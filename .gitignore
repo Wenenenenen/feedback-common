@@ -1,0 +1,19 @@
+# 凭据与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# IDE / 系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# C++ 构建目录
+build/
+out/
+cmake-build-*/
