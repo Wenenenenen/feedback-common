@@ -1,0 +1,30 @@
+# 凭据与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# IDE / 系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+/output/
+/data/
+*.log
+
+# 前端依赖与构建产物
+node_modules/
+dist/
+.vite/
+*.log
