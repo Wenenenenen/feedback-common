@@ -1,0 +1,28 @@
+# 凭据与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# IDE / 系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Go 构建产物与运行数据
+/bin/
+*.exe
+*.db
+*.db-journal
+/data/
+/tmp/
+
+# 前端依赖与构建产物
+node_modules/
+dist/
+.vite/
+*.log
