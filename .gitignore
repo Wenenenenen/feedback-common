@@ -18,3 +18,7 @@ node_modules/
 dist/
 .vite/
 *.log
+
+# 自动化测试的临时产物（导出文件、截图、诊断素材）
+.tmp-export/
+.playwright-mcp/
