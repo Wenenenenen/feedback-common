@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>录音漂移校准工作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>录音漂移校准工作台</h1>
+  <div class="toolbar">
+    <button id="btnImportRef">导入参考 WAV</button>
+    <button id="btnImportTracks">导入待校准 WAV</button>
+    <button id="btnSaveProj">保存项目</button>
+    <button id="btnOpenProj">打开项目</button>
+  </div>
+  <input type="file" id="fileRef" accept=".wav,audio/wav" hidden>
+  <input type="file" id="fileTracks" accept=".wav,audio/wav" multiple hidden>
+  <input type="file" id="fileProj" accept=".json,application/json" hidden>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<section id="refInfo" class="ref-info">尚未导入参考录音。</section>
+
+<main>
+  <aside>
+    <h2>待校准轨</h2>
+    <ul id="trackList" class="track-list"></ul>
+  </aside>
+
+  <section class="detail" id="detail" hidden>
+    <h2 id="detailTitle"></h2>
+    <div class="map-info" id="mapInfo"></div>
+    <div class="evidence" id="evidence"></div>
+
+    <div class="wave-wrap">
+      <canvas id="wave" height="340"></canvas>
+      <div class="axis-note">上：参考轨　下：待校准轨（已按当前映射对齐到参考时间轴）　点击跳转预听，拖动选择导出范围</div>
+    </div>
+
+    <div class="transport">
+      <button id="btnPlay">▶ 预听</button>
+      <span id="playTime">0.00 s</span>
+      <span class="hint">预听：左声道 = 参考，右声道 = 待校准轨（与导出使用同一映射）</span>
+    </div>
+
+    <fieldset>
+      <legend>手动锚点修正（两对时间点）</legend>
+      <div class="anchors">
+        <label>锚点1 待校准轨 <input id="maT1" type="number" step="0.001"> s</label>
+        <label>参考 <input id="maR1" type="number" step="0.001"> s</label>
+        <label>锚点2 待校准轨 <input id="maT2" type="number" step="0.001"> s</label>
+        <label>参考 <input id="maR2" type="number" step="0.001"> s</label>
+        <button id="btnApplyManual">应用手动锚点</button>
+        <button id="btnReanalyze">重新自动分析</button>
+        <button id="btnCancel" hidden>取消分析</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>导出（48kHz / 16位 / 双声道 WAV，缺失区补零）</legend>
+      <div class="export-row">
+        <label>参考时间起点 <input id="exStart" type="number" step="0.001" min="0"> s</label>
+        <label>终点 <input id="exEnd" type="number" step="0.001" min="0"> s</label>
+        <button id="btnExport">导出 WAV</button>
+      </div>
+    </fieldset>
+  </section>
+  <section class="detail placeholder" id="noSel">导入参考与待校准 WAV 后，在左侧选择一轨查看校准结果。</section>
+</main>
+
+<script src="dsp.js"></script>
+<script src="wav.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
