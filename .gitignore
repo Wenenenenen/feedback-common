@@ -1,0 +1,17 @@
+# 凭据文件
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa*
+credentials*.json
+secrets*.json
+# 缓存目录
+.cache/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
