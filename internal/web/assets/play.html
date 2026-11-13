@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训视频播放</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <style>
+    .player-wrap { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .player-card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 4px rgba(20,40,70,.08); }
+    video { width: 100%; background: #000; border-radius: 8px; max-height: 70vh; }
+    .player-bar {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      margin-top: 14px; font-size: 14px;
+    }
+    .player-bar label { color: #46536a; }
+    select {
+      padding: 6px 10px; border: 1px solid #c8d0dc; border-radius: 6px; font-size: 14px;
+    }
+    #current-level {
+      margin-left: auto;
+      background: #eef2ff; color: #4356b5;
+      padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600;
+    }
+    #player-message { font-size: 13px; color: #b8730f; min-height: 18px; margin-top: 10px; }
+    .back-link { display: inline-block; margin-bottom: 14px; color: #2563eb; text-decoration: none; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="player-wrap">
+    <a class="back-link" href="/">← 返回管理页</a>
+    <div class="player-card">
+      <h2 id="video-title" style="margin:0 0 12px;font-size:17px;">加载中……</h2>
+      <video id="video" controls playsinline></video>
+      <div class="player-bar">
+        <label for="level-select">清晰度：</label>
+        <select id="level-select">
+          <option value="-1">自动（按网速切换）</option>
+        </select>
+        <span id="current-level">当前播放：--</span>
+      </div>
+      <p id="player-message"></p>
+    </div>
+  </div>
+
+  <!-- 本地 vendor，运行期不依赖公网 CDN -->
+  <script src="/static/vendor/hls.min.js"></script>
+  <script src="/static/player.js"></script>
+</body>
+</html>

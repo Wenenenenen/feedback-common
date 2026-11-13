@@ -26,3 +26,7 @@ node_modules/
 dist/
 .vite/
 *.log
+
+# Playwright MCP 截图与临时产物
+.playwright-mcp/
+*.png

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训视频转码管理</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>培训视频转码管理</h1>
+    <span class="hint">上传 MP4 后自动转多档 HLS，任务排队执行，刷新页面不丢进度</span>
+  </header>
+
+  <main class="container">
+    <!-- 上传区 -->
+    <section class="card upload-card">
+      <h2>上传视频</h2>
+      <form id="upload-form">
+        <div class="form-row">
+          <label class="file-label">
+            <input type="file" id="file-input" name="file" accept="video/*" required>
+            <span id="file-name">选择视频文件（mp4/mov/mkv/ts/flv）</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <input type="text" id="title-input" name="title" placeholder="标题（可选，默认用文件名）" maxlength="120">
+        </div>
+        <button type="submit" id="upload-btn">上传并转码</button>
+        <div class="progress-wrap hidden" id="upload-progress-wrap">
+          <div class="progress-bar"><div class="progress-inner" id="upload-progress"></div></div>
+          <span id="upload-progress-text">0%</span>
+        </div>
+        <p class="error-text" id="upload-error"></p>
+      </form>
+    </section>
+
+    <!-- 视频列表 -->
+    <section class="card">
+      <div class="list-head">
+        <h2>视频列表</h2>
+        <button id="refresh-btn" class="btn-secondary" type="button">手动刷新</button>
+      </div>
+      <div id="video-list">
+        <p class="hint">加载中……</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
