@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>剖面工作台 · 树脂打印出厂检查</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f6feb'/%3E%3Cpath d='M6 22 L16 8 L26 22 Z' fill='white'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#1f6feb"/><path d="M6 22 L16 8 L26 22 Z" fill="#fff"/></svg>
+      <div>
+        <h1>剖面工作台</h1>
+        <p class="tagline">树脂打印出厂检查 · 空腔 / 断壁 / 分离部件 · 单位 mm</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="status" class="status">等待模型</span>
+      <button id="btn-open-sample" class="btn primary" type="button">载入 STL</button>
+      <input id="file-input" type="file" accept=".stl,model/stl" hidden>
+      <button id="btn-clear" class="btn ghost" type="button">清空</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>模型</h2>
+        <div id="model-name" class="model-name">未载入模型</div>
+        <div id="model-stats" class="model-stats"></div>
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-inner">
+            <div class="drop-icon">⇩</div>
+            <p>拖入 STL 文件</p>
+            <p class="muted small">ASCII / 二进制 · 单位 mm · 只读解析</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>样例</h2>
+        <div id="sample-list" class="sample-list"></div>
+        <div id="self-check" class="self-check"></div>
+      </section>
+
+      <section class="panel">
+        <h2>拓扑诊断</h2>
+        <ul id="diag-list" class="diag-list"></ul>
+        <div id="warnings" class="warnings"></div>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <nav class="tabs">
+        <button id="nav-tab-view" class="tab active" type="button">视图</button>
+        <button id="nav-tab-data" class="tab" type="button">数据</button>
+      </nav>
+
+      <div id="view-panel" class="view-panel">
+        <div class="canvas-block">
+          <div class="canvas-head">
+            <span class="canvas-title">三维视图</span>
+            <span class="hint">拖动旋转 · Shift/右键平移 · Alt+拖动移切面 · 滚轮缩放</span>
+            <button id="btn-fit3d" class="btn tiny" type="button">适配视图</button>
+          </div>
+          <div id="pane-3d" class="canvas-wrap">
+            <canvas id="canvas3d"></canvas>
+            <div class="axis-legend" aria-hidden="true">
+              <span class="x">X</span><span class="y">Y</span><span class="z">Z</span>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-block">
+          <div class="canvas-head">
+            <span class="canvas-title">截面 · 1 单位 = 1 mm</span>
+            <label class="check"><input id="show-grid-2d" type="checkbox" checked> 网格</label>
+            <label class="check"><input id="show-labels-2d" type="checkbox" checked> 标注</label>
+            <button id="btn-fit2d" class="btn tiny" type="button">适配截面</button>
+          </div>
+          <div id="pane-2d" class="canvas-wrap">
+            <canvas id="canvas2d"></canvas>
+            <div class="legend2d">
+              <span class="legend-item solid">实心区域</span>
+              <span class="legend-item hole">孔洞</span>
+              <span class="legend-item open">开口</span>
+            </div>
+            <div id="section-reason" class="section-reason"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="data-panel" class="data-panel hidden">
+        <div class="data-metrics">
+          <div class="metric"><label>实体面积</label><strong id="metric-area">—</strong></div>
+          <div class="metric"><label>全部边界周长</label><strong id="metric-perimeter">—</strong></div>
+          <div class="metric"><label>环数</label><strong id="metric-loops">—</strong></div>
+          <div class="metric"><label>孔洞数</label><strong id="metric-holes">—</strong></div>
+          <div class="metric"><label>分离部件</label><strong id="metric-bodies">—</strong></div>
+          <div class="metric"><label>开口边界</label><strong id="metric-open">—</strong></div>
+        </div>
+        <div class="data-body">
+          <div class="loop-panel">
+            <h3>边界环</h3>
+            <div class="table-wrap">
+              <table class="loop-table">
+                <thead><tr><th>类型</th><th>部件</th><th>面积 mm²</th><th>周长 mm</th><th>点数</th></tr></thead>
+                <tbody id="loop-table"></tbody>
+              </table>
+            </div>
+            <div id="loop-detail" class="loop-detail"></div>
+          </div>
+          <div class="body-panel">
+            <h3>部件</h3>
+            <div id="body-list" class="body-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <section class="panel">
+        <h2>切面 n · p = d</h2>
+        <div class="field-row">
+          <label>nx</label><input id="n-x" type="number" step="any" value="0">
+          <label>ny</label><input id="n-y" type="number" step="any" value="0">
+          <label>nz</label><input id="n-z" type="number" step="any" value="1">
+          <label class="scale-label" id="n-scale-label">比例</label><input id="n-scale" type="number" step="any" value="1" min="0">
+        </div>
+        <div id="n-normalize-hint" class="muted small">n 可不归一化；d 按 n·p 的实际值使用</div>
+        <div class="presets">
+          <button id="btn-z-up" class="btn tiny" type="button">+Z 顶</button>
+          <button id="btn-z-down" class="btn tiny" type="button">−Z 底</button>
+          <button id="btn-x-plane" class="btn tiny" type="button">X 面</button>
+          <button id="btn-y-plane" class="btn tiny" type="button">Y 面</button>
+          <button id="btn-z-plane" class="btn tiny" type="button">Z 中</button>
+          <button id="btn-iso" class="btn tiny" type="button">斜切 1:1:1</button>
+        </div>
+
+        <div class="d-section">
+          <div class="d-head"><label for="d-slider">位置 d</label><input id="d-number" type="number" step="any" value="0"></div>
+          <input id="d-slider" type="range" min="-50" max="100" step="0.1" value="0">
+          <div id="d-range-hint" class="muted small"></div>
+          <div id="plane-origin" class="plane-origin muted small"></div>
+        </div>
+
+        <div class="slice-info">
+          <span id="slice-time" class="slice-time">—</span>
+          <span id="hover-info" class="hover-info"><span class="muted">悬停二维图或表格查看边界详情</span></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>导出</h2>
+        <div class="export-row">
+          <button id="btn-svg" class="btn" type="button" disabled>SVG 剖面（1:1 mm）</button>
+          <button id="btn-json" class="btn" type="button" disabled>JSON 报告</button>
+        </div>
+        <p class="muted small">SVG 以 mm 为单位；JSON 含平面、二维环、三维交点、孔洞归属与测量值。</p>
+      </section>
+
+      <section class="panel notes">
+        <h2>约定</h2>
+        <ul>
+          <li>截面按沿法线 <b>+n</b> 正向趋近的极限计算。</li>
+          <li>实体外环为逆时针，孔洞为顺时针；按三维连通体分组。</li>
+          <li>开口/非流形只提示，不补成实体；坏文件不覆盖已载模型。</li>
+          <li>纯 CPU + Canvas 2D，无切片/布尔内核。</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <div id="loading" class="loading"><div class="spinner"></div><span id="loading-text">载入中…</span></div>
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+[
+  {
+    "file": "hollow-binary.stl",
+    "n": [
+      0,
+      0,
+      1
+    ],
+    "d": 6,
+    "loops": 2,
+    "holes": 1,
+    "area_mm2": 336,
+    "perimeter_mm": 112
+  },
+  {
+    "file": "hollow-ascii.stl",
+    "n": [
+      0,
+      0,
+      1
+    ],
+    "d": 6,
+    "loops": 2,
+    "holes": 1,
+    "area_mm2": 336,
+    "perimeter_mm": 112
+  },
+  {
+    "file": "hollow-binary.stl",
+    "n": [
+      0,
+      0,
+      1
+    ],
+    "d": 0,
+    "loops": 2,
+    "holes": 1,
+    "area_mm2": 336,
+    "perimeter_mm": 112
+  },
+  {
+    "file": "hollow-binary.stl",
+    "n": [
+      0,
+      0,
+      1
+    ],
+    "d": 12,
+    "loops": 0,
+    "holes": 0,
+    "area_mm2": 0,
+    "perimeter_mm": 0
+  },
+  {
+    "file": "hollow-binary.stl",
+    "n": [
+      0,
+      0,
+      -1
+    ],
+    "d": -12,
+    "loops": 2,
+    "holes": 1,
+    "area_mm2": 336,
+    "perimeter_mm": 112
+  },
+  {
+    "file": "double-ring.stl",
+    "n": [
+      0,
+      0,
+      1
+    ],
+    "d": 6,
+    "loops": 4,
+    "holes": 2,
+    "area_mm2": 672,
+    "perimeter_mm": 224
+  },
+  {
+    "file": "cube.stl",
+    "n": [
+      1,
+      0,
+      1
+    ],
+    "d": 10,
+    "loops": 1,
+    "holes": 0,
+    "area_mm2": 565.685424949238,
+    "perimeter_mm": 96.5685424949238
+  },
+  {
+    "file": "many-rings.stl",
+    "n": [
+      0,
+      0,
+      1
+    ],
+    "d": 6,
+    "loops": 1250,
+    "holes": 625,
+    "area_mm2": 210000,
+    "perimeter_mm": 70000
+  }
+]
