@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alpha 层检查台</title>
+<style>
+  :root {
+    --bg: #0f1218;
+    --panel: #171c26;
+    --panel-2: #1e2530;
+    --border: #2a3342;
+    --text: #e6eaf2;
+    --muted: #9aa6b8;
+    --accent: #5b9dff;
+    --ok: #3fb96b;
+    --err: #ff6b6b;
+    --warn: #e0a64b;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f6fa; --panel: #ffffff; --panel-2: #f0f3f8;
+      --border: #d4dbe6; --text: #1c2430; --muted: #5c6878;
+      --accent: #2468e0; --err: #c63636;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    padding: 14px 20px 6px;
+  }
+  header h1 { margin: 0 0 2px; font-size: 18px; }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+  }
+  .toolbar label { color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+  select, button, input::file-selector-button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 6px 10px; font-size: 13px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  input[type=file] { font-size: 12px; max-width: 210px; }
+  .size-val { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .spacer { flex: 1; }
+  .status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .progress { font-family: var(--mono); font-size: 12px; color: var(--accent); min-height: 1em; padding: 0 20px 4px; }
+  .error {
+    margin: 8px 20px 0; padding: 9px 12px; border-radius: 8px;
+    background: color-mix(in srgb, var(--err) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
+    color: var(--err); font-size: 13px; display: none;
+  }
+  .error.show { display: block; }
+  main {
+    display: grid; grid-template-columns: minmax(0, auto) minmax(320px, 1fr);
+    gap: 18px; padding: 16px 20px 28px; align-items: start;
+  }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; } }
+  .canvas-wrap {
+    position: relative; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px; width: fit-content; max-width: 100%;
+  }
+  canvas {
+    display: block; width: min(58vh, 560px); height: auto; aspect-ratio: 1;
+    image-rendering: pixelated; cursor: crosshair; border-radius: 4px;
+  }
+  #marker {
+    position: absolute; border: 1.5px solid var(--warn);
+    pointer-events: none; display: none; box-shadow: 0 0 0 1px rgba(0,0,0,.45);
+  }
+  .hover-coord { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .cam-info { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 6px; word-break: break-all; }
+  aside {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; min-width: 0;
+  }
+  aside h3 { margin: 0 0 10px; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 11.5px; }
+  th, td { border: 1px solid var(--border); padding: 5px 7px; text-align: right; }
+  th { background: var(--panel-2); color: var(--muted); font-weight: 600; }
+  td:first-child, th:first-child { text-align: center; }
+  .final { font-family: var(--mono); font-size: 12px; margin: 12px 0 4px; }
+  .note { color: var(--muted); font-size: 11.5px; margin: 4px 0 0; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .hint kbd {
+    font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; font-size: 11px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Alpha 层检查台</h1>
+  <p>纯 CPU 软件光栅化参考台 · 逐像素片元核对 · 线性空间合成 → sRGB PNG · 无 WebGL/WebGPU，离线可用</p>
+</header>
+
+<div class="toolbar">
+  <label>样例场景
+    <select id="sample-select"><option value="">— 选择 —</option></select>
+  </label>
+  <label>导入场景 JSON
+    <input id="file-input" type="file" accept=".json,application/json">
+  </label>
+  <label>方形输出
+    <select id="size-select"></select>
+    <span id="size-val" class="size-val">512×512</span>
+  </label>
+  <button id="cam-reset" type="button">复位相机</button>
+  <button id="export-png" type="button">导出 PNG</button>
+  <span class="spacer"></span>
+  <span id="status" class="status">未加载场景</span>
+</div>
+<div id="progress" class="progress"></div>
+<div id="error" class="error"></div>
+
+<main>
+  <div>
+    <div class="canvas-wrap">
+      <canvas id="view" width="64" height="64"></canvas>
+      <div id="marker"></div>
+    </div>
+    <div id="hover-coord" class="hover-coord"></div>
+    <div id="cam-info" class="cam-info"></div>
+    <p class="hint">拖动 = 环绕相机 · 滚轮 = 推拉 · 点击像素 = 查看由近到远全部片元（含不透明面之后）</p>
+  </div>
+  <aside id="inspect-panel">
+    <h3>点击图像中的像素查看逐片元信息</h3>
+  </aside>
+</main>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
