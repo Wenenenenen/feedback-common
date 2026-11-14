@@ -1,0 +1,14 @@
+场景JSON格式：version固定为1，width和height为输出像素尺寸，camera给出position、target、up、fov_y_degrees、near、far。
+右手世界坐标，默认相机在原点看向-z，+y朝上；一般相机用position、target、up定义观察方向。fov_y_degrees为竖直视角。
+triangles为三角形数组，每个id必须是唯一非负整数，每个vertices恰有三个顶点。顶点position是世界坐标，rgba为0至1的非预乘线性颜色。
+background_linear_rgb为不透明背景。双面渲染，无光照，无抗锯齿，采样位置是左上原点坐标(x+0.5,y+0.5)。
+可见范围是相机空间深度near至far之间及视口内部。深度指沿相机前向的正距离，不是到相机的欧氏距离。
+插值须符合透视投影。先得到片元的非预乘rgba，再按深度从近到远合成；严格同深度时id小者在前。
+屏幕坐标+y向下，三角形统一到有向面积为正；边函数为(b-a)叉(p-a)，边上像素只在dy<0或dy=0且dx>0时归属该边。
+逐像素检查列表保留所有覆盖且alpha>0的片元，包括不透明面后面没有最终贡献的片元；alpha为0的不列入。
+最终线性RGB以标准sRGB传递函数编码为8位PNG，alpha恒为255。不得在sRGB值上直接合成。
+expected.json给出默认相机下的像素参考，除共享边测试外由独立的射线与三角形求交产生。深度和rgba允许绝对误差1e-6，PNG各通道允许误差1。
+crossing两面在左右区域的遮挡顺序相反；gradient检验透视插值；clipping含近面、远面及相机背后的顶点。
+shared-edge检验同一方形的对角线上不能混合两次；equal-depth检验稳定顺序；occlusion检验全透明及不透明遮挡。
+stack32有64个三角形、32层重叠面；两个reversed场景仅反转输入顺序，渲染结果须逐像素一致。
+invalid-duplicate具有重复id，应拒绝且保留上一帧。本包为脚本合成数据，按CC0-1.0提供。
