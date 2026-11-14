@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>回访录音按键音脱敏</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --line: #dfe3e8; --text: #1f2329;
+    --accent: #2563eb; --accent-soft: #dbe7ff; --danger: #dc2626; --muted: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin-bottom: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+           padding: 16px 20px; margin-bottom: 16px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 6px 14px; border: 1px solid var(--line); border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: .9; }
+  button.danger:hover { border-color: var(--danger); color: var(--danger); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.small { padding: 2px 8px; font-size: 12px; }
+  input[type=text], input[type=number], select { font: inherit; padding: 4px 8px;
+           border: 1px solid var(--line); border-radius: 6px; }
+  input.ms { width: 90px; }
+  .info { color: var(--muted); }
+  .info b { color: var(--text); font-weight: 600; }
+  #progressWrap { display: none; flex: 1; min-width: 160px; height: 8px; background: var(--line);
+           border-radius: 4px; overflow: hidden; }
+  #progressBar { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left;
+           white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  tr.selected { background: var(--accent-soft); }
+  tr:hover { background: #f2f6ff; }
+  #wave { width: 100%; display: block; cursor: crosshair; border: 1px solid var(--line);
+          border-radius: 6px; background: #fbfcfe; }
+  .hidden { display: none; }
+  .err { color: var(--danger); }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  legend { color: var(--muted); font-size: 12px; padding: 0 6px; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>回访录音按键音（DTMF）脱敏</h1>
+  <div class="sub">导入 8/16/48kHz · 16 位 PCM · 单/双声道 WAV（最长 60 秒），自动识别 16 个按键音并按声道脱敏。</div>
+
+  <div class="panel">
+    <div class="row">
+      <input type="file" id="fileInput" accept=".wav,audio/wav">
+      <button id="analyzeBtn" class="primary" disabled>开始分析</button>
+      <div id="progressWrap"><div id="progressBar"></div></div>
+      <span id="status" class="info"></span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span id="fileInfo" class="info">未加载文件</span>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="wavePanel">
+    <canvas id="wave" height="120"></canvas>
+    <div class="info" style="margin-top:6px">点击色块选中事件；上排为声道 0（左），双声道时下排为声道 1（右）。</div>
+  </div>
+
+  <div class="panel hidden" id="eventsPanel">
+    <div class="row" style="margin-bottom:10px">
+      <b>按键事件（<span id="eventCount">0</span>）</b>
+      <span class="info">起止帧为采样帧号，结束帧不包含在区间内；毫秒可编辑，按回车生效。</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>声道</th><th>按键</th><th>开始帧</th><th>结束帧</th>
+          <th>开始(ms)</th><th>结束(ms)</th><th>时长(ms)</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="eventRows"></tbody>
+    </table>
+    <fieldset style="margin-top:12px">
+      <legend>手工新增事件</legend>
+      <div class="row">
+        <label>声道 <select id="addChannel"></select></label>
+        <label>按键 <select id="addKey"></select></label>
+        <label>开始(ms) <input type="number" class="ms" id="addStart" step="0.1" min="0"></label>
+        <label>结束(ms) <input type="number" class="ms" id="addEnd" step="0.1" min="0"></label>
+        <button id="addBtn">新增</button>
+        <span id="addErr" class="err"></span>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="panel hidden" id="exportPanel">
+    <div class="row">
+      <fieldset>
+        <legend>脱敏范围</legend>
+        <label><input type="radio" name="mode" value="event" checked> 仅处理事件所在声道</label>
+        <label style="margin-left:12px"><input type="radio" name="mode" value="both"> 同时处理两个声道</label>
+      </fieldset>
+      <button id="playRedactedBtn">试听脱敏结果</button>
+      <button id="exportCsvBtn">导出事件 CSV</button>
+      <button id="exportWavBtn" class="primary">导出脱敏 WAV</button>
+    </div>
+    <div class="info" style="margin-top:8px">
+      每个事件前后各扩 10ms 静音，扩展段外再接 5ms 线性渐变；重叠范围按并集处理。
+      输出保留原采样率、声道数与总帧数，其余采样值保持不变；CSV 与导出音频基于同一份事件列表，始终一致。
+    </div>
+  </div>
+
+  <script src="dtmf.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
