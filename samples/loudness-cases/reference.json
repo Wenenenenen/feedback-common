@@ -1,0 +1,103 @@
+{
+  "说明": "素材为自行合成的信号。参考I和真峰值来自本机ffmpeg的ebur128，仅作为独立验收参照；short与silence没有可用的完整门限块。I容差0.2LU，真峰值容差0.3dB。",
+  "计量约定": "整轨起点建立400毫秒块，步长100毫秒，丢弃末尾不完整块；M为400毫秒、S为3秒，均不加门限；没有完整窗口时记为null。纯静音的I与真峰值均记为null，页面分别显示不可测和负无穷。",
+  "交付约定": "同采样率、声道和采样帧数的24位PCM；禁止动态限幅、独立声道增益和自动裁掉静音。输出JSON包含输入与交付后的I、真峰值、目标、实际增益及是否受峰值约束。",
+  "cases": [
+    {
+      "file": "mono.wav",
+      "rate": 48000,
+      "channels": 1,
+      "bits": 24,
+      "frames": 384000,
+      "i_lufs": -23.0,
+      "sample_peak_dbfs": -19.99999792912278,
+      "true_peak_dbtp": -20.0,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "dual-mono.wav",
+      "rate": 44100,
+      "channels": 2,
+      "bits": 16,
+      "frames": 352800,
+      "i_lufs": -20.0,
+      "sample_peak_dbfs": -19.999469871546843,
+      "true_peak_dbtp": -20.0,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "gated.wav",
+      "rate": 48000,
+      "channels": 2,
+      "bits": 24,
+      "frames": 768000,
+      "i_lufs": -19.1,
+      "sample_peak_dbfs": -16.478176199471463,
+      "true_peak_dbtp": -16.5,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "unequal.wav",
+      "rate": 48000,
+      "channels": 2,
+      "bits": 24,
+      "frames": 288000,
+      "i_lufs": -24.7,
+      "sample_peak_dbfs": -21.938195600688083,
+      "true_peak_dbtp": -21.9,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "intersample.wav",
+      "rate": 48000,
+      "channels": 2,
+      "bits": 24,
+      "frames": 144000,
+      "i_lufs": 2.4,
+      "sample_peak_dbfs": -3.925450485968263,
+      "true_peak_dbtp": -0.9,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "peak-conflict.wav",
+      "rate": 48000,
+      "channels": 2,
+      "bits": 24,
+      "frames": 384000,
+      "i_lufs": -50.2,
+      "sample_peak_dbfs": -1.1103466040620245,
+      "true_peak_dbtp": -1.1,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "silence.wav",
+      "rate": 44100,
+      "channels": 1,
+      "bits": 16,
+      "frames": 88200,
+      "i_lufs": null,
+      "sample_peak_dbfs": null,
+      "true_peak_dbtp": null,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    },
+    {
+      "file": "short.wav",
+      "rate": 48000,
+      "channels": 1,
+      "bits": 16,
+      "frames": 9600,
+      "i_lufs": null,
+      "sample_peak_dbfs": -19.999469871546843,
+      "true_peak_dbtp": -20.0,
+      "target_lufs": -23,
+      "ceiling_dbtp": -1
+    }
+  ]
+}

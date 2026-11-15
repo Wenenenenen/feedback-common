@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Node 产物与测试下载
+node_modules/
+tests/dl-*.json
+tests/dl-*.wav
+# 系统垃圾
+.DS_Store
+Thumbs.db

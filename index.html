@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>响度交付核对台 · BS.1770 / EBU R128</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>响度交付核对台</h1>
+          <p class="subtitle">BS.1770-4 整轨 I · 真峰值 · EBU 双重门限 — 计量核心与增益计算均为自研，无现成响度库</p>
+        </div>
+        <div class="stamp" id="engineStamp">引擎就绪 · 4× 过采样真峰值</div>
+      </header>
+
+      <section class="panel" id="loadPanel">
+        <div class="panel-head"><h2>1 · 导入素材</h2></div>
+        <div class="load-row">
+          <label class="file-drop" id="fileDrop">
+            <input type="file" id="fileInput" accept=".wav,audio/wav" hidden />
+            <span class="file-drop-title">选择或拖入 WAV</span>
+            <span class="file-drop-hint">44.1/48 kHz · 16/24 位 PCM · 单/双声道 · 最长 60 秒</span>
+          </label>
+        </div>
+        <div class="file-meta" id="fileMeta" hidden></div>
+        <div class="error-banner" id="loadError" hidden></div>
+      </section>
+
+      <section class="panel" id="analysisPanel" hidden>
+        <div class="panel-head">
+          <h2>2 · 计量结果</h2>
+          <span class="badge" id="freshBadge">当前结果</span>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-tile">
+            <div class="stat-label">整轨响度 I</div>
+            <div class="stat-value" id="statI">—</div>
+            <div class="stat-unit" id="statIUnit">LUFS</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">时长 / 完整门块</div>
+            <div class="stat-value" id="statDuration">—</div>
+            <div class="stat-unit" id="statBlocks"></div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">最高采样峰值</div>
+            <div class="stat-value" id="statSamplePeak">—</div>
+            <div class="stat-unit">dBFS（逐声道）</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">最高真峰值</div>
+            <div class="stat-value" id="statTruePeak">—</div>
+            <div class="stat-unit">dBTP · <span id="statOversample">4×</span> 过采样</div>
+          </div>
+        </div>
+
+        <div class="channel-table-wrap">
+          <table class="channel-table" id="channelTable">
+            <thead>
+              <tr><th>声道</th><th>采样峰值 dBFS</th><th>真峰值 dBTP</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="chart-card viz-root">
+          <div class="chart-head">
+            <h3>M（400 ms）与 S（3 s）响度曲线</h3>
+            <div class="legend">
+              <span class="legend-item"><i class="swatch swatch-m"></i>M 短时</span>
+              <span class="legend-item"><i class="swatch swatch-s"></i>S 短期</span>
+            </div>
+          </div>
+          <div class="chart-scroll">
+            <svg id="loudnessChart" viewBox="0 0 900 320" preserveAspectRatio="none" role="img"
+              aria-label="400毫秒M与3秒S响度随时间变化曲线"></svg>
+            <div class="chart-tooltip" id="chartTooltip" hidden></div>
+          </div>
+          <p class="chart-note" id="chartNote"></p>
+        </div>
+      </section>
+
+      <section class="panel" id="deliveryPanel" hidden>
+        <div class="panel-head"><h2>3 · 交付参数与增益决策</h2></div>
+        <div class="param-grid">
+          <label class="param">
+            <span>目标响度（LUFS）</span>
+            <input type="number" id="targetLufs" value="-23" step="0.1" inputmode="decimal" />
+          </label>
+          <label class="param">
+            <span>真峰值上限（dBTP）</span>
+            <input type="number" id="ceilingDbtp" value="-1" step="0.1" inputmode="decimal" />
+          </label>
+          <label class="param param-select">
+            <span>真峰值过采样倍数</span>
+            <select id="oversampleSelect">
+              <option value="4" selected>4×（最低合规）</option>
+              <option value="8">8×（交叉验证）</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="gain-out" id="gainOut">
+          <div class="gain-row"><span>整轨固定增益</span><strong id="gainValue">—</strong></div>
+          <div class="gain-row"><span>决策依据</span><strong id="gainReason">—</strong></div>
+          <div class="gain-row"><span>预计交付响度 I</span><strong id="predI">—</strong></div>
+          <div class="gain-row"><span>预计最高真峰值</span><strong id="predTp">—</strong></div>
+          <div class="gap-banner" id="gapBanner" hidden></div>
+          <div class="blocked-banner" id="blockedBanner" hidden></div>
+        </div>
+
+        <div class="actions">
+          <div class="ab-toggle" role="group" aria-label="试听切换">
+            <button class="ab-btn active" data-mode="original" id="abOriginal">原音</button>
+            <button class="ab-btn" data-mode="processed" id="abProcessed" disabled>结果</button>
+          </div>
+          <div class="play-controls">
+            <button id="playBtn" class="btn" disabled>播放</button>
+            <span class="play-time" id="playTime">0.0 s</span>
+          </div>
+          <div class="export-controls">
+            <button id="exportWav" class="btn btn-primary" disabled>导出 24 位 WAV</button>
+            <button id="exportJson" class="btn" disabled>导出读数 JSON</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p>
+          固定增益对整轨所有声道/样本同倍数施加；无动态限幅、无独立声道增益、不裁剪静音。
+          修改文件或参数后，旧分析与交付状态立即失效并重新标记。
+        </p>
+      </footer>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

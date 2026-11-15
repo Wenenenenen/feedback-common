@@ -1,0 +1,15 @@
+{
+  "name": "loudness-delivery-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BS.1770-4 / EBU R128 loudness metering and fixed-gain delivery tool (self-contained, no external loudness library)",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/verify.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "serve": "python3 -m http.server 8000"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
