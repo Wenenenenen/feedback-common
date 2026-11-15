@@ -1,0 +1,11 @@
+{
+  "name": "chroma-matte-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "绿幕序列抠像工作台：整段参数键控、多边形保留/剔除、多视图预览与三套 PNG 序列导出",
+  "scripts": {
+    "test": "node --test test/keyer.test.js",
+    "serve": "node tools/serve.mjs"
+  }
+}

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>绿幕序列抠像工作台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2321d321'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%2316181d'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>绿幕序列抠像工作台</h1>
+  <div class="topbar-actions">
+    <label class="btn">
+      导入序列 ZIP
+      <input id="fileInput" type="file" accept=".zip" hidden>
+    </label>
+    <button id="presetBtn" class="btn" disabled>应用 preset.json</button>
+    <button id="exportBtn" class="btn primary" disabled>导出三套 PNG 序列</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左栏：工具与视图 -->
+  <aside class="panel left">
+    <section>
+      <h2>多边形工具（全序列生效）</h2>
+      <div class="row">
+        <button id="toolProtect" class="btn tool active">绘制保留区</button>
+        <button id="toolRemove" class="btn tool">绘制剔除区</button>
+      </div>
+      <p class="hint">单击添加顶点，双击或回车闭合；Esc 取消当前绘制。</p>
+      <div class="row">
+        <button id="toolEdit" class="btn tool">编辑/选择</button>
+        <button id="deletePolyBtn" class="btn danger" disabled>删除选中</button>
+      </div>
+      <ul id="polyList" class="poly-list"></ul>
+    </section>
+
+    <section>
+      <h2>预览视图</h2>
+      <div class="view-grid">
+        <label><input type="radio" name="view" value="original" checked> 原图</label>
+        <label><input type="radio" name="view" value="matte"> 灰度遮罩</label>
+        <label><input type="radio" name="view" value="checker"> 棋盘格</label>
+        <label><input type="radio" name="view" value="black"> 黑底</label>
+        <label><input type="radio" name="view" value="white"> 白底</label>
+        <label><input type="radio" name="view" value="custom"> 自选背景</label>
+      </div>
+      <label class="btn small">
+        选择背景 PNG
+        <input id="bgInput" type="file" accept=".png" hidden>
+      </label>
+      <span id="bgStatus" class="hint"></span>
+      <div class="row zoom-row">
+        <button id="zoomOut" class="btn small">－</button>
+        <span id="zoomLabel">100%</span>
+        <button id="zoomIn" class="btn small">＋</button>
+        <button id="zoomFit" class="btn small">适配</button>
+        <button id="zoomOne" class="btn small">1:1</button>
+      </div>
+      <p class="hint">滚轮缩放、拖动画布平移，双击复位。</p>
+      <label class="check"><input type="checkbox" id="overlayToggle" checked> 叠加显示多边形</label>
+    </section>
+  </aside>
+
+  <!-- 中间：画布与播放 -->
+  <section class="stage">
+    <div id="viewport" class="viewport">
+      <canvas id="canvas"></canvas>
+      <div id="dropHint" class="drop-hint">导入或拖入包含 8 位 sRGB RGB PNG 的 ZIP<br>（≤120 帧、≤1280×720、尺寸需一致）</div>
+      <div id="busy" class="busy hidden">处理中…</div>
+    </div>
+    <div class="transport">
+      <button id="playBtn" class="btn" disabled>▶ 播放</button>
+      <button id="stopBtn" class="btn" disabled>■ 停止</button>
+      <label class="fps">帧率
+        <input id="fpsInput" type="number" min="1" max="60" value="24" step="1"> fps
+      </label>
+      <input id="scrub" type="range" min="0" max="0" value="0" disabled>
+      <span id="frameLabel">— / —</span>
+    </div>
+  </section>
+
+  <!-- 右栏：键控参数 -->
+  <aside class="panel right">
+    <section>
+      <h2>绿幕键控（整段共用）</h2>
+      <div class="row key-color-row">
+        <input type="color" id="keyColor" value="#21d321">
+        <button id="pickKeyBtn" class="btn small">取色器：在画面单击取色</button>
+      </div>
+      <p class="hint">取色器读取线性绿色度最高的画面色，也可直接修改色块。</p>
+
+      <label class="slider">内阈值（小于则完全保留）
+        <input type="range" id="innerRange" min="0" max="0.3" step="0.005" value="0.01">
+        <output id="innerVal">0.010</output>
+      </label>
+      <label class="slider">外阈值（大于则完全抠除）
+        <input type="range" id="outerRange" min="0.05" max="0.7" step="0.005" value="0.63">
+        <output id="outerVal">0.630</output>
+      </label>
+      <label class="slider">边缘软化（像素）
+        <input type="range" id="softRange" min="0" max="8" step="1" value="0">
+        <output id="softVal">0</output>
+      </label>
+      <label class="slider">去绿强度
+        <input type="range" id="despillRange" min="0" max="1" step="0.05" value="0.5">
+        <output id="despillVal">0.50</output>
+      </label>
+      <button id="resetParams" class="btn small">恢复默认参数</button>
+    </section>
+
+    <section>
+      <h2>序列信息</h2>
+      <dl id="seqInfo" class="seq-info">
+        <dt>状态</dt><dd id="infoStatus">未导入</dd>
+        <dt>帧数</dt><dd id="infoFrames">—</dd>
+        <dt>尺寸</dt><dd id="infoSize">—</dd>
+      </dl>
+    </section>
+  </aside>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
