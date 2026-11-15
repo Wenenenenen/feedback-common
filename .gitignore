@@ -15,3 +15,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解压后的样例（不可信数据，保留原始 zip，不纳入版本库）
+samples/extracted/
+# 运行产物
+/tmp/
+node_modules/

@@ -1,0 +1,1568 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Matrix Room Convolver · 立体声房间响应试配</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1a19'/%3E%3Cpath d='M6 16h4l3-7 4 14 3-7h6' stroke='%233987e5' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #212120;
+    --surface-3: #262625;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --line: #2c2c2a;
+    --line-strong: #383835;
+    --series-l: #3987e5;
+    --series-r: #d95926;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --focus: #3987e5;
+    --radius: 14px;
+    --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  [hidden] { display: none !important; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body { min-height: 100vh; }
+
+  ::selection { background: rgba(57, 135, 229, 0.32); }
+
+  .shell {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 28px 32px 72px;
+  }
+
+  /* ── header ───────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .brand-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .brand-mark svg { display: block; }
+
+  h1 {
+    margin: 0 0 2px;
+    font-size: 21px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  .brand-sub {
+    color: var(--muted);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+  }
+
+  .top-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-2);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .chip.ok { color: var(--ink); }
+  .chip.ok::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--good);
+  }
+  .chip.bad { color: var(--ink); border-color: rgba(208, 59, 59, 0.5); }
+  .chip.bad::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--critical);
+  }
+  .chip.idle::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  /* ── global status strip ──────────────────── */
+  .status-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 38px;
+    margin-bottom: 18px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink-2);
+    font-size: 12.5px;
+  }
+
+  .status-strip .spinner {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--line-strong);
+    border-top-color: var(--series-l);
+    animation: spin 0.9s linear infinite;
+    flex: none;
+    display: none;
+  }
+
+  .status-strip.busy .spinner { display: block; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status-strip .grow { flex: 1; min-width: 0; }
+  .status-strip .status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .bar {
+    position: relative;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--surface-3);
+    overflow: hidden;
+  }
+
+  .bar > .fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0%;
+    background: var(--series-l);
+    border-radius: 2px;
+    transition: width 120ms linear;
+  }
+
+  .status-strip .bar { width: min(240px, 26vw); display: none; }
+  .status-strip.busy .bar { display: block; }
+  .status-strip.busy .status-text { color: var(--ink); }
+
+  /* ── layout & cards ───────────────────────── */
+  .grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .card {
+    grid-column: span 12;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px 20px;
+    min-width: 0;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+
+  .card-title {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .step {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+
+  .card-note {
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.5;
+    text-align: right;
+  }
+
+  .card-note.left { text-align: left; }
+
+  .span-7 { grid-column: span 7; }
+  .span-5 { grid-column: span 5; }
+  .span-6 { grid-column: span 6; }
+  .span-4 { grid-column: span 4; }
+  .span-8 { grid-column: span 8; }
+
+  /* ── stat tiles ───────────────────────────── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .stat {
+    padding: 14px 16px 13px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-2);
+    min-width: 0;
+  }
+
+  .stat-label {
+    color: var(--muted);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    margin-bottom: 5px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stat-value.small { font-size: 16px; }
+  .stat-sub {
+    margin-top: 4px;
+    color: var(--ink-2);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stat-value.warn { color: var(--warning); }
+  .stat-value.critical { color: var(--critical); }
+
+  /* ── file slots ───────────────────────────── */
+  .sample-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .sample-row .hint {
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  .file-slots {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .slot {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--surface-2);
+    padding: 12px;
+    transition: border-color 140ms ease, background 140ms ease;
+    min-width: 0;
+  }
+
+  .slot.wide { grid-column: span 4; }
+  .slot.route { grid-column: span 1; }
+
+  .slot.dragover {
+    border-color: var(--focus);
+    background: var(--surface-3);
+  }
+
+  .slot.error {
+    border-color: rgba(208, 59, 59, 0.55);
+  }
+
+  .slot.loaded .slot-dot { background: var(--good); }
+  .slot.error .slot-dot { background: var(--critical); }
+  .slot.empty .slot-dot { background: var(--muted); }
+
+  .slot-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 6px;
+  }
+
+  .slot-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+  }
+
+  .slot-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .slot-role {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .slot-title {
+    font-size: 12px;
+    color: var(--ink-2);
+    margin-bottom: 8px;
+    min-height: 18px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .slot-title em { font-style: normal; color: var(--muted); }
+
+  .slot-meta {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.55;
+    font-variant-numeric: tabular-nums;
+    min-height: 34px;
+  }
+
+  .slot-meta b { color: var(--ink-2); font-weight: 500; }
+  .slot-meta .err { color: var(--critical); }
+
+  .slot-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .slot-actions .btn { flex: 1; }
+
+  .drop-caption {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+
+  /* ── buttons & controls ───────────────────── */
+  .btn {
+    appearance: none;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-3);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+
+  .btn:hover { background: #303030; border-color: #4a4a48; }
+  .btn:active { background: #373735; }
+
+  .btn:focus-visible,
+  select:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .btn:disabled {
+    cursor: not-allowed;
+    color: var(--muted);
+    background: var(--surface-2);
+    border-color: var(--line);
+    opacity: 0.7;
+  }
+
+  .btn.primary {
+    background: var(--series-l);
+    border-color: var(--series-l);
+    color: #fff;
+    font-weight: 550;
+  }
+
+  .btn.primary:hover { background: #4c96ec; border-color: #4c96ec; }
+  .btn.primary:active { background: #2f75c9; }
+  .btn.primary:disabled { background: var(--surface-2); border-color: var(--line); color: var(--muted); }
+
+  .btn.ghost { background: transparent; }
+  .btn.ghost:hover { background: var(--surface-3); }
+  .btn.danger { color: #f0b6b2; border-color: rgba(208, 59, 59, 0.45); }
+  .btn.danger:hover { background: rgba(208, 59, 59, 0.12); }
+  .btn.danger:disabled { color: var(--muted); border-color: var(--line); background: var(--surface-2); }
+
+  /* 取消按钮始终占位（不引起布局跳动），非忙碌时仅隐藏 */
+  #cancel-task:disabled { visibility: hidden; }
+  .btn.tiny { height: 26px; font-size: 11px; padding: 0 9px; }
+  .btn.play::before {
+    content: "";
+    width: 0; height: 0;
+    border-left: 7px solid currentColor;
+    border-top: 4.5px solid transparent;
+    border-bottom: 4.5px solid transparent;
+  }
+  .btn.stop::before {
+    content: "";
+    width: 8px; height: 8px; background: currentColor; border-radius: 1.5px;
+  }
+
+  select, input[type="number"], input[type="text"] {
+    appearance: none;
+    font: inherit;
+    font-size: 12px;
+    height: 32px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    padding: 0 28px 0 10px;
+    min-width: 0;
+  }
+
+  input[type="number"] {
+    padding-right: 6px;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .num-wrap input {
+    padding-right: 30px;
+  }
+  }
+
+  select {
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+      linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 14px, calc(100% - 10px) 14px;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+  }
+
+  select option { background: var(--surface-2); }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 22px;
+    background: transparent;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, var(--series-l) 0 var(--pct, 0%), var(--surface-3) var(--pct, 0%) 100%);
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--line-strong);
+    margin-top: -5px;
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--surface-3);
+  }
+
+  input[type="range"]::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--series-l);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ink);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--line-strong);
+  }
+
+  /* ── routing matrix ───────────────────────── */
+  .routing-matrix {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .matrix-corner { min-height: 26px; display: flex; align-items: flex-end; }
+
+  .axis-hint {
+    font-size: 9.5px;
+    line-height: 1.3;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+
+  .matrix-axis {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    min-height: 26px;
+  }
+
+  .matrix-axis .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .axis-label {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-right: 4px;
+  }
+
+  .axis-label .out {
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+
+  .axis-label .out-sub {
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+
+  .matrix-cell {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+    padding: 10px 11px;
+    min-height: 92px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .matrix-cell.empty { opacity: 0.55; }
+  .matrix-cell.crosstalk { border-color: rgba(217, 89, 38, 0.32); }
+
+  .cell-top {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .cell-code {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+  }
+
+  .cell-tag {
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    padding: 0 5px;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+
+  .matrix-cell.crosstalk .cell-tag { color: #e7a07f; border-color: rgba(217, 89, 38, 0.35); }
+
+  .cell-route {
+    color: var(--muted);
+    font-size: 10.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cell-name {
+    color: var(--ink-2);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cell-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    margin-top: auto;
+    padding-top: 2px;
+    white-space: nowrap;
+  }
+
+  .formula {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #141413;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.9;
+    color: var(--ink-2);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .formula .op { color: var(--muted); }
+  .formula .wet { color: var(--series-l); }
+  .formula .dry { color: var(--ink-2); }
+  .formula .d { color: var(--ink-2); }
+  .formula .note {
+    display: block;
+    margin-top: 2px;
+    font-family: var(--sans);
+    font-size: 10.5px;
+    color: var(--muted);
+    white-space: normal;
+  }
+
+  .route-legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .route-legend .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .route-legend .key .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  /* ── params ───────────────────────────────── */
+  .param-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 0 28px;
+    align-items: start;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .length-block { min-width: 0; }
+
+  .length-block .param-head { margin-bottom: 10px; }
+
+  .param {
+    padding: 2px 0 0;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    padding-left: 24px;
+    min-width: 0;
+  }
+
+  .param:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .param-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 7px;
+  }
+
+  .param-name {
+    font-size: 12.5px;
+    color: var(--ink);
+    font-weight: 550;
+  }
+
+  .param-name small {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 10.5px;
+    margin-left: 6px;
+  }
+
+  .param-readout {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .param-readout b { color: var(--ink); font-weight: 600; }
+
+  .param-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .param-controls .range-wrap { flex: 1; min-width: 0; }
+
+  .num-wrap {
+    position: relative;
+    flex: none;
+    width: 92px;
+  }
+
+  .num-wrap input {
+    width: 100%;
+    padding-right: 38px;
+  }
+
+  .num-wrap .unit {
+    position: absolute;
+    right: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 10.5px;
+    pointer-events: none;
+  }
+
+  .presets {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .preset {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 10px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .preset:hover { color: var(--ink); border-color: var(--line-strong); background: var(--surface-2); }
+  .preset.active { color: var(--ink); border-color: var(--line-strong); background: var(--surface-3); }
+
+  .param-foot {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  .mix-readout {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .mix-readout .seg {
+    display: inline-flex;
+    height: 6px;
+    width: 100%;
+    max-width: 180px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--surface-3);
+  }
+
+  .mix-readout .seg i { display: block; height: 100%; }
+  .mix-readout .seg .dry-part { background: var(--ink-2); }
+  .mix-readout .seg .wet-part { background: var(--series-l); }
+
+  /* ── length summary ───────────────────────── */
+  .length-list {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .length-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--surface-2);
+    min-width: 0;
+  }
+
+  .length-row .name {
+    color: var(--muted);
+    font-size: 10.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .length-row .val {
+    color: var(--ink-2);
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .length-row.tail { border-color: rgba(250, 178, 25, 0.3); }
+  .length-row.tail .val { color: var(--warning); }
+  .length-row.total { border-color: var(--line-strong); background: var(--surface-3); }
+  .length-row.total .name { color: var(--ink-2); }
+  .length-row.total .val { color: var(--ink); font-weight: 600; }
+
+  .length-foot {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.6;
+  }
+
+  /* ── waveforms ───────────────────────────── */
+  .wave-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .wave-card { position: relative; }
+
+  .wave-card.full { grid-column: 1 / -1; }
+
+  .wave-frame {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #141413;
+    overflow: hidden;
+  }
+
+  .wave-frame canvas { display: block; width: 100%; height: 150px; }
+  .wave-frame.short canvas { height: 84px; }
+  .wave-frame.tall canvas { height: 190px; }
+
+  .wave-placeholder {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 16px;
+    background: #141413;
+    pointer-events: none;
+  }
+
+  .wave-placeholder.hidden { display: none; }
+
+  .wave-tooltip {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+    min-width: 132px;
+    padding: 7px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: rgba(26, 26, 25, 0.96);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    font-size: 10.5px;
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums;
+    opacity: 0;
+    transition: opacity 80ms ease;
+    transform: translate(-50%, -100%);
+    white-space: nowrap;
+  }
+
+  .wave-tooltip.show { opacity: 1; }
+  .wave-tooltip .t { color: var(--muted); font-family: var(--mono); margin-bottom: 2px; }
+  .wave-tooltip .row { display: flex; align-items: center; gap: 5px; color: var(--ink-2); }
+  .wave-tooltip .row .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+
+  .legend .key { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .key .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .legend .sep { width: 1px; height: 12px; background: var(--line-strong); }
+  .legend .caption { font-variant-numeric: tabular-nums; }
+
+  .wave-foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 10.5px;
+    flex-wrap: wrap;
+  }
+
+  .wave-foot .num { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+  .ir-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .ir-tile { min-width: 0; }
+
+  .ir-tile .wave-frame { border-color: var(--line); }
+  .ir-tile .wave-frame canvas { height: 68px; }
+
+  .ir-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 5px;
+    font-size: 11px;
+    min-width: 0;
+  }
+
+  .ir-head .code { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+  .ir-head .len { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .ir-foot {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(20, 20, 19, 0.85);
+    backdrop-filter: blur(2px);
+    z-index: 3;
+    padding: 16px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+
+  .overlay.show { display: flex; }
+  .overlay .bar { width: min(320px, 70%); }
+  .overlay .overlay-text { font-variant-numeric: tabular-nums; }
+
+  /* ── transport & export ───────────────────── */
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .transport .group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .transport-label {
+    color: var(--muted);
+    font-size: 11px;
+    min-width: 52px;
+  }
+
+  .now-playing {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    min-height: 18px;
+  }
+
+  .now-playing.active { color: var(--ink-2); }
+
+  .divider-v {
+    width: 1px;
+    height: 22px;
+    background: var(--line-strong);
+    margin: 0 2px;
+  }
+
+  .export-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+
+  .export-note {
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  .report {
+    margin-top: 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+    padding: 12px 14px;
+    display: none;
+  }
+
+  .report.show { display: block; }
+
+  .report-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .report-head .title { font-size: 12px; font-weight: 550; }
+
+  .report-head .file {
+    color: var(--muted);
+    font-size: 10.5px;
+    font-family: var(--mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .report-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .report-item {
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+    min-width: 0;
+  }
+
+  .report-item .k { color: var(--muted); font-size: 10.5px; margin-bottom: 2px; }
+  .report-item .v {
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .report-item .v small { font-size: 10.5px; font-weight: 400; color: var(--ink-2); margin-left: 4px; }
+  .report-item .v.warn { color: var(--warning); }
+  .report-item .v.critical { color: var(--critical); }
+
+  .report-foot {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 10.5px;
+    line-height: 1.6;
+  }
+
+  .empty-state {
+    color: var(--muted);
+    font-size: 12px;
+    padding: 16px 0;
+  }
+
+  /* ── validation ───────────────────────────── */
+  .alerts { display: grid; gap: 8px; margin-top: 14px; }
+
+  .alert {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border: 1px solid rgba(208, 59, 59, 0.35);
+    border-radius: 9px;
+    background: rgba(208, 59, 59, 0.07);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+
+  .alert .icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: rgba(208, 59, 59, 0.2);
+    color: #f0b6b2;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .alert b { color: var(--ink); font-weight: 600; }
+
+  .alert.info {
+    border-color: var(--line-strong);
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
+  .alert.info .icon { background: var(--surface-3); color: var(--muted); }
+
+  .alert ul { margin: 0; padding-left: 16px; }
+  .alert li { margin: 1px 0; }
+
+  /* ── misc ─────────────────────────────────── */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .fade-in { animation: fade-in 160ms ease both; }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  @media (max-width: 1020px) {
+    .span-7, .span-5, .span-6, .span-4, .span-8 { grid-column: span 12; }
+    .wave-grid { grid-template-columns: 1fr; }
+    .wave-card.full { grid-column: span 12; }
+    .file-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .slot.wide { grid-column: span 2; }
+    .slot.route { grid-column: span 1; }
+  }
+
+  @media (max-width: 720px) {
+    .shell { padding: 20px 16px 56px; }
+    .card-head { flex-direction: column; align-items: stretch; gap: 8px; }
+    .card-note { text-align: left; }
+    .wave-card .card-head .legend { justify-content: flex-start; }
+    .card-head .card-title { flex: none; }
+    .topbar { flex-direction: column; align-items: flex-start; gap: 14px; }
+    .top-meta { justify-content: flex-start; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sample-row select { flex: 1; }
+    .file-slots { grid-template-columns: 1fr; }
+    .slot.wide, .slot.route { grid-column: span 1; }
+    .routing-matrix { grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1fr); }
+    .matrix-cell { min-height: 84px; padding: 9px; }
+    .wave-frame canvas { height: 128px; }
+    .wave-frame.tall canvas { height: 160px; }
+    .ir-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .report-grid { grid-template-columns: 1fr; }
+    .param-grid { grid-template-columns: 1fr; gap: 18px; }
+    .param { border-left: 0; padding-left: 0; }
+    .param + .param { border-top: 1px solid var(--line); padding-top: 16px; }
+    .length-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .length-row.total { grid-column: span 2; }
+    .param-controls { flex-wrap: wrap; }
+    .num-wrap { width: 104px; }
+    .card { padding: 15px 14px 16px; }
+    .transport { gap: 6px; }
+    .now-playing { width: 100%; margin-left: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          <path d="M3 13h3.4l2.4-6.6 3.4 13.2 2.6-6.6H23" stroke="#3987e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Matrix Room Convolver</h1>
+        <div class="brand-sub">立体声房间响应试配 · 四路由矩阵卷积</div>
+      </div>
+    </div>
+    <div class="top-meta">
+      <span class="chip idle" id="chip-rate">采样率 —</span>
+      <span class="chip idle" id="chip-state">等待导入</span>
+    </div>
+  </header>
+
+  <div class="status-strip" id="status-strip" role="status" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <div class="grow"><div class="status-text" id="status-text">导入干声与四条脉冲响应以开始。</div></div>
+    <div class="bar" aria-hidden="true"><div class="fill" id="status-fill"></div></div>
+    <button class="btn tiny danger" id="cancel-task" type="button" disabled>取消</button>
+  </div>
+
+  <main class="grid">
+    <!-- 01 stats -->
+    <section class="card" aria-label="摘要">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">采样率</div>
+          <div class="stat-value small" id="stat-rate">—</div>
+          <div class="stat-sub" id="stat-rate-sub">全部文件一致后可用</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">固定输出长度</div>
+          <div class="stat-value" id="stat-length">—</div>
+          <div class="stat-sub" id="stat-length-sub">干声 + 最长 IR − 1 + 预延迟</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">尾长</div>
+          <div class="stat-value" id="stat-tail">—</div>
+          <div class="stat-sub" id="stat-tail-sub">w = 0 时仍保留</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">量化前峰值</div>
+          <div class="stat-value" id="stat-peak">—</div>
+          <div class="stat-sub" id="stat-peak-sub">超限样本 —</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 files -->
+    <section class="card span-7" aria-labelledby="files-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">01</span><h2 id="files-title">导入文件</h2></div>
+        <div class="card-note left">44.1 / 48 kHz · 16 / 24-bit PCM<br>IR 文件名须为 LL、LR、RL、RR</div>
+      </div>
+      <div class="sample-row">
+        <label class="sr-only" for="sample-select">内置样例</label>
+        <select id="sample-select" aria-label="内置样例">
+          <option value="">内置样例</option>
+        </select>
+        <button class="btn" id="load-sample" type="button">加载样例</button>
+        <span class="hint" id="sample-hint">样例来自 samples/matrix-room.zip</span>
+      </div>
+      <div class="file-slots" id="file-slots"></div>
+      <div class="alerts" id="alerts" aria-live="polite"></div>
+      <p class="drop-caption">可直接把 WAV 拖到对应卡片；拖入多个文件时按文件名自动归类（LL/LR/RL/RR 为 IR，其余视为干声）。</p>
+    </section>
+
+    <!-- 03 routing -->
+    <section class="card span-5" aria-labelledby="routing-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">02</span><h2 id="routing-title">路由矩阵</h2></div>
+        <div class="card-note left">首字母 = 输出，次字母 = 输入</div>
+      </div>
+      <div class="routing-matrix" id="routing-matrix" aria-label="路由矩阵"></div>
+      <div class="formula" id="formula" aria-label="混音公式"></div>
+      <div class="route-legend">
+        <span class="key"><span class="dot" style="background: var(--series-l)"></span>左声道输出</span>
+        <span class="key"><span class="dot" style="background: var(--series-r)"></span>右声道输出</span>
+        <span class="key"><span class="dot" style="background: var(--muted)"></span>对角：同侧直达</span>
+        <span class="key"><span class="dot" style="background: #e7a07f"></span>交叉：串音</span>
+      </div>
+    </section>
+
+    <!-- 04 params -->
+    <section class="card" aria-labelledby="params-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">03</span><h2 id="params-title">参数</h2></div>
+        <div class="card-note left">预延迟只作用于湿声；不自动归一化</div>
+      </div>
+
+      <div class="param-grid">
+      <div class="param">
+        <div class="param-head">
+          <div class="param-name">预延迟 <small>只作用于湿声，按整数采样帧</small></div>
+          <div class="param-readout" id="predelay-readout">—</div>
+        </div>
+        <div class="param-controls">
+          <div class="range-wrap">
+            <label class="sr-only" for="predelay-range">预延迟（帧）</label>
+            <input type="range" id="predelay-range" min="0" max="9600" step="1" value="0"
+                   aria-valuetext="0 帧，0.0 毫秒" disabled>
+          </div>
+          <div class="num-wrap">
+            <label class="sr-only" for="predelay-frames">预延迟帧数</label>
+            <input type="number" id="predelay-frames" min="0" max="9600" step="1" value="0" disabled>
+            <span class="unit">帧</span>
+          </div>
+        </div>
+        <div class="presets" id="predelay-presets"></div>
+        <div class="param-foot">范围 0–200 ms；48 kHz 下 0–9,600 帧。输入帧号直接进入索引，不做小数插值。</div>
+      </div>
+
+      <div class="param">
+        <div class="param-head">
+          <div class="param-name">湿声比例 w <small>0 = 仅干声，1 = 仅矩阵卷积</small></div>
+          <div class="param-readout" id="wet-readout">—</div>
+        </div>
+        <div class="param-controls">
+          <div class="range-wrap">
+            <label class="sr-only" for="wet-range">湿声比例</label>
+            <input type="range" id="wet-range" min="0" max="1" step="0.001" value="0.65"
+                   aria-valuetext="0.650" disabled>
+          </div>
+          <div class="num-wrap" style="width: 98px">
+            <label class="sr-only" for="wet-number">湿声比例数值</label>
+            <input type="number" id="wet-number" min="0" max="1" step="0.001" value="0.65" disabled>
+            <span class="unit">w</span>
+          </div>
+        </div>
+        <div class="mix-readout">
+          <span>干声 <b id="mix-dry">35%</b></span>
+          <span class="seg" aria-hidden="true"><i class="dry-part" id="mix-dry-bar" style="width:35%"></i><i class="wet-part" id="mix-wet-bar" style="width:65%"></i></span>
+          <span>湿声 <b id="mix-wet">65%</b></span>
+        </div>
+      </div>
+
+      </div>
+
+      <div class="length-block">
+        <div class="param-head">
+          <div class="param-name">长度 <small>固定，不随 w 改变</small></div>
+          <div class="param-readout" id="length-total">—</div>
+        </div>
+        <div class="length-list" id="length-summary"></div>
+        <div class="length-foot">
+          N = 干声帧数 + 最长 IR 帧数 − 1 + 预延迟帧数。缺失的干声按零补齐；即使 w = 0 也按 N 输出，尾段不会截掉。
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 waveform input + IR -->
+    <section class="card wave-card" aria-labelledby="wave-input-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">04</span><h2 id="wave-input-title">干声输入</h2></div>
+        <div class="legend" id="dry-legend">
+          <span class="key"><span class="dot" style="background: var(--series-l)"></span>左 L</span>
+          <span class="key"><span class="dot" style="background: var(--series-r)"></span>右 R</span>
+          <span class="sep"></span>
+          <span class="caption" id="dry-caption">—</span>
+        </div>
+      </div>
+      <div class="wave-frame" id="dry-frame">
+        <canvas id="dry-wave" role="img" aria-label="干声输入波形" aria-describedby="dry-caption"></canvas>
+        <div class="wave-placeholder" id="dry-placeholder">尚未导入双声道干声</div>
+        <div class="wave-tooltip" id="dry-tooltip" aria-hidden="true"></div>
+      </div>
+      <div class="wave-foot">
+        <span>横向：时间</span>
+        <span class="num" id="dry-foot">—</span>
+      </div>
+    </section>
+
+    <section class="card wave-card" aria-labelledby="wave-ir-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">05</span><h2 id="wave-ir-title">脉冲响应</h2></div>
+        <div class="card-note left">各通道独立，最长 4 秒</div>
+      </div>
+      <div class="ir-grid" id="ir-grid"></div>
+      <div class="wave-foot">
+        <span>纵向 ±1.0 满刻度</span>
+        <span class="num" id="ir-foot">—</span>
+      </div>
+    </section>
+
+    <!-- 06 output waveform -->
+    <section class="card wave-card full" aria-labelledby="wave-out-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">06</span><h2 id="wave-out-title">处理后输出</h2></div>
+        <div class="legend" id="out-legend">
+          <span class="key"><span class="dot" style="background: var(--series-l)"></span>左 L</span>
+          <span class="key"><span class="dot" style="background: var(--series-r)"></span>右 R</span>
+          <span class="sep"></span>
+          <span class="caption" id="out-caption">—</span>
+        </div>
+      </div>
+      <div class="wave-frame tall" id="out-frame">
+        <canvas id="out-wave" role="img" aria-label="处理后输出波形（含尾段）" aria-describedby="out-caption"></canvas>
+        <div class="wave-placeholder" id="out-placeholder">等待计算</div>
+        <div class="overlay" id="out-overlay" role="status">
+          <div class="overlay-text" id="out-overlay-text">计算中…</div>
+          <div class="bar"><div class="fill" id="out-overlay-fill"></div></div>
+          <button class="btn tiny danger" id="out-cancel" type="button">取消</button>
+        </div>
+        <div class="wave-tooltip" id="out-tooltip" aria-hidden="true"></div>
+      </div>
+      <div class="wave-foot">
+        <span>尾段保留 · 输出固定长度</span>
+        <span class="num" id="out-foot">—</span>
+      </div>
+    </section>
+
+    <!-- 07 transport + export -->
+    <section class="card" aria-labelledby="audio-title">
+      <div class="card-head">
+        <div class="card-title"><span class="step">07</span><h2 id="audio-title">试听与导出</h2></div>
+        <div class="card-note left">导出 24-bit PCM WAV · 限幅只在导出时发生</div>
+      </div>
+
+      <div class="transport">
+        <span class="transport-label">试听</span>
+        <div class="group">
+          <button class="btn play" id="play-dry" type="button" disabled>处理前</button>
+          <button class="btn play primary" id="play-wet" type="button" disabled>处理后</button>
+          <button class="btn stop ghost" id="stop-play" type="button" disabled>停止</button>
+        </div>
+        <span class="now-playing" id="now-playing">未播放</span>
+      </div>
+
+      <div class="export-row">
+        <button class="btn primary" id="export-btn" type="button" disabled>导出 24-bit WAV</button>
+        <span class="export-note">
+          峰值与超限样本按量化前浮点结果统计；仅在写 WAV 时对超出 ±1 的量程限幅，<br>
+          处理与试听路径不做归一化或限幅。
+        </span>
+      </div>
+
+      <div class="report" id="export-report" aria-live="polite">
+        <div class="report-head">
+          <span class="title">导出报告</span>
+          <span class="file" id="export-file">—</span>
+        </div>
+        <div class="report-grid">
+          <div class="report-item">
+            <div class="k">量化前峰值</div>
+            <div class="v" id="rep-peak">—</div>
+          </div>
+          <div class="report-item">
+            <div class="k">超限样本（|x| &gt; 1）</div>
+            <div class="v" id="rep-over">—</div>
+          </div>
+          <div class="report-item">
+            <div class="k">导出时限幅样本</div>
+            <div class="v" id="rep-clamp">—</div>
+          </div>
+        </div>
+        <div class="report-foot" id="rep-foot">—</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
