@@ -1,0 +1,12 @@
+{
+  "name": "projector-warp-blend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "双投影幕布透视校正与边缘融合网页",
+  "scripts": {
+    "test:unit": "node --test tests/unit.test.mjs",
+    "test:e2e": "playwright test tests/e2e.spec.mjs",
+    "test": "npm run test:unit && npm run test:e2e"
+  }
+}

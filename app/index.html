@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双投影幕布校正台</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>双投影幕布校正台</strong>
+    <span class="rev" id="revisionLabel">修订 #0</span>
+  </div>
+  <div class="toolbar">
+    <label class="btn">导入 PNG
+      <input type="file" id="fileImage" accept="image/png" hidden>
+    </label>
+    <label class="btn">导入配置 JSON
+      <input type="file" id="fileConfig" accept=".json,application/json" hidden>
+    </label>
+    <label class="btn">同时导入（PNG + JSON，可多选/拖入）
+      <input type="file" id="fileBoth" accept="image/png,.json" multiple hidden>
+    </label>
+    <span class="sep"></span>
+    <button class="btn" id="btnExportConfig" type="button">导出配置</button>
+    <button class="btn" id="btnExportComposite" type="button">导出合成 PNG</button>
+    <button class="btn" id="btnExportAll" type="button">导出全部（投影+合成+配置）</button>
+  </div>
+</header>
+
+<div id="notice" class="notice hidden"></div>
+
+<main class="layout">
+  <section class="panel surface-panel">
+    <div class="panel-head">
+      <h2>幕布与四角映射</h2>
+      <div class="hint">拖动四角调整透视，或在右侧输入数字。点击幕布查看探针。</div>
+    </div>
+    <div class="surface-wrap" id="surfaceWrap">
+      <div class="surface-stage">
+        <canvas id="surfaceCanvas" class="surface-canvas"></canvas>
+        <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+      </div>
+      <div id="probeTip" class="probe-tip hidden"></div>
+    </div>
+    <div class="surface-meta" id="surfaceMeta"></div>
+  </section>
+
+  <aside class="panel params-panel">
+    <div class="panel-head"><h2>参数</h2></div>
+    <div class="params-scroll" id="paramsScroll"></div>
+  </aside>
+</main>
+
+<section class="panel outputs-panel">
+  <div class="panel-head">
+    <h2>输出预览</h2>
+    <div class="hint">各投影为原分辨率帧缓冲（含边缘羽化权重）；合成为幕布分辨率。右侧为权重蒙层（调试）。</div>
+  </div>
+  <div class="outputs-grid" id="outputsGrid"></div>
+</section>
+
+<section class="panel inspector-panel">
+  <div class="panel-head"><h2>探针</h2></div>
+  <div id="inspector" class="inspector">点击上方幕布任意位置查看映射坐标、权重与线性颜色。</div>
+</section>
+
+<footer class="statusbar">
+  <span id="statusText">未加载配置</span>
+  <span id="imageText"></span>
+</footer>
+
+<script src="js/geometry.js"></script>
+<script src="js/color.js"></script>
+<script src="js/state.js"></script>
+<script src="js/png-encoder.js"></script>
+<script src="js/sampler.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
