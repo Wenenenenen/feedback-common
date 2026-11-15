@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stroke Mesh Studio — 矢量描边网格编辑器</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>Stroke Mesh Studio</h1>
+  <div class="toolbar">
+    <button id="btn-import">导入 JSON</button>
+    <input type="file" id="file-input" accept=".json,application/json" hidden>
+    <button id="btn-export-mesh">导出网格 JSON</button>
+    <button id="btn-export-png">导出透明 PNG</button>
+    <span class="sep"></span>
+    <label><input type="checkbox" id="tg-fill" checked> 网格填充</label>
+    <label><input type="checkbox" id="tg-wireframe"> 三角线框</label>
+    <label><input type="checkbox" id="tg-centerline"> 中心线</label>
+    <label><input type="checkbox" id="tg-native"> 原生描边对照</label>
+    <span class="sep"></span>
+    <label>缩放 <input type="range" id="zoom" min="1" max="8" step="0.5" value="3"></label>
+  </div>
+</header>
+<main>
+  <aside>
+    <div class="panel">
+      <div class="panel-title">路径 <button id="btn-add" title="新增路径">＋</button><button id="btn-del" title="删除路径">－</button></div>
+      <ul id="path-list"></ul>
+    </div>
+    <div class="panel">
+      <div class="panel-title">编辑</div>
+      <label>ID <input id="ed-id" type="text"></label>
+      <label>命令 (JSON 数组,绝对坐标 M/L/Q/C/Z)</label>
+      <textarea id="ed-commands" rows="6" spellcheck="false"></textarea>
+      <label>变换矩阵 a,b,c,d,e,f</label>
+      <input id="ed-transform" type="text">
+      <div class="row">
+        <label>线宽 <input id="ed-width" type="number" step="0.5" min="0.1"></label>
+        <label>miterLimit <input id="ed-miter" type="number" step="0.5" min="1"></label>
+      </div>
+      <div class="row">
+        <label>连接
+          <select id="ed-join">
+            <option value="miter">miter</option>
+            <option value="bevel">bevel</option>
+            <option value="round">round</option>
+          </select>
+        </label>
+        <label>端帽
+          <select id="ed-cap">
+            <option value="butt">butt</option>
+            <option value="square">square</option>
+            <option value="round">round</option>
+          </select>
+        </label>
+      </div>
+      <label>虚线数组(正数,逗号分隔;空 = 实线)</label>
+      <input id="ed-dash" type="text">
+      <label>虚线相位 dashOffset(正 = 沿图案向前)</label>
+      <input id="ed-offset" type="number" step="1">
+      <label>颜色 r,g,b,a(0..1)</label>
+      <input id="ed-color" type="text">
+      <button id="btn-apply" class="primary">应用修改</button>
+      <div id="ed-error" class="error"></div>
+    </div>
+  </aside>
+  <section class="stage">
+    <div class="canvas-wrap"><canvas id="view"></canvas></div>
+    <div class="statusbar">
+      <span id="stats"></span>
+      <span id="pick-info">点击虚线查看弧长区间</span>
+    </div>
+  </section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
