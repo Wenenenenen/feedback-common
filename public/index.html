@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>循环音频制作台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <h1>循环音频制作台</h1>
+      <p class="brand-sub">采样级切点 · 后卷预混交叉淡化 · smpl 循环标记</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <input type="file" id="fileInput" accept=".wav,audio/wav,audio/x-wav" hidden>
+    <button class="btn primary" id="btnImport">导入 WAV</button>
+    <input type="file" id="projectInput" accept=".json,application/json" hidden>
+    <button class="btn" id="btnProjectOpen">打开工程</button>
+    <button class="btn" id="btnProjectSave" disabled>保存工程</button>
+    <button class="btn accent" id="btnExport" disabled>导出循环 WAV</button>
+  </div>
+</header>
+
+<div class="notice-strip" id="noticeStrip" hidden>
+  <span id="noticeText"></span>
+  <button class="link-btn" id="noticeClose" aria-label="关闭提示">×</button>
+</div>
+
+<main class="layout">
+  <section class="main-col">
+    <div class="card wave-card">
+      <div class="wave-head">
+        <div class="source-line">
+          <span class="dot" id="sourceDot"></span>
+          <span id="sourceInfo">尚未导入素材</span>
+        </div>
+        <div class="zoom-group">
+          <button class="icon-btn" id="btnZoomOut" title="缩小（Shift+滚轮可平移）">−</button>
+          <button class="icon-btn" id="btnZoomFit" title="适应全部素材">适应</button>
+          <button class="icon-btn" id="btnZoomIn" title="放大">+</button>
+          <span class="view-info" id="viewInfo"></span>
+        </div>
+      </div>
+      <div class="wave-stage" id="waveStage">
+        <canvas id="waveCanvas"></canvas>
+        <div class="empty-hint" id="emptyHint">
+          <strong>导入一段 WAV 开始</strong>
+          <span>支持 44.1 / 48 kHz、16 / 24 位 PCM、单 / 双声道，最长 60 秒</span>
+          <span>也可以打开工程后导入工程记录的源文件</span>
+        </div>
+      </div>
+      <div class="overview-wrap">
+        <canvas id="overviewCanvas"></canvas>
+      </div>
+      <div class="wave-foot">
+        <span id="cursorInfo">光标：—</span>
+        <span class="wave-hint">拖拽波形新建区间 · 拖拽两条边界线微调 · 单击定位试听 · 滚轮缩放</span>
+      </div>
+    </div>
+
+    <div class="card metrics-card">
+      <div class="card-head">
+        <h2>接缝指标</h2>
+        <span class="muted" id="metricsMeta">每个声道单独测量；跳变为相邻两采样的差值</span>
+      </div>
+      <div class="table-scroll">
+        <table class="metrics-table" id="metricsTable">
+          <thead>
+            <tr>
+              <th class="ch-col">声道</th>
+              <th>状态</th>
+              <th title="循环首帧与前一个采样 x[start-1] 的差值">首端</th>
+              <th title="后一个采样 x[end] 与循环末帧的差值">尾端</th>
+              <th title="首帧与末帧在循环回绕处的差值">接缝</th>
+              <th title="区间开头 10ms 的 RMS">首 RMS</th>
+              <th title="区间末尾 10ms 的 RMS">尾 RMS</th>
+            </tr>
+          </thead>
+          <tbody id="metricsBody">
+            <tr><td colspan="7" class="empty-cell">导入素材后显示各声道的测量值</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="metrics-legend">
+        <span>跳变与 RMS 均以满幅 1.0 为单位（16 位 1 LSB = 1/32768，24 位 1 LSB = 1/8388608）。</span>
+        <span id="fadeMetricNote"></span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side-col">
+    <div class="card">
+      <div class="card-head">
+        <h2>循环区间</h2>
+        <span class="tag" id="rangeTag">[start, end)</span>
+      </div>
+      <div class="field-grid">
+        <label class="field">
+          <span class="field-label">起点 start（帧）</span>
+          <span class="input-row">
+            <button class="step-btn" id="startMinus" title="起点减 1 帧">−1</button>
+            <input type="number" id="startInput" min="0" step="1" inputmode="numeric" disabled>
+            <button class="step-btn" id="startPlus" title="起点加 1 帧">+1</button>
+          </span>
+          <span class="field-sub" id="startTime">—</span>
+        </label>
+        <label class="field">
+          <span class="field-label">终点 end（帧，开区间）</span>
+          <span class="input-row">
+            <button class="step-btn" id="endMinus" title="终点减 1 帧">−1</button>
+            <input type="number" id="endInput" min="1" step="1" inputmode="numeric" disabled>
+            <button class="step-btn" id="endPlus" title="终点加 1 帧">+1</button>
+          </span>
+          <span class="field-sub" id="endTime">—</span>
+        </label>
+      </div>
+      <div class="range-summary">
+        <div><span class="muted">循环长度</span><strong id="lenFrames">—</strong></div>
+        <div><span class="muted">时长</span><strong id="lenTime">—</strong></div>
+        <div><span class="muted">预留音频</span><strong id="postrollInfo">—</strong></div>
+      </div>
+      <p class="hint">两声道始终使用同一组切点；区间长度为 end − start。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>交叉淡化</h2>
+        <span class="tag" id="fadeTag">F = 0</span>
+      </div>
+      <div class="fade-slider-row">
+        <input type="range" id="fadeSlider" min="0" max="100" step="0.1" value="0" disabled>
+        <span class="fade-value">
+          <input type="number" id="fadeMsInput" min="0" max="100" step="0.01" value="0" disabled>
+          <span class="muted">ms</span>
+        </span>
+      </div>
+      <div class="fade-meta">
+        <span id="fadeFramesInfo">F = 0 帧（不处理）</span>
+        <span class="muted" id="fadeLimitInfo"></span>
+      </div>
+      <div class="fade-frames-row">
+        <span>精确帧数 F</span>
+        <input type="number" id="fadeFramesInput" min="0" step="1" value="0" inputmode="numeric" disabled>
+        <span class="muted">0 或 ≥ 2</span>
+      </div>
+      <div class="error-box" id="fadeError" hidden>
+        <div id="fadeErrorText"></div>
+        <button id="fadeFixMax" hidden></button>
+        <button id="fadeFixZero" hidden></button>
+      </div>
+      <p class="hint">
+        长度 F 帧的线性交叉淡化：首帧完全取 end 之后的预留音频，末帧完全取原头部；
+        循环长度保持不变。F 只能为 0 或至少 2 帧，且不超过区间一半、不超过 end 之后的预留。
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>循环试听</h2>
+        <span class="tag" id="playTag">已停止</span>
+      </div>
+      <div class="audition-row">
+        <button class="btn play-btn" id="btnPlay" disabled>▶ 试听循环</button>
+        <div class="segmented" id="monitorGroup" role="group" aria-label="试听处理前后的音频">
+          <button class="seg" id="monitorRaw" disabled>处理前</button>
+          <button class="seg active" id="monitorProcessed" disabled>处理后</button>
+        </div>
+      </div>
+      <div class="audition-meta">
+        <span>循环内位置 <strong id="playPosition">—</strong></span>
+        <span>已循环 <strong id="loopCounter">0</strong> 轮</span>
+      </div>
+      <p class="hint">连续循环播放；切换处理前后会保持循环内位置。单击波形可重新定位。</p>
+    </div>
+
+    <div class="card status-card">
+      <div class="card-head">
+        <h2>工程与导出</h2>
+      </div>
+      <div class="status-line" id="projectStatus">工程：未保存</div>
+      <div class="status-line" id="exportStatus">导出：—</div>
+      <div class="status-line muted" id="checksumStatus">源文件校验和：—</div>
+      <p class="hint">
+        工程文件记录源文件 SHA-256、切点与淡化参数；重载时素材不匹配会提示。
+        导出 WAV 只含循环区间，并写入覆盖全段的 smpl 前向无限循环标记。
+      </p>
+    </div>
+  </aside>
+</main>
+
+<dialog id="mismatchDialog" class="dialog">
+  <h2>源文件与工程不匹配</h2>
+  <p id="mismatchIntro">工程记录的源文件与当前导入的素材不一致：</p>
+  <ul id="mismatchList" class="diff-list"></ul>
+  <p class="hint">如果仍然应用，切点与淡化参数会按当前素材长度做安全钳制，可能无法逐帧还原。</p>
+  <div class="dialog-actions">
+    <button class="btn" id="mismatchCancel">取消</button>
+    <button class="btn primary" id="mismatchApply">仍然应用参数</button>
+  </div>
+</dialog>
+
+<dialog id="infoDialog" class="dialog">
+  <h2 id="infoTitle">提示</h2>
+  <p id="infoBody"></p>
+  <div class="dialog-actions">
+    <button class="btn primary" id="infoOk">知道了</button>
+  </div>
+</dialog>
+
+<script src="wav.js"></script>
+<script src="loop-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
