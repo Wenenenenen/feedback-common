@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>AmbiX 方向校准台 · 一阶声场旋转</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23121619'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%235eead4' stroke-width='2'/%3E%3Cpath d='M16 16 L24 12' stroke='%23fbbf24' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0c0f12;
+    --surface: #14181c;
+    --surface-2: #1a1f24;
+    --surface-3: #20262c;
+    --ink: #e9eef3;
+    --ink-2: #aab6c0;
+    --muted: #76828c;
+    --line: #262d34;
+    --line-strong: #333c45;
+    --accent: #5eead4;
+    --accent-dim: rgba(94, 234, 212, 0.14);
+    --accent-2: #7dd3fc;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --good: #34d399;
+    --ch-w: #7dd3fc;
+    --ch-y: #f472b6;
+    --ch-z: #a3e635;
+    --ch-x: #fbbf24;
+    --radius: 12px;
+    --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { min-height: 100vh; }
+  ::selection { background: rgba(94, 234, 212, 0.28); }
+
+  .shell { max-width: 1440px; margin: 0 auto; padding: 24px 28px 72px; }
+
+  /* ══ header ══════════════════════════════════ */
+  .topbar {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 24px; margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark {
+    width: 46px; height: 46px; border-radius: 13px; flex: none;
+    background: linear-gradient(150deg, #1a2429, #12171b);
+    border: 1px solid var(--line-strong); display: grid; place-items: center;
+  }
+  .brand-mark svg { display: block; }
+  h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: 0.2px; }
+  .subtitle { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+  .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* ══ generic controls ═══════════════════════ */
+  button, select, input { font-family: inherit; font-size: 13px; color: var(--ink); }
+  button {
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 9px; padding: 7px 13px; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  button:hover:not(:disabled) { background: var(--surface-3); border-color: #46515c; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .38; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent); color: #07211d; border-color: transparent; font-weight: 600;
+  }
+  button.primary:hover:not(:disabled) { background: #7ff2df; border-color: transparent; }
+  button.ghost { background: transparent; }
+  button.small { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
+  button.danger-ghost { color: var(--danger); border-color: rgba(248,113,113,.3); background: transparent; }
+  button.danger-ghost:hover:not(:disabled) { background: rgba(248,113,113,.1); }
+
+  input[type="number"], input[type="text"], select {
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 8px; padding: 6px 9px; outline: none;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="number"] { font-family: var(--mono); }
+  input[type="number"]:focus, input[type="text"]:focus, select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(94,234,212,.12);
+  }
+  input[type="file"] { display: none; }
+  select { cursor: pointer; }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; background: transparent;
+    width: 100%; height: 22px; margin: 0; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 999px; background: var(--surface-3);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px; border-radius: 999px; background: var(--surface-3);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px;
+    border-radius: 50%; background: var(--accent); border: 2px solid #0c0f12;
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%; background: var(--accent);
+    border: 2px solid #0c0f12; box-shadow: 0 0 0 1px var(--accent);
+  }
+  input[type="range"]:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ══ layout ═════════════════════════════════ */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 16px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid var(--line); background: #121619;
+  }
+  .card-title { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13.5px; }
+  .step {
+    width: 21px; height: 21px; border-radius: 6px; flex: none;
+    background: var(--accent-dim); color: var(--accent);
+    display: grid; place-items: center; font-size: 11.5px; font-weight: 700;
+    font-family: var(--mono);
+  }
+  .card-body { padding: 16px; }
+  .card-note { color: var(--muted); font-size: 12px; }
+
+  .hint { color: var(--muted); font-size: 12px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .nowrap { white-space: nowrap; }
+
+  /* ══ drop zone / source ═════════════════════ */
+  .dropzone {
+    border: 1.5px dashed var(--line-strong); border-radius: 10px;
+    padding: 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+    background: rgba(255,255,255,.008);
+  }
+  .dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-dim); }
+  .dropzone .dz-title { font-weight: 600; margin-bottom: 3px; }
+  .dropzone .dz-sub { color: var(--muted); font-size: 12px; }
+  .dz-icon { color: var(--accent); margin-bottom: 6px; }
+
+  .source-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 7px; padding: 3px 9px; font-size: 12px; color: var(--ink-2);
+  }
+  .chip b { color: var(--ink); font-weight: 600; font-family: var(--mono); }
+  .chip.ok { border-color: rgba(52,211,153,.3); color: var(--good); }
+  .chip.bad { border-color: rgba(248,113,113,.35); color: var(--danger); }
+
+  .field-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .field-label { color: var(--ink-2); font-size: 12.5px; flex: none; width: 82px; }
+
+  .format-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .format-card {
+    position: relative; border: 1px solid var(--line-strong); border-radius: 9px;
+    padding: 10px 12px; cursor: pointer; background: var(--surface-2);
+    transition: border-color .15s, background .15s;
+  }
+  .format-card:hover { border-color: #46515c; }
+  .format-card input { position: absolute; opacity: 0; pointer-events: none; }
+  .format-card .fc-title, .format-card .fc-sub { pointer-events: none; }
+  .format-card .fc-title { font-weight: 600; font-size: 13px; }
+  .format-card .fc-sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; font-family: var(--mono); }
+  .format-card:has(input:checked) { border-color: var(--accent); background: var(--accent-dim); }
+  .format-card:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(94,234,212,.18); }
+
+  /* ══ tables ═════════════════════════════════ */
+  table.matrix { border-collapse: separate; border-spacing: 3px; font-family: var(--mono); font-size: 11.5px; }
+  table.matrix th {
+    color: var(--muted); font-weight: 500; font-size: 10.5px; padding: 2px 4px;
+    text-align: center; font-family: var(--sans);
+  }
+  table.matrix td {
+    background: var(--surface-2); border-radius: 5px; padding: 3px 7px;
+    text-align: right; min-width: 44px; color: var(--ink-2);
+  }
+  table.matrix td.zero { color: #3d464e; }
+  table.matrix td.diag { color: var(--accent); background: rgba(94,234,212,.08); }
+  table.matrix th.rowhead { text-align: right; padding-right: 6px; color: var(--ink-2); font-family: var(--mono); }
+
+  .matrix-wrap { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 12px; }
+  .matrix-block .mb-title { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .matrix-block .mb-title b { color: var(--ink-2); font-weight: 500; }
+
+  /* ══ mode switch ════════════════════════════ */
+  .segmented {
+    display: inline-flex; background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 9px; padding: 3px; gap: 2px;
+  }
+  .segmented button {
+    border: none; background: transparent; padding: 5px 13px; border-radius: 6px;
+    color: var(--muted); font-size: 12.5px;
+  }
+  .segmented button:hover:not(:disabled) { background: var(--surface-3); color: var(--ink-2); border: none; }
+  .segmented button.active { background: var(--surface-3); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .segmented button.active::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    display: inline-block; margin-right: 7px; vertical-align: 1px;
+  }
+
+  .angle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+  .angle-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; }
+  .angle-box label { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--ink-2); }
+  .angle-box label span.tag { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .angle-input-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .angle-input-row input[type="number"] { width: 100%; text-align: right; font-size: 15px; padding: 4px 8px; }
+  .angle-input-row .unit { color: var(--muted); font-size: 12px; }
+  .angle-box input[type="range"] { margin-top: 4px; }
+
+  .readout-line {
+    display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px;
+    font-size: 12px; color: var(--muted); align-items: center;
+  }
+  .readout-line code {
+    font-family: var(--mono); color: var(--ink-2); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; font-size: 11.5px;
+  }
+  .readout-line code b { color: var(--accent); font-weight: 600; }
+
+  /* ══ keyframe editor ════════════════════════ */
+  .kf-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .kf-toolbar .spacer { flex: 1 1 auto; }
+
+  .kf-scroll { max-height: 288px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; }
+  table.kf { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.kf th {
+    position: sticky; top: 0; z-index: 1; background: var(--surface-2); color: var(--muted);
+    font-weight: 500; font-size: 11px; text-align: left; padding: 7px 8px;
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  table.kf td { padding: 4px 6px; border-bottom: 1px solid rgba(38,45,52,.6); vertical-align: middle; }
+  table.kf tr:last-child td { border-bottom: none; }
+  table.kf tr.invalid td { background: rgba(248,113,113,.07); }
+  table.kf td.idx { color: var(--muted); font-family: var(--mono); font-size: 11px; text-align: right; width: 28px; }
+  table.kf input.q { width: 74px; padding: 4px 6px; font-family: var(--mono); font-size: 11.5px; text-align: right; }
+  table.kf input.frame { width: 88px; padding: 4px 6px; font-family: var(--mono); font-size: 11.5px; text-align: right; }
+  table.kf .euler-cell { color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+  table.kf .row-actions { text-align: right; width: 34px; }
+  .icon-btn {
+    width: 24px; height: 24px; padding: 0; justify-content: center; border-radius: 6px;
+    color: var(--muted); background: transparent; border-color: transparent;
+  }
+  .icon-btn:hover:not(:disabled) { color: var(--danger); background: rgba(248,113,113,.1); border-color: transparent; }
+
+  .kf-empty { padding: 22px; text-align: center; color: var(--muted); font-size: 12.5px; }
+
+  .msg { border-radius: 8px; padding: 8px 11px; font-size: 12px; margin-top: 10px; display: flex; gap: 8px; align-items: flex-start; }
+  .msg.error { background: rgba(248,113,113,.09); border: 1px solid rgba(248,113,113,.28); color: #fca5a5; }
+  .msg.warn { background: rgba(251,191,36,.07); border: 1px solid rgba(251,191,36,.25); color: #fcd34d; }
+  .msg.ok { background: rgba(52,211,153,.07); border: 1px solid rgba(52,211,153,.25); color: #6ee7b7; }
+  .msg.info { background: rgba(125,211,252,.06); border: 1px solid rgba(125,211,252,.2); color: #bae6fd; }
+  .msg ul { margin: 2px 0 0; padding-left: 16px; }
+
+  /* ══ timeline / transport ═══════════════════ */
+  .timeline-wrap { position: relative; margin-top: 12px; }
+  canvas.timeline {
+    display: block; width: 100%; height: 104px; border-radius: 9px;
+    background: #0f1316; border: 1px solid var(--line); cursor: crosshair; touch-action: none;
+  }
+  .transport { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .play-btn {
+    width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: 50%;
+    background: var(--accent); color: #07211d; border: none; flex: none;
+  }
+  .play-btn:hover:not(:disabled) { background: #7ff2df; border: none; }
+  .play-btn:disabled { background: var(--surface-3); color: var(--muted); }
+  .time-readout { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); min-width: 138px; }
+  .time-readout b { color: var(--ink); font-weight: 600; }
+  .scrub-wrap { flex: 1 1 240px; min-width: 160px; }
+  .scrub-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); font-family: var(--mono); margin-top: -2px; }
+
+  .audition-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; margin-top: 14px; align-items: start; }
+  @media (max-width: 900px) { .audition-grid { grid-template-columns: 1fr; } }
+  canvas.dir { display: block; width: 100%; height: 300px; border-radius: 9px; background: #0f1316; border: 1px solid var(--line); }
+
+  .meters { display: flex; flex-direction: column; gap: 7px; }
+  .meter-row { display: grid; grid-template-columns: 26px minmax(0,1fr) 74px; gap: 8px; align-items: center; }
+  .meter-name { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+  .meter-track {
+    position: relative; height: 9px; border-radius: 5px; background: var(--surface-2);
+    overflow: hidden; border: 1px solid var(--line);
+  }
+  .meter-fill {
+    position: absolute; inset: 0 auto 0 0; width: 0%; border-radius: 4px;
+    background: currentColor; transition: width .05s linear;
+  }
+  .meter-peak { position: absolute; top: -2px; bottom: -2px; width: 1.5px; background: var(--ink-2); opacity: .6; }
+  .meter-val { font-family: var(--mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+
+  .dir-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+  .dir-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dir-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  /* ══ stats / export ═════════════════════════ */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+  .stat {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 11px;
+  }
+  .stat .stat-label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  .stat .stat-value { font-family: var(--mono); font-size: 16px; font-weight: 600; margin-top: 1px; }
+  .stat .stat-sub { font-size: 10.5px; color: var(--muted); font-family: var(--mono); margin-top: 1px; }
+  .stat.wide { grid-column: 1 / -1; }
+  .stat.danger { border-color: rgba(248,113,113,.4); background: rgba(248,113,113,.07); }
+  .stat.danger .stat-value { color: var(--danger); }
+
+  .export-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .export-actions button { justify-content: center; padding: 9px 13px; }
+
+  .kv { display: grid; grid-template-columns: 108px minmax(0,1fr); gap: 5px 10px; font-size: 12px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: var(--mono); color: var(--ink-2); font-size: 11.5px; word-break: break-word; }
+
+  .divider { height: 1px; background: var(--line); margin: 14px 0; }
+
+  .status-strip {
+    display: flex; align-items: center; gap: 8px; padding: 6px 11px;
+    border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-2); max-width: 100%;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status-strip.busy .status-dot { background: var(--warn); animation: pulse 1.1s infinite; }
+  .status-strip.ok .status-dot { background: var(--good); }
+  .status-strip.error .status-dot { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+  .progress-track { height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width .12s linear; }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+
+  .stack-8 { display: flex; flex-direction: column; gap: 8px; }
+  .row-8 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .grow { flex: 1 1 auto; }
+
+  @media (max-width: 1120px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .shell { padding: 18px 18px 56px; }
+  }
+  @media (max-width: 620px) {
+    .angle-grid { grid-template-columns: 1fr; }
+    .format-cards { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+    .stat.wide { grid-column: 1 / -1; }
+    /* 窄屏：关键帧表格改为纵向卡片，避免数字被截断 */
+    table.kf thead { display: none; }
+    table.kf, table.kf tbody { display: block; }
+    table.kf tr {
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) 24px;
+      grid-template-areas:
+        "idx frame w x del"
+        "idx y z . del"
+        "idx euler euler euler del";
+      gap: 6px 5px;
+      align-items: end;
+      padding: 9px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    table.kf tr:last-child { border-bottom: none; }
+    table.kf td { display: block; padding: 0; border: none; min-width: 0; }
+    table.kf td.idx { grid-area: idx; text-align: left; align-self: start; padding-top: 15px; }
+    table.kf td.frame-cell { grid-area: frame; }
+    table.kf td.q-w { grid-area: w; }
+    table.kf td.q-x { grid-area: x; }
+    table.kf td.q-y { grid-area: y; }
+    table.kf td.q-z { grid-area: z; }
+    table.kf td.euler-cell { grid-area: euler; display: block; font-size: 10.5px; }
+    table.kf td.row-actions { grid-area: del; align-self: start; padding-top: 14px; width: auto; }
+    table.kf td.frame-cell::before,
+    table.kf td.q-cell::before {
+      content: attr(data-label);
+      display: block; font-family: var(--mono); font-size: 9.5px;
+      color: var(--muted); margin-bottom: 1px;
+    }
+    table.kf input.frame, table.kf input.q {
+      width: 100%; padding: 4px 5px; font-size: 12px;
+    }
+    table.kf .row-actions { width: 26px; }
+    .kf-toolbar { gap: 6px; }
+    .kf-toolbar button { padding: 5px 8px; font-size: 11.5px; }
+    .card-head { flex-wrap: wrap; row-gap: 6px; }
+    .card-note { flex-basis: 100%; }
+    .top-actions { width: 100%; }
+    .top-actions select { flex: 1 1 auto; min-width: 0; }
+    .status-strip { width: 100%; }
+    .transport { gap: 10px; }
+    .time-readout { min-width: 0; }
+    .scrub-wrap { flex-basis: 100%; order: 3; }
+    .audition-grid { grid-template-columns: 1fr; }
+    canvas.dir { height: 260px; }
+    .matrix-wrap { gap: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          <circle cx="13" cy="13" r="8.5" stroke="#5eead4" stroke-width="1.6" opacity=".55"/>
+          <ellipse cx="13" cy="13" rx="8.5" ry="3.4" stroke="#5eead4" stroke-width="1.2" opacity=".35"/>
+          <path d="M13 13 L20.5 9.2" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="13" cy="13" r="1.7" fill="#5eead4"/>
+        </svg>
+      </div>
+      <div>
+        <h1>AmbiX 方向校准台</h1>
+        <p class="subtitle">一阶四声道 B-format · 主动声场旋转 · 预览与导出同一条曲线</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="sr-only" for="sample-select">样例</label>
+      <select id="sample-select" title="载入样例">
+        <option value="">选择样例…</option>
+      </select>
+      <button id="load-sample" class="ghost" disabled>载入样例</button>
+      <button id="open-file" class="primary">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12.5V13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        导入四声道 WAV
+      </button>
+      <input type="file" id="file-input" accept=".wav,audio/wav,audio/x-wav,audio/wave">
+      <div class="status-strip" id="status-strip">
+        <span class="status-dot"></span>
+        <span id="status-text">等待导入音频</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- ═══════════ 左列 ═══════════ -->
+    <div class="col">
+
+      <!-- 1. 音频与格式 -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title"><span class="step">1</span>音频与 B-format 格式</div>
+          <span class="card-note">四声道 PCM · 44.1 / 48 kHz · 16 / 24-bit · ≤ 60 s</span>
+        </div>
+        <div class="card-body">
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="拖入或选择四声道 WAV 文件">
+            <div class="dz-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M12 15V4m0 0L8 8m4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="dz-title">把四声道 WAV 拖到这里，或点击选择</div>
+            <div class="dz-sub">不按普通环绕声混音；声道顺序由下方格式手动指定</div>
+          </div>
+          <div id="source-info" hidden>
+            <div class="source-meta" id="source-meta"></div>
+            <div class="divider"></div>
+            <div class="field-row" style="margin-top:0">
+              <span class="field-label">输入格式</span>
+              <span class="hint">手动选择；页面不会按声道掩码猜测</span>
+            </div>
+            <div class="format-cards">
+              <label class="format-card">
+                <input type="radio" name="in-format" value="ambix" id="in-ambix" checked>
+                <div class="fc-title">AmbiX</div>
+                <div class="fc-sub">ACN / SN3D · W Y Z X</div>
+              </label>
+              <label class="format-card">
+                <input type="radio" name="in-format" value="fuma" id="in-fuma">
+                <div class="fc-title">FuMa</div>
+                <div class="fc-sub">W X Y Z · W × √2</div>
+              </label>
+            </div>
+            <div class="matrix-wrap">
+              <div class="matrix-block">
+                <div class="mb-title">格式换算矩阵 <b>M</b>（行 = 输入通道，列 = 规范序）</div>
+                <div id="conv-matrix"></div>
+              </div>
+              <div class="matrix-block">
+                <div class="mb-title">监听矩阵 <b>monitor_rows_wyzx</b></div>
+                <div id="monitor-matrix"></div>
+              </div>
+            </div>
+            <div class="readout-line" id="channel-map"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 旋转 -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title"><span class="step">2</span>声场主动旋转</div>
+          <div class="segmented" role="radiogroup" aria-label="旋转模式">
+            <button id="mode-static" role="radio" aria-checked="true" class="active">静态欧拉角</button>
+            <button id="mode-automation" role="radio" aria-checked="false">关键帧四元数</button>
+          </div>
+        </div>
+        <div class="card-body">
+
+          <div id="static-panel">
+            <p class="hint" style="margin:0 0 4px">
+              右手系 X 前 / Y 左 / Z 上；矩阵次序 <span class="mono">Rz(yaw)·Ry(pitch)·Rx(roll)</span>。
+              W 为 0 阶项，不参与旋转。
+            </p>
+            <div class="angle-grid">
+              <div class="angle-box">
+                <label for="yaw">Yaw 偏航 <span class="tag">Rz</span></label>
+                <div class="angle-input-row">
+                  <input type="number" id="yaw" value="0" step="0.1" min="-3600" max="3600" inputmode="decimal">
+                  <span class="unit">°</span>
+                </div>
+                <input type="range" id="yaw-range" min="-180" max="180" step="0.1" value="0" aria-label="Yaw 滑块">
+              </div>
+              <div class="angle-box">
+                <label for="pitch">Pitch 俯仰 <span class="tag">Ry</span></label>
+                <div class="angle-input-row">
+                  <input type="number" id="pitch" value="0" step="0.1" min="-3600" max="3600" inputmode="decimal">
+                  <span class="unit">°</span>
+                </div>
+                <input type="range" id="pitch-range" min="-90" max="90" step="0.1" value="0" aria-label="Pitch 滑块">
+              </div>
+              <div class="angle-box">
+                <label for="roll">Roll 横滚 <span class="tag">Rx</span></label>
+                <div class="angle-input-row">
+                  <input type="number" id="roll" value="0" step="0.1" min="-3600" max="3600" inputmode="decimal">
+                  <span class="unit">°</span>
+                </div>
+                <input type="range" id="roll-range" min="-180" max="180" step="0.1" value="0" aria-label="Roll 滑块">
+              </div>
+            </div>
+            <div class="readout-line">
+              <span>等价四元数（归一化）</span>
+              <code id="euler-quat">[1, 0, 0, 0]</code>
+              <span class="grow"></span>
+              <button class="small ghost" id="reset-angles">归零</button>
+            </div>
+          </div>
+
+          <div id="automation-panel" hidden>
+            <p class="hint" style="margin:0 0 10px">
+              关键帧按采样帧定位，覆盖整段音频；端点之外保持最近端值，不做外推。
+              四元数导入即归一化，点积为负时翻转取最短弧 SLERP。
+            </p>
+            <div class="kf-toolbar">
+              <button class="small" id="kf-add" disabled>＋ 播放头处添加关键帧</button>
+              <button class="small ghost" id="kf-import-btn">导入 JSON</button>
+              <input type="file" id="kf-import" accept=".json,application/json">
+              <button class="small ghost" id="kf-export">导出 JSON</button>
+              <span class="spacer"></span>
+              <span class="hint mono" id="kf-count">0 个关键帧</span>
+            </div>
+            <div class="kf-scroll" id="kf-scroll">
+              <table class="kf" id="kf-table" hidden>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>frame</th>
+                    <th>w</th><th>x</th><th>y</th><th>z</th>
+                    <th class="euler-head">欧拉角等价</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="kf-body"></tbody>
+              </table>
+              <div class="kf-empty" id="kf-empty">尚无关键帧。把播放头放到需要的时刻，点「添加关键帧」。</div>
+            </div>
+            <div id="kf-status"></div>
+            <div class="readout-line" id="kf-range-note"></div>
+          </div>
+
+          <div class="msg info" id="mode-note" style="margin-top:14px">
+            两种旋转模式互斥：只有当前选中的模式会参与渲染。切换不会清除另一模式的数据。
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 试听与方向 -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title"><span class="step">3</span>试听与方向示意</div>
+          <span class="card-note">拖动时间轴试听；指向为当前帧的旋转结果</span>
+        </div>
+        <div class="card-body">
+          <div class="timeline-wrap">
+            <canvas class="timeline" id="timeline" aria-label="音频时间轴与关键帧"></canvas>
+          </div>
+          <div class="transport">
+            <button class="play-btn" id="play-btn" disabled aria-label="播放">
+              <svg id="play-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M4.5 2.8v10.4c0 .5.5.8 1 .5l8.2-5.2a.6.6 0 0 0 0-1L5.5 2.3c-.5-.3-1 0-1 .5Z"/>
+              </svg>
+            </button>
+            <div class="time-readout">
+              <b id="time-now">0:00.000</b> / <span id="time-total">0:00.000</span>
+              <div class="hint mono" id="frame-now" style="font-size:10.5px">frame 0 / 0</div>
+            </div>
+            <div class="scrub-wrap">
+              <input type="range" id="scrub" min="0" max="0" value="0" step="1" disabled aria-label="播放位置">
+              <div class="scrub-labels"><span>0</span><span id="scrub-end">0</span></div>
+            </div>
+            <label class="row-8" style="gap:6px;color:var(--muted);font-size:11.5px">
+              音量
+              <input type="range" id="volume" min="0" max="1" step="0.01" value="0.9" style="width:84px" aria-label="监听音量">
+            </label>
+          </div>
+
+          <div class="audition-grid">
+            <div>
+              <canvas class="dir" id="dir-canvas" aria-label="方向示意"></canvas>
+              <div class="dir-legend">
+                <span><i style="background:var(--ch-x)"></i>X 前</span>
+                <span><i style="background:var(--ch-y)"></i>Y 左</span>
+                <span><i style="background:var(--ch-z)"></i>Z 上</span>
+                <span><i style="background:#5a6772"></i>原始方向</span>
+              </div>
+            </div>
+            <div>
+              <div class="readout-line" style="margin-top:0">
+                <span>当前帧四元数</span>
+                <code id="dir-quat">[1, 0, 0, 0]</code>
+                <span>朝向</span>
+                <code id="dir-azel">az 0.0° / el 0.0°</code>
+              </div>
+              <div class="meters" id="meters" style="margin-top:12px"></div>
+              <div class="readout-line" id="frame-values" style="margin-top:10px"></div>
+              <div class="hint" style="margin-top:8px">
+                监听解码使用 <span class="mono">monitor_rows_wyzx</span> 的 L/R 两行；
+                仅用于试听，不参与导出，也不改变电平。
+              </div>
+            </div>
+          </div>
+
+          <div class="progress-track" id="render-progress-track" hidden>
+            <div class="progress-fill" id="render-progress"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════ 右列 ═══════════ -->
+    <div class="col">
+
+      <!-- 输出 -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title"><span class="step">4</span>输出与导出</div>
+        </div>
+        <div class="card-body">
+          <div class="field-row" style="margin-top:0">
+            <span class="field-label">输出格式</span>
+            <div class="format-cards" style="margin-top:0;flex:1">
+              <label class="format-card">
+                <input type="radio" name="out-format" value="ambix" id="out-ambix" checked>
+                <div class="fc-title">AmbiX</div>
+                <div class="fc-sub">W Y Z X · SN3D</div>
+              </label>
+              <label class="format-card">
+                <input type="radio" name="out-format" value="fuma" id="out-fuma">
+                <div class="fc-title">FuMa</div>
+                <div class="fc-sub">W X Y Z · W ÷ √2</div>
+              </label>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="stat-grid" id="stat-grid">
+            <div class="stat wide">
+              <div class="stat-label">旋转后峰值（24-bit 前）</div>
+              <div class="stat-value" id="stat-peak">—</div>
+              <div class="stat-sub" id="stat-peak-sub">尚未渲染</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">采样率</div>
+              <div class="stat-value" id="stat-rate" style="font-size:14px">—</div>
+              <div class="stat-sub">保持输入不变</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">帧数</div>
+              <div class="stat-value" id="stat-frames" style="font-size:14px">—</div>
+              <div class="stat-sub" id="stat-format-sub">输出 24-bit · 4 声道</div>
+            </div>
+            <div class="stat wide" id="stat-overflow-card">
+              <div class="stat-label">超出 [-1,1) 样点</div>
+              <div class="stat-value" id="stat-overflow">—</div>
+              <div class="stat-sub" id="stat-overflow-sub">&nbsp;</div>
+            </div>
+          </div>
+
+          <div id="overflow-msg"></div>
+
+          <div class="export-actions">
+            <button class="primary" id="export-wav" disabled>导出 24-bit PCM WAV</button>
+            <button id="export-json" disabled>导出格式 JSON</button>
+          </div>
+          <div id="export-status"></div>
+
+          <div class="divider"></div>
+          <div class="kv">
+            <dt>导出规则</dt>
+            <dd>只做格式换算与旋转，不归一化、不限幅</dd>
+            <dt>采样率 / 帧数</dt>
+            <dd>与输入一致</dd>
+            <dt>溢出处理</dt>
+            <dd>显示峰值并阻止 PCM 导出</dd>
+          </div>
+        </div>
+      </section>
+
+      <!-- 参考核对 -->
+      <section class="card" id="reference-card" hidden>
+        <div class="card-head">
+          <div class="card-title"><span class="step">✓</span>参考文件核对</div>
+          <span class="card-note" id="reference-note"></span>
+        </div>
+        <div class="card-body">
+          <div class="kv">
+            <dt>参考文件</dt>
+            <dd>reference-automated-48000-24.wav</dd>
+            <dt>核对方式</dt>
+            <dd>同一 automation.json 曲线，逐样点比较 24-bit 整数</dd>
+            <dt>允许误差</dt>
+            <dd>±4 个最小整数单位</dd>
+          </div>
+          <div id="reference-result"></div>
+        </div>
+      </section>
+
+      <!-- 约定摘要 -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title">约定摘要</div>
+          <span class="card-note">来自包内 conventions.json</span>
+        </div>
+        <div class="card-body">
+          <div class="kv" id="conventions-summary">
+            <dt>坐标</dt><dd>右手系 X 前 / Y 左 / Z 上</dd>
+            <dt>旋转</dt><dd>主动旋转 q·v·q⁻¹</dd>
+            <dt>欧拉角</dt><dd>Rz(yaw)·Ry(pitch)·Rx(roll)</dd>
+            <dt>W 分量</dt><dd>0 阶项，不参与旋转</dd>
+            <dt>插值</dt><dd>最短弧 SLERP，端点保持</dd>
+            <dt>参考容差</dt><dd>±4 个 24-bit 整数单位</dd>
+          </div>
+          <div id="conventions-mismatch"></div>
+        </div>
+      </section>
+
+      <p class="hint" style="padding:0 4px">
+        本页完全在本地浏览器中计算，无外部请求。样例包内容按不可信数据只读使用。
+      </p>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

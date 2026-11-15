@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 样例解压目录（由 start.sh / server.py 从 zip 生成）
+samples/extracted/
