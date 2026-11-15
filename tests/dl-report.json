@@ -1,0 +1,52 @@
+{
+  "source": {
+    "sample_rate": 48000,
+    "channels": 2,
+    "bits_per_sample": 24,
+    "frames": 144000,
+    "duration_s": 3
+  },
+  "target_lufs": 4,
+  "ceiling_dbtp": -1,
+  "oversample_factor": 8,
+  "input": {
+    "integrated_lufs": 2.3737329786816597,
+    "per_channel": [
+      {
+        "channel": 1,
+        "sample_peak_dbfs": -3.925450485968263,
+        "true_peak_dbtp": -0.9111223448941934
+      },
+      {
+        "channel": 2,
+        "sample_peak_dbfs": -3.925450485968263,
+        "true_peak_dbtp": -0.9111223448941934
+      }
+    ],
+    "max_true_peak_dbtp": -0.9111223448941934
+  },
+  "delivered": {
+    "integrated_lufs": 2.2848553306757515,
+    "per_channel": [
+      {
+        "channel": 1,
+        "sample_peak_dbfs": -4.014328133969335,
+        "true_peak_dbtp": -0.9999999746454309
+      },
+      {
+        "channel": 2,
+        "sample_peak_dbfs": -4.014328133969335,
+        "true_peak_dbtp": -0.9999999746454309
+      }
+    ],
+    "max_true_peak_dbtp": -0.9999999746454309
+  },
+  "gain": {
+    "gain_db": -0.08887765510580659,
+    "gain_linear": 0.9898197548997173,
+    "peak_constrained": true,
+    "target_gap_lu": 1.715144676424147
+  },
+  "gating": "BS.1770-4 absolute -70 LUFS + relative -10 LU; 400ms block / 100ms hop",
+  "generated_at": "2026-11-15T09:36:15.323Z"
+}
