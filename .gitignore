@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 样例解压目录（由 server.py 自动生成）
+samples/extracted/
+# 测试解压目录
+tests/.cases/
+# 测试/手动导出的产物（放在仓库根时忽略）
+/*.png
+/*_settings.json

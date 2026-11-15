@@ -1,0 +1,17 @@
+{
+  "dimensions": [
+    16,
+    12,
+    8
+  ],
+  "spacing": [
+    1,
+    2,
+    3
+  ],
+  "voxelType": "u16",
+  "endian": "big",
+  "raw": "ramp-u16be.raw",
+  "layout": "x-fastest",
+  "origin": "voxel-box-min"
+}

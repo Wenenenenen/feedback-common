@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>体扫描射线预览工作台</title>
+<style>
+  :root {
+    --bg: #12151a; --panel: #1b1f26; --panel2: #232936; --panel3: #2b3242;
+    --border: #333b4a; --text: #dde3ec; --dim: #8b94a7; --dim2: #626b7d;
+    --accent: #5b9df9; --accent2: #f0a45c; --danger: #e36a6a; --ok: #5cc98d;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+    background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin-right: 10px; white-space: nowrap; }
+  header h1 small { color: var(--dim2); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; font-family: inherit;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.38; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+  button.warn { color: var(--accent2); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .seg button { border: 0; border-right: 1px solid var(--border); border-radius: 0; padding: 3px 10px; background: var(--panel2); }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  input[type=file] { display: none; }
+
+  #statusBar {
+    padding: 5px 12px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--dim);
+    min-height: 29px;
+  }
+  #statusBar .msg { color: var(--text); }
+  #statusBar .bad { color: var(--danger); font-weight: 500; }
+  #statusBar .warnText { color: var(--accent2); }
+  #statusBar .good { color: var(--ok); }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 296px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border);
+    overflow-y: auto; overscroll-behavior: contain; padding: 0 0 14px;
+  }
+  #sidebar section { border-bottom: 1px solid var(--border); padding: 9px 12px 11px; }
+  #sidebar h2 {
+    font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 1.2px;
+    margin-bottom: 7px; font-weight: 600;
+  }
+  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .row label { color: var(--dim); font-size: 12px; flex-shrink: 0; }
+  .row.wrap { flex-wrap: wrap; }
+  input[type=number], input[type=text], select {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 3px; padding: 2px 6px; font-size: 12px; min-width: 0; font-family: inherit;
+  }
+  input[type=number]:focus, input[type=text]:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); }
+  .num { width: 66px; }
+  .small { font-size: 11px; color: var(--dim2); }
+  .mono { font-family: var(--mono); font-size: 11.5px; }
+
+  .dataCard {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 9px; margin-bottom: 6px; font-size: 12px;
+  }
+  .dataCard .name { font-family: var(--mono); font-size: 11.5px; word-break: break-all; }
+  .dataCard .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .dataCard .meta .bad { color: var(--danger); }
+
+  #viewWrap {
+    flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column;
+    background: #0b0d11;
+  }
+  #canvasHost { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+  #viewCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+  #emptyTip {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: var(--dim2); font-size: 13.5px; line-height: 1.7; pointer-events: none; padding: 20px;
+  }
+  #progressBar {
+    position: absolute; left: 0; top: 0; height: 3px; background: var(--accent);
+    width: 0%; transition: width 80ms linear; pointer-events: none; opacity: 0; z-index: 3;
+  }
+  #progressBar.on { opacity: 1; }
+  #axisHint { position: absolute; left: 10px; bottom: 8px; font-family: var(--mono); font-size: 11px;
+    color: #7f889a; pointer-events: none; background: rgba(11,13,17,0.6); padding: 2px 6px; border-radius: 3px; }
+
+  #probePanel {
+    position: absolute; right: 10px; top: 10px; width: 268px; max-height: calc(100% - 20px);
+    background: rgba(24,28,36,0.94); border: 1px solid var(--border); border-radius: 6px;
+    backdrop-filter: blur(4px); overflow-y: auto; font-size: 11.5px; z-index: 2;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+  }
+  #probePanel.hidden { display: none; }
+  #probePanel .ph {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 9px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12px;
+    position: sticky; top: 0; background: #1b2027;
+  }
+  #probePanel .ph button { padding: 1px 7px; font-size: 11px; }
+  #probeBody { padding: 7px 9px; }
+  #probeBody .kv { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  #probeBody .kv span:first-child { color: var(--dim); white-space: nowrap; }
+  #probeBody .kv span:last-child { font-family: var(--mono); text-align: right; word-break: break-all; }
+  #probeBody .kv.color { align-items: center; }
+  #probeBody .kv.color span:last-child { display: flex; align-items: center; gap: 6px; justify-content: flex-end; min-width: 0; }
+  #probeBody .kv.color .rgba { font-size: 10.5px; white-space: nowrap; }
+  #probeBody .sep { border-top: 1px solid var(--border); margin: 6px 0 5px; }
+  #probeBody .samples { max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 3px; margin-top: 4px; }
+  #probeBody .samples table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 10.5px; }
+  #probeBody .samples th { position: sticky; top: 0; background: #232936; color: var(--dim); font-weight: 500; padding: 2px 4px; text-align: right; }
+  #probeBody .samples td { padding: 1px 4px; text-align: right; }
+  #probeBody .samples tr.mark { background: rgba(91,157,249,0.18); }
+  #probeBody .samples tr.mark td { color: #cfd9ea; }
+  #probeBody .swatch { display: inline-block; width: 30px; height: 12px; border-radius: 2px; vertical-align: middle; border: 1px solid var(--border);
+    background-image: linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%),linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%);
+    background-size: 6px 6px; background-position: 0 0, 3px 3px; }
+  #probeBody .swatchFill { display:block; width:100%; height:100%; border-radius:2px; }
+  #probeBody .err { color: var(--danger); }
+
+  #tfEditor { display: flex; flex-direction: column; gap: 4px; }
+  .tfRow { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+  .tfRow input[type=number] { width: 58px; padding: 1px 4px; font-variant-numeric: tabular-nums; }
+  .tfRow input[type=color] { width: 26px; height: 21px; border: 1px solid var(--border); background: none; padding: 0; border-radius: 3px; cursor: pointer; }
+  .tfRow input[type=range] { flex: 1; min-width: 30px; }
+  .tfRow .alphaVal { width: 38px; text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+  .tfRow button.del { padding: 0 5px; font-size: 11px; line-height: 16px; color: var(--danger); }
+  #tfPreview { width: 100%; height: 40px; display: block; border: 1px solid var(--border); border-radius: 3px; margin-top: 3px; }
+
+  .hintFoot { padding: 6px 12px; color: var(--dim2); font-size: 11px; background: var(--panel); border-top: 1px solid var(--border); }
+  kbd { font-family: var(--mono); background: var(--panel3); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 10.5px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: #2a3140; color: var(--text); border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: 5px; font-size: 12.5px; max-width: 70vw;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.45); opacity: 0; transition: opacity 180ms; pointer-events: none; z-index: 10;
+    white-space: pre-wrap;
+  }
+  #toast.on { opacity: 1; }
+  #toast.bad { border-color: var(--danger); color: #ffd4d4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>体扫描射线预览<small>CPU 射线采样 · mm 物理尺寸</small></h1>
+  <button id="btnImport" class="primary">导入数据</button>
+  <button id="btnSample" disabled>载入样例</button>
+  <span style="flex:1"></span>
+  <button id="btnPng" disabled title="导出透明 RGBA PNG">导出 PNG</button>
+  <button id="btnSettings" disabled title="导出设置 JSON">导出设置</button>
+  <button id="btnLoadSettings" disabled title="从设置 JSON 恢复">载入设置</button>
+  <input type="file" id="fileData" accept=".json,.raw" multiple>
+  <input type="file" id="fileSettings" accept=".json">
+</header>
+<div id="statusBar">
+  <span id="statusMsg" class="msg">请导入 RAW + JSON，或载入样例</span>
+  <span id="statusData"></span>
+  <span id="statusRender"></span>
+  <span id="statusError" class="bad"></span>
+</div>
+<main>
+  <div id="sidebar">
+    <section>
+      <h2>数据</h2>
+      <div id="dataCard" class="small">尚未加载数据。</div>
+      <div class="row" style="margin-top:6px; gap:5px;">
+        <button id="btnImport2" style="flex:1">选择 JSON + RAW…</button>
+      </div>
+      <div id="sampleList" style="margin-top:6px;"></div>
+    </section>
+
+    <section>
+      <h2>视图</h2>
+      <div class="seg" id="viewSeg" style="flex-wrap:wrap; display:flex;">
+        <button data-view="+x" title="射线沿 +X">+X</button>
+        <button data-view="-x" title="射线沿 −X">−X</button>
+        <button data-view="+y" title="射线沿 +Y">+Y</button>
+        <button data-view="-y" title="射线沿 −Y">−Y</button>
+        <button data-view="+z" title="射线沿 +Z">+Z</button>
+        <button data-view="-z" title="射线沿 −Z">−Z</button>
+      </div>
+      <div class="row" style="margin-top:7px;">
+        <label style="width:38px">缩放</label>
+        <input type="range" id="zoomRange" min="-1.2" max="1.2" step="0.01" value="0">
+      </div>
+      <div class="row">
+        <label style="width:38px">平移</label>
+        <button id="btnResetPan" style="padding:1px 8px; font-size:11px">居中</button>
+        <span class="small" id="orbitInfo">拖动旋转 · 滚轮缩放 · 右键/Shift 拖动平移</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>渲染</h2>
+      <div class="row">
+        <label>模式</label>
+        <div class="seg" id="modeSeg" style="flex:1">
+          <button data-mode="composite" style="flex:1">前向合成</button>
+          <button data-mode="mip" style="flex:1">最大值投影</button>
+        </div>
+      </div>
+      <div class="row">
+        <label style="width:44px">步长</label>
+        <input type="range" id="stepRange" min="0.25" max="4" step="0.05" value="1">
+        <input type="number" id="stepNum" class="num" min="0.25" max="4" step="0.05" value="1">
+        <span class="small">mm</span>
+      </div>
+      <div class="row" id="windowRow">
+        <label style="width:44px">窗</label>
+        <input type="number" id="winLo" class="num" step="1">
+        <span class="small">–</span>
+        <input type="number" id="winHi" class="num" step="1">
+        <span class="small">MIP 灰度</span>
+      </div>
+      <div class="row">
+        <label style="width:44px">画幅</label>
+        <select id="sizeSel" style="flex:1">
+          <option value="256">256 × 256</option>
+          <option value="384">384 × 384</option>
+          <option value="512">512 × 512</option>
+          <option value="768">768 × 768</option>
+          <option value="1024">1024 × 1024</option>
+        </select>
+      </div>
+    </section>
+
+    <section>
+      <h2>传递函数（线性 RGB · 每 mm 不透明度）</h2>
+      <div class="row">
+        <label style="width:70px">参考厚度</label>
+        <input type="number" id="refMm" class="num" min="0.05" step="0.05" value="1">
+        <span class="small">mm</span>
+      </div>
+      <div id="tfEditor"></div>
+      <div class="row" style="margin-top:4px; gap:5px;">
+        <button id="btnAddStop" style="flex:1">添加控制点</button>
+        <button id="btnResetTf">重置</button>
+      </div>
+      <canvas id="tfPreview" height="40"></canvas>
+      <div class="small" style="margin-top:3px">不透明度按实际步长与末段余长换算：α步 = 1 − (1 − α)（L / 参考厚度）</div>
+    </section>
+
+    <section>
+      <h2>点选射线</h2>
+      <div class="small">单击画面任意像素，右侧面板显示该射线的进入/离开区间、逐采样值与最终颜色。</div>
+      <div class="row" style="margin-top:5px;">
+        <button id="btnClearProbe" style="flex:1">清除点选</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="viewWrap">
+    <div id="canvasHost">
+      <canvas id="viewCanvas" width="512" height="512"></canvas>
+      <div id="progressBar"></div>
+      <div id="emptyTip"><div>导入 RAW + JSON 后在此预览<br><span class="small">JSON 描述尺寸、体素间距、u8/u16 与字节序</span></div></div>
+      <div id="axisHint"></div>
+      <div id="probePanel" class="hidden">
+        <div class="ph"><span>射线点选结果</span><button id="btnCloseProbe" title="关闭">✕</button></div>
+        <div id="probeBody"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<div class="hintFoot">
+  <kbd>拖动</kbd> 旋转 · <kbd>滚轮</kbd> 缩放 · <kbd>Shift/右键拖动</kbd> 平移 · <kbd>单击</kbd> 点选射线 · <kbd>+X −X +Y −Y +Z −Z</kbd> 轴向预设 ·
+  渲染期间可继续操作，只显示最新结果
+</div>
+<div id="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+<script>
+  // ES modules do not load from a file:// page (CORS blocks them), so tell the
+  // user to start the bundled server instead of seeing a blank, dead page.
+  if (location.protocol === 'file:') {
+    var tip = document.getElementById('emptyTip');
+    var bar = document.getElementById('statusMsg');
+    if (tip) tip.innerHTML = '<div>请先启动本地服务，再用 http:// 打开本页<br>' +
+      '<span class="small">在项目目录运行 <code>python3 server.py</code>，然后访问 http://localhost:8000/</span></div>';
+    if (bar) { bar.textContent = '当前是 file:// 打开，脚本被浏览器阻止；请用 python3 server.py 启动'; bar.className = 'msg bad'; }
+    tip.style.display = 'flex';
+  }
+</script>
+</body>
+</html>

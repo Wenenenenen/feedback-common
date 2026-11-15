@@ -1,0 +1,43 @@
+{
+  "mode": "composite",
+  "view": "+z",
+  "step": 1.0,
+  "imageSize": [
+    256,
+    256
+  ],
+  "window": [
+    0,
+    2000
+  ],
+  "transferFunction": [
+    {
+      "value": 0,
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "alpha": 0
+    },
+    {
+      "value": 1000,
+      "rgb": [
+        1,
+        0,
+        0
+      ],
+      "alpha": 0.1
+    },
+    {
+      "value": 4095,
+      "rgb": [
+        1,
+        1,
+        1
+      ],
+      "alpha": 0.4
+    }
+  ],
+  "opacityReferenceMm": 1
+}

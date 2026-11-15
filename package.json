@@ -1,0 +1,12 @@
+{
+  "name": "voxel-ray-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "工业体扫描射线预览工作台（纯 CPU 渲染，无第三方运行时依赖）",
+  "scripts": {
+    "start": "python3 server.py",
+    "test": "node --test tests/core.test.mjs tests/png.test.mjs tests/settings.test.mjs",
+    "test:e2e": "node tests/e2e.mjs"
+  }
+}

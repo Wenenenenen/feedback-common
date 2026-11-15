@@ -1,0 +1,17 @@
+{
+  "dimensions": [
+    32,
+    24,
+    16
+  ],
+  "spacing": [
+    1,
+    1,
+    2
+  ],
+  "voxelType": "u16",
+  "endian": "little",
+  "raw": "uniform-u16le.raw",
+  "layout": "x-fastest",
+  "origin": "voxel-box-min"
+}

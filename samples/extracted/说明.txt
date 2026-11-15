@@ -1,0 +1,1 @@
+坐标单位mm，物理包围盒从零到dimensions*spacing，体素中心为(index+0.5)*spacing。x变化最快。正轴视图的射线沿该轴正方向。传递函数颜色为线性RGB，每1mm不透明度按距离指数换算，透明PNG保存直通alpha与sRGB颜色。MIP以window线性映射到灰度，不采用传递函数alpha。
