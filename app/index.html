@@ -1,0 +1,1332 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>YUV 色度位置核对台</title>
+<style>
+/* ---- design tokens: 示波器/工程仪器观感，冷灰中性色 + 青蓝信号色 ---- */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --fg: #17212b;
+  --fg-dim: #5a6b7b;
+  --line: #d3dae2;
+  --accent: #0e7490;
+  --accent-soft: #e0f2f7;
+  --good: #15803d;
+  --warn: #b45309;
+  --bad: #b91c1c;
+  --bad-soft: #fde8e8;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .04);
+}
+:root[data-theme="dark"] {
+  --bg: #10151c;
+  --panel: #18202a;
+  --panel-2: #212b37;
+  --fg: #e3eaf1;
+  --fg-dim: #93a3b3;
+  --line: #2c3947;
+  --accent: #38bdf8;
+  --accent-soft: #0c2f3f;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --bad-soft: #3a1d22;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c;
+    --panel: #18202a;
+    --panel-2: #212b37;
+    --fg: #e3eaf1;
+    --fg-dim: #93a3b3;
+    --line: #2c3947;
+    --accent: #38bdf8;
+    --accent-soft: #0c2f3f;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --bad-soft: #3a1d22;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+button, input, select { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  gap: 12px;
+}
+
+/* ---- header ---- */
+header.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-block: 12px;
+}
+.topbar h1 { font-size: 17px; letter-spacing: .2px; }
+.topbar .sub { color: var(--fg-dim); font-size: 12px; }
+.topbar .spacer { flex: 1; }
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.pill::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--fg-dim);
+}
+.pill.ok { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.pill.ok::before { background: var(--good); }
+.pill.err { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); background: var(--bad-soft); }
+.pill.err::before { background: var(--bad); }
+
+/* ---- layout ---- */
+.work {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 280px;
+  gap: 12px;
+  min-height: 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+.col {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-height: 0;
+  overflow: auto;
+}
+.col-inner { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+section.block h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .9px;
+  color: var(--fg-dim);
+  margin-bottom: 8px;
+}
+
+/* ---- forms ---- */
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.field label { font-size: 12px; color: var(--fg-dim); }
+.field input, .field select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  min-width: 0;
+}
+.field input:focus, .field select:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.plane-box {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--panel-2);
+}
+.plane-box .plane-title {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+  color: var(--accent);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #06121b; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.file-label {
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  background: var(--panel-2);
+}
+.file-label:hover { border-color: var(--accent); }
+.file-label input { display: none; }
+.file-label .fname { font-family: var(--mono); font-size: 12px; color: var(--fg-dim); word-break: break-all; }
+.file-label .ftitle { font-size: 13px; font-weight: 600; }
+
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button {
+  flex: 1;
+  border: 0;
+  background: var(--panel-2);
+  padding: 6px 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-dim);
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
+/* ---- error banner ---- */
+.banner {
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line));
+  background: var(--bad-soft);
+  color: var(--bad);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.banner b { display: block; margin-bottom: 4px; }
+.banner ul { margin: 0; padding-left: 18px; }
+.banner li { margin-bottom: 2px; }
+
+/* ---- viewer ---- */
+.viewer-col { display: flex; flex-direction: column; min-height: 0; }
+.viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.viewer-head .title { font-weight: 600; font-size: 13px; }
+.viewer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.canvas-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background:
+    repeating-conic-gradient(color-mix(in srgb, var(--line) 55%, transparent) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.canvas-wrap { position: relative; line-height: 0; }
+canvas.main {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+  display: block;
+}
+canvas.cross {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.viewer-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.viewer-foot .mono { color: var(--fg); }
+
+/* compare mode */
+.compare-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+.compare-grid .pane {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.compare-grid .pane-head {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--mono);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compare-grid .canvas-scroll { padding: 8px; }
+
+/* frame scrubber */
+.scrub { display: flex; align-items: center; gap: 8px; }
+.scrub input[type=range] { flex: 1; min-width: 80px; }
+.frame-num { font-family: var(--mono); font-size: 13px; min-width: 64px; text-align: center; }
+
+/* ---- pixel panel ---- */
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12.5px; }
+.kv dt { color: var(--fg-dim); }
+.kv dd { margin: 0; font-family: var(--mono); text-align: right; }
+.swatch-row { display: flex; align-items: center; gap: 8px; }
+.swatch {
+  width: 34px; height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #000;
+  flex: none;
+}
+.rgb-pre { font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim); word-break: break-all; }
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.tag.clipped { background: var(--bad-soft); color: var(--bad); }
+hr.sep { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.note { font-size: 11.5px; color: var(--fg-dim); }
+.empty-hint {
+  color: var(--fg-dim);
+  font-size: 13px;
+  padding: 24px 12px;
+  text-align: center;
+}
+@media (max-width: 1080px) {
+  .work { grid-template-columns: 1fr; }
+  .col { max-height: none; }
+  .viewer-col { min-height: 420px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <h1>YUV 色度位置核对台</h1>
+    <span class="sub">平面 YUV420 · 8/10 位 · 矩阵 / 范围 / 色度位置对照</span>
+    <span class="spacer"></span>
+    <span id="statusPill" class="pill">未载入数据</span>
+    <button class="btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <div class="work">
+    <!-- ============ 左栏：导入与布局 ============ -->
+    <aside class="col">
+      <div class="col-inner">
+        <section class="block">
+          <h2>数据导入</h2>
+          <label class="file-label">
+            <span class="ftitle">RAW 像素文件</span>
+            <input type="file" id="rawFile" accept=".raw,.yuv,application/octet-stream">
+            <span class="fname" id="rawName">未选择</span>
+          </label>
+          <div style="height:8px"></div>
+          <label class="file-label">
+            <span class="ftitle">参数 JSON</span>
+            <input type="file" id="jsonFile" accept=".json,application/json">
+            <span class="fname" id="jsonName">未选择</span>
+          </label>
+          <div style="height:8px"></div>
+          <div class="btn-row">
+            <button class="btn" type="button" id="loadSample8">载入样例 odd-8</button>
+            <button class="btn" type="button" id="loadSample10">载入样例 odd-10</button>
+          </div>
+          <p class="note" id="pairHint" style="margin-bottom:0">RAW 与 JSON 都就绪后自动解析；也可先选 JSON 再补 RAW。</p>
+        </section>
+
+        <section class="block">
+          <h2>布局参数</h2>
+          <div class="grid3">
+            <div class="field"><label>width</label><input type="number" id="cfgW" min="1" max="640"></div>
+            <div class="field"><label>height</label><input type="number" id="cfgH" min="1" max="360"></div>
+            <div class="field"><label>frames</label><input type="number" id="cfgF" min="1" max="30"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>bits</label>
+              <select id="cfgBits"><option value="8">8</option><option value="10">10</option></select>
+            </div>
+            <div class="field"><label>frame_bytes</label><input type="number" id="cfgFB" min="1"></div>
+          </div>
+          <div id="planesEdit">
+            <div class="plane-box" style="margin-bottom:8px">
+              <div class="plane-title">Y</div>
+              <div class="grid2">
+                <div class="field"><label>offset</label><input type="number" id="yOff" min="0"></div>
+                <div class="field"><label>stride</label><input type="number" id="yStride" min="1"></div>
+              </div>
+            </div>
+            <div class="plane-box" style="margin-bottom:8px">
+              <div class="plane-title">U</div>
+              <div class="grid2">
+                <div class="field"><label>offset</label><input type="number" id="uOff" min="0"></div>
+                <div class="field"><label>stride</label><input type="number" id="uStride" min="1"></div>
+              </div>
+            </div>
+            <div class="plane-box">
+              <div class="plane-title">V</div>
+              <div class="grid2">
+                <div class="field"><label>offset</label><input type="number" id="vOff" min="0"></div>
+                <div class="field"><label>stride</label><input type="number" id="vStride" min="1"></div>
+              </div>
+            </div>
+          </div>
+          <div style="height:8px"></div>
+          <button class="btn primary" type="button" id="applyCfg" style="width:100%">应用布局并重新校验</button>
+        </section>
+
+        <section class="block">
+          <h2>导出</h2>
+          <div class="btn-row">
+            <button class="btn" type="button" id="exportPng" disabled>导出当前帧 PNG</button>
+            <button class="btn" type="button" id="exportJson" disabled>导出参数 JSON</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- ============ 中栏：查看器 ============ -->
+    <main class="col viewer-col">
+      <div class="viewer-head">
+        <div class="seg" role="group" aria-label="查看平面" id="planeSeg">
+          <button data-plane="RGB" class="on">RGB</button>
+          <button data-plane="Y">Y</button>
+          <button data-plane="U">U</button>
+          <button data-plane="V">V</button>
+        </div>
+        <div class="seg" role="group" aria-label="查看模式" id="modeSeg">
+          <button data-mode="single" class="on">单视图</button>
+          <button data-mode="compare">并排比较</button>
+        </div>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn" type="button" id="zoomOut">－</button>
+        <span class="mono" id="zoomLabel" style="min-width:52px;text-align:center">1×</span>
+        <button class="btn" type="button" id="zoomIn">＋</button>
+        <button class="btn" type="button" id="zoomFit">适配</button>
+      </div>
+
+      <div class="viewer-body">
+        <div id="singleView" class="canvas-scroll">
+          <div class="canvas-wrap" id="canvasWrap">
+            <canvas class="main" id="mainCanvas"></canvas>
+            <canvas class="cross" id="crossCanvas"></canvas>
+          </div>
+        </div>
+        <div id="compareView" class="compare-grid" hidden>
+          <div class="pane">
+            <div class="pane-head" id="paneHeadA">A</div>
+            <div class="canvas-scroll"><div class="canvas-wrap"><canvas class="main" id="canvasA"></canvas><canvas class="cross" id="crossA"></canvas></div></div>
+          </div>
+          <div class="pane">
+            <div class="pane-head" id="paneHeadB">B</div>
+            <div class="canvas-scroll"><div class="canvas-wrap"><canvas class="main" id="canvasB"></canvas><canvas class="cross" id="crossB"></canvas></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="viewer-foot">
+        <div class="scrub">
+          <button class="btn" id="prevFrame" type="button">◀</button>
+          <input type="range" id="frameScrub" min="0" max="0" value="0">
+          <button class="btn" id="nextFrame" type="button">▶</button>
+          <span class="frame-num" id="frameLabel">0 / 0</span>
+        </div>
+        <span class="spacer" style="flex:1"></span>
+        <span>指针像素：<span class="mono" id="hoverCoord">—</span></span>
+        <span class="note">滚轮缩放 · 单击锁定像素 · 方向键切帧</span>
+      </div>
+    </main>
+
+    <!-- ============ 右栏：参数与像素面板 ============ -->
+    <aside class="col">
+      <div class="col-inner">
+        <section class="block" id="paramBlock">
+          <h2>转换参数 <span class="note" id="paramTarget"></span></h2>
+          <div class="field"><label>matrix 矩阵</label>
+            <div class="seg" id="matrixSeg"><button data-val="601">BT.601</button><button data-val="709" class="on">BT.709</button></div>
+          </div>
+          <div class="field"><label>range 范围</label>
+            <div class="seg" id="rangeSeg"><button data-val="limited" class="on">limited</button><button data-val="full">full</button></div>
+          </div>
+          <div class="field" style="margin-bottom:0"><label>siting 色度位置</label>
+            <div class="seg" id="sitingSeg"><button data-val="center" class="on">center</button><button data-val="left">left</button></div>
+          </div>
+          <div id="compareParamWrap" hidden style="margin-top:10px">
+            <hr class="sep" style="margin-bottom:10px">
+            <div class="seg" id="sideSeg" style="margin-bottom:10px">
+              <button data-side="A" class="on">编辑 A 参数</button>
+              <button data-side="B">编辑 B 参数</button>
+            </div>
+            <p class="note" style="margin:0">A/B 各存一套 matrix/range/siting，切换上面的分段控件即编辑对应侧。</p>
+          </div>
+        </section>
+
+        <section class="block">
+          <h2>像素面板</h2>
+          <div id="pixelEmpty" class="empty-hint">在画面上移动或单击以查看像素数值</div>
+          <div id="pixelBody" hidden>
+            <div class="kv" style="margin-bottom:10px">
+              <dt>坐标</dt><dd id="pxCoord">—</dd>
+              <dt>帧</dt><dd id="pxFrame">—</dd>
+              <dt>原始 Y</dt><dd id="pxY">—</dd>
+              <dt>插值 U</dt><dd id="pxU">—</dd>
+              <dt>插值 V</dt><dd id="pxV">—</dd>
+            </div>
+            <div class="swatch-row" style="margin-bottom:8px">
+              <div class="swatch" id="pxSwatch"></div>
+              <div>
+                <div style="font-size:12px">裁剪前 RGB（编码域 0–1）</div>
+                <div class="rgb-pre" id="pxPre">—</div>
+              </div>
+            </div>
+            <div class="kv">
+              <dt>最终 8 位 R</dt><dd id="pxR">—</dd>
+              <dt>最终 8 位 G</dt><dd id="pxG">—</dd>
+              <dt>最终 8 位 B</dt><dd id="pxB">—</dd>
+              <dt>裁剪情况</dt><dd><span class="tag" id="pxClip">未裁剪</span></dd>
+            </div>
+          </div>
+        </section>
+
+        <section class="block" id="errBlock" hidden>
+          <h2>校验错误</h2>
+          <div class="banner" id="errBanner"></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============================================================
+ * YUV 色度位置核对台 —— 全部布局读取与颜色换算均自行实现，
+ * 不调用任何现成 YUV→RGB 接口。
+ * ============================================================ */
+
+/* ---------------- 常量与工具 ---------------- */
+const MATRICES = {
+  "601": { Kr: 0.299, Kb: 0.114 },
+  "709": { Kr: 0.2126, Kb: 0.0722 },
+};
+const ceilDiv = (a, b) => Math.ceil(a / b);
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const $ = (id) => document.getElementById(id);
+
+function fmt(n, digits = 4) {
+  return Number(n).toFixed(digits);
+}
+
+/* ---------------- 状态 ---------------- */
+const state = {
+  rawBytes: null,          // Uint8Array
+  rawName: null,
+  cfg: null,               // 布局 JSON 对象
+  errors: [],              // 校验错误
+  frame: 0,
+  plane: "RGB",            // RGB | Y | U | V
+  mode: "single",          // single | compare
+  zoom: 1,
+  hover: null,             // {x,y}
+  locked: null,            // 单击锁定的像素
+  params: {
+    A: { matrix: "709", range: "limited", siting: "center" },
+    B: { matrix: "601", range: "full", siting: "left" },
+  },
+  activeSide: "A",
+  samples: null,           // 内置样例数据
+};
+
+/* ---------------- 布局校验 ---------------- */
+function validateLayout(bytes, cfg) {
+  const errors = [];
+  const need = ["width", "height", "frames", "bits", "frame_bytes", "planes"];
+  for (const k of need) {
+    if (!(k in cfg)) errors.push(`参数缺少字段：${k}`);
+  }
+  if (errors.length) return errors;
+
+  const { width, height, frames, bits, frame_bytes, planes } = cfg;
+  if (!Number.isInteger(width) || width < 1 || width > 640)
+    errors.push("width 必须是 1–640 的整数");
+  if (!Number.isInteger(height) || height < 1 || height > 360)
+    errors.push("height 必须是 1–360 的整数");
+  if (!Number.isInteger(frames) || frames < 1 || frames > 30)
+    errors.push("frames 必须是 1–30 的整数");
+  if (bits !== 8 && bits !== 10)
+    errors.push(`bits=${bits} 不支持，仅允许 8 或 10`);
+  if (!Number.isInteger(frame_bytes) || frame_bytes <= 0)
+    errors.push("frame_bytes 必须是正整数");
+  for (const p of ["Y", "U", "V"]) {
+    if (!planes || typeof planes[p] !== "object")
+      errors.push(`planes 缺少 ${p} 平面定义`);
+  }
+  if (errors.length) return errors;
+
+  if (!("matrix" in cfg) || !MATRICES[cfg.matrix])
+    errors.push(`matrix 取值无效：${cfg.matrix}（应为 601 或 709）`);
+  if (!["limited", "full"].includes(cfg.range))
+    errors.push(`range 取值无效：${cfg.range}（应为 limited 或 full）`);
+  if (!["center", "left"].includes(cfg.siting))
+    errors.push(`siting 取值无效：${cfg.siting}（应为 center 或 left）`);
+
+  // 文件长度：必须恰好等于 frame_bytes × frames
+  const expectLen = frame_bytes * frames;
+  if (bytes.length !== expectLen) {
+    errors.push(
+      `文件长度 ${bytes.length} 字节，不等于 frame_bytes(${frame_bytes}) × frames(${frames}) = ${expectLen}（数据截断或冗余）`
+    );
+  }
+
+  const bps = bits === 8 ? 1 : 2;
+  const cw = ceilDiv(width, 2);
+  const ch = ceilDiv(height, 2);
+  const dims = { Y: [width, height], U: [cw, ch], V: [cw, ch] };
+  const rowIntervals = { Y: [], U: [], V: [] };
+
+  for (const name of ["Y", "U", "V"]) {
+    const { offset, stride } = planes[name];
+    const [pw, ph] = dims[name];
+    if (!Number.isInteger(offset) || offset < 0) {
+      errors.push(`${name} 平面 offset 必须是非负整数`);
+      continue;
+    }
+    if (!Number.isInteger(stride) || stride <= 0) {
+      errors.push(`${name} 平面 stride 必须是正整数`);
+      continue;
+    }
+    const lineBytes = pw * bps;
+    if (stride < lineBytes) {
+      errors.push(
+        `${name} 平面 stride=${stride} 字节，小于一行有效字节 ${lineBytes}（${pw} 采样 × ${bps} 字节）`
+      );
+    }
+    const end = offset + (ph - 1) * stride + lineBytes;
+    if (end > frame_bytes) {
+      errors.push(
+        `${name} 平面有效区间 [${offset}, ${end}) 超出单帧 frame_bytes=${frame_bytes}`
+      );
+    }
+    // 记录每一行的有效字节区间（stride 填充区不属于有效数据）
+    for (let row = 0; row < ph; row++) {
+      const start = offset + row * stride;
+      rowIntervals[name].push([start, start + lineBytes]);
+    }
+  }
+
+  // 平面有效字节逐行区间不得重叠
+  const names = ["Y", "U", "V"];
+  for (let i = 0; i < names.length; i++) {
+    for (let j = i + 1; j < names.length; j++) {
+      const a = rowIntervals[names[i]], b = rowIntervals[names[j]];
+      let hit = false;
+      for (const [s1, e1] of a) {
+        for (const [s2, e2] of b) {
+          if (Math.max(s1, s2) < Math.min(e1, e2)) { hit = true; break; }
+        }
+        if (hit) break;
+      }
+      if (hit) errors.push(`平面 ${names[i]} 与 ${names[j]} 的有效字节区间重叠`);
+    }
+  }
+
+  // 10 位：所有“有效采样”高 6 位必须为 0（stride 填充字节不受约束）
+  if (bits === 10 && errors.filter((e) => e.includes("文件长度")).length === 0) {
+    outer:
+    for (let f = 0; f < frames; f++) {
+      for (const name of ["Y", "U", "V"]) {
+        const { offset, stride } = planes[name];
+        const [pw, ph] = dims[name];
+        const base0 = f * frame_bytes + offset;
+        for (let row = 0; row < ph; row++) {
+          const rowBase = base0 + row * stride;
+          for (let col = 0; col < pw; col++) {
+            const idx = rowBase + col * 2;
+            if (idx + 1 >= bytes.length) break outer;
+            const v = bytes[idx] | (bytes[idx + 1] << 8);
+            if (v & 0xfc00) {
+              errors.push(
+                `${name} 平面第 ${f} 帧位置 (${col},${row}) 的 10 位采样高 6 位非零（值=0x${v.toString(16).padStart(4, "0")}）`
+              );
+              break outer;
+            }
+          }
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+/* ---------------- 平面采样读取 ---------------- */
+function readSample(bytes, cfg, frame, planeName, col, row) {
+  const p = cfg.planes[planeName];
+  const base = frame * cfg.frame_bytes + p.offset + row * p.stride;
+  if (cfg.bits === 8) return bytes[base + col];
+  return bytes[base + col * 2] | (bytes[base + col * 2 + 1] << 8);
+}
+
+/* 色度双线性重建：先把亮度像素坐标映射到色度网格，越界坐标先钳制 */
+function sampleChroma(bytes, cfg, frame, planeName, x, y, siting) {
+  const cw = ceilDiv(cfg.width, 2);
+  const ch = ceilDiv(cfg.height, 2);
+  // center: 色度中心 (2i+0.5, 2j+0.5)；left: (2i, 2j+0.5)
+  const gx = siting === "center" ? (x - 0.5) / 2 : x / 2;
+  const gy = (y - 0.5) / 2;
+  const x0 = Math.floor(gx), y0 = Math.floor(gy);
+  const fx = gx - x0, fy = gy - y0;
+  const cx0 = clamp(x0, 0, cw - 1), cx1 = clamp(x0 + 1, 0, cw - 1);
+  const cy0 = clamp(y0, 0, ch - 1), cy1 = clamp(y0 + 1, 0, ch - 1);
+  const v00 = readSample(bytes, cfg, frame, planeName, cx0, cy0);
+  const v10 = readSample(bytes, cfg, frame, planeName, cx1, cy0);
+  const v01 = readSample(bytes, cfg, frame, planeName, cx0, cy1);
+  const v11 = readSample(bytes, cfg, frame, planeName, cx1, cy1);
+  const top = v00 * (1 - fx) + v10 * fx;
+  const bot = v01 * (1 - fx) + v11 * fx;
+  return top * (1 - fy) + bot * fy;
+}
+
+/* ---------------- YUV → RGB（自行实现，编码域，不做伽马） ---------------- */
+function convertPixel(bytes, cfg, frame, x, y, params) {
+  const bits = cfg.bits;
+  const s = 1 << (bits - 8);
+  const M = (1 << bits) - 1;
+  const rawY = readSample(bytes, cfg, frame, "Y", x, y);
+  const u = sampleChroma(bytes, cfg, frame, "U", x, y, params.siting);
+  const v = sampleChroma(bytes, cfg, frame, "V", x, y, params.siting);
+
+  let Yn, Cb, Cr;
+  if (params.range === "limited") {
+    Yn = (rawY - 16 * s) / (219 * s);
+    Cb = (u - 128 * s) / (224 * s);
+    Cr = (v - 128 * s) / (224 * s);
+  } else {
+    Yn = rawY / M;
+    Cb = (u - 128 * s) / M;
+    Cr = (v - 128 * s) / M;
+  }
+
+  const { Kr, Kb } = MATRICES[params.matrix];
+  const Kg = 1 - Kr - Kb;
+  // 转换前不裁剪
+  const R = Yn + 2 * (1 - Kr) * Cr;
+  const B = Yn + 2 * (1 - Kb) * Cb;
+  const G = (Yn - Kr * R - Kb * B) / Kg;
+
+  const clipped = R < 0 || R > 1 || G < 0 || G > 1 || B < 0 || B > 1;
+  const q = (v) => Math.floor(clamp(v, 0, 1) * 255 + 0.5);
+  return {
+    rawY, u, v,
+    rgbPre: [R, G, B],
+    rgb: [q(R), q(G), q(B)],
+    clipped,
+  };
+}
+
+/* ---------------- 整帧渲染 ---------------- */
+function renderFrame(canvas, frame, plane, params) {
+  const { cfg, rawBytes } = state;
+  const W = cfg.width, H = cfg.height;
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d", { willReadFrequently: false });
+  const img = ctx.createImageData(W, H);
+  const d = img.data;
+
+  if (plane === "Y" || plane === "U" || plane === "V") {
+    const maxV = (1 << cfg.bits) - 1;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let val;
+        if (plane === "Y") {
+          val = readSample(rawBytes, cfg, frame, "Y", x, y);
+        } else {
+          // U/V 按当前 siting 双线性重建到亮度网格，保持与 RGB 同一坐标系
+          val = sampleChroma(rawBytes, cfg, frame, plane, x, y, params.siting);
+        }
+        const g = Math.round(clamp(val / maxV, 0, 1) * 255);
+        const i = (y * W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = g;
+        d[i + 3] = 255;
+      }
+    }
+  } else {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const { rgb } = convertPixel(rawBytes, cfg, frame, x, y, params);
+        const i = (y * W + x) * 4;
+        d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = 255;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/* 适配缩放：取整像素倍数，保证放大检查时像素边界清晰 */
+function fitZoom() {
+  const { cfg } = state;
+  if (!cfg) return 1;
+  const host = $("singleView");
+  const maxW = host.clientWidth - 40;
+  const maxH = host.clientHeight - 40;
+  const z = Math.max(1, Math.floor(Math.min(maxW / cfg.width, maxH / cfg.height)));
+  return Math.min(z, 128);
+}
+
+function applyZoom() {
+  const { cfg, zoom } = state;
+  if (!cfg) return;
+  for (const cv of ["mainCanvas", "canvasA", "canvasB"]) {
+    const c = $(cv);
+    c.style.width = cfg.width * zoom + "px";
+    c.style.height = cfg.height * zoom + "px";
+  }
+  for (const cv of ["crossCanvas", "crossA", "crossB"]) {
+    const c = $(cv);
+    c.style.width = cfg.width * zoom + "px";
+    c.style.height = cfg.height * zoom + "px";
+    c.width = cfg.width * zoom;
+    c.height = cfg.height * zoom;
+  }
+  $("zoomLabel").textContent = zoom + "×";
+  drawCrosshair();
+}
+
+/* ---------------- 十字光标 ---------------- */
+function drawCrosshair() {
+  const targets = [
+    ["crossCanvas", "mainCanvas"],
+    ["crossA", "canvasA"],
+    ["crossB", "canvasB"],
+  ];
+  const sel = state.locked || state.hover;
+  for (const [crossId] of targets) {
+    const cv = $(crossId);
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!sel || !state.cfg) continue;
+    const z = state.zoom;
+    const px = sel.x * z, py = sel.y * z;
+    ctx.strokeStyle = "rgba(56,189,248,.9)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + .5, py + .5, z - 1, z - 1);
+    ctx.beginPath();
+    ctx.moveTo(px + z / 2, 0); ctx.lineTo(px + z / 2, cv.height);
+    ctx.moveTo(0, py + z / 2); ctx.lineTo(cv.width, py + z / 2);
+    ctx.stroke();
+  }
+}
+
+/* ---------------- 主渲染流程 ---------------- */
+function renderAll() {
+  if (!state.cfg || state.errors.length) return;
+  const { frame, plane, mode, params } = state;
+  if (mode === "single") {
+    const p = state.activeSide === "A" ? params.A : params.B;
+    renderFrame($("mainCanvas"), frame, plane, p);
+  } else {
+    renderFrame($("canvasA"), frame, plane, params.A);
+    renderFrame($("canvasB"), frame, plane, params.B);
+    $("paneHeadA").textContent =
+      `A · ${params.A.matrix} / ${params.A.range} / ${params.A.siting}`;
+    $("paneHeadB").textContent =
+      `B · ${params.B.matrix} / ${params.B.range} / ${params.B.siting}`;
+  }
+  applyZoom();
+  updatePixelPanel();
+}
+
+function updatePixelPanel() {
+  const sel = state.locked || state.hover;
+  if (!sel || !state.cfg || state.errors.length) {
+    $("pixelBody").hidden = true;
+    $("pixelEmpty").hidden = false;
+    return;
+  }
+  $("pixelBody").hidden = false;
+  $("pixelEmpty").hidden = true;
+  const p = state.mode === "compare"
+    ? state.params[state.activeSide]
+    : (state.activeSide === "A" ? state.params.A : state.params.B);
+  const r = convertPixel(state.rawBytes, state.cfg, state.frame, sel.x, sel.y, p);
+  $("pxCoord").textContent = `(${sel.x}, ${sel.y})`;
+  $("pxFrame").textContent = String(state.frame);
+  $("pxY").textContent = String(r.rawY);
+  $("pxU").textContent = fmt(r.u, 3);
+  $("pxV").textContent = fmt(r.v, 3);
+  $("pxPre").textContent =
+    `R ${fmt(r.rgbPre[0])}  G ${fmt(r.rgbPre[1])}  B ${fmt(r.rgbPre[2])}`;
+  $("pxR").textContent = String(r.rgb[0]);
+  $("pxG").textContent = String(r.rgb[1]);
+  $("pxB").textContent = String(r.rgb[2]);
+  const tag = $("pxClip");
+  if (r.clipped) {
+    tag.textContent = "有裁剪";
+    tag.className = "tag clipped";
+  } else {
+    tag.textContent = "未裁剪";
+    tag.className = "tag";
+  }
+  $("pxSwatch").style.background =
+    `rgb(${r.rgb[0]},${r.rgb[1]},${r.rgb[2]})`;
+  $("hoverCoord").textContent = `(${sel.x}, ${sel.y})`;
+}
+
+/* ---------------- 载入与校验入口 ---------------- */
+function ingest(rawBytes, cfg, rawName) {
+  state.rawBytes = rawBytes;
+  state.cfg = cfg;
+  state.rawName = rawName || null;
+  state.errors = validateLayout(rawBytes, cfg);
+  state.frame = 0;
+  state.hover = null;
+  state.locked = null;
+  if (!state.errors.length) {
+    // 以 JSON 声明的转换参数作为 A 侧初始值
+    state.params.A = {
+      matrix: cfg.matrix, range: cfg.range, siting: cfg.siting,
+    };
+  }
+  syncConfigForm();
+  syncParamSegs();
+  renderErrors();
+  renderStatus();
+  updateFrameControls();
+  if (!state.errors.length) {
+    state.zoom = fitZoom();
+    renderAll();
+  } else {
+    $("exportPng").disabled = true;
+    $("exportJson").disabled = true;
+  }
+}
+
+function renderErrors() {
+  const block = $("errBlock"), banner = $("errBanner");
+  if (!state.errors.length) {
+    block.hidden = true;
+    return;
+  }
+  block.hidden = false;
+  banner.innerHTML =
+    `<b>布局/数据校验未通过（${state.errors.length} 项）</b><ul>` +
+    state.errors.map((e) => `<li></li>`).join("") + `</ul>`;
+  banner.querySelectorAll("li").forEach((li, i) => (li.textContent = state.errors[i]));
+}
+
+function renderStatus() {
+  const pill = $("statusPill");
+  if (!state.cfg || !state.rawBytes) {
+    pill.className = "pill";
+    pill.textContent = "未载入数据";
+  } else if (state.errors.length) {
+    pill.className = "pill err";
+    pill.textContent = `校验失败 · ${state.errors.length} 项错误`;
+  } else {
+    pill.className = "pill ok";
+    pill.textContent =
+      `${state.cfg.width}×${state.cfg.height} · ${state.cfg.frames} 帧 · ${state.cfg.bits} 位`;
+    $("exportPng").disabled = false;
+    $("exportJson").disabled = false;
+  }
+}
+
+function updateFrameControls() {
+  const n = state.cfg ? state.cfg.frames : 1;
+  const scrub = $("frameScrub");
+  scrub.max = Math.max(0, n - 1);
+  scrub.value = state.frame;
+  $("frameLabel").textContent = `${state.frame} / ${Math.max(0, n - 1)}`;
+  $("prevFrame").disabled = state.frame <= 0;
+  $("nextFrame").disabled = state.frame >= n - 1;
+}
+
+/* ---------------- 表单同步 ---------------- */
+function syncConfigForm() {
+  const c = state.cfg;
+  if (!c) return;
+  $("cfgW").value = c.width; $("cfgH").value = c.height; $("cfgF").value = c.frames;
+  $("cfgBits").value = String(c.bits); $("cfgFB").value = c.frame_bytes;
+  $("yOff").value = c.planes.Y.offset; $("yStride").value = c.planes.Y.stride;
+  $("uOff").value = c.planes.U.offset; $("uStride").value = c.planes.U.stride;
+  $("vOff").value = c.planes.V.offset; $("vStride").value = c.planes.V.stride;
+}
+
+function readConfigForm() {
+  return {
+    width: +$("cfgW").value,
+    height: +$("cfgH").value,
+    frames: +$("cfgF").value,
+    bits: +$("cfgBits").value,
+    frame_bytes: +$("cfgFB").value,
+    matrix: state.cfg?.matrix || "709",
+    range: state.cfg?.range || "limited",
+    siting: state.cfg?.siting || "center",
+    planes: {
+      Y: { offset: +$("yOff").value, stride: +$("yStride").value },
+      U: { offset: +$("uOff").value, stride: +$("uStride").value },
+      V: { offset: +$("vOff").value, stride: +$("vStride").value },
+    },
+  };
+}
+
+function syncParamSegs() {
+  const p = state.params[state.activeSide];
+  for (const [segId, key] of [["matrixSeg", "matrix"], ["rangeSeg", "range"], ["sitingSeg", "siting"]]) {
+    $(segId).querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.val === p[key]);
+    });
+  }
+  $("sideSeg").querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.side === state.activeSide);
+  });
+  $("paramTarget").textContent =
+    state.mode === "compare" ? `（编辑侧 ${state.activeSide}）` : "";
+}
+
+/* ---------------- 文件读取 ---------------- */
+const pending = { json: null, raw: null, rawName: null };
+
+function tryAutoIngest() {
+  if (pending.json && pending.raw) {
+    ingest(pending.raw, pending.json, pending.rawName);
+  } else {
+    $("pairHint").textContent =
+      pending.json ? "JSON 已就绪，等待 RAW 文件。" :
+      pending.raw ? "RAW 已就绪，等待参数 JSON。" :
+      "RAW 与 JSON 都就绪后自动解析；也可先选 JSON 再补 RAW。";
+  }
+}
+
+$("rawFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $("rawName").textContent = f.name;
+  pending.raw = new Uint8Array(await f.arrayBuffer());
+  pending.rawName = f.name;
+  tryAutoIngest();
+});
+$("jsonFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $("jsonName").textContent = f.name;
+  try {
+    pending.json = JSON.parse(await f.text());
+    const j = pending.json;
+    // 可重新导入：若 JSON 自带转换参数，同步到 A 侧
+    if (MATRICES[j.matrix]) state.params.A.matrix = j.matrix;
+    if (["limited", "full"].includes(j.range)) state.params.A.range = j.range;
+    if (["center", "left"].includes(j.siting)) state.params.A.siting = j.siting;
+    syncParamSegs();
+  } catch (err) {
+    state.cfg = null;
+    state.errors = [`JSON 解析失败：${err.message}`];
+    renderErrors(); renderStatus();
+    return;
+  }
+  tryAutoIngest();
+});
+
+/* ---------------- 内置样例（与 samples 包同源数据） ---------------- */
+const SAMPLE_FILES = {
+  "odd-8": {
+    cfg: {
+      width: 7, height: 5, frames: 3, bits: 8, frame_bytes: 132,
+      matrix: "709", range: "limited", siting: "center",
+      planes: {
+        Y: { offset: 8, stride: 10 },
+        U: { offset: 66, stride: 7 },
+        V: { offset: 95, stride: 7 },
+      },
+    },
+    // 占位：启动时由嵌入的 base64 数据填充
+    b64: null,
+  },
+  "odd-10": {
+    cfg: {
+      width: 7, height: 5, frames: 3, bits: 10, frame_bytes: 224,
+      matrix: "709", range: "limited", siting: "center",
+      planes: {
+        Y: { offset: 8, stride: 20 },
+        U: { offset: 116, stride: 14 },
+        V: { offset: 166, stride: 14 },
+      },
+    },
+    b64: null,
+  },
+};
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function loadSample(name) {
+  const rec = EMBEDDED_SAMPLES[name];
+  const bytes = b64ToBytes(rec.b64);
+  pending.json = rec.cfg; pending.raw = bytes; pending.rawName = name + ".raw";
+  $("rawName").textContent = name + ".raw（内置样例）";
+  $("jsonName").textContent = name + ".json（内置样例）";
+  ingest(bytes, rec.cfg, name + ".raw");
+}
+$("loadSample8").addEventListener("click", () => loadSample("odd-8"));
+$("loadSample10").addEventListener("click", () => loadSample("odd-10"));
+
+/* ---------------- 交互：平面/模式/参数 ---------------- */
+$("planeSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  state.plane = b.dataset.plane;
+  $("planeSeg").querySelectorAll("button").forEach((x) =>
+    x.classList.toggle("on", x === b));
+  renderAll();
+});
+$("modeSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  state.mode = b.dataset.mode;
+  $("modeSeg").querySelectorAll("button").forEach((x) =>
+    x.classList.toggle("on", x === b));
+  $("singleView").hidden = state.mode !== "single";
+  $("compareView").hidden = state.mode !== "compare";
+  $("compareParamWrap").hidden = state.mode !== "compare";
+  syncParamSegs();
+  if (state.cfg && !state.errors.length) {
+    state.zoom = state.mode === "compare"
+      ? Math.max(1, Math.floor(state.zoom / 2)) : fitZoom();
+    renderAll();
+  }
+});
+for (const [segId, key] of [["matrixSeg", "matrix"], ["rangeSeg", "range"], ["sitingSeg", "siting"]]) {
+  $(segId).addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    state.params[state.activeSide][key] = b.dataset.val;
+    syncParamSegs();
+    renderAll();
+  });
+}
+$("sideSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  state.activeSide = b.dataset.side;
+  syncParamSegs();
+  renderAll();
+});
+
+/* ---------------- 帧与缩放 ---------------- */
+$("frameScrub").addEventListener("input", (e) => {
+  state.frame = +e.target.value;
+  updateFrameControls();
+  renderAll();
+});
+$("prevFrame").addEventListener("click", () => setFrame(state.frame - 1));
+$("nextFrame").addEventListener("click", () => setFrame(state.frame + 1));
+function setFrame(f) {
+  if (!state.cfg) return;
+  state.frame = clamp(f, 0, state.cfg.frames - 1);
+  updateFrameControls();
+  renderAll();
+}
+$("zoomIn").addEventListener("click", () => { state.zoom = Math.min(128, state.zoom + 1); applyZoom(); });
+$("zoomOut").addEventListener("click", () => { state.zoom = Math.max(1, state.zoom - 1); applyZoom(); });
+$("zoomFit").addEventListener("click", () => { state.zoom = fitZoom(); applyZoom(); });
+
+const scrollHosts = [$("singleView"), ...document.querySelectorAll(".compare-grid .canvas-scroll")];
+function onWheel(e) {
+  if (!state.cfg || state.errors.length) return;
+  e.preventDefault();
+  const dir = e.deltaY < 0 ? 1 : -1;
+  state.zoom = clamp(state.zoom + dir, 1, 128);
+  applyZoom();
+}
+for (const h of scrollHosts) h.addEventListener("wheel", onWheel, { passive: false });
+
+function eventToPixel(ev, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((ev.clientX - rect.left) / state.zoom);
+  const y = Math.floor((ev.clientY - rect.top) / state.zoom);
+  if (!state.cfg) return null;
+  if (x < 0 || y < 0 || x >= state.cfg.width || y >= state.cfg.height) return null;
+  return { x, y };
+}
+function bindCanvas(canvas) {
+  canvas.addEventListener("mousemove", (e) => {
+    const p = eventToPixel(e, canvas);
+    state.hover = p;
+    drawCrosshair();
+    updatePixelPanel();
+  });
+  canvas.addEventListener("mouseleave", () => {
+    state.hover = null;
+    drawCrosshair();
+    updatePixelPanel();
+    $("hoverCoord").textContent = "—";
+  });
+  canvas.addEventListener("click", (e) => {
+    const p = eventToPixel(e, canvas);
+    state.locked = p;
+    drawCrosshair();
+    updatePixelPanel();
+  });
+}
+bindCanvas($("mainCanvas"));
+bindCanvas($("canvasA"));
+bindCanvas($("canvasB"));
+
+document.addEventListener("keydown", (e) => {
+  if (!state.cfg || state.errors.length) return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "ArrowLeft") { setFrame(state.frame - 1); e.preventDefault(); }
+  if (e.key === "ArrowRight") { setFrame(state.frame + 1); e.preventDefault(); }
+});
+
+/* ---------------- 手工应用布局 ---------------- */
+$("applyCfg").addEventListener("click", () => {
+  if (!state.rawBytes) {
+    state.errors = ["尚未载入 RAW 数据，无法校验布局。"];
+    renderErrors();
+    return;
+  }
+  const cfg = readConfigForm();
+  ingest(state.rawBytes, cfg, state.rawName);
+});
+
+/* ---------------- 导出 PNG / 参数 JSON ---------------- */
+$("exportPng").addEventListener("click", () => {
+  if (!state.cfg || state.errors.length) return;
+  const p = state.mode === "compare"
+    ? state.params[state.activeSide]
+    : (state.activeSide === "A" ? state.params.A : state.params.B);
+  const off = document.createElement("canvas");
+  off.width = state.cfg.width; off.height = state.cfg.height;
+  renderFrame(off, state.frame, "RGB", p);
+  off.toBlob((blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const base = (state.rawName || "frame").replace(/\.[^.]+$/, "");
+    a.href = url;
+    a.download = `${base}-f${state.frame}-${p.matrix}-${p.range}-${p.siting}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }, "image/png");
+});
+
+$("exportJson").addEventListener("click", () => {
+  if (!state.cfg || state.errors.length) return;
+  const p = state.params.A;
+  // 与导入布局同构，可直接重新导入；附带当前帧与来源文件用于溯源
+  const out = {
+    width: state.cfg.width,
+    height: state.cfg.height,
+    frames: state.cfg.frames,
+    bits: state.cfg.bits,
+    frame_bytes: state.cfg.frame_bytes,
+    matrix: p.matrix,
+    range: p.range,
+    siting: p.siting,
+    planes: {
+      Y: { ...state.cfg.planes.Y },
+      U: { ...state.cfg.planes.U },
+      V: { ...state.cfg.planes.V },
+    },
+    exported_frame: state.frame,
+    source_raw: state.rawName || null,
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const base = (state.rawName || "params").replace(/\.[^.]+$/, "");
+  a.href = url;
+  a.download = `${base}-params.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+
+/* ---------------- 主题 ---------------- */
+$("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme ||
+    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
+});
+
+/* ---------------- 启动 ---------------- */
+// EMBEDDED_SAMPLES 由紧随其后的脚本块注入（base64 RAW）
+var EMBEDDED_SAMPLES = SAMPLE_FILES;
+void SAMPLE_FILES;
+</script>
+<script id="sample-data">EMBEDDED_SAMPLES['odd-8'].b64 = 'paWlpaWlpaUQNFl9osbrpaWlEDRZfaLG66WlpRA0WX2ixuulpaUQNFl9osbrpaWlEDRZfaLG66WlpaWlpaWlpaWlMFiAqKWlpThgiLClpaVAaJC4paWlpaWlpaWlpaXQsJBwpaWlwKCAYKWlpbCQcFClpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaUQNFl9osbrpaWlEDRZfaLG66WlpRA0WX2ixuulpaUQNFl9osbrpaWlEDRZfaLG66WlpaWlpaWlpaWlPGSMtKWlpURslLylpaVMdJzEpaWlpaWlpaWlpaXIqIhopaWluJh4WKWlpaiIaEilpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaUQNFl9osbrpaWlEDRZfaLG66WlpRA0WX2ixuulpaUQNFl9osbrpaWlEDRZfaLG66WlpaWlpaWlpaWlSHCYwKWlpVB4oMilpaVYgKjQpaWlpaWlpaWlpaXAoIBgpaWlsJBwUKWlpaCAYEClpaWlpaWlpaWlpaWlpaWlpaWl';
+EMBEDDED_SAMPLES['odd-10'].b64 = 'paWlpaWlpaVAANAAZAH0AYgCGAOsA6WlpaWlpUAA0ABkAfQBiAIYA6wDpaWlpaWlQADQAGQB9AGIAhgDrAOlpaWlpaVAANAAZAH0AYgCGAOsA6WlpaWlpUAA0ABkAfQBiAIYA6wDpaWlpaWlpaWlpaWlpaXAAGABAAKgAqWlpaWlpeAAgAEgAsACpaWlpaWlAAGgAUAC4AKlpaWlpaWlpaWlpaWlpUADwAJAAsABpaWlpaWlAAOAAgACgAGlpaWlpaXAAkACwAFAAaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpUAA0ABkAfQBiAIYA6wDpaWlpaWlQADQAGQB9AGIAhgDrAOlpaWlpaVAANAAZAH0AYgCGAOsA6WlpaWlpUAA0ABkAfQBiAIYA6wDpaWlpaWlQADQAGQB9AGIAhgDrAOlpaWlpaWlpaWlpaWlpfAAkAEwAtACpaWlpaWlEAGwAVAC8AKlpaWlpaUwAdABcAIQA6WlpaWlpaWlpaWlpaWlIAOgAiACoAGlpaWlpaXgAmAC4AFgAaWlpaWlpaACIAKgASABpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlQADQAGQB9AGIAhgDrAOlpaWlpaVAANAAZAH0AYgCGAOsA6WlpaWlpUAA0ABkAfQBiAIYA6wDpaWlpaWlQADQAGQB9AGIAhgDrAOlpaWlpaVAANAAZAH0AYgCGAOsA6WlpaWlpaWlpaWlpaWlIAHAAWACAAOlpaWlpaVAAeABgAIgA6WlpaWlpWABAAKgAkADpaWlpaWlpaWlpaWlpaUAA4ACAAKAAaWlpaWlpcACQALAAUABpaWlpaWlgAIAAoABAAGlpaWlpaWlpaWlpaWlpaWlpaWlpaWl';
+EMBEDDED_SAMPLES['odd-8'].cfg = {"width": 7, "height": 5, "frames": 3, "bits": 8, "frame_bytes": 132, "matrix": "709", "range": "limited", "siting": "center", "planes": {"Y": {"offset": 8, "stride": 10}, "U": {"offset": 66, "stride": 7}, "V": {"offset": 95, "stride": 7}}};
+EMBEDDED_SAMPLES['odd-10'].cfg = {"width": 7, "height": 5, "frames": 3, "bits": 10, "frame_bytes": 224, "matrix": "709", "range": "limited", "siting": "center", "planes": {"Y": {"offset": 8, "stride": 20}, "U": {"offset": 116, "stride": 14}, "V": {"offset": 166, "stride": 14}}};
+</script>
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+  syncParamSegs();
+  renderStatus();
+});
+</script>
+</body>
+</html>

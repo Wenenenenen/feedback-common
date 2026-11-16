@@ -1,0 +1,6 @@
+{
+  "invalid-high-bits.raw": "配odd-10.json，高6位非零",
+  "invalid-short.raw": "配odd-10.json，文件缺1字节",
+  "invalid-stride.json": "配odd-10.raw，10位步幅未对齐且不足一行",
+  "invalid-overlap.json": "配odd-10.raw，U与V有效数据重叠"
+}

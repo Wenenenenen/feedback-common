@@ -1,0 +1,8 @@
+{
+  "布局": "每帧独立，planes按Y、U、V命名；offset和stride均为字节；每帧起点为帧号乘frame_bytes。8位用u8，10位用低10位有效的u16le，高6位必须为0。色度宽高分别为ceil(width/2)、ceil(height/2)，平面有效字节不得重叠。文件长必须等于frame_bytes乘frames。",
+  "采样": "亮度像素中心坐标为整数(x,y)。center色度中心为(2i+0.5,2j+0.5)，left为(2i,2j+0.5)。映射到色度网格后双线性插值，越界坐标先钳制。",
+  "归一化": "令s=2^(bits-8)，M=2^bits-1。limited使用Y=(rawY-16s)/(219s)、Cb=(U-128s)/(224s)、Cr=(V-128s)/(224s)；full使用Y=rawY/M、Cb=(U-128s)/M、Cr=(V-128s)/M。转换前不裁剪。",
+  "矩阵": "601的Kr=0.299,Kb=0.114；709的Kr=0.2126,Kb=0.0722；Kg=1-Kr-Kb。R=Y+2(1-Kr)Cr；B=Y+2(1-Kb)Cb；G=(Y-Kr*R-Kb*B)/Kg。RGB均为编码域值，不再做伽马变换。",
+  "量化": "各通道最终钳制到[0,1]，乘255后floor(v+0.5)。输出RGB PNG，不含透明度。",
+  "参考": "checks.json列出指定参数、帧号和位置的最终RGB，逐通道允许1个码值误差；错误样例见invalid.json。"
+}

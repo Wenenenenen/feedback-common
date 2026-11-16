@@ -1,0 +1,24 @@
+{
+  "width": 7,
+  "height": 5,
+  "frames": 3,
+  "bits": 10,
+  "frame_bytes": 224,
+  "matrix": "709",
+  "range": "limited",
+  "siting": "center",
+  "planes": {
+    "Y": {
+      "offset": 8,
+      "stride": 20
+    },
+    "U": {
+      "offset": 116,
+      "stride": 7
+    },
+    "V": {
+      "offset": 166,
+      "stride": 14
+    }
+  }
+}

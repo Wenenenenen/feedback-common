@@ -1,0 +1,898 @@
+[
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      138,
+      18,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      146,
+      120,
+      111
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      172,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      125,
+      21,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      133,
+      123,
+      131
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      159,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      136,
+      31,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      142,
+      119,
+      111
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      162,
+      249,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      125,
+      33,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      131,
+      121,
+      129
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      151,
+      251,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      143,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      149,
+      24,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      148,
+      122,
+      110
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      162,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      143,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      135,
+      26,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      134,
+      124,
+      131
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      147,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      142,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      146,
+      36,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      144,
+      121,
+      110
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      153,
+      247,
+      255
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      142,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      134,
+      38,
+      0
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      131,
+      123,
+      129
+    ]
+  },
+  {
+    "file": "odd-8",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      141,
+      248,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      138,
+      18,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      146,
+      120,
+      111
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      172,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      125,
+      21,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      133,
+      123,
+      131
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      159,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      136,
+      31,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      141,
+      119,
+      110
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      162,
+      248,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      128,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      125,
+      33,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      130,
+      121,
+      128
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "601",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      150,
+      250,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      143,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      149,
+      24,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      148,
+      122,
+      110
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "center",
+    "rgb": [
+      162,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      143,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      135,
+      26,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      134,
+      124,
+      131
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "limited",
+    "siting": "left",
+    "rgb": [
+      147,
+      255,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      142,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      146,
+      36,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      143,
+      121,
+      110
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "full",
+    "siting": "center",
+    "rgb": [
+      153,
+      246,
+      255
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 0,
+    "y": 0,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      142,
+      0,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 0,
+    "x": 1,
+    "y": 2,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      133,
+      38,
+      0
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 1,
+    "x": 3,
+    "y": 3,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      131,
+      122,
+      128
+    ]
+  },
+  {
+    "file": "odd-10",
+    "frame": 2,
+    "x": 6,
+    "y": 4,
+    "matrix": "709",
+    "range": "full",
+    "siting": "left",
+    "rgb": [
+      140,
+      248,
+      255
+    ]
+  }
+]
