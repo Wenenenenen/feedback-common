@@ -1,0 +1,1 @@
+{"fixed":{"instance":"a-mirror","face":0,"t":5,"position":[0,0,5],"barycentric":[0.25,0.25,0.5],"normal":[0,0,-1]},"miss":null,"inside":{"instance":"shear","t":2},"singular_excluded":["singular"],"unique_blas":2}

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>实例化射线拾取 × 双层 BVH 校验台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>实例化射线拾取校验台 <span class="sub">自研 BLAS/TLAS 双层 BVH · 逐三角穷举对照 · 无现成 Raycaster/BVH 库</span></h1>
+</header>
+<main>
+  <section id="viewport-wrap">
+    <canvas id="gl"></canvas>
+    <div id="viewport-hint">左键拖拽旋转 · 滚轮缩放 · Shift+拖拽平移 · 点击拾取物体</div>
+    <div id="pick-readout" class="hidden"></div>
+  </section>
+
+  <aside id="panel">
+    <details open>
+      <summary>场景</summary>
+      <div class="row btns">
+        <button id="btn-sample">加载内置样例</button>
+        <button id="btn-invalid-sample">非法矩阵样例</button>
+        <label class="file-btn">上传 JSON<input type="file" id="file-input" multiple accept=".json"></label>
+      </div>
+      <div class="hint">上传需包含 scene.json（必需）、rays.json、expected.json。上限：2000 实例 / 每网格 2 万面。</div>
+      <div id="scene-stats" class="kv"></div>
+      <div id="invalid-list" class="warn-list"></div>
+    </details>
+
+    <details open>
+      <summary>拾取结果</summary>
+      <div id="pick-result" class="kv dim">在左侧视口中点击物体</div>
+      <div class="row btns">
+        <label><input type="checkbox" id="chk-visited" checked> 显示访问的包围盒</label>
+        <label><input type="checkbox" id="chk-brute-pick"> 同时跑穷举对照</label>
+      </div>
+      <div id="pick-stats" class="kv"></div>
+    </details>
+
+    <details open>
+      <summary>批量比对（BVH vs 穷举 vs expected）</summary>
+      <div class="row btns">
+        <button id="btn-run">运行批量比对</button>
+        <button id="btn-cancel" disabled>取消</button>
+        <button id="btn-export" disabled>导出报告</button>
+      </div>
+      <progress id="batch-progress" value="0" max="1"></progress>
+      <div id="batch-status" class="hint"></div>
+      <div id="batch-summary" class="kv"></div>
+      <div id="batch-table-wrap"><table id="batch-table"></table></div>
+    </details>
+
+    <details>
+      <summary>报告状态</summary>
+      <div id="report-status" class="kv dim">尚未生成报告</div>
+    </details>
+
+    <details>
+      <summary>实例矩阵编辑（只重建 TLAS）</summary>
+      <div class="row">
+        <select id="inst-select"></select>
+      </div>
+      <div id="matrix-grid"></div>
+      <div class="row btns">
+        <button id="btn-apply-matrix">应用矩阵</button>
+        <button id="btn-reset-matrix">还原</button>
+      </div>
+      <div id="matrix-msg" class="hint"></div>
+      <div id="build-counters" class="kv"></div>
+    </details>
+  </aside>
+</main>
+<script src="js/core.js"></script>
+<script src="js/sample-data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
