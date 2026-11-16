@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旁链压缩校验台</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #d9dde3;
+    --text: #1c2330;
+    --muted: #5b6472;
+    --accent: #2563eb;
+    --accent2: #7c3aed;
+    --key-color: #059669;
+    --gain-color: #dc2626;
+    --danger: #b91c1c;
+    --ok: #047857;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  main { max-width: 1080px; margin: 0 auto; padding: 16px 20px 48px; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  section h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .file-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  .file-box { display: flex; align-items: center; gap: 8px; }
+  .file-box label { font-weight: 600; }
+  input[type="file"] { max-width: 240px; }
+  button {
+    font: inherit;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 6px;
+    padding: 5px 14px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: 0.9; }
+  button.active { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .info { color: var(--muted); font-size: 12.5px; }
+  .info b { color: var(--text); font-weight: 600; }
+  #errors {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 8px;
+    white-space: pre-wrap;
+  }
+  #errors:empty { display: none; }
+  .params {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 8px 24px;
+  }
+  .param { display: grid; grid-template-columns: 92px 1fr 64px; align-items: center; gap: 8px; }
+  .param label { font-size: 13px; color: var(--muted); }
+  .param input[type="range"] { width: 100%; }
+  .param input[type="number"] {
+    width: 64px; font: inherit; padding: 2px 4px;
+    border: 1px solid var(--border); border-radius: 4px;
+  }
+  .lane-label {
+    font-size: 12px; color: var(--muted); margin: 8px 0 2px;
+    display: flex; justify-content: space-between;
+  }
+  canvas.display {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fbfcfe;
+    cursor: crosshair;
+    display: block;
+  }
+  .transport { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  #time-display { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+  #clip-report { font-size: 13px; margin-top: 8px; }
+  #clip-report .bad { color: var(--danger); font-weight: 600; }
+  #clip-report .good { color: var(--ok); }
+  .export-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  footer { color: var(--muted); font-size: 12px; max-width: 1080px; margin: 0 auto; padding: 0 20px 32px; }
+  kbd {
+    border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 5px; font-size: 12px; background: #fff;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>旁链压缩校验台</h1>
+  <p>峰值检测 · 软/硬拐点 · dB 域攻放平滑 · 前瞻 · 补偿增益 · 干湿混合 —— 按样例包《约定.json》逐帧实现，不使用现成压缩器。</p>
+</header>
+<main>
+  <section>
+    <h2>1. 导入音频（44.1/48 kHz · 16/24 位 PCM · 单/双声道 · 主轨 ≤ 30 s）</h2>
+    <div class="file-row">
+      <div class="file-box">
+        <label>主轨（必选）</label>
+        <input type="file" id="main-file" accept=".wav,audio/wav,audio/x-wav">
+      </div>
+      <div class="file-box">
+        <label>外部旁链（可选）</label>
+        <input type="file" id="key-file" accept=".wav,audio/wav,audio/x-wav">
+        <button id="clear-key" type="button" hidden>清除旁链</button>
+      </div>
+    </div>
+    <div class="info" id="main-info" style="margin-top:8px">主轨：未加载</div>
+    <div class="info" id="key-info">检测源：主轨（未加载外部旁链）</div>
+    <div id="errors"></div>
+  </section>
+
+  <section>
+    <h2>2. 参数（修改后自动重算）</h2>
+    <div class="params" id="params"></div>
+    <div class="info" id="lookahead-info" style="margin-top:8px"></div>
+  </section>
+
+  <section>
+    <h2>3. 波形与增益衰减（点击定位试听）</h2>
+    <div class="lane-label"><span>主轨波形</span><span id="main-lane-info"></span></div>
+    <canvas class="display" id="main-canvas" height="120"></canvas>
+    <div class="lane-label" id="key-lane-label" hidden><span>旁链波形（超出自身长度按 0 检测）</span><span id="key-lane-info"></span></div>
+    <canvas class="display" id="key-canvas" height="80" hidden></canvas>
+    <div class="lane-label"><span>增益衰减 g[n+L]（dB，不含补偿增益）</span><span id="gain-lane-info"></span></div>
+    <canvas class="display" id="gain-canvas" height="110"></canvas>
+    <div class="transport">
+      <button id="play-btn" type="button" disabled>▶ 播放</button>
+      <button id="bypass-btn" type="button" disabled>旁路：关</button>
+      <span id="time-display">0.000 / 0.000 s</span>
+      <span class="info">空格键播放/暂停；旁路时试听原始主轨作 A/B 对比</span>
+    </div>
+    <div id="clip-report"></div>
+  </section>
+
+  <section>
+    <h2>4. 导出（始终对应当前参数）</h2>
+    <div class="export-row">
+      <button class="primary" id="export-wav" type="button" disabled>导出 24 位 WAV</button>
+      <button class="primary" id="export-csv" type="button" disabled>导出增益 CSV</button>
+      <span class="info">24 位 PCM：×2²³ 四舍五入（半值远离 0）后饱和；不归一化、不加限幅器。CSV 每 ⌊sr/100⌋ 帧一点并含 N−1。</span>
+    </div>
+  </section>
+</main>
+<footer>
+  检测取各声道绝对值最大值，两声道共用增益；无外部旁链时用主轨，短旁链末尾补零，长旁链前瞻可越界读取。
+  前瞻只读取 g[n+L]，输出恰为主轨 N 帧，不整体移位、不改变帧数。削波统计为混合后、量化前 |y| &gt; 1 的逐声道采样数。
+</footer>
+<script src="dsp.js"></script>
+<script>
+(function () {
+  'use strict';
+  var DSP = window.SidechainDSP;
+
+  var PARAM_DEFS = [
+    { key: 'threshold_db', label: '阈值 dB', min: -60, max: 0, step: 0.1, def: -18 },
+    { key: 'ratio', label: '压缩比', min: 1, max: 20, step: 0.1, def: 4 },
+    { key: 'knee_db', label: '拐点 dB', min: 0, max: 24, step: 0.1, def: 0 },
+    { key: 'attack_ms', label: '启动 ms', min: 0, max: 200, step: 0.1, def: 5 },
+    { key: 'release_ms', label: '释放 ms', min: 0, max: 2000, step: 1, def: 80 },
+    { key: 'lookahead_ms', label: '前瞻 ms', min: 0, max: 20, step: 0.1, def: 10 },
+    { key: 'makeup_db', label: '补偿 dB', min: -12, max: 12, step: 0.1, def: 0 },
+    { key: 'mix', label: '干湿比', min: 0, max: 1, step: 0.01, def: 1 }
+  ];
+
+  var state = {
+    main: null,          // decodeWav 结果
+    key: null,
+    params: {},
+    result: null,        // { g, y, L }
+    clips: null,
+    bypass: false,
+    playing: false,
+    offsetSec: 0,
+    actx: null,
+    source: null,
+    playStartCtx: 0,
+    playStartOffset: 0,
+    manualStop: false,
+    bufOriginal: null,
+    bufProcessed: null,
+    rafId: 0
+  };
+  PARAM_DEFS.forEach(function (d) { state.params[d.key] = d.def; });
+
+  var $ = function (id) { return document.getElementById(id); };
+  var mainCanvas = $('main-canvas'), keyCanvas = $('key-canvas'), gainCanvas = $('gain-canvas');
+
+  // ---------- 参数控件 ----------
+  var paramsEl = $('params');
+  PARAM_DEFS.forEach(function (d) {
+    var row = document.createElement('div');
+    row.className = 'param';
+    var lab = document.createElement('label');
+    lab.textContent = d.label;
+    var range = document.createElement('input');
+    range.type = 'range'; range.min = d.min; range.max = d.max; range.step = d.step; range.value = d.def;
+    var num = document.createElement('input');
+    num.type = 'number'; num.min = d.min; num.max = d.max; num.step = d.step; num.value = d.def;
+    function clamp(v) { return Math.min(d.max, Math.max(d.min, v)); }
+    range.addEventListener('input', function () {
+      state.params[d.key] = parseFloat(range.value);
+      num.value = range.value;
+      scheduleRecompute();
+    });
+    num.addEventListener('change', function () {
+      var v = clamp(parseFloat(num.value));
+      if (!isFinite(v)) v = d.def;
+      state.params[d.key] = v;
+      num.value = v; range.value = v;
+      scheduleRecompute();
+    });
+    row.appendChild(lab); row.appendChild(range); row.appendChild(num);
+    paramsEl.appendChild(row);
+  });
+
+  // ---------- 文件加载 ----------
+  function showError(msg) { $('errors').textContent = msg || ''; }
+
+  function fmtInfo(t) {
+    return '<b>' + t.name + '</b> — ' + t.sampleRate + ' Hz · ' +
+      (t.channels === 1 ? '单声道' : '双声道') + ' · ' + t.bits + ' 位 · ' +
+      t.frames + ' 帧（' + (t.frames / t.sampleRate).toFixed(3) + ' s）';
+  }
+
+  function readFile(input, cb) {
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var r = new FileReader();
+    r.onload = function () { cb(f.name, r.result); };
+    r.onerror = function () { showError('读取文件失败：' + f.name); };
+    r.readAsArrayBuffer(f);
+  }
+
+  $('main-file').addEventListener('change', function () {
+    readFile(this, function (name, buf) {
+      try {
+        var t = DSP.decodeWav(buf, name);
+        if (t.frames / t.sampleRate > 30) {
+          throw new Error(name + '：主轨时长 ' + (t.frames / t.sampleRate).toFixed(3) +
+            ' s，超过 30 s 上限，已拒绝');
+        }
+        state.main = t;
+        if (state.key && state.key.sampleRate !== t.sampleRate) {
+          var msg = '采样率不一致：' + t.name + ' 为 ' + t.sampleRate + ' Hz，' +
+            state.key.name + ' 为 ' + state.key.sampleRate + ' Hz，已清除旁链';
+          state.key = null;
+          $('key-file').value = '';
+          $('clear-key').hidden = true;
+          showError(msg);
+        } else {
+          showError('');
+        }
+        $('main-info').innerHTML = '主轨：' + fmtInfo(t);
+        updateKeyInfo();
+        stopPlayback();
+        state.offsetSec = 0;
+        state.bufOriginal = state.bufProcessed = null;
+        recompute();
+      } catch (e) {
+        showError(e.message);
+      }
+      this.value = '';
+    }.bind(this));
+  });
+
+  $('key-file').addEventListener('change', function () {
+    readFile(this, function (name, buf) {
+      try {
+        var t = DSP.decodeWav(buf, name);
+        if (state.main && t.sampleRate !== state.main.sampleRate) {
+          throw new Error('采样率不一致：' + state.main.name + ' 为 ' + state.main.sampleRate +
+            ' Hz，' + t.name + ' 为 ' + t.sampleRate + ' Hz，旁链已拒绝');
+        }
+        state.key = t;
+        $('clear-key').hidden = false;
+        showError('');
+        updateKeyInfo();
+        recompute();
+      } catch (e) {
+        showError(e.message);
+      }
+      this.value = '';
+    }.bind(this));
+  });
+
+  $('clear-key').addEventListener('click', function () {
+    state.key = null;
+    $('key-file').value = '';
+    this.hidden = true;
+    updateKeyInfo();
+    recompute();
+  });
+
+  function updateKeyInfo() {
+    if (state.key) {
+      $('key-info').innerHTML = '检测源：外部旁链 ' + fmtInfo(state.key) +
+        (state.main && state.key.frames < state.main.frames
+          ? '（短于主轨，末尾补零）'
+          : (state.main && state.key.frames > state.main.frames ? '（长于主轨，前瞻可读取后续内容）' : ''));
+    } else {
+      $('key-info').textContent = '检测源：主轨（未加载外部旁链）';
+    }
+  }
+
+  // ---------- 计算 ----------
+  var recomputeTimer = 0;
+  function scheduleRecompute() {
+    clearTimeout(recomputeTimer);
+    recomputeTimer = setTimeout(recompute, 60);
+  }
+
+  function recompute() {
+    clearTimeout(recomputeTimer);
+    if (!state.main) {
+      state.result = null;
+      drawAll();
+      updateClipReport();
+      updateTransport();
+      return;
+    }
+    var m = state.main;
+    state.result = DSP.process(m.data, state.key ? state.key.data : null,
+      m.sampleRate, m.frames, state.params);
+    state.clips = DSP.clipCounts(state.result.y);
+    state.bufProcessed = null; // 下次播放/导出前重建
+    if (state.playing) restartSource(); // 让试听立即反映新参数
+    drawAll();
+    updateClipReport();
+    updateTransport();
+    updateLookaheadInfo();
+  }
+
+  function updateLookaheadInfo() {
+    if (!state.main) { $('lookahead-info').textContent = ''; return; }
+    var L = state.result ? state.result.L :
+      Math.floor(state.params.lookahead_ms * state.main.sampleRate / 1000 + 0.5);
+    $('lookahead-info').textContent = '前瞻 L = ' + L + ' 帧；检测算到 N+L−1 = ' +
+      (state.main.frames + L - 1) + '，输出恰为主轨 N = ' + state.main.frames + ' 帧，不整体移位。';
+  }
+
+  function updateClipReport() {
+    var el = $('clip-report');
+    if (!state.clips) { el.textContent = ''; return; }
+    var names = state.main.channels === 1 ? ['声道'] : ['左声道', '右声道'];
+    var parts = state.clips.map(function (c, i) {
+      return names[i] + ' <span class="' + (c > 0 ? 'bad' : 'good') + '">' + c + '</span>';
+    });
+    el.innerHTML = '量化前削波采样数（|y| &gt; 1）：' + parts.join('，') +
+      (state.clips.some(function (c) { return c > 0; })
+        ? ' — <span class="bad">导出将饱和到有符号 24 位，不做归一化/限幅</span>'
+        : ' — 无削波');
+  }
+
+  // ---------- 绘制 ----------
+  function fitCanvas(cv) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = cv.clientWidth, h = cv.height;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+    }
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, w: w, h: h };
+  }
+
+  var CH_COLORS = ['#2563eb', '#7c3aed'];
+
+  // dataFrames 为数据实际长度，axisFrames 为时间轴全长（主轨 N）；
+  // 短旁链只画自身区段，之后保持 0 线，保证两轨与增益曲线时间轴对齐。
+  function drawWaveform(cv, data, dataFrames, axisFrames) {
+    var f = fitCanvas(cv), ctx = f.ctx, w = f.w, h = f.h;
+    ctx.clearRect(0, 0, w, h);
+    if (!data) return;
+    var ch = data.length;
+    var laneH = h / ch;
+    for (var c = 0; c < ch; c++) {
+      var mid = laneH * c + laneH / 2;
+      ctx.strokeStyle = '#e2e6ec';
+      ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+      ctx.strokeStyle = CH_COLORS[c % 2];
+      ctx.beginPath();
+      var samples = data[c];
+      var xEnd = Math.min(w, Math.ceil(dataFrames * w / axisFrames));
+      for (var x = 0; x < xEnd; x++) {
+        var i0 = Math.floor(x * axisFrames / w);
+        var i1 = Math.max(i0 + 1, Math.floor((x + 1) * axisFrames / w));
+        if (i0 >= dataFrames) break;
+        var mn = Infinity, mx = -Infinity;
+        for (var i = i0; i < i1 && i < dataFrames; i++) {
+          var v = samples[i];
+          if (v < mn) mn = v;
+          if (v > mx) mx = v;
+        }
+        var y0 = mid - mx * (laneH / 2 - 2);
+        var y1 = mid - mn * (laneH / 2 - 2);
+        ctx.moveTo(x + 0.5, y0);
+        ctx.lineTo(x + 0.5, Math.max(y1, y0 + 0.5));
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawGain(cv) {
+    var f = fitCanvas(cv), ctx = f.ctx, w = f.w, h = f.h;
+    ctx.clearRect(0, 0, w, h);
+    if (!state.result) return;
+    var g = state.result.g, L = state.result.L, N = state.main.frames;
+    var gmin = 0;
+    for (var n = 0; n < N; n += 16) { var v = g[n + L]; if (v < gmin) gmin = v; }
+    gmin = Math.min(gmin, -0.5);
+    function yOf(db) { return (db / gmin) * (h - 14) + 2; }
+    // 网格
+    ctx.strokeStyle = '#e2e6ec';
+    ctx.fillStyle = '#8a93a3';
+    ctx.font = '10px sans-serif';
+    for (var db = 0; db >= gmin; db -= Math.max(1, Math.ceil(-gmin / 5))) {
+      var y = yOf(db);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillText(db + ' dB', 4, y - 2);
+    }
+    ctx.strokeStyle = '#dc2626';
+    ctx.beginPath();
+    for (var x = 0; x < w; x++) {
+      var i0 = Math.floor(x * N / w);
+      var i1 = Math.max(i0 + 1, Math.floor((x + 1) * N / w));
+      var mn = Infinity;
+      for (var i = i0; i < i1 && i < N; i++) { var gv = g[i + L]; if (gv < mn) mn = gv; }
+      var yy = yOf(mn);
+      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+
+  function drawPlayhead() {
+    if (!state.main) return;
+    var pos = currentPos();
+    var frac = pos / (state.main.frames / state.main.sampleRate);
+    [mainCanvas, gainCanvas].concat(state.key ? [keyCanvas] : []).forEach(function (cv) {
+      if (cv.hidden) return;
+      var ctx = cv.getContext('2d');
+      var dpr = window.devicePixelRatio || 1;
+      var w = cv.width / dpr, h = cv.height / dpr;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.5;
+      var x = frac * w;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      ctx.restore();
+    });
+    $('time-display').textContent = pos.toFixed(3) + ' / ' +
+      (state.main.frames / state.main.sampleRate).toFixed(3) + ' s';
+  }
+
+  function drawAll() {
+    if (!state.main) {
+      [mainCanvas, keyCanvas, gainCanvas].forEach(function (cv) {
+        var f = fitCanvas(cv); f.ctx.clearRect(0, 0, f.w, f.h);
+      });
+      $('main-lane-info').textContent = '';
+      $('gain-lane-info').textContent = '';
+      return;
+    }
+    drawWaveform(mainCanvas, state.main.data, state.main.frames, state.main.frames);
+    $('main-lane-info').textContent = state.main.channels === 1 ? '单声道' : '上：左声道 · 下：右声道';
+    if (state.key) {
+      $('key-lane-label').hidden = false;
+      keyCanvas.hidden = false;
+      drawWaveform(keyCanvas, state.key.data, state.key.frames, state.main.frames);
+      $('key-lane-info').textContent = state.key.frames + ' 帧';
+    } else {
+      $('key-lane-label').hidden = true;
+      keyCanvas.hidden = true;
+    }
+    drawGain(gainCanvas);
+    if (state.result) {
+      var gmin = 0;
+      var g = state.result.g, L = state.result.L, N = state.main.frames;
+      for (var n = 0; n < N; n++) if (g[n + L] < gmin) gmin = g[n + L];
+      $('gain-lane-info').textContent = '最大衰减 ' + gmin.toFixed(2) + ' dB';
+    }
+    drawPlayhead();
+  }
+
+  // 点击定位
+  [mainCanvas, keyCanvas, gainCanvas].forEach(function (cv) {
+    cv.addEventListener('pointerdown', function (e) {
+      if (!state.main) return;
+      var rect = cv.getBoundingClientRect();
+      var frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      seek(frac * state.main.frames / state.main.sampleRate);
+    });
+  });
+
+  // ---------- 播放 ----------
+  function ensureCtx() {
+    if (!state.actx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      state.actx = new AC();
+    }
+    if (state.actx.state === 'suspended') state.actx.resume();
+  }
+
+  function buildBuffers() {
+    var m = state.main;
+    if (!state.bufOriginal) {
+      state.bufOriginal = state.actx.createBuffer(m.channels, m.frames, m.sampleRate);
+      for (var c = 0; c < m.channels; c++) {
+        state.bufOriginal.copyToChannel(new Float32Array(m.data[c]), c);
+      }
+    }
+    if (!state.bufProcessed && state.result) {
+      state.bufProcessed = state.actx.createBuffer(m.channels, m.frames, m.sampleRate);
+      for (var c2 = 0; c2 < m.channels; c2++) {
+        state.bufProcessed.copyToChannel(new Float32Array(state.result.y[c2]), c2);
+      }
+    }
+  }
+
+  function currentPos() {
+    if (state.playing && state.actx) {
+      return Math.min(
+        state.playStartOffset + (state.actx.currentTime - state.playStartCtx),
+        state.main ? state.main.frames / state.main.sampleRate : 0
+      );
+    }
+    return state.offsetSec;
+  }
+
+  function startSource(offset) {
+    var src = state.actx.createBufferSource();
+    src.buffer = state.bypass ? state.bufOriginal : state.bufProcessed;
+    src.connect(state.actx.destination);
+    var dur = state.main.frames / state.main.sampleRate;
+    src.onended = function () {
+      if (!state.manualStop && state.source === src) {
+        state.playing = false;
+        state.offsetSec = 0;
+        updateTransport();
+        cancelAnimationFrame(state.rafId);
+        drawAll();
+      }
+    };
+    src.start(0, Math.min(offset, dur - 1e-4));
+    state.source = src;
+    state.playStartCtx = state.actx.currentTime;
+    state.playStartOffset = offset;
+  }
+
+  function restartSource() {
+    if (!state.playing) return;
+    var pos = currentPos();
+    state.manualStop = true;
+    try { state.source.stop(); } catch (e) {}
+    state.manualStop = false;
+    state.bufProcessed = null;
+    buildBuffers();
+    startSource(pos);
+  }
+
+  function play() {
+    if (!state.main || !state.result) return;
+    ensureCtx();
+    buildBuffers();
+    var dur = state.main.frames / state.main.sampleRate;
+    if (state.offsetSec >= dur) state.offsetSec = 0;
+    startSource(state.offsetSec);
+    state.playing = true;
+    updateTransport();
+    tick();
+  }
+
+  function stopPlayback() {
+    if (state.playing && state.source) {
+      state.manualStop = true;
+      try { state.source.stop(); } catch (e) {}
+      state.manualStop = false;
+    }
+    state.playing = false;
+    cancelAnimationFrame(state.rafId);
+  }
+
+  function pause() {
+    state.offsetSec = currentPos();
+    stopPlayback();
+    updateTransport();
+    drawAll();
+  }
+
+  function seek(sec) {
+    var dur = state.main.frames / state.main.sampleRate;
+    sec = Math.min(dur, Math.max(0, sec));
+    if (state.playing) {
+      state.manualStop = true;
+      try { state.source.stop(); } catch (e) {}
+      state.manualStop = false;
+      startSource(sec);
+    } else {
+      state.offsetSec = sec;
+    }
+    drawAll();
+  }
+
+  function tick() {
+    if (!state.playing) return;
+    drawAll();
+    state.rafId = requestAnimationFrame(tick);
+  }
+
+  function updateTransport() {
+    var ready = !!(state.main && state.result);
+    $('play-btn').disabled = !ready;
+    $('bypass-btn').disabled = !ready;
+    $('export-wav').disabled = !ready;
+    $('export-csv').disabled = !ready;
+    $('play-btn').textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+    $('bypass-btn').textContent = '旁路：' + (state.bypass ? '开（原始主轨）' : '关');
+    $('bypass-btn').className = state.bypass ? 'active' : '';
+  }
+
+  $('play-btn').addEventListener('click', function () {
+    if (state.playing) pause(); else play();
+  });
+
+  $('bypass-btn').addEventListener('click', function () {
+    state.bypass = !state.bypass;
+    if (state.playing) {
+      var pos = currentPos();
+      state.manualStop = true;
+      try { state.source.stop(); } catch (e) {}
+      state.manualStop = false;
+      startSource(pos);
+    }
+    updateTransport();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && !/INPUT|BUTTON|TEXTAREA/.test(document.activeElement.tagName)) {
+      e.preventDefault();
+      if (state.playing) pause(); else play();
+    }
+  });
+
+  // ---------- 导出 ----------
+  function download(name, blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 100);
+  }
+
+  function baseName() {
+    return state.main.name.replace(/\.wav$/i, '');
+  }
+
+  $('export-wav').addEventListener('click', function () {
+    if (!state.main) return;
+    recompute(); // 保证导出对应当前参数
+    var buf = DSP.encodeWav24(state.result.y, state.main.sampleRate);
+    download(baseName() + '-sidechain-24bit.wav', new Blob([buf], { type: 'audio/wav' }));
+  });
+
+  $('export-csv').addEventListener('click', function () {
+    if (!state.main) return;
+    recompute();
+    var csv = DSP.gainCsv(state.result.g, state.result.L, state.main.sampleRate, state.main.frames);
+    download(baseName() + '-gain.csv', new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  });
+
+  window.addEventListener('resize', drawAll);
+  updateLookaheadInfo();
+  drawAll();
+})();
+</script>
+</body>
+</html>
