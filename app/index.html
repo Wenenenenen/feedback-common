@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>立体深度锻造台</title>
+<style>
+  :root {
+    --bg: #101318; --panel: #191d24; --panel2: #222834; --panel3: #2c3342;
+    --border: #333b4a; --text: #dde3ec; --dim: #8b94a7; --dim2: #626b7d;
+    --accent: #5b9df9; --accent2: #f0a45c; --danger: #e36a6a; --ok: #5cc98d;
+    --left: #ff6b6b; --right: #4fd6d6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+    background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; font-weight: 600; margin-right: 8px; white-space: nowrap; }
+  header h1 small { color: var(--dim2); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 11px; cursor: pointer; font-size: 12.5px; font-family: inherit;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.38; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.1); }
+  button.danger { color: var(--danger); }
+  button.danger:hover:not(:disabled) { border-color: var(--danger); }
+  button.tiny { padding: 1px 7px; font-size: 11px; }
+  input[type=file] { display: none; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .seg button { border: 0; border-right: 1px solid var(--border); border-radius: 0; padding: 3px 10px; background: var(--panel2); }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--accent); color: #fff; }
+
+  #statusBar {
+    padding: 5px 12px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 12px;
+    color: var(--dim); min-height: 29px;
+  }
+  #statusBar .msg { color: var(--text); }
+  #statusBar .bad { color: var(--danger); font-weight: 500; }
+  #statusBar .warn { color: var(--accent2); }
+  #statusBar .good { color: var(--ok); }
+  #statusBar .mono { font-family: var(--mono); font-size: 11px; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 312px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border);
+    overflow-y: auto; overscroll-behavior: contain; padding-bottom: 16px;
+  }
+  #sidebar section { border-bottom: 1px solid var(--border); padding: 9px 12px 11px; }
+  #sidebar h2 {
+    font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 1.2px;
+    margin-bottom: 7px; font-weight: 600;
+  }
+  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .row:last-child { margin-bottom: 0; }
+  .row > label.k { color: var(--dim); font-size: 12px; flex-shrink: 0; }
+  .row.wrap { flex-wrap: wrap; }
+  input[type=number], input[type=text], select {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 3px; padding: 2px 6px; font-size: 12px; min-width: 0; font-family: inherit;
+  }
+  input[type=number]:focus, input[type=text]:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); }
+  input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+  input[type=number].num { width: 72px; }
+  .small { font-size: 11px; color: var(--dim2); line-height: 1.55; }
+  .mono { font-family: var(--mono); font-size: 11.5px; }
+  .kv { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 11.5px; }
+  .kv > span:first-child { color: var(--dim); white-space: nowrap; }
+  .kv > span:last-child { font-family: var(--mono); text-align: right; word-break: break-all; }
+  .dataCard {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 9px; font-size: 12px; margin-bottom: 6px;
+  }
+  .dataCard .name { font-family: var(--mono); font-size: 11.5px; word-break: break-all; }
+  .dataCard .meta { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .dataCard.err { border-color: var(--danger); }
+  .dataCard.err .meta { color: var(--danger); }
+  .importErr {
+    background: rgba(227,106,106,0.10); border: 1px solid var(--danger);
+    border-radius: 5px; padding: 6px 9px; margin-bottom: 6px; font-size: 11.5px;
+    color: #ffb9b9; line-height: 1.55;
+  }
+  .importErr.hidden { display: none; }
+  .importErr .h { font-weight: 600; color: var(--danger); margin-bottom: 2px; }
+
+  #viewArea { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #0a0c10; position: relative; }
+  #viewGrid {
+    flex: 1; min-height: 0; display: grid; gap: 1px; background: #262c38;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .panel { position: relative; background: #0a0c10; min-width: 0; min-height: 0; overflow: hidden; }
+  .panel canvas { width: 100%; height: 100%; display: block; cursor: crosshair; object-fit: contain; touch-action: none; }
+  .panel .tag {
+    position: absolute; left: 7px; top: 6px; max-width: calc(100% - 14px);
+    font-size: 11px; color: #b8c1d1;
+    background: rgba(10,12,16,0.72); border: 1px solid rgba(90,100,120,0.45);
+    border-radius: 3px; padding: 1px 6px; pointer-events: none; letter-spacing: 0.3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .panel .tag b { font-weight: 600; }
+  .panel .tag .l { color: var(--left); }
+  .panel .tag .r { color: var(--right); }
+  .panel .tag .meta { color: var(--dim2); margin-left: 5px; font-family: var(--mono); }
+  .panel.empty::after {
+    content: "—"; position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: #39414f; font-size: 22px; pointer-events: none;
+  }
+  #emptyTip {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: var(--dim2); font-size: 13.5px; line-height: 1.8; pointer-events: none; padding: 20px;
+    z-index: 2;
+  }
+  #emptyTip code { font-family: var(--mono); color: var(--dim); background: var(--panel2); padding: 1px 5px; border-radius: 3px; }
+  #progressBar {
+    position: absolute; left: 0; top: 0; height: 3px; background: var(--accent);
+    width: 0%; transition: width 70ms linear; opacity: 0; z-index: 4;
+  }
+  #progressBar.on { opacity: 1; }
+
+  #probePanel {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    overflow: hidden; font-size: 11.5px;
+  }
+  #probePanel.hidden { display: none; }
+  #probeHint.hidden { display: none; }
+  #probePanel .ph {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 4px 8px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 11.5px;
+    background: var(--panel3);
+  }
+  #probePanel .ph button { padding: 0 6px; font-size: 11px; line-height: 16px; }
+  #probeBody { padding: 6px 8px; }
+  #probeBody .sep { border-top: 1px solid var(--border); margin: 6px 0 5px; }
+  #probeBody .badge { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10.5px; }
+  #probeBody .badge.hole { background: rgba(227,106,106,0.18); color: #ff9d9d; }
+  #probeBody .badge.cov { background: rgba(92,201,141,0.16); color: #86e0b0; }
+  #probeBody .swatch {
+    display: inline-block; width: 26px; height: 11px; border-radius: 2px; vertical-align: middle;
+    border: 1px solid var(--border);
+  }
+  #probeBody .err { color: var(--danger); }
+  #probeBody .note { color: var(--dim2); font-size: 10.5px; line-height: 1.5; margin-top: 4px; }
+
+  .hintFoot {
+    padding: 5px 12px; color: var(--dim2); font-size: 11px;
+    background: var(--panel); border-top: 1px solid var(--border);
+  }
+  kbd { font-family: var(--mono); background: var(--panel3); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 10.5px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: #2a3140; color: var(--text); border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: 5px; font-size: 12.5px; max-width: 70vw;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.45); opacity: 0; transition: opacity 180ms;
+    pointer-events: none; z-index: 10; white-space: pre-wrap;
+  }
+  #toast.on { opacity: 1; }
+  #toast.bad { border-color: var(--danger); color: #ffd4d4; }
+  @media (max-width: 1180px) {
+    #sidebar { width: 286px; }
+    #probePanel { width: 260px; }
+    #viewGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 860px) {
+    body { overflow: auto; height: auto; min-height: 100%; }
+    header { padding: 6px 10px; }
+    header h1 small { display: none; }
+    #statusBar { padding: 4px 10px; gap: 10px; }
+    main { flex-direction: column; }
+    #viewArea { order: 1; min-height: 58vh; }
+    #sidebar { order: 2; width: 100%; border-right: 0; border-top: 1px solid var(--border); overflow-y: visible; }
+    #viewGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); min-height: 58vh; }
+    .panel .tag { font-size: 10px; padding: 0 4px; }
+    .panel .tag .meta { display: none; }
+    .hintFoot { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>立体深度锻造台<small>RGB-D · 网格重建 · 平行双目</small></h1>
+  <button id="btnImport" class="primary">导入数据</button>
+  <button id="btnSample" disabled>载入样例</button>
+  <button id="btnCancel" class="danger" disabled title="取消正在进行的渲染">取消渲染</button>
+  <span class="spacer"></span>
+  <button id="btnExport" disabled title="导出未补洞 RGBA、补洞预览、两眼遮罩与完整参数">导出 ZIP</button>
+  <input type="file" id="fileImport" accept=".json,.f32,.bin,image/png,.png" multiple>
+</header>
+<div id="statusBar">
+  <span id="statusMsg" class="msg">请导入 JSON + 颜色 PNG + 深度 .f32，或载入样例</span>
+  <span id="statusData" class="mono"></span>
+  <span id="statusRender"></span>
+</div>
+
+<main>
+  <div id="sidebar">
+    <section>
+      <h2>数据</h2>
+      <div id="importError" class="importErr hidden"></div>
+      <div id="dataCard"><div class="small">尚未加载数据。</div></div>
+      <div class="row" style="gap:5px">
+        <button id="btnImport2" style="flex:1">选择 JSON + PNG + F32…</button>
+      </div>
+      <div id="sampleList" style="margin-top:7px"></div>
+      <div class="small" style="margin-top:6px">
+        深度为逐行 float32 小端、无文件头、米制前向距离；相机 x 右 / y 下 / z 前，
+        像素 (c,r) 中心在 (c+.5, r+.5)。最大 1024 × 768。
+      </div>
+    </section>
+
+    <section id="probeSection">
+      <h2>像素探针</h2>
+      <div id="probePanel" class="hidden">
+        <div class="ph"><span>点击画面任意位置</span><button id="btnCloseProbe" title="关闭">✕</button></div>
+        <div id="probeBody"></div>
+      </div>
+      <div id="probeHint" class="small">单击任一画面中的像素，这里显示它的米制深度、理论视差和两眼覆盖情况。</div>
+    </section>
+
+    <section>
+      <h2>立体参数</h2>
+      <div class="row">
+        <label class="k" style="width:66px">眼距 b</label>
+        <input type="range" id="eyeRange" min="0.005" max="0.5" step="0.001" value="0.1">
+        <input type="number" id="eyeNum" class="num" step="0.001" min="0.001" value="0.1">
+        <span class="small">m</span>
+      </div>
+      <div class="row">
+        <label class="k" style="width:66px">零视差面 Z₀</label>
+        <input type="range" id="zpRange" min="0.25" max="20" step="0.05" value="4">
+        <input type="number" id="zpNum" class="num" step="0.05" min="0.05" value="4">
+        <span class="small">m</span>
+      </div>
+      <div class="row">
+        <label class="k" style="width:66px">断边阈值 Δ</label>
+        <input type="range" id="jumpRange" min="0" max="3" step="0.01" value="0.5">
+        <input type="number" id="jumpNum" class="num" step="0.01" min="0" value="0.5">
+        <span class="small">m</span>
+      </div>
+      <div class="small">视差 d(Z) = fx·b·(1/Z − 1/Z₀)</div>
+      <div class="kv"><span>最近深度处</span><span id="dispFormula" class="mono">—</span></div>
+      <div class="kv"><span>数据范围</span><span id="dispRange" class="mono">—</span></div>
+      <div class="small" style="margin-top:4px">
+        三角形在三点深度有限且都大于 0、极差 ≤ 阈值时保留；三角形之间因此断开，前后景不会连成一片。
+        重叠处更近的表面获胜，等深度按源三角形编号小者获胜。
+      </div>
+    </section>
+
+    <section>
+      <h2>水平补洞（仅预览）</h2>
+      <div class="row">
+        <label class="k" style="width:66px; display:flex; align-items:center; gap:5px">
+          <input type="checkbox" id="fillToggle" checked> 启用
+        </label>
+        <label class="k">上限</label>
+        <input type="number" id="fillGapNum" class="num" style="width:58px" min="0" max="512" step="1" value="24">
+        <span class="small">px</span>
+      </div>
+      <div id="fillStats" class="kv"><span>—</span><span></span></div>
+      <div class="small" id="fillStrategy" style="margin-top:5px"></div>
+    </section>
+
+    <section>
+      <h2>统计</h2>
+      <div id="statsBox"></div>
+    </section>
+
+    <section>
+      <h2>样例</h2>
+      <div class="small">
+        样例来自 <span class="mono">samples/stereo-depth-forge-cases.zip</span>，启动服务时自动解压。
+        <b>invalid-truncated</b> 故意把深度截短，导入应被拒绝并说明缺少多少字节。
+      </div>
+    </section>
+  </div>
+
+  <div id="viewArea">
+    <div id="viewGrid">
+      <div class="panel" id="panelSrc">
+        <canvas id="cSrc"></canvas>
+        <div class="tag">原图 <span class="meta" id="tagSrc"></span></div>
+      </div>
+      <div class="panel" id="panelDepth">
+        <canvas id="cDepth"></canvas>
+        <div class="tag">深度 <span class="meta" id="tagDepth"></span></div>
+      </div>
+      <div class="panel" id="panelMask">
+        <canvas id="cMask"></canvas>
+        <div class="tag">原始空洞遮罩 <span class="meta" id="tagMask"></span></div>
+        <div class="seg" id="maskSeg" style="position:absolute; right:7px; bottom:7px; z-index:2">
+          <button data-mask="both" class="on" title="红 = 仅左眼孔，青 = 仅右眼孔，白 = 两眼都是孔">双眼</button>
+          <button data-mask="left" title="左眼原始空洞遮罩">左眼</button>
+          <button data-mask="right" title="右眼原始空洞遮罩">右眼</button>
+        </div>
+      </div>
+      <div class="panel" id="panelLeft">
+        <canvas id="cLeft"></canvas>
+        <div class="tag"><b class="l">左眼</b> <span class="meta" id="tagLeft"></span></div>
+      </div>
+      <div class="panel" id="panelRight">
+        <canvas id="cRight"></canvas>
+        <div class="tag"><b class="r">右眼</b> <span class="meta" id="tagRight"></span></div>
+      </div>
+      <div class="panel" id="panelAna">
+        <canvas id="cAna"></canvas>
+        <div class="tag">红青预览 <span class="meta" id="tagAna"></span></div>
+      </div>
+      <div id="emptyTip"><div>导入 <code>JSON</code> + <code>PNG</code> + <code>.f32</code> 后在此预览<br>
+        <span class="small">或点左侧「载入样例」；也可把三个文件一起拖进页面</span></div></div>
+      <div id="progressBar"></div>
+    </div>
+    <div class="hintFoot">
+      <kbd>单击任一画面</kbd> 查看该像素的米制深度与理论视差 · <kbd>补洞</kbd> 只作用于左右眼与红青预览，原始遮罩与实际导出遮罩不变 ·
+      <kbd>调整参数</kbd> 立即重算，可随时取消
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+<script>
+  if (location.protocol === 'file:') {
+    var tip = document.getElementById('emptyTip');
+    if (tip) tip.innerHTML = '<div>请先启动本地服务，再用 http:// 打开本页<br>' +
+      '<span class="small">在项目目录运行 <code>python3 server.py</code>，然后访问 http://localhost:8000/</span></div>';
+    var bar = document.getElementById('statusMsg');
+    if (bar) { bar.textContent = '当前是 file:// 打开，模块脚本被浏览器阻止；请用 python3 server.py 启动'; bar.className = 'msg bad'; }
+  }
+</script>
+</body>
+</html>

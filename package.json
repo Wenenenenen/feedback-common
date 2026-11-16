@@ -1,0 +1,12 @@
+{
+  "name": "stereo-depth-forge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RGB-D 立体画面制作台：深度网格重建、断边、平行双目渲染（纯 CPU，无第三方运行时依赖）",
+  "scripts": {
+    "start": "python3 server.py",
+    "test": "node --test tests/core.test.mjs tests/png.test.mjs tests/zip.test.mjs tests/params.test.mjs",
+    "test:e2e": "node tests/e2e.mjs"
+  }
+}
