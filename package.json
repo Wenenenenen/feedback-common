@@ -1,0 +1,12 @@
+{
+  "name": "patch-seam-tessellator",
+  "version": "1.0.0",
+  "description": "双三次贝塞尔曲面片接缝感知自适应细分预览（正交相机、屏幕误差驱动、无 T 接点）",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/engine.test.js",
+    "e2e": "node test/e2e.test.js",
+    "serve": "node test/serve.js"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>曲面片接缝细分预览</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>曲面片接缝细分预览</h1>
+      <div class="topbar-actions">
+        <label class="file-btn">
+          导入 JSON
+          <input type="file" id="importFile" accept=".json,application/json" hidden />
+        </label>
+        <select id="sampleSelect" title="内置样例">
+          <option value="patches">样例：双片接缝（reversed）</option>
+          <option value="curved">样例：单片曲面</option>
+          <option value="flat">样例：单片平面</option>
+          <option value="invalid-seam">样例：接缝不重合（应拒绝）</option>
+        </select>
+        <button id="exportMesh">导出网格 JSON</button>
+        <button id="exportReport">导出细分报告</button>
+      </div>
+    </header>
+
+    <div class="body">
+      <main class="viewport-wrap">
+        <canvas id="glcanvas"></canvas>
+
+        <div id="importError" class="import-error hidden">
+          <div class="import-error-card">
+            <h3 id="importErrorTitle">导入被拒绝</h3>
+            <ul id="importErrorList"></ul>
+            <p class="hint">已保留当前模型，未加载该文件。请按提示修正接缝控制点后重新导入。</p>
+            <button id="dismissError">知道了</button>
+          </div>
+        </div>
+
+        <div id="progressWrap" class="progress-wrap">
+          <div class="progress-label">
+            <span>正在重新细分…</span>
+            <button id="cancelBtn" disabled>取消</button>
+          </div>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+        </div>
+
+        <div class="viewport-hint">
+          左键拖动旋转 · Shift/右键平移 · 滚轮缩放 · 单击拾取控制点
+        </div>
+      </main>
+
+      <aside class="panel">
+        <section class="card">
+          <h2>细分参数</h2>
+          <label class="slider-label">
+            屏幕误差阈值 <b id="pixelErrorVal">1.00</b> px
+            <input type="range" id="pixelError" min="0.05" max="8" step="0.05" value="1" />
+          </label>
+          <label class="slider-label">
+            最大细分深度 <b id="maxDepthVal">7</b>
+            <input type="range" id="maxDepth" min="0" max="7" step="1" value="7" />
+          </label>
+          <button id="retessBtn" class="primary">立即重新细分</button>
+          <p class="hint">相机旋转或缩放后自动按当前视角重新细分。</p>
+        </section>
+
+        <section class="card">
+          <h2>显示</h2>
+          <div class="checks">
+            <label><input type="checkbox" id="showMesh" checked /> 着色网格</label>
+            <label><input type="checkbox" id="showWireframe" checked /> 线框</label>
+            <label><input type="checkbox" id="showNormals" /> 法线</label>
+            <label><input type="checkbox" id="showControlNet" /> 控制网</label>
+          </div>
+          <label class="select-label">着色模式
+            <select id="shadeMode">
+              <option value="shaded">光照着色（按片着色）</option>
+              <option value="flat">平面色（按片着色）</option>
+              <option value="heatmap">误差热图</option>
+            </select>
+          </label>
+          <p class="hint">红色三角形为达到深度上限仍不达标区域。</p>
+        </section>
+
+        <section class="card" id="editor-card">
+          <h2>控制点编辑</h2>
+          <div id="editor" class="editor hidden">
+            <div id="cpLabel" class="cp-label"></div>
+            <div class="xyz">
+              <label>X<input type="number" step="0.01" id="cpX" /></label>
+              <label>Y<input type="number" step="0.01" id="cpY" /></label>
+              <label>Z<input type="number" step="0.01" id="cpZ" /></label>
+            </div>
+            <p id="cpLinked" class="linked"></p>
+          </div>
+          <p class="hint" id="editorHint">在视口中单击控制点进行编辑；接缝控制点会联动更新相邻片。</p>
+        </section>
+
+        <section class="card">
+          <h2>统计</h2>
+          <div id="stats" class="stats-grid"></div>
+          <table class="per-patch">
+            <thead><tr><th>片</th><th>深度</th><th>叶</th><th>三角</th><th>误差px</th><th>超限</th></tr></thead>
+            <tbody id="perPatch"></tbody>
+          </table>
+          <p class="hint">当前片：<span id="patchList"></span></p>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script src="src/math3d.js"></script>
+  <script src="src/bezier.js"></script>
+  <script src="src/model.js"></script>
+  <script src="src/camera.js"></script>
+  <script src="src/tessellator.js"></script>
+  <script src="src/exporter.js"></script>
+  <script src="src/renderer.js"></script>
+  <script src="src/samples.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
