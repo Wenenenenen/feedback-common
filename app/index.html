@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>UV 重叠审计台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ---------- design tokens ---------- */
+:root {
+  --bg: #eef2f6;
+  --panel: #ffffff;
+  --panel-2: #f6f9fc;
+  --ink: #16212e;
+  --muted: #5c6b7c;
+  --faint: #8593a3;
+  --line: #d6dee7;
+  --line-strong: #b8c4d1;
+  --accent: #1f5f99;
+  --accent-soft: #e2edf8;
+  --accent-ink: #ffffff;
+  --good: #5f83a3;
+  --good-fill: rgba(95,131,163,.28);
+  --overlap: #c2690a;
+  --overlap-fill: rgba(217,130,18,.30);
+  --mirror: #7a3fd0;
+  --mirror-fill: rgba(139,92,246,.28);
+  --outside: #0e7d94;
+  --outside-fill: rgba(14,125,148,.26);
+  --stretch: #cf3341;
+  --stretch-fill: rgba(220,70,82,.26);
+  --degenerate: #8a94a0;
+  --degenerate-fill: rgba(138,148,160,.22);
+  --selected: #1d4ed8;
+  --shadow: 0 1px 2px rgba(16,32,48,.06), 0 4px 14px rgba(16,32,48,.07);
+  --radius: 12px;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', var(--font-body);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161d;
+    --panel: #18212c;
+    --panel-2: #1f2a37;
+    --ink: #e4ebf2;
+    --muted: #9fb0c0;
+    --faint: #738396;
+    --line: #2b3947;
+    --line-strong: #3d4f61;
+    --accent: #6aa9e0;
+    --accent-soft: #1d3045;
+    --accent-ink: #0c1622;
+    --good: #7fa3c2;
+    --good-fill: rgba(127,163,194,.24);
+    --overlap: #e59a3c;
+    --overlap-fill: rgba(229,154,60,.28);
+    --mirror: #b18cf0;
+    --mirror-fill: rgba(150,110,230,.26);
+    --outside: #46c2d8;
+    --outside-fill: rgba(40,170,195,.24);
+    --stretch: #f0707c;
+    --stretch-fill: rgba(235,95,108,.24);
+    --degenerate: #8a94a0;
+    --degenerate-fill: rgba(138,148,160,.20);
+    --selected: #7db0ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161d;
+  --panel: #18212c;
+  --panel-2: #1f2a37;
+  --ink: #e4ebf2;
+  --muted: #9fb0c0;
+  --faint: #738396;
+  --line: #2b3947;
+  --line-strong: #3d4f61;
+  --accent: #6aa9e0;
+  --accent-soft: #1d3045;
+  --accent-ink: #0c1622;
+  --good: #7fa3c2;
+  --good-fill: rgba(127,163,194,.24);
+  --overlap: #e59a3c;
+  --stretch: #f0707c;
+  --stretch-fill: rgba(235,95,108,.24);
+  --overlap-fill: rgba(229,154,60,.28);
+  --mirror: #b18cf0;
+  --mirror-fill: rgba(150,110,230,.26);
+  --outside: #46c2d8;
+  --outside-fill: rgba(40,170,195,.24);
+  --degenerate: #8a94a0;
+  --degenerate-fill: rgba(138,148,160,.20);
+  --selected: #7db0ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- header ---------- */
+.app-header {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-block: 14px 10px;
+}
+.app-title { font-size: 20px; font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; gap: 10px; }
+.app-title .logo {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), #6aa9e0);
+  display: grid; place-items: center; color: #fff; flex: none;
+}
+.app-title .logo svg { width: 18px; height: 18px; }
+.header-spacer { flex: 1; }
+.btn {
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-weight: 600;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); border-color: var(--line); }
+.btn.danger { color: var(--stretch); border-color: var(--line-strong); }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn svg { width: 15px; height: 15px; }
+.icon-btn { padding: 7px 9px; }
+
+/* ---------- status strip ---------- */
+.status-strip {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+}
+.project-name { font-weight: 700; font-family: var(--font-mono); font-size: 13px; }
+.status-pill {
+  font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+  letter-spacing: .3px;
+}
+.status-pill.analyzing { background: var(--accent-soft); color: var(--accent); }
+.status-pill.done { background: rgba(34,150,90,.14); color: #1c8a4e; }
+.status-pill.error { background: var(--stretch-fill); color: var(--stretch); }
+.status-pill.cancelled { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.progress-wrap { flex: 1; min-width: 160px; display: flex; align-items: center; gap: 10px; }
+.progress-bar { flex: 1; height: 7px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 99px; transition: width .2s; }
+.progress-label { font-size: 12px; color: var(--muted); min-width: 150px; }
+.error-text { color: var(--stretch); font-weight: 600; font-size: 13px; }
+.pending-note { font-size: 12px; color: var(--overlap); font-weight: 600; }
+
+/* ---------- summary tiles ---------- */
+.tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 12px; }
+.tile {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px; box-shadow: var(--shadow); min-width: 0;
+}
+.tile .label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
+.tile .value { font-family: var(--font-mono); font-size: 21px; font-weight: 600; margin-top: 2px; }
+.tile .sub { font-size: 11px; color: var(--faint); }
+.tile.t-overlap .value { color: var(--overlap); }
+.tile.t-mirror .value { color: var(--mirror); }
+.tile.t-outside .value { color: var(--outside); }
+.tile.t-stretch .value { color: var(--stretch); }
+.tile.t-degenerate .value { color: var(--degenerate); }
+
+/* ---------- view cards ---------- */
+.views { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); overflow: hidden; min-width: 0;
+}
+.card-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+}
+.card-head h2 { font-size: 14px; font-weight: 700; }
+.card-head .hint { font-size: 11.5px; color: var(--faint); }
+.head-spacer { flex: 1; }
+.view-body { position: relative; padding: 10px; }
+.view-canvas-box { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+#threeContainer, #uvCanvas { width: 100%; height: 100%; border-radius: 8px; display: block; }
+#uvCanvas { background: var(--panel-2); touch-action: none; user-select: none; -webkit-user-select: none; }
+#threeContainer canvas { user-select: none; -webkit-user-select: none; }
+.toggle-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+  background: var(--panel);
+}
+.toggle-chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.toggle-chip input { accent-color: var(--accent); margin: 0; }
+
+/* ---------- filters ---------- */
+.filters {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 12px;
+}
+.filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  padding: 5px 11px; font-size: 12.5px; font-weight: 600; background: var(--panel);
+  user-select: none;
+}
+.filter-chip.on { border-color: currentColor; background: var(--panel-2); }
+.filter-chip input { accent-color: var(--accent); margin: 0; }
+.filter-chip .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.dot.overlap { background: var(--overlap); }
+.dot.mirror { background: var(--mirror); }
+.dot.outside { background: var(--outside); }
+.dot.stretch { background: var(--stretch); }
+.dot.degenerate { background: var(--degenerate); }
+.threshold-input {
+  width: 74px; padding: 4px 8px; border-radius: 7px;
+  border: 1px solid var(--line-strong); background: var(--panel);
+  font-family: var(--font-mono); font-size: 12.5px;
+}
+.filter-count { font-size: 12px; color: var(--muted); margin-left: auto; }
+.btn-mini { padding: 3px 9px; font-size: 12px; border-radius: 7px; }
+
+/* ---------- bottom grid ---------- */
+.bottom { display: grid; grid-template-columns: 340px 1fr; gap: 12px; align-items: start; }
+.detail { padding: 14px; position: sticky; top: 12px; }
+.detail h3 { font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.cycle-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cycle-bar .pos { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.badge {
+  font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.badge.overlap { color: var(--overlap); background: var(--overlap-fill); }
+.badge.mirror { color: var(--mirror); background: var(--mirror-fill); }
+.badge.outside { color: var(--outside); background: var(--outside-fill); }
+.badge.stretch { color: var(--stretch); background: var(--stretch-fill); }
+.badge.degenerate { color: var(--degenerate); background: var(--degenerate-fill); }
+.badge.ok { color: var(--good); border-color: var(--line-strong); }
+.metric-list { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; font-size: 12.5px; }
+.metric-list .k { color: var(--muted); }
+.metric-list .v { font-family: var(--font-mono); font-weight: 500; text-align: right; }
+.detail-divider { height: 1px; background: var(--line); margin: 12px 0; }
+.pair-list { display: flex; flex-direction: column; gap: 6px; max-height: 210px; overflow-y: auto; }
+.pair-row {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+  background: var(--panel-2); cursor: pointer;
+}
+.pair-row:hover { border-color: var(--accent); }
+.pair-row .area { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--overlap); font-weight: 600; }
+.empty-note { color: var(--faint); font-size: 12.5px; }
+
+/* ---------- table ---------- */
+.table-card { padding: 0; }
+.table-scroll { max-height: 460px; overflow: auto; }
+.table-scroll::after {
+  content: '左右滑动查看完整报告 →';
+  display: none;
+  position: sticky; left: 12px;
+  font-size: 11px; color: var(--faint);
+  padding: 4px 0 2px;
+}
+@media (max-width: 760px) {
+  .table-scroll::after { display: block; }
+}
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--panel-2); text-align: left;
+  padding: 8px 10px; font-weight: 700; color: var(--muted);
+  border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none;
+}
+thead th .arrow { font-size: 10px; color: var(--accent); }
+tbody td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--panel-2); }
+tbody tr.selected { background: var(--accent-soft); }
+tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--selected); }
+td.num, th.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.mini-badges { display: flex; gap: 4px; }
+.mini-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+.mini-badge.overlap { color: var(--overlap); background: var(--overlap-fill); }
+.mini-badge.mirror { color: var(--mirror); background: var(--mirror-fill); }
+.mini-badge.outside { color: var(--outside); background: var(--outside-fill); }
+.mini-badge.stretch { color: var(--stretch); background: var(--stretch-fill); }
+.mini-badge.degenerate { color: var(--degenerate); background: var(--degenerate-fill); }
+.pager { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.pager .info { font-size: 12px; color: var(--muted); }
+
+/* ---------- empty / drop state ---------- */
+.dropzone {
+  border: 2px dashed var(--line-strong); border-radius: var(--radius);
+  background: var(--panel);
+  padding: 44px 24px; text-align: center;
+  display: grid; gap: 14px; justify-items: center;
+  transition: border-color .15s, background .15s;
+}
+.dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .big-icon { width: 52px; height: 52px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.dropzone .big-icon svg { width: 26px; height: 26px; }
+.dropzone h2 { font-size: 18px; }
+.dropzone p { color: var(--muted); margin: 0; max-width: 520px; }
+.sample-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.file-meta { font-size: 12px; color: var(--faint); font-family: var(--font-mono); }
+
+/* ---------- tooltip ---------- */
+.tooltip {
+  position: fixed; z-index: 60; pointer-events: none;
+  background: var(--ink); color: var(--bg);
+  font-size: 11.5px; padding: 5px 9px; border-radius: 7px;
+  font-family: var(--font-mono); opacity: 0; transition: opacity .1s;
+  max-width: 260px; white-space: nowrap;
+}
+.tooltip.show { opacity: .95; }
+
+/* ---------- export modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(10,18,28,.5);
+  display: grid; place-items: center; z-index: 80; padding: 16px;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); width: min(560px, 100%); padding: 18px;
+  display: grid; gap: 12px; max-height: 86vh; overflow: auto;
+}
+.modal h3 { font-size: 16px; }
+.modal .preview-img {
+  width: 256px; height: 256px; image-rendering: pixelated;
+  border: 1px solid var(--line-strong); border-radius: 6px; background: #000;
+  justify-self: center;
+}
+.modal textarea {
+  width: 100%; min-height: 180px; resize: vertical;
+  font-family: var(--font-mono); font-size: 11px;
+  border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px;
+  background: var(--panel-2); color: var(--ink);
+}
+.modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal .note { font-size: 12px; color: var(--muted); }
+
+/* ---------- legend ---------- */
+.legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 14px; font-size: 11.5px; color: var(--muted); }
+.legend .item { display: inline-flex; align-items: center; gap: 5px; }
+.legend .swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid var(--line-strong); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1080px) {
+  .tiles { grid-template-columns: repeat(3, 1fr); }
+  .bottom { grid-template-columns: 1fr; }
+  .detail { position: static; }
+}
+@media (max-width: 760px) {
+  .views { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .app-header { gap: 8px; }
+  .table-scroll { max-height: 380px; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1 class="app-title">
+    <span class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+        <path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/>
+      </svg>
+    </span>
+    UV 重叠审计台
+  </h1>
+  <span class="header-spacer"></span>
+  <button class="btn" id="btnSampleSmall" type="button">载入示例：小模型</button>
+  <button class="btn" id="btnSampleGrid" type="button">载入示例：5000 面网格</button>
+  <button class="btn primary" id="btnImport" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+    导入 JSON
+  </button>
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+  <button class="btn danger" id="btnCancel" type="button" hidden>取消分析</button>
+  <button class="btn icon-btn ghost" id="btnTheme" type="button" title="切换深浅色">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+  </button>
+</header>
+
+<!-- status -->
+<section class="status-strip" id="statusStrip" hidden>
+  <span class="project-name" id="projectName"></span>
+  <span class="status-pill" id="statusPill"></span>
+  <div class="progress-wrap" id="progressWrap" hidden>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-label mono" id="progressLabel"></span>
+  </div>
+  <span class="error-text" id="errorText" hidden></span>
+  <span class="pending-note" id="pendingNote" hidden></span>
+  <span class="header-spacer"></span>
+  <button class="btn" id="btnExportCsv" type="button" disabled>导出 CSV 报告</button>
+  <button class="btn" id="btnExportJson" type="button" disabled>导出 JSON 报告</button>
+  <button class="btn" id="btnExportPng" type="button" disabled>导出遮罩 PNG</button>
+</section>
+
+<!-- tiles -->
+<section class="tiles" id="tiles" hidden>
+  <div class="tile"><div class="label">三角形</div><div class="value mono" id="tileTotal">–</div><div class="sub" id="tileValidSub"></div></div>
+  <div class="tile t-overlap"><div class="label">正面积重叠对</div><div class="value mono" id="tileOverlap">–</div><div class="sub" id="tileOverlapSub"></div></div>
+  <div class="tile t-mirror"><div class="label">镜像面</div><div class="value mono" id="tileMirror">–</div><div class="sub">有向 UV 面积为负</div></div>
+  <div class="tile t-outside"><div class="label">越界面</div><div class="value mono" id="tileOutside">–</div><div class="sub">任一角超出 [0,1]</div></div>
+  <div class="tile t-stretch"><div class="label">拉伸超标面</div><div class="value mono" id="tileStretch">–</div><div class="sub" id="tileStretchSub"></div></div>
+  <div class="tile t-degenerate"><div class="label">退化面</div><div class="value mono" id="tileDegenerate">–</div><div class="sub">面积 ≤ 1e-12，已排除</div></div>
+</section>
+
+<!-- empty state -->
+<section class="dropzone" id="dropzone">
+  <div class="big-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+  </div>
+  <h2>导入逐面角 UV 的 JSON 模型</h2>
+  <p>需要 <span class="mono">vertices</span>（3D 坐标）、<span class="mono">faces</span>（三角形索引，最多 5000）、<span class="mono">uv</span>（与 faces 逐面逐角对应，原点左下）。可把文件拖到这里，或先用内置示例查看效果。</p>
+  <div class="sample-row">
+    <button class="btn primary" id="btnSampleSmall2" type="button">载入示例：小模型（6 面，含重叠/镜像/退化）</button>
+    <button class="btn" id="btnSampleGrid2" type="button">载入示例：5000 面网格</button>
+  </div>
+  <button class="btn" id="btnChooseFile" type="button">选择文件…</button>
+  <span class="file-meta" id="fileMeta"></span>
+</section>
+
+<!-- main workspace -->
+<main id="workspace" hidden>
+  <section class="views">
+    <div class="card">
+      <div class="card-head">
+        <h2>三维网格</h2>
+        <span class="hint">拖拽旋转 · 滚轮缩放 · 点选定位面</span>
+        <span class="head-spacer"></span>
+        <button class="btn ghost btn-mini" id="btnReset3d" type="button">复位视角</button>
+      </div>
+      <div class="view-body"><div class="view-canvas-box"><div id="threeContainer"></div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>UV 平面</h2>
+        <span class="hint">点选轮换重叠面 · 拖拽平移 · 滚轮缩放</span>
+        <span class="head-spacer"></span>
+        <label class="toggle-chip" id="chipMask"><input type="checkbox" id="chkMask">256² 遮罩</label>
+        <label class="toggle-chip on" id="chipOvl"><input type="checkbox" id="chkOvl" checked>重叠区域</label>
+        <button class="btn ghost btn-mini" id="btnResetUv" type="button">复位</button>
+      </div>
+      <div class="view-body"><div class="view-canvas-box"><canvas id="uvCanvas"></canvas></div></div>
+      <div class="legend">
+        <span class="item"><span class="swatch" style="background:var(--good-fill)"></span>正常</span>
+        <span class="item"><span class="swatch" style="background:var(--overlap-fill)"></span>重叠</span>
+        <span class="item"><span class="swatch" style="background:var(--mirror-fill)"></span>镜像</span>
+        <span class="item"><span class="swatch" style="background:var(--outside-fill)"></span>越界</span>
+        <span class="item"><span class="swatch" style="background:var(--stretch-fill)"></span>拉伸超标</span>
+        <span class="item"><span class="swatch" style="background:var(--degenerate-fill)"></span>退化</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card filters">
+    <div class="filter-group">
+      <strong style="font-size:12.5px">筛选问题：</strong>
+      <label class="filter-chip" data-filter="overlap"><span class="dot overlap"></span>重叠</label>
+      <label class="filter-chip" data-filter="mirror"><span class="dot mirror"></span>镜像</label>
+      <label class="filter-chip" data-filter="outside"><span class="dot outside"></span>越界</label>
+      <label class="filter-chip" data-filter="stretch"><span class="dot stretch"></span>拉伸 ≥</label>
+      <input class="threshold-input mono" id="stretchThreshold" type="number" min="1" step="0.1" value="2">
+      <label class="filter-chip" data-filter="degenerate"><span class="dot degenerate"></span>退化</label>
+      <button class="btn ghost btn-mini" id="btnClearFilter" type="button">清除</button>
+    </div>
+    <span class="filter-count mono" id="filterCount"></span>
+  </section>
+
+  <section class="bottom">
+    <div class="card detail" id="detailPanel">
+      <h3>面详情 <span class="mono" style="color:var(--muted);font-size:12px" id="detailId">未选择</span></h3>
+      <div class="cycle-bar">
+        <button class="btn btn-mini" id="btnPrevCycle" type="button" disabled>上一个</button>
+        <span class="pos" id="cyclePos"></span>
+        <button class="btn btn-mini" id="btnNextCycle" type="button" disabled>下一个</button>
+      </div>
+      <div class="badges" id="detailBadges"></div>
+      <div class="metric-list" id="metricList"></div>
+      <div class="detail-divider"></div>
+      <h3 style="margin-bottom:8px">参与的重叠对 <span class="mono" style="color:var(--muted);font-size:12px" id="pairCount"></span></h3>
+      <div class="pair-list" id="pairList"><span class="empty-note">该面没有正面积重叠。</span></div>
+    </div>
+
+    <div class="card table-card">
+      <div class="card-head">
+        <h2>逐面报告</h2>
+        <span class="hint">点表头排序，点行在两个视图中定位</span>
+        <span class="head-spacer"></span>
+        <select class="threshold-input" id="pageSize" style="width:96px">
+          <option value="50" selected>50 行/页</option>
+          <option value="100">100 行/页</option>
+          <option value="200">200 行/页</option>
+        </select>
+      </div>
+      <div class="table-scroll">
+        <table id="faceTable">
+          <thead><tr>
+            <th data-sort="id">面号 <span class="arrow"></span></th>
+            <th class="num" data-sort="areaRatio">面积倍率 <span class="arrow"></span></th>
+            <th class="num" data-sort="svHi">σ 大 <span class="arrow"></span></th>
+            <th class="num" data-sort="svLo">σ 小 <span class="arrow"></span></th>
+            <th class="num" data-sort="stretch">拉伸比 <span class="arrow"></span></th>
+            <th>标记</th>
+            <th class="num" data-sort="overlapArea">重叠面积合计 <span class="arrow"></span></th>
+          </tr></thead>
+          <tbody id="faceTbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button class="btn btn-mini" id="btnPagePrev" type="button">上一页</button>
+        <span class="info mono" id="pageInfo"></span>
+        <button class="btn btn-mini" id="btnPageNext" type="button">下一页</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="modalTitle">导出</h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="btn primary" id="modalDownload" type="button">下载文件</button>
+      <button class="btn" id="modalCopy" type="button" hidden>复制内容</button>
+      <span class="header-spacer"></span>
+      <button class="btn ghost" id="modalClose" type="button">关闭</button>
+    </div>
+    <p class="note" id="modalNote"></p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="app/sample-data.js"></script>
+<script src="app/engine.js"></script>
+<script src="app/threeview.js"></script>
+<script src="app/uvview.js"></script>
+<script src="app/app.js"></script>
+</body>
+</html>
