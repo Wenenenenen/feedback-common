@@ -1,0 +1,805 @@
+<title>Constrained LOD Forge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ---- 设计令牌：工程制图暗色工作台 ---- */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --ink: #17202c;
+  --ink-2: #52606f;
+  --line: #d4dae3;
+  --accent: #1f6feb;
+  --accent-ink: #ffffff;
+  --good: #1a7f4b;
+  --warn: #b45309;
+  --bad: #c0392b;
+  --lock: #d63b3b;
+  --wire: 17 24 39;
+  --radius: 10px;
+  --mono: "SF Mono", "Cascadia Code", ui-monospace, "Roboto Mono", Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141c;
+    --surface: #161e2a;
+    --surface-2: #1d2735;
+    --ink: #e6ecf4;
+    --ink-2: #93a2b5;
+    --line: #2b3848;
+    --accent: #4d8dff;
+    --accent-ink: #0b1220;
+    --good: #39c07d;
+    --warn: #f0a94e;
+    --bad: #ff6b5e;
+    --lock: #ff5d5d;
+    --wire: 178 190 206;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e141c;
+  --surface: #161e2a;
+  --surface-2: #1d2735;
+  --ink: #e6ecf4;
+  --ink-2: #93a2b5;
+  --line: #2b3848;
+  --accent: #4d8dff;
+  --accent-ink: #0b1220;
+  --good: #39c07d;
+  --warn: #f0a94e;
+  --bad: #ff6b5e;
+  --lock: #ff5d5d;
+  --wire: 178 190 206;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px;
+}
+.app { max-width: 1480px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; min-height: calc(100% - 28px); }
+
+/* ---- 顶栏 ---- */
+header.topbar { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.topbar h1 { font-size: 19px; margin: 0; letter-spacing: 0.2px; font-weight: 700; }
+header.topbar .sub { color: var(--ink-2); font-size: 12.5px; }
+header.topbar .spacer { flex: 1; }
+.theme-btn {
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 11px; cursor: pointer; font: inherit; font-size: 12.5px;
+}
+.theme-btn:hover { border-color: var(--accent); }
+
+/* ---- 控制面板 ---- */
+.panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 18px; align-items: end; }
+.field label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 5px; letter-spacing: 0.3px; }
+.field input[type="number"], .field select {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 8px; padding: 8px 10px; font: inherit; font-variant-numeric: tabular-nums;
+}
+.field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.radio-row { display: flex; gap: 6px; }
+.radio-row label {
+  flex: 1; text-align: center; padding: 8px 6px; border: 1px solid var(--line);
+  border-radius: 8px; cursor: pointer; background: var(--surface-2); font-size: 13px;
+}
+.radio-row input { display: none; }
+.radio-row input:checked + span { color: var(--accent); font-weight: 600; }
+.radio-row label:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+button.primary, button.ghost, button.danger {
+  border-radius: 8px; padding: 9px 16px; font: inherit; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); }
+button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+button.ghost { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+button.ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+button.danger { background: transparent; color: var(--bad); border-color: var(--bad); }
+button.danger:disabled { display: none; }
+.file-load { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.file-load input[type="file"] { display: none; }
+.pill {
+  display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.pill.good { color: var(--good); border-color: var(--good); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--bad); border-color: var(--bad); }
+
+/* ---- 进度 ---- */
+.progress-wrap { display: none; align-items: center; gap: 12px; margin-top: 12px; }
+.progress-wrap.active { display: flex; }
+.progress-bar { flex: 1; height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; min-width: 120px; }
+.progress-bar > i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width 0.15s linear; }
+.progress-text { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+
+/* ---- 错误 ---- */
+.errors {
+  display: none; background: var(--surface); border: 1px solid var(--bad);
+  border-left: 4px solid var(--bad); border-radius: var(--radius); padding: 12px 16px;
+}
+.errors.show { display: block; }
+.errors h3 { margin: 0 0 8px; font-size: 13.5px; color: var(--bad); }
+.errors ul { margin: 0; padding-left: 18px; max-height: 210px; overflow: auto; font-size: 12.5px; }
+.errors li { margin-bottom: 4px; }
+.errors code { font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.warn-box { border-left-color: var(--warn); }
+.warn-box h3 { color: var(--warn); }
+
+/* ---- 视图区 ---- */
+.views { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; min-height: 380px; }
+.view-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.view-head {
+  display: flex; align-items: center; gap: 8px; padding: 9px 14px;
+  border-bottom: 1px solid var(--line); flex-wrap: wrap;
+}
+.view-head h2 { font-size: 13.5px; margin: 0; font-weight: 700; }
+.view-head .meta { color: var(--ink-2); font-size: 12px; font-family: var(--mono); }
+.view-head .spacer { flex: 1; }
+.view-canvas { position: relative; flex: 1; min-height: 320px; background: var(--surface-2); }
+.view-canvas canvas { display: block; }
+.view-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--ink-2); font-size: 13px; text-align: center; padding: 20px;
+}
+.view-toggles { display: flex; gap: 12px; padding: 8px 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.view-toggles label { font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--ink-2); }
+.view-toggles input { accent-color: var(--accent); }
+.legend {
+  position: absolute; left: 12px; bottom: 12px; background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 11.5px;
+  display: none; backdrop-filter: blur(4px);
+}
+.legend.show { display: block; }
+.legend .bar { width: 170px; height: 10px; border-radius: 5px; margin: 5px 0 4px;
+  background: linear-gradient(90deg, rgb(26,51,166), rgb(26,140,217), rgb(51,191,140), rgb(217,217,64), rgb(242,128,38), rgb(217,31,31)); }
+.legend .ends { display: flex; justify-content: space-between; font-family: var(--mono); color: var(--ink-2); }
+.legend .title { font-weight: 600; color: var(--ink); }
+
+/* ---- 统计 ---- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  min-width: 0;
+}
+.stat .k { font-size: 11.5px; color: var(--ink-2); letter-spacing: 0.3px; text-transform: uppercase; }
+.stat .v { font-size: 19px; font-weight: 700; font-family: var(--mono); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.stat .v small { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.stat.distance .v { font-size: 16px; }
+.reason {
+  margin-top: 10px; padding: 9px 12px; border-radius: 8px; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.reason.good { border-color: var(--good); }
+.reason.warn { border-color: var(--warn); }
+.reason.bad { border-color: var(--bad); }
+.reason strong { display: block; margin-bottom: 2px; }
+
+/* ---- 导出模态 ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(8, 12, 18, 0.55);
+  display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+}
+.modal-backdrop.show { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  width: min(760px, 100%); max-height: 84vh; display: flex; flex-direction: column; padding: 18px 20px;
+}
+.modal h3 { margin: 0 0 10px; font-size: 15px; }
+.modal textarea {
+  flex: 1; width: 100%; min-height: 280px; resize: vertical; font-family: var(--mono); font-size: 12px;
+  background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+}
+.modal .m-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: 9px 18px; border-radius: 999px;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 60;
+}
+.toast.show { opacity: 0.94; }
+
+@media (max-width: 860px) {
+  .views { grid-template-columns: 1fr; }
+  .view-canvas { min-height: 260px; }
+}
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <h1>Constrained LOD Forge</h1>
+    <span class="sub">保边界约束的平面 QEM 边折叠简化 · 边界与材质交界顶点锁定 · 每次从原模型重新运行</span>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <section class="panel">
+    <div class="controls-grid">
+      <div class="field" style="grid-column: span 2; min-width: 0;">
+        <label>输入网格 JSON（vertices / faces / materials，最多 1 万面）</label>
+        <div class="file-load">
+          <label class="ghost" style="display:inline-block;padding:9px 16px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;font-weight:600;">
+            选择文件
+            <input type="file" id="fileInput" accept=".json,application/json">
+          </label>
+          <select id="sampleSelect" style="background:var(--surface-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 10px;font:inherit;max-width:260px;">
+            <option value="">载入内置样例…</option>
+            <option value="data/torus.json">torus.json（封闭环面，1024 面）</option>
+            <option value="data/open-grid.json">open-grid.json（开口网格+双材质，800 面）</option>
+            <option value="data/locked-quad.json">locked-quad.json（全锁定四边形，2 面）</option>
+            <option value="data/invalid-nonmanifold.json">invalid-nonmanifold.json（非流形反例）</option>
+          </select>
+          <span class="pill" id="sourcePill">未载入模型</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>目标方式</label>
+        <div class="radio-row">
+          <label><input type="radio" name="tmode" value="ratio" checked><span>保留比例</span></label>
+          <label><input type="radio" name="tmode" value="count"><span>目标面数</span></label>
+        </div>
+      </div>
+
+      <div class="field" id="ratioField">
+        <label for="ratioInput">保留比例（0–100%）</label>
+        <input type="number" id="ratioInput" min="1" max="100" step="1" value="50">
+      </div>
+      <div class="field" id="countField" hidden>
+        <label for="countInput">目标面数（不超过）</label>
+        <input type="number" id="countInput" min="1" step="1" placeholder="例如 256">
+      </div>
+
+      <div class="field">
+        <label>&nbsp;</label>
+        <div class="btn-row">
+          <button class="primary" id="runBtn" disabled>开始简化</button>
+          <button class="danger" id="cancelBtn" hidden>取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar"><i id="progressBar"></i></div>
+      <span class="progress-text" id="progressText">—</span>
+    </div>
+  </section>
+
+  <div class="errors" id="errorBox" role="alert"></div>
+
+  <section class="views">
+    <div class="view-card">
+      <div class="view-head">
+        <h2>原网格</h2>
+        <span class="meta" id="origMeta">—</span>
+        <span class="spacer"></span>
+        <span class="pill" id="origLockPill" hidden>锁定点 <b id="origLockN">0</b></span>
+      </div>
+      <div class="view-canvas" id="origCanvas">
+        <div class="view-empty" id="origEmpty">载入模型后在此显示原网格</div>
+        <div class="legend" id="origLegend">
+          <div class="title">原顶点 → 简化表面距离</div>
+          <div class="bar"></div>
+          <div class="ends"><span id="legendMin">0</span><span id="legendMax">max</span></div>
+        </div>
+      </div>
+      <div class="view-toggles">
+        <label><input type="checkbox" id="origWire" checked> 线框</label>
+        <label><input type="checkbox" id="origLock" checked> 锁定点</label>
+        <label><input type="checkbox" id="heatToggle"> 距离热图</label>
+      </div>
+    </div>
+
+    <div class="view-card">
+      <div class="view-head">
+        <h2>简化网格</h2>
+        <span class="meta" id="simpMeta">—</span>
+        <span class="spacer"></span>
+        <span class="pill" id="simpStatusPill">无结果</span>
+      </div>
+      <div class="view-canvas" id="simpCanvas">
+        <div class="view-empty" id="simpEmpty">完成一次简化后在此并排比较</div>
+      </div>
+      <div class="view-toggles">
+        <label><input type="checkbox" id="simpWire" checked> 线框</label>
+        <label><input type="checkbox" id="simpLock" checked> 锁定点</label>
+        <span style="flex:1"></span>
+        <button class="ghost" id="exportMeshBtn" disabled style="padding:5px 12px;font-size:12.5px;">导出网格 JSON</button>
+        <button class="ghost" id="exportStatsBtn" disabled style="padding:5px 12px;font-size:12.5px;">导出折叠统计</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="statsPanel" hidden>
+    <div class="stats">
+      <div class="stat"><div class="k">原始面数</div><div class="v" id="stSrcF">—</div></div>
+      <div class="stat"><div class="k">结果面数</div><div class="v" id="stDstF">—</div></div>
+      <div class="stat"><div class="k">结果顶点</div><div class="v" id="stDstV">—</div></div>
+      <div class="stat"><div class="k">折叠边数</div><div class="v" id="stCollapse">—</div></div>
+      <div class="stat"><div class="k">锁定顶点</div><div class="v" id="stLocked">—</div></div>
+      <div class="stat distance"><div class="k">最大距离 d<sub>max</sub></div><div class="v" id="stMaxD">—</div></div>
+      <div class="stat distance"><div class="k">均方根距离 RMS</div><div class="v" id="stRms">—</div></div>
+    </div>
+    <div class="reason" id="stopReason"><strong>停止原因</strong><span id="stopReasonText">—</span></div>
+    <div class="reason" id="rejectReason" hidden><strong>合法性拒绝计数</strong><span id="rejectText">—</span></div>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">导出</h3>
+    <textarea id="modalText" readonly spellcheck="false"></textarea>
+    <div class="m-actions">
+      <button class="primary" id="modalCopy">复制到剪贴板</button>
+      <button class="ghost" id="modalDownload">下载文件</button>
+      <span class="spacer" style="flex:1"></span>
+      <button class="ghost" id="modalClose">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="js/lod-core.js"></script>
+<script src="js/lod-view.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- 状态 ----------
+  var state = {
+    source: null,        // 原始 {vertices,faces,materials}，永不修改
+    sourceName: '',
+    validation: null,
+    lastResult: null,    // 上次完整简化结果
+    lastDistances: null,
+    running: false,
+    cancelRequested: false,
+    runToken: 0
+  };
+
+  // ---------- 主题 ----------
+  var themeBtn = $('themeBtn');
+  themeBtn.addEventListener('click', function () {
+    var root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    // 线框颜色来自主题变量，重建当前两个视图使其生效
+    if (state.source) renderOriginal();
+    if (state.lastResult) {
+      simpView.setHeat(null);
+      simpView.setMesh(state.lastResult.mesh, state.lockedVertices, true);
+      simpView.setWireVisible($('simpWire').checked);
+      simpView.setLocksVisible($('simpLock').checked);
+      simpView.syncFrom(origView);
+    }
+  });
+
+  // ---------- 错误展示 ----------
+  function showErrors(res) {
+    var box = $('errorBox');
+    var isWarn = res.errors.length === 0 && res.warnings.length > 0;
+    box.className = 'errors show' + (isWarn ? ' warn-box' : '');
+    var items = res.errors.length ? res.errors : res.warnings;
+    var title = res.errors.length
+      ? '输入被拒绝（' + res.errors.length + ' 项问题），未开始简化'
+      : '校验通过，但有 ' + res.warnings.length + ' 条警告';
+    box.innerHTML = '<h3>' + title + '</h3><ul>' + items.map(function (e) {
+      return '<li><code>' + escapeHtml(e.location) + '</code> — ' + escapeHtml(e.message) + '</li>';
+    }).join('') + '</ul>';
+  }
+  function clearErrors() { $('errorBox').className = 'errors'; }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ---------- 载入 ----------
+  function loadMeshData(data, name) {
+    clearErrors();
+    var res = LODCore.validateMesh(data);
+    state.validation = res;
+    if (!res.ok) {
+      state.source = null;
+      $('runBtn').disabled = true;
+      $('sourcePill').textContent = name + '：校验失败';
+      $('sourcePill').className = 'pill bad';
+      showErrors(res);
+      clearViews();
+      return;
+    }
+    state.source = data;
+    state.sourceName = name;
+    state.lastResult = null;
+    state.lastDistances = null;
+    $('runBtn').disabled = false;
+    $('sourcePill').textContent = name + ' · ' + data.vertices.length + ' 顶点 / ' + data.faces.length + ' 面 / ' +
+      new Set(data.materials).size + ' 材质';
+    $('sourcePill').className = 'pill good';
+    if (res.warnings.length) showErrors(res);
+    renderOriginal();
+    resetSimplified();
+    // 面数上限提示
+    if (data.faces.length > 10000) {
+      // 校验本身不拒绝，但按题目范围给出提示
+    }
+  }
+
+  $('fileInput').addEventListener('change', function (ev) {
+    var file = ev.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data;
+      try { data = JSON.parse(reader.result); }
+      catch (e) {
+        showErrors({
+          errors: [{ code: 'parse', location: 'JSON 解析', message: '不是合法 JSON：' + e.message }],
+          warnings: []
+        });
+        state.source = null;
+        $('runBtn').disabled = true;
+        $('sourcePill').textContent = file.name + '：JSON 解析失败';
+        $('sourcePill').className = 'pill bad';
+        return;
+      }
+      loadMeshData(data, file.name);
+    };
+    reader.readAsText(file);
+    ev.target.value = '';
+  });
+
+  $('sampleSelect').addEventListener('change', function (ev) {
+    var url = ev.target.value;
+    if (!url) return;
+    fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (data) {
+      loadMeshData(data, url.split('/').pop());
+    }).catch(function (e) {
+      showErrors({ errors: [{ code: 'fetch', location: url, message: '样例载入失败：' + e.message }], warnings: [] });
+    });
+    ev.target.value = '';
+  });
+
+  // ---------- 目标输入切换 ----------
+  var ratioInput = $('ratioInput'), countInput = $('countInput');
+  document.querySelectorAll('input[name="tmode"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      var isRatio = document.querySelector('input[name="tmode"]:checked').value === 'ratio';
+      $('ratioField').hidden = !isRatio;
+      $('countField').hidden = isRatio;
+    });
+  });
+
+  function resolveTarget() {
+    var F = state.source.faces.length;
+    var mode = document.querySelector('input[name="tmode"]:checked').value;
+    if (mode === 'ratio') {
+      var r = parseFloat(ratioInput.value);
+      if (!Number.isFinite(r) || r <= 0 || r > 100) {
+        return { error: '保留比例必须是 0–100 之间的数，当前为 ' + ratioInput.value };
+      }
+      return { target: Math.max(1, Math.round(F * r / 100)) };
+    } else {
+      var c = parseInt(countInput.value, 10);
+      if (!Number.isInteger(c) || c < 1) {
+        return { error: '目标面数必须是不小于 1 的整数，当前为 ' + countInput.value };
+      }
+      return { target: Math.min(c, F) };
+    }
+  }
+
+  // ---------- 视图 ----------
+  var origView, simpView;
+  function initViews() {
+    origView = new LODView.MeshView($('origCanvas'));
+    simpView = new LODView.MeshView($('simpCanvas'));
+    var syncing = false;
+    [origView, simpView].forEach(function (vw) {
+      vw.controls.addEventListener('change', function () {
+        if (syncing) return;
+        syncing = true;
+        var other = vw === origView ? simpView : origView;
+        other.syncFrom(vw);
+        other.render();
+        vw.render();
+        syncing = false;
+      });
+    });
+    window.addEventListener('resize', function () {
+      origView.resize(); simpView.resize();
+      origView.render(); simpView.render();
+    });
+    requestAnimationFrame(function loop() {
+      origView.render();
+      simpView.render();
+      requestAnimationFrame(loop);
+    });
+  }
+
+  function renderOriginal() {
+    $('origEmpty').style.display = 'none';
+    // 锁定点需要一次“只算拓扑”的信息：用目标=原始面数跑一次快速零折叠得到 lockedVertices
+    var probe = LODCore.simplify(state.source, state.source.faces.length);
+    state.lockedVertices = probe.lockedVertices;
+    var heatOn = $('heatToggle').checked && state.lastDistances;
+    origView.setHeat(heatOn ? state.lastDistances.distances : null,
+      heatOn ? state.lastDistances.max : 1);
+    origView.setMesh(state.source, state.lockedVertices, false);
+    origView.setWireVisible($('origWire').checked);
+    origView.setLocksVisible($('origLock').checked);
+    $('origMeta').textContent = state.source.vertices.length + ' 顶点 · ' + state.source.faces.length + ' 面';
+    $('origLockN').textContent = state.lockedVertices.length;
+    $('origLockPill').hidden = state.lockedVertices.length === 0;
+    if (heatOn) {
+      $('legendMin').textContent = '0';
+      $('legendMax').textContent = state.lastDistances.max.toFixed(4);
+      $('origLegend').classList.add('show');
+    } else {
+      $('origLegend').classList.remove('show');
+    }
+  }
+
+  function resetSimplified() {
+    $('simpEmpty').style.display = 'flex';
+    $('simpEmpty').textContent = '完成一次简化后在此并排比较';
+    $('simpMeta').textContent = '—';
+    $('simpStatusPill').textContent = '无结果';
+    $('simpStatusPill').className = 'pill';
+    $('exportMeshBtn').disabled = true;
+    $('exportStatsBtn').disabled = true;
+    $('statsPanel').hidden = true;
+    if (simpView) simpView._clear();
+  }
+  function clearViews() {
+    resetSimplified();
+    $('origMeta').textContent = '—';
+    $('origLockPill').hidden = true;
+    $('origEmpty').style.display = 'flex';
+    $('origEmpty').textContent = '载入模型后在此显示原网格';
+    if (origView) origView._clear();
+  }
+
+  $('origWire').addEventListener('change', function () { origView && origView.setWireVisible(this.checked); });
+  $('simpWire').addEventListener('change', function () { simpView && simpView.setWireVisible(this.checked); });
+  $('origLock').addEventListener('change', function () { origView && origView.setLocksVisible(this.checked); });
+  $('simpLock').addEventListener('change', function () { simpView && simpView.setLocksVisible(this.checked); });
+  $('heatToggle').addEventListener('change', function () {
+    if (state.source) renderOriginal();
+  });
+
+  // ---------- 异步简化（让出主线程，支持取消） ----------
+  function runSimplify() {
+    clearErrors();
+    var t = resolveTarget();
+    if (t.error) {
+      showErrors({ errors: [{ code: 'bad-target', location: '目标输入', message: t.error }], warnings: [] });
+      return;
+    }
+    var token = ++state.runToken;
+    state.running = true;
+    state.cancelRequested = false;
+    $('runBtn').disabled = true;
+    $('cancelBtn').hidden = false;
+    $('progressWrap').classList.add('active');
+    $('progressBar').style.width = '0%';
+    $('progressText').textContent = '准备中…';
+
+    var F0 = state.source.faces.length;
+    // 用宏任务分片驱动：simplify 内部在检查点轮询回调
+    setTimeout(function () {
+      if (token !== state.runToken) return;
+      var result;
+      try {
+        result = LODCore.simplify(state.source, t.target, {
+          shouldCancel: function () { return state.cancelRequested; },
+          onProgress: function (p) {
+            var pct = Math.min(100, Math.round((1 - (p.faces - t.target) / Math.max(1, F0 - t.target)) * 100));
+            $('progressBar').style.width = Math.max(2, pct) + '%';
+            $('progressText').textContent = '当前 ' + p.faces + ' 面 / 目标 ' + t.target +
+              ' · 已折叠 ' + p.collapsed + ' 次';
+          }
+        });
+      } catch (e) {
+        state.running = false;
+        $('runBtn').disabled = false;
+        $('cancelBtn').hidden = true;
+        $('progressWrap').classList.remove('active');
+        showErrors({ errors: [{ code: 'runtime', location: '简化过程', message: e.message }], warnings: [] });
+        return;
+      }
+      if (token !== state.runToken) return;
+      finishRun(result, t.target, token);
+    }, 30);
+  }
+
+  function finishRun(result, target, token) {
+    state.running = false;
+    $('runBtn').disabled = false;
+    $('cancelBtn').hidden = true;
+    $('progressWrap').classList.remove('active');
+
+    if (result.status === 'cancelled') {
+      // 取消：保留上次完整结果，不覆盖
+      $('progressText').textContent = '已取消，保留上次完整结果';
+      showErrors({
+        errors: [],
+        warnings: [{ location: '取消', message: '本次运行已取消。当前展示与导出仍为上次完整结果（' +
+          (state.lastResult ? state.lastResult.mesh.faces.length + ' 面）' : '尚无完整结果）') }]
+      });
+      return;
+    }
+
+    // 完整结果：计算距离并保存
+    var dist = LODCore.computeDistances(state.source.vertices, result.mesh.vertices, result.mesh.faces);
+    state.lastResult = result;
+    state.lastDistances = dist;
+
+    // 右视图
+    $('simpEmpty').style.display = 'none';
+    simpView.setHeat(null);
+    simpView.setMesh(result.mesh, state.lockedVertices, true);
+    simpView.setWireVisible($('simpWire').checked);
+    simpView.setLocksVisible($('simpLock').checked);
+    simpView.syncFrom(origView);
+
+    $('simpMeta').textContent = result.mesh.vertices.length + ' 顶点 · ' + result.mesh.faces.length + ' 面';
+    var pill = $('simpStatusPill');
+    if (result.status === 'target-reached') {
+      pill.textContent = '达到目标';
+      pill.className = 'pill good';
+    } else {
+      pill.textContent = '约束停止 · 实际 ' + result.mesh.faces.length + ' 面';
+      pill.className = 'pill warn';
+    }
+    $('exportMeshBtn').disabled = false;
+    $('exportStatsBtn').disabled = false;
+
+    // 统计面板
+    $('statsPanel').hidden = false;
+    $('stSrcF').innerHTML = result.stats.sourceFaces;
+    $('stDstF').innerHTML = result.mesh.faces.length +
+      (result.mesh.faces.length > target ? ' <small>目标 ' + target + '</small>' : '');
+    $('stDstV').textContent = result.mesh.vertices.length;
+    $('stCollapse').textContent = result.stats.collapsedEdges;
+    $('stLocked').textContent = result.stats.lockedVertices;
+    $('stMaxD').textContent = dist.max.toExponential(4);
+    $('stRms').textContent = dist.rms.toExponential(4);
+
+    var reason = $('stopReason');
+    reason.className = 'reason ' + (result.status === 'target-reached' ? 'good' : 'warn');
+    $('stopReasonText').textContent = result.stopReason;
+
+    var rej = result.stats.rejects;
+    var rejTotal = rej.flip + rej.degenerate + rej.nonmanifold + rej.duplicate;
+    if (rejTotal > 0) {
+      $('rejectReason').hidden = false;
+      $('rejectText').textContent = '面翻转 ' + rej.flip + ' · 退化 ' + rej.degenerate +
+        ' · 非流形 ' + rej.nonmanifold + ' · 重复面 ' + rej.duplicate +
+        '（被拒绝的折叠不计入结果，未通过删除面凑目标）';
+    } else {
+      $('rejectReason').hidden = true;
+    }
+
+    // 热图开关现在可用，刷新左视图以反映（若已勾选）
+    if ($('heatToggle').checked) renderOriginal();
+    $('progressBar').style.width = '100%';
+    $('progressText').textContent = '完成：' + result.mesh.faces.length + ' 面';
+  }
+
+  $('runBtn').addEventListener('click', runSimplify);
+  $('cancelBtn').addEventListener('click', function () {
+    state.cancelRequested = true;
+    $('progressText').textContent = '正在取消…';
+  });
+
+  // ---------- 导出 ----------
+  function exportMeshJson() {
+    var r = state.lastResult;
+    var payload = {
+      format: 'constrained-lod-forge/mesh-v1',
+      sourceName: state.sourceName,
+      vertices: r.mesh.vertices,
+      faces: r.mesh.faces,
+      materials: r.mesh.materials,
+      vertexMap: r.mesh.vertexMap,
+      faceSourceIndex: r.mesh.faceSourceIndex
+    };
+    openExport('简化网格 JSON（含材质编号与原顶点映射）', JSON.stringify(payload, null, 2),
+      baseName() + '-lod.json');
+  }
+  function exportStatsJson() {
+    var r = state.lastResult, d = state.lastDistances;
+    var payload = {
+      format: 'constrained-lod-forge/stats-v1',
+      sourceName: state.sourceName,
+      generatedAt: new Date().toISOString(),
+      target: { requested: r.stats.targetFaces, reached: r.status === 'target-reached' },
+      status: r.status,
+      stopReason: r.stopReason,
+      stats: r.stats,
+      distance: { max: d.max, rms: d.rms, count: d.distances.length },
+      collapseLog: r.collapseLog
+    };
+    openExport('折叠统计 JSON（逐次折叠日志 + 距离指标）', JSON.stringify(payload, null, 2),
+      baseName() + '-stats.json');
+  }
+  function baseName() {
+    return (state.sourceName || 'mesh').replace(/\.json$/i, '');
+  }
+  $('exportMeshBtn').addEventListener('click', exportMeshJson);
+  $('exportStatsBtn').addEventListener('click', exportStatsJson);
+
+  // ---------- 模态（复制 + 下载；沙箱中下载可能无效，复制始终可用） ----------
+  var modalCurrentName = '';
+  function openExport(title, text, fileName) {
+    $('modalTitle').textContent = title;
+    $('modalText').value = text;
+    modalCurrentName = fileName;
+    $('modalBackdrop').classList.add('show');
+  }
+  $('modalClose').addEventListener('click', function () { $('modalBackdrop').classList.remove('show'); });
+  $('modalBackdrop').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('show');
+  });
+  $('modalCopy').addEventListener('click', function () {
+    var ta = $('modalText');
+    ta.focus(); ta.select();
+    var done = function () { toast('已复制 ' + formatBytes(ta.value.length) + ' 到剪贴板'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(done).catch(function () {
+        document.execCommand('copy'); done();
+      });
+    } else {
+      document.execCommand('copy'); done();
+    }
+  });
+  $('modalDownload').addEventListener('click', function () {
+    var blob = new Blob([$('modalText').value], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = modalCurrentName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+    toast('已触发下载 ' + modalCurrentName + '（若浏览器拦截，请用复制）');
+  });
+  function formatBytes(n) {
+    return n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB';
+  }
+  var toastTimer = null;
+  function toast(msg) {
+    var el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+  }
+
+  // ---------- 启动 ----------
+  initViews();
+  // 默认载入 torus，让首帧就是可操作的真实工作台
+  fetch('data/torus.json').then(function (r) { return r.json(); }).then(function (data) {
+    loadMeshData(data, 'torus.json');
+  }).catch(function () { /* 离线时用户可手动选文件 */ });
+})();
+</script>
