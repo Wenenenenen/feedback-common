@@ -15,3 +15,5 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 仅测试用：指向全局 Playwright 的本地软链
+node_modules/

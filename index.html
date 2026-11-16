@@ -1,0 +1,421 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>APNG Disposal Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout concept: a debug instrument — top control rail, four labeled stage canvases
+   in a 2×2 grid, inspector rail on the right, timeline docked at the bottom. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --fg: #18222e;
+  --fg-muted: #5b6875;
+  --line: #d3dae2;
+  --accent: #2563c9;
+  --accent-soft: #e2ecfb;
+  --danger: #c0334d;
+  --danger-soft: #fbe6ea;
+  --warn: #9a6a12;
+  --good: #1e7d4f;
+  --edit: #b45309;
+  --edit-soft: #fdf0dd;
+  --checker: #cfd6dd;
+  --shadow: 0 1px 3px rgba(18, 28, 40, .08), 0 4px 14px rgba(18, 28, 40, .06);
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "WenQuanYi Zen Hei", monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c;
+    --surface: #18202a;
+    --surface-2: #202a36;
+    --fg: #e6ebf1;
+    --fg-muted: #96a3b2;
+    --line: #2c3846;
+    --accent: #74a7f0;
+    --accent-soft: #1d2c42;
+    --danger: #f0788e;
+    --danger-soft: #3a1d25;
+    --warn: #d8b25f;
+    --good: #6fd6a4;
+    --edit: #e5a85c;
+    --edit-soft: #332817;
+    --checker: #2a3441;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c; --surface: #18202a; --surface-2: #202a36;
+  --fg: #e6ebf1; --fg-muted: #96a3b2; --line: #2c3846;
+  --accent: #74a7f0; --accent-soft: #1d2c42;
+  --danger: #f0788e; --danger-soft: #3a1d25;
+  --warn: #d8b25f; --good: #6fd6a4;
+  --edit: #e5a85c; --edit-soft: #332817;
+  --checker: #2a3441;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+
+.app-header {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-block: 14px 12px;
+}
+.app-header h1 { font-size: 18px; letter-spacing: -.01em; }
+.app-header .sub { color: var(--fg-muted); font-size: 12.5px; }
+.header-spacer { flex: 1; }
+.theme-toggle {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; color: var(--fg-muted);
+}
+.theme-toggle:hover { color: var(--fg); border-color: var(--accent); }
+
+.drop-zone {
+  border: 1.5px dashed var(--line); border-radius: 12px;
+  background: var(--surface);
+  padding: 26px 20px; text-align: center;
+  transition: border-color .15s, background .15s;
+}
+.drop-zone.dragging { border-color: var(--accent); background: var(--accent-soft); }
+.drop-zone p { margin: 0 0 12px; color: var(--fg-muted); }
+.drop-zone strong { color: var(--fg); }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 8px; padding: 8px 14px; font-weight: 600;
+}
+.btn.secondary {
+  background: var(--surface); color: var(--fg); border-color: var(--line);
+}
+.btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:hover:not(:disabled) { filter: brightness(1.07); }
+
+#error-panel {
+  margin-block: 14px;
+  background: var(--danger-soft); border: 1px solid var(--danger);
+  border-left-width: 4px; border-radius: 10px; padding: 14px 16px;
+}
+.err-kind {
+  font-weight: 700; color: var(--danger); text-transform: uppercase;
+  letter-spacing: .06em; font-size: 12px; margin-bottom: 6px;
+}
+.err-msg { margin-bottom: 8px; }
+.err-loc { font-family: var(--mono); font-size: 13px; color: var(--fg); }
+.err-loc code {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 6px;
+}
+.err-sep { height: 1px; background: var(--danger); opacity: .35; margin: 10px 0; }
+
+.meta-bar {
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; margin-block: 12px;
+}
+.meta-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.meta-item .k { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-muted); }
+.meta-item .v { font-family: var(--mono); font-size: 13px; }
+.meta-sep { width: 1px; align-self: stretch; background: var(--line); }
+.poster-canvas {
+  width: 72px; height: 54px; object-fit: contain;
+  image-rendering: pixelated; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff; margin-top: 2px;
+}
+
+.workspace-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .workspace-grid { grid-template-columns: 1fr; }
+}
+
+.stage-panel, .inspector, .timeline-dock {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow);
+}
+.stage-panel { padding: 14px; min-width: 0; }
+.stage-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.stage-head h2 { font-size: 14px; }
+.stage-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+.stage-tools label { display: inline-flex; align-items: center; gap: 5px; color: var(--fg-muted); font-size: 12.5px; }
+.icon-btn {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px;
+  min-width: 32px; height: 30px; padding: 0 9px; color: var(--fg);
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.canvas-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) { .canvas-grid { grid-template-columns: 1fr; } }
+.canvas-card {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px; min-width: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.canvas-card h3 {
+  font-size: 12.5px; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.canvas-card h3 .rect { font-family: var(--mono); font-weight: 400; }
+.canvas-scroll {
+  overflow: auto; border-radius: 6px; border: 1px solid var(--line);
+  background: #fff; display: flex; justify-content: center;
+  max-height: 46vh;
+}
+.canvas-scroll canvas {
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  display: block; flex: none;
+}
+
+.pixel-bar {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 11px; margin-top: 10px;
+  min-height: 34px;
+}
+#swatch {
+  width: 20px; height: 20px; border-radius: 5px;
+  border: 1px solid var(--line); flex: none; background: transparent;
+}
+
+.inspector { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.inspector h2 { font-size: 14px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label { font-size: 12px; color: var(--fg-muted); font-weight: 600; }
+.field input, .field select {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font-family: var(--mono);
+}
+.field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.field input.edited, .field select.edited {
+  border-color: var(--edit); background: var(--edit-soft);
+}
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.timing-readout {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; font-family: var(--mono); font-size: 12.5px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.timing-readout .k { color: var(--fg-muted); font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.orig-note { font-size: 12px; color: var(--fg-muted); font-family: var(--mono); word-break: break-word; }
+.poster-note {
+  font-size: 12.5px; border-radius: 8px; padding: 9px 11px;
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+}
+.inspector .btn { width: 100%; justify-content: center; }
+
+.timeline-dock { margin-block: 14px; padding: 12px 14px; }
+.transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.transport .spacer { flex: 1; }
+.jump-wrap { display: flex; align-items: center; gap: 6px; color: var(--fg-muted); font-size: 12.5px; }
+.jump-wrap input {
+  width: 64px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 8px; font-family: var(--mono);
+}
+#timeline-strip {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;
+}
+.tl-item {
+  flex: none; width: 74px; background: var(--surface-2);
+  border: 1.5px solid var(--line); border-radius: 9px; padding: 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.tl-item:hover { border-color: var(--accent); }
+.tl-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.tl-thumb {
+  width: 56px; height: 42px; object-fit: contain;
+  image-rendering: pixelated; border-radius: 4px; border: 1px solid var(--line); background: #fff;
+}
+.tl-label { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); }
+.tl-item.active .tl-label { color: var(--accent); font-weight: 700; }
+
+.export-row { display: flex; gap: 10px; flex-wrap: wrap; padding-bottom: 18px; }
+.footer-note {
+  color: var(--fg-muted); font-size: 12px; padding-bottom: 22px;
+}
+.footer-note code { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+</style>
+
+<div class="app-header">
+  <div>
+    <h1>APNG Disposal Studio</h1>
+    <div class="sub">局部更新帧残影排错 · 自行解析 acTL/fcTL/fdAT 并合成</div>
+  </div>
+  <div class="header-spacer"></div>
+  <button class="theme-toggle" id="theme-toggle" type="button">切换深浅色</button>
+</div>
+
+<div class="drop-zone" id="drop-zone">
+  <p><strong>拖入 APNG 文件</strong>，或点击选择（8 位 RGBA、非隔行，≤120 帧 / 1024×1024 / 50MB）</p>
+  <input type="file" id="file-input" accept=".apng,.png" hidden>
+  <button class="btn" type="button" onclick="document.getElementById('file-input').click()">选择 APNG 文件</button>
+</div>
+
+<div id="error-panel" hidden></div>
+
+<div id="workspace" hidden>
+  <div class="meta-bar">
+    <div class="meta-item"><span class="k">文件</span><span class="v" id="info-file">—</span></div>
+    <div class="meta-sep"></div>
+    <div class="meta-item"><span class="k">画布</span><span class="v" id="info-canvas">—</span></div>
+    <div class="meta-item"><span class="k">帧数</span><span class="v" id="info-frames">—</span></div>
+    <div class="meta-item"><span class="k">循环</span><span class="v" id="info-plays">—</span></div>
+    <div class="meta-item"><span class="k">默认图</span><span class="v" id="info-poster">—</span></div>
+    <div class="meta-sep"></div>
+    <div class="meta-item poster-preview-item">
+      <span class="k">默认图预览（静态解码 IDAT）</span>
+      <canvas id="poster-canvas" class="poster-canvas" width="64" height="48"></canvas>
+    </div>
+  </div>
+
+  <div class="workspace-grid">
+    <div class="stage-panel">
+      <div class="stage-head">
+        <h2>四态画布</h2>
+        <div class="stage-tools">
+          <label><input type="checkbox" id="chk-checker" checked> 棋盘格</label>
+          <button class="icon-btn" id="btn-zoom-out" type="button" title="缩小">−</button>
+          <span class="mono" id="zoom-label">8×</span>
+          <button class="icon-btn" id="btn-zoom-in" type="button" title="放大">+</button>
+        </div>
+      </div>
+      <div class="canvas-grid">
+        <div class="canvas-card">
+          <h3>① 局部原帧 <span class="rect" id="raw-meta"></span></h3>
+          <div class="canvas-scroll"><canvas id="cv-raw"></canvas></div>
+        </div>
+        <div class="canvas-card">
+          <h3>② 合成前 before</h3>
+          <div class="canvas-scroll"><canvas id="cv-before"></canvas></div>
+        </div>
+        <div class="canvas-card">
+          <h3>③ 展示时 shown</h3>
+          <div class="canvas-scroll"><canvas id="cv-shown"></canvas></div>
+        </div>
+        <div class="canvas-card">
+          <h3>④ 处置后 after</h3>
+          <div class="canvas-scroll"><canvas id="cv-after"></canvas></div>
+        </div>
+      </div>
+      <div class="pixel-bar">
+        <span id="swatch"></span>
+        <span id="pixel-readout">悬停取色…</span>
+      </div>
+    </div>
+
+    <aside class="inspector">
+      <h2>帧 #<span id="frame-index">0</span> 参数</h2>
+      <div class="field">
+        <label>fcTL 字节偏移</label>
+        <div class="timing-readout"><span class="mono" id="fctl-offset"></span></div>
+      </div>
+      <div class="field">
+        <label>帧矩形</label>
+        <div class="timing-readout"><span class="mono" id="frame-rect"></span></div>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label for="in-delay-num">delay_num</label>
+          <input id="in-delay-num" type="number" min="0" max="65535" step="1">
+        </div>
+        <div class="field">
+          <label for="in-delay-den">delay_den（0→100）</label>
+          <input id="in-delay-den" type="number" min="0" max="65535" step="1">
+        </div>
+      </div>
+      <div class="field">
+        <label for="in-dispose">dispose_op 处置方式</label>
+        <select id="in-dispose">
+          <option value="0">0 · NONE — 保留画面</option>
+          <option value="1">1 · BACKGROUND — 区域清透明</option>
+          <option value="2">2 · PREVIOUS — 恢复绘制前</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="in-blend">blend_op 混合方式</label>
+        <select id="in-blend">
+          <option value="0">0 · SOURCE — 直接替换</option>
+          <option value="1">1 · OVER — straight-alpha 混合</option>
+        </select>
+      </div>
+      <div class="timing-readout">
+        <div><span class="k">本帧时长（播放）</span> <span id="frame-ms"></span> ms</div>
+        <div><span class="k">生效分母</span> <span id="effective-den"></span></div>
+        <div><span class="k">累计时间</span> <span id="cumulative-ms"></span> ms</div>
+      </div>
+      <div class="orig-note" id="orig-params"></div>
+      <div class="field">
+        <label for="num-plays">acTL num_plays（0 = 无限）</label>
+        <input id="num-plays" type="number" min="0" max="4294967295" step="1">
+      </div>
+      <div class="poster-note" id="poster-flag"></div>
+      <button class="btn secondary" id="btn-reset" type="button">恢复全部原始参数</button>
+    </aside>
+  </div>
+
+  <div class="timeline-dock">
+    <div class="transport">
+      <button class="icon-btn" id="btn-first" type="button" title="首帧 (Home)">⏮</button>
+      <button class="icon-btn" id="btn-prev" type="button" title="上一帧 (←)">◀</button>
+      <button class="btn" id="btn-play" type="button">播放</button>
+      <button class="icon-btn" id="btn-next" type="button" title="下一帧 (→)">▶</button>
+      <button class="icon-btn" id="btn-last" type="button" title="末帧 (End)">⏭</button>
+      <div class="spacer"></div>
+      <div class="jump-wrap">
+        跳转
+        <input id="frame-jump" type="number" min="0" step="1">
+        / <span id="frame-total">0</span>
+      </div>
+    </div>
+    <div id="timeline-strip"></div>
+  </div>
+
+  <div class="export-row">
+    <button class="btn" id="btn-export-apng" type="button">导出修改后的 APNG</button>
+    <button class="btn secondary" id="btn-export-seq" type="button">导出完整展示帧 PNG 序列（ZIP）</button>
+  </div>
+  <div class="footer-note">
+    计时约定：<code>delay_den=0</code> 按 100 解释；<code>delay_num=0</code> 播放下限 10ms，导出仍保存原分子分母；
+    有理数累计不提前取整；<code>num_plays=0</code> 无限循环，其余播完停在最终 shown。
+    导出重建全部块 CRC 与连续序号，不修改图像数据与帧矩形。
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme === 'dark' ||
+      (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+    root.dataset.theme = dark ? 'light' : 'dark';
+  });
+</script>
