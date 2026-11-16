@@ -1,0 +1,32 @@
+{
+  "ppqn": 480,
+  "duration_ticks": 960,
+  "tempo": [
+    {
+      "tick": 0,
+      "us_per_quarter": 500000
+    }
+  ],
+  "params": {
+    "attack_ms": 0,
+    "decay_ms": 0,
+    "sustain": 1,
+    "release_ms": 0,
+    "voices": 1
+  },
+  "events": [
+    {
+      "tick": 0,
+      "type": "on",
+      "channel": 0,
+      "key": 69,
+      "velocity": 100
+    },
+    {
+      "tick": 48,
+      "type": "off",
+      "channel": 0,
+      "key": 69
+    }
+  ]
+}

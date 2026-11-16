@@ -1,0 +1,50 @@
+{
+  "ppqn": 480,
+  "duration_ticks": 960,
+  "tempo": [
+    {
+      "tick": 480,
+      "us_per_quarter": 1000000
+    },
+    {
+      "tick": 0,
+      "us_per_quarter": 500000
+    }
+  ],
+  "params": {
+    "attack_ms": 10,
+    "decay_ms": 40,
+    "sustain": 0.6,
+    "release_ms": 60,
+    "voices": 2
+  },
+  "events": [
+    {
+      "tick": 480,
+      "type": "on",
+      "channel": 0,
+      "key": 69,
+      "velocity": 100
+    },
+    {
+      "tick": 720,
+      "type": "on",
+      "channel": 0,
+      "key": 69,
+      "velocity": 0
+    },
+    {
+      "tick": 0,
+      "type": "on",
+      "channel": 1,
+      "key": 60,
+      "velocity": 100
+    },
+    {
+      "tick": 240,
+      "type": "off",
+      "channel": 1,
+      "key": 60
+    }
+  ]
+}

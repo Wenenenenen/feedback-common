@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>踏板声部复现器</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #171e2e;
+    --panel2: #1d2638;
+    --text: #e6ebf5;
+    --muted: #8b96ad;
+    --line: #2a3550;
+    --held: #3b82f6;
+    --pedal: #f59e0b;
+    --release: #34d399;
+    --stolen: #ef4444;
+    --accent: #7c9cff;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f6fb; --panel: #ffffff; --panel2: #eef1f8;
+      --text: #1c2333; --muted: #5b6579; --line: #d5dcea;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header { padding: 14px 20px 6px; }
+  header h1 { font-size: 18px; margin: 0 0 2px; }
+  header p { margin: 0; color: var(--muted); font-size: 12px; }
+  .bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 10px 20px; background: var(--panel); border-block: 1px solid var(--line);
+  }
+  .bar label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  select, input[type=number], button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 9px; font: inherit; font-size: 13px;
+  }
+  input[type=number] { width: 64px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1020; font-weight: 600; }
+  #errors {
+    display: none; margin: 10px 20px 0; padding: 10px 14px; border-radius: 8px;
+    background: #3a1620; color: #ffb4c0; border: 1px solid #7f2d3f; font-size: 13px;
+  }
+  #errors ul { margin: 4px 0 0; padding-left: 18px; }
+  #stats { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; gap: 14px; }
+  #stats .bad { color: var(--stolen); font-weight: 600; }
+  main { display: grid; grid-template-columns: 1fr 300px; gap: 14px; padding: 14px 20px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  #rollWrap { position: relative; overflow-x: auto; }
+  canvas { display: block; }
+  #roll { cursor: crosshair; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  #cursorInfo h2, #voiceCard h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+  #transport { display: flex; gap: 10px; align-items: center; }
+  #cursorTime { font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>踏板 / 偷声声部复现器</h1>
+  <p>导入 JSON 事件与速度表，按约定离线合成 48kHz 单声道；用于核对限复音下的声部分配与真实发声。</p>
+</header>
+
+<div class="bar">
+  <label>样例
+    <select id="sampleSel">
+      <option value="">（选择样例）</option>
+    </select>
+  </label>
+  <label>导入 <input type="file" id="fileInput" accept=".json,application/json" style="width:180px"></label>
+  <span id="stats"></span>
+</div>
+
+<div class="bar">
+  <label>attack_ms <input type="number" id="pAttack" min="0" max="200" step="1"></label>
+  <label>decay_ms <input type="number" id="pDecay" min="0" max="500" step="1"></label>
+  <label>sustain <input type="number" id="pSustain" min="0" max="1" step="0.05"></label>
+  <label>release_ms <input type="number" id="pRelease" min="0" max="2000" step="1"></label>
+  <label>复音上限 <input type="number" id="pVoices" min="1" max="32" step="1"></label>
+  <span id="envInfo" style="color:var(--muted);font-size:12px"></span>
+</div>
+
+<div id="errors"></div>
+
+<main>
+  <div class="card">
+    <div id="transport">
+      <button id="playBtn" class="primary" disabled>▶ 从游标播放</button>
+      <button id="stopBtn" disabled>■ 停止</button>
+      <span id="cursorTime" class="mono">游标 帧 0 / 0.0000s</span>
+      <span style="flex:1"></span>
+      <button id="wavBtn" disabled>导出 WAV (48k/24bit)</button>
+      <button id="reportBtn" disabled>导出逐声部报告</button>
+    </div>
+    <div id="rollWrap" style="margin-top:10px">
+      <canvas id="roll"></canvas>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--held)"></i>按键</span>
+      <span><i style="background:var(--pedal)"></i>踏板保持</span>
+      <span><i style="background:var(--release)"></i>release</span>
+      <span><i style="background:var(--stolen)"></i>被偷声（红框 + ✕）</span>
+      <span><i style="background:var(--line)"></i>底部细条：踏板踩下区间（按通道）</span>
+    </div>
+  </div>
+
+  <div class="card" id="voiceCard">
+    <h2>游标处声部状态</h2>
+    <div id="cursorInfo"><p style="color:var(--muted)">尚未加载项目。</p></div>
+  </div>
+</main>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

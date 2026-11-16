@@ -1,0 +1,7 @@
+{
+  "total_frames": 48000,
+  "id0_end_frame": 2400,
+  "silent_from_frame": 2400,
+  "first_sample": 0,
+  "sample_formula": "n<2400时y=0.15*(100/127)*sin(2*pi*440*n/48000)，其后为0；24位量化误差<=2LSB。"
+}

@@ -1,0 +1,11 @@
+{
+  "event_frames_by_input_index": [
+    24000,
+    48000,
+    0,
+    12000
+  ],
+  "total_frames": 74880,
+  "a4_frequency_hz": 440,
+  "release_frames": 2880
+}

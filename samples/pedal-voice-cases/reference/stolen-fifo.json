@@ -1,0 +1,32 @@
+{
+  "voices": [
+    {
+      "id": 0,
+      "on_frame": 0,
+      "key_up_frame": 7200,
+      "release_frame": null,
+      "end_frame": 4800,
+      "reason": "stolen"
+    },
+    {
+      "id": 1,
+      "on_frame": 2400,
+      "key_up_frame": 9600,
+      "release_frame": 9600,
+      "end_frame": 12480,
+      "reason": "release"
+    },
+    {
+      "id": 2,
+      "on_frame": 4800,
+      "key_up_frame": 12000,
+      "release_frame": 12000,
+      "end_frame": 14880,
+      "reason": "release"
+    }
+  ],
+  "unmatched_off_events": [
+    6
+  ],
+  "total_frames": 50880
+}

@@ -1,0 +1,11 @@
+{
+  "输入": "ppqn为1..9600；duration_ticks为正整数；tempo为{tick,us_per_quarter}数组，tick唯一、0<=tick<duration_ticks，速度为1..60000000，缺tick=0则默认500000。events中tick也必须小于duration_ticks。支持on、off、pedal，channel为0..15，key和velocity为0..127，pedal的value为0..127。最多5000事件、32声部、30秒项目时长，尾音另计。",
+  "排序与时间": "tempo按tick排序后分段积分；事件按(tick,原数组下标)稳定排序。先算累计秒数，再用floor(seconds*48000+0.5)得到帧号；同帧仍按前述顺序。声部id为on事件原数组下标。velocity=0的on按off处理，不创建声部。",
+  "配对": "每个channel/key的off消费最早尚未配对的on，即使该on声部已被偷走也必须消费；不因偷声移除逻辑配对记录。未配对off记警告并忽略。key_up_frame仍须写回已被偷声的记录。",
+  "踏板": "value>=64为踩下。off在踏板下仅标记松键，不启动release。抬踏板同时释放本通道所有已松键但未释放的声部；仍按键的声部继续。重新踩踏板不能救回已经release的声部。",
+  "偷声": "处理事件前先清理自然结束的声部。声部数达到上限时，优先偷已经进入release的声部，其中取on_frame最小者，若相同取id最小者；没有release声部则从所有声部按同一规则选择。被偷声立即截断，不播放尾音；同键重触发创建独立声部。",
+  "包络": "attack_ms为0..200，decay_ms为0..500，sustain为0..1，release_ms为0..2000。毫秒按floor(ms*48+0.5)换为帧数A、D、R。非release时，年龄a<A取a/A，A<=a<A+D取1-(1-sustain)*(a-A)/D，其后取sustain；零长度阶段直接跳过。release在当前帧先取得原包络值h，之后r帧取h*(1-r/R)，r>=R即结束，R=0立即结束。踏板保持时attack/decay照常前进。",
+  "合成": "48kHz单声道。每个声部从on帧起相位为0，频率440*2^((key-69)/12)，贡献0.15*(velocity/127)*envelope*sin(2*pi*f*age/48000)。每帧先处理全部事件再合成，所有声部求和。不得自动归一化，超界样值饱和并报告量化前abs(sum)>1的采样数。",
+  "结束与导出": "项目结束帧也用累计秒数四舍五入；此时无视踏板强制所有未release声部进入release，已经release的不重启。输出恰为结束帧+R帧。PCM24按2^23量化、半值远离0并饱和。报告每个声部id、channel、key、on_frame、key_up_frame、release_frame、end_frame及reason；未发生字段为null，reason为stolen、release或project_end，end_frame为不再贡献声音的首帧。另列未配对off事件下标与削波数。",
+  "交互": "钢琴卷帘用不同颜色标出按键、踏板保持、release和被偷声，时间游标显示该帧声部状态；修改参数重新渲染后可任意定位试听，不得沿用旧参数缓存。"
+}

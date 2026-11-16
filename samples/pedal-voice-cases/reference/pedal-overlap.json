@@ -1,0 +1,29 @@
+{
+  "voices": [
+    {
+      "id": 0,
+      "on_frame": 0,
+      "key_up_frame": 4800,
+      "release_frame": 9600,
+      "end_frame": 12480,
+      "reason": "release"
+    },
+    {
+      "id": 3,
+      "on_frame": 6000,
+      "key_up_frame": 7200,
+      "release_frame": 9600,
+      "end_frame": 12480,
+      "reason": "release"
+    },
+    {
+      "id": 6,
+      "on_frame": 14400,
+      "key_up_frame": 16800,
+      "release_frame": 16800,
+      "end_frame": 19680,
+      "reason": "release"
+    }
+  ],
+  "total_frames": 50880
+}
