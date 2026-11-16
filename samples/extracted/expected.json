@@ -1,0 +1,1 @@
+{"constant_rgb":[1,2,0.5],"constant_irradiance":[3.141592653589793,6.283185307179586,1.5707963267948966],"linear_irradiance_formula":"E(n)=pi*C*(1+(2/3)*(.6*nx+.2*ny))","rotation_90_bright_direction":[0,0,-1],"solid_angle":12.566370614359172}

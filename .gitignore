@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+node_modules/
+
+# 样例解压目录（由 start.sh / server.py 从 zip 生成）
+samples/extracted/
+
+# 本地开发草稿（含样例解压副本与临时脚本）
+.work/

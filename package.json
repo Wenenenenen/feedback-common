@@ -1,0 +1,11 @@
+{
+  "name": "irradiance-sh-baker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "等距柱状全景图 → 三阶实球谐漫反射探针烘焙台",
+  "scripts": {
+    "serve": "python3 -I src/py/server.py --port 8000",
+    "test": "node tests/node_check.mjs samples/extracted"
+  }
+}

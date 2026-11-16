@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>漫反射光照探针烘焙台 · 等距柱状 → 三阶球谐</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主内容</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="title-block">
+      <h1>漫反射光照探针烘焙台</h1>
+      <p class="sub">
+        等距柱状 RGB 浮点全景图 → 三阶实球谐 9 组 RGB 系数
+        <span class="sep">·</span> 立体角加权积分，不做像素平均
+      </p>
+    </div>
+    <dl class="units">
+      <div><dt>输入 L</dt><dd>W/(m²·sr)</dd></div>
+      <div><dt>辐亮度系数 C</dt><dd>W/(m²·sr)</dd></div>
+      <div><dt>辐照度系数 E</dt><dd>W/m²</dd></div>
+    </dl>
+  </div>
+</header>
+
+<main id="main" class="layout">
+  <!-- ───────────── 左栏：导入与设置 ───────────── -->
+  <div class="col col-left">
+
+    <section class="panel" id="panel-import">
+      <h2>1 · 导入环境图</h2>
+      <div class="drop" id="drop-zone" tabindex="0" role="button"
+           aria-label="拖入或选择 PFM 文件">
+        <input type="file" id="file-input" accept=".pfm,.PFM,application/octet-stream" hidden>
+        <strong>拖入 PFM 全景图</strong>
+        <span>或点击选择文件 · RGB float32 · ≤ 1024×512</span>
+        <span class="drop-hint">支持大小端、尺度因子与底行优先（按文件头自动识别）</span>
+      </div>
+
+      <div class="sample-row">
+        <label for="sample-select">样例</label>
+        <select id="sample-select"></select>
+        <button id="load-sample" type="button">载入样例</button>
+      </div>
+
+      <details class="advanced">
+        <summary>格式覆盖（仅在文件头异常时使用）</summary>
+        <div class="field-grid">
+          <label>字节序
+            <select id="opt-endian">
+              <option value="auto">按尺度符号（默认）</option>
+              <option value="little">小端</option>
+              <option value="big">大端</option>
+            </select>
+          </label>
+          <label>行序
+            <select id="opt-roworder">
+              <option value="auto">底行优先（默认）</option>
+              <option value="bottom">底行优先</option>
+              <option value="top">顶行优先</option>
+            </select>
+          </label>
+          <label>尺度
+            <select id="opt-scale">
+              <option value="header">乘以 |尺度|（默认）</option>
+              <option value="one">忽略尺度（乘 1）</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint" id="override-hint">覆盖后需重新载入文件才生效。</p>
+      </details>
+
+      <div class="status-block">
+        <div class="status-line">
+          <span class="dot" id="status-dot"></span>
+          <span id="status-text">尚未载入环境图</span>
+          <button id="cancel-bake" type="button" class="danger" hidden>取消烘焙</button>
+        </div>
+        <progress id="bake-progress" max="1" value="0" hidden></progress>
+      </div>
+
+      <dl class="meta-grid" id="image-meta" hidden></dl>
+      <ul class="messages" id="image-warnings"></ul>
+      <div class="error-box" id="import-error" hidden role="alert"></div>
+    </section>
+
+    <section class="panel" id="panel-coeff-import">
+      <h2>2 · 导入已有系数</h2>
+      <p class="hint">
+        只接受带基标识与 kind 的 JSON；旋转角按「已烘焙」读入，不再二次旋转。
+        导入失败不会覆盖当前结果。
+      </p>
+      <div class="file-row">
+        <input type="file" id="coeff-input" accept=".json,application/json" hidden>
+        <button id="coeff-pick" type="button">选择系数 JSON…</button>
+        <button id="coeff-paste-toggle" type="button" class="ghost">粘贴 JSON</button>
+      </div>
+      <textarea id="coeff-paste" rows="6" placeholder="粘贴导出的系数 JSON…" hidden></textarea>
+      <div class="file-row" id="coeff-paste-actions" hidden>
+        <button id="coeff-import-paste" type="button">导入粘贴内容</button>
+      </div>
+      <div class="error-box" id="coeff-error" hidden role="alert"></div>
+      <div class="ok-box" id="coeff-ok" hidden></div>
+      <ul class="messages" id="coeff-warnings"></ul>
+      <dl class="meta-grid" id="import-meta" hidden></dl>
+    </section>
+
+    <section class="panel" id="panel-display">
+      <h2>3 · 显示</h2>
+      <p class="hint badge-hint">曝光与色调映射只影响预览像素，不参与积分，也不进入导出。</p>
+      <div class="field-grid">
+        <div class="field">
+          <label for="exposure-range">曝光</label>
+          <div class="slider-row">
+            <input type="range" id="exposure-range" min="-4" max="6" step="0.05" value="0">
+            <output id="exposure-out">×1.00</output>
+          </div>
+        </div>
+        <label>色调映射
+          <select id="tone-mode"></select>
+        </label>
+        <div class="field">
+          <span class="field-label">预览旋转</span>
+          <label class="check-row">
+            <input type="checkbox" id="preview-rotated" checked>
+            <span>预览显示旋转后的环境</span>
+          </label>
+        </div>
+      </div>
+      <p class="hint" id="display-note"></p>
+    </section>
+
+    <section class="panel" id="panel-rotation">
+      <h2>4 · 绕 y 轴旋转</h2>
+      <p class="hint">
+        右手系正角：<strong>+90° 时 +x → −z</strong>；旋转环境 Lr(n) = L(R⁻¹n)。
+        角度直接烘焙进系数，导出后不再需要再次旋转。
+      </p>
+      <div class="rotate-row">
+        <label class="sr-only" for="rotation-number">旋转角（度）</label>
+        <input type="number" id="rotation-number" value="0" step="1" min="-360" max="360">
+        <span class="unit">deg</span>
+        <input type="range" id="rotation-range" min="-180" max="180" step="0.5" value="0">
+      </div>
+      <div class="preset-row">
+        <button type="button" data-angle="0">0°</button>
+        <button type="button" data-angle="90">+90°</button>
+        <button type="button" data-angle="180">180°</button>
+        <button type="button" data-angle="-90">−90°</button>
+        <button type="button" data-angle="45">45°</button>
+      </div>
+      <dl class="meta-grid" id="rotation-meta" hidden>
+        <div><dt>亮部方向（原图）</dt><dd id="rot-bright-before">—</dd></div>
+        <div><dt>亮部方向（旋转后）</dt><dd id="rot-bright-after">—</dd></div>
+      </dl>
+    </section>
+
+    <section class="panel" id="panel-export">
+      <h2>5 · 导出系数</h2>
+      <p class="hint">
+        两种系数同时导出，文件名与单位不同。当前旋转角会写进 JSON 并计入数值。
+      </p>
+      <div class="export-grid">
+        <button type="button" id="export-radiance" class="export-btn">
+          <span class="k">环境辐亮度系数 C</span>
+          <span class="u">W/(m²·sr) · radiance</span>
+        </button>
+        <button type="button" id="export-irradiance" class="export-btn">
+          <span class="k">辐照度系数 E（余弦卷积）</span>
+          <span class="u">W/m² · irradiance</span>
+        </button>
+      </div>
+      <div class="file-row">
+        <button type="button" id="export-both" class="ghost">导出两份 JSON</button>
+        <button type="button" id="copy-radiance" class="ghost">复制辐亮度 JSON</button>
+        <button type="button" id="copy-irradiance" class="ghost">复制辐照度 JSON</button>
+      </div>
+      <div class="ok-box" id="export-ok" hidden></div>
+    </section>
+  </div>
+
+  <!-- ───────────── 右栏：预览与数据 ───────────── -->
+  <div class="col col-right">
+
+    <section class="panel" id="panel-preview">
+      <h2>等距柱状预览</h2>
+      <div class="canvas-wrap">
+        <canvas id="equirect-canvas" aria-label="等距柱状环境图预览"></canvas>
+        <p class="canvas-empty" id="equirect-empty">载入 PFM 后显示</p>
+      </div>
+      <p class="hint" id="preview-caption">—</p>
+    </section>
+
+    <section class="panel" id="panel-sphere">
+      <h2>法线球 · 点选查看数值</h2>
+      <div class="sphere-layout">
+        <div class="sphere-canvas-wrap">
+          <canvas id="sphere-canvas" aria-label="法线球预览，可点选方向"></canvas>
+        </div>
+        <div class="readout" id="readout">
+          <div class="kind-toggle" role="group" aria-label="显示哪种系数">
+            <button type="button" id="kind-irradiance" class="active">辐照度 E</button>
+            <button type="button" id="kind-radiance">辐亮度 C</button>
+          </div>
+          <dl class="readout-grid">
+            <div><dt>法线 n</dt><dd id="ro-dir">—</dd></div>
+            <div><dt>θ / φ</dt><dd id="ro-angles">—</dd></div>
+            <div><dt id="ro-kind-label">辐照度 E(n)</dt><dd id="ro-value">—</dd></div>
+            <div><dt>亮度 Y</dt><dd id="ro-lum">—</dd></div>
+            <div><dt>单位</dt><dd id="ro-unit">W/m²</dd></div>
+          </dl>
+          <div class="swatch" id="ro-swatch" aria-hidden="true"></div>
+          <p class="hint">拖动转向；单击选法线；双击复位视角。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-coeffs">
+      <h2>系数表</h2>
+      <p class="stale-note" id="coeff-stale" hidden role="status"></p>
+      <p class="hint">
+        Cᵢ = ∫ L·Yᵢ dω（W/(m²·sr)）；Eᵢ = Cᵢ·A_l（W/m²），A₀=π、A₁=2π/3、A₂=π/4。
+      </p>
+      <div class="table-scroll">
+        <table class="data-table" id="coeff-table">
+          <thead>
+            <tr>
+              <th scope="col">基</th>
+              <th scope="col">l, m</th>
+              <th scope="col" class="num">C · R</th>
+              <th scope="col" class="num">C · G</th>
+              <th scope="col" class="num">C · B</th>
+              <th scope="col" class="num">E · R</th>
+              <th scope="col" class="num">E · G</th>
+              <th scope="col" class="num">E · B</th>
+            </tr>
+          </thead>
+          <tbody id="coeff-body"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="coeff-summary">—</p>
+    </section>
+
+    <section class="panel" id="panel-rows">
+      <h2>逐行立体角与贡献</h2>
+      <p class="hint">
+        Ω_r = 2π·(cos(πr/H) − cos(π(r+1)/H))；ΣΩ_r = 4π。
+        贡献 = Σ_列 Yᵢ(n)·L(n)·ΔΩ，逐行累加即得 Cᵢ。
+      </p>
+      <div class="row-toolbar">
+        <label for="row-band-select">贡献列显示</label>
+        <select id="row-band-select"></select>
+        <label class="check-row"><input type="checkbox" id="row-only-nonzero"> 只看非零行</label>
+      </div>
+      <div class="table-scroll tall">
+        <table class="data-table" id="row-table">
+          <thead>
+            <tr>
+              <th scope="col">r</th>
+              <th scope="col" class="num">θ (°)</th>
+              <th scope="col" class="num">Ω_r (sr)</th>
+              <th scope="col" class="bar-col">Ω 条（相对赤道行）</th>
+              <th scope="col" class="num">Ω 占比</th>
+              <th scope="col" class="num">平均 L</th>
+              <th scope="col" class="num">贡献 R</th>
+              <th scope="col" class="num">贡献 G</th>
+              <th scope="col" class="num">贡献 B</th>
+            </tr>
+          </thead>
+          <tbody id="row-body"></tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Σ</th>
+              <td class="num">—</td>
+              <td class="num" id="row-total-omega">—</td>
+              <td class="bar-col">4π</td>
+              <td class="num">100%</td>
+              <td class="num" id="row-total-mean">—</td>
+              <td class="num" id="row-total-r">—</td>
+              <td class="num" id="row-total-g">—</td>
+              <td class="num" id="row-total-b">—</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-mean">
+      <h2>直接平均 vs 立体角加权</h2>
+      <p class="hint">
+        等距柱状图的行长度相同但立体角不同：极区行面积小、像素多。
+        直接按像素平均会给极区过高权重。
+      </p>
+      <table class="data-table compact" id="mean-table">
+        <thead>
+          <tr><th scope="col">通道</th><th scope="col" class="num">直接像素平均</th><th scope="col" class="num">立体角加权平均</th><th scope="col" class="num">偏差</th></tr>
+        </thead>
+        <tbody id="mean-body"></tbody>
+      </table>
+    </section>
+
+    <section class="panel" id="panel-conformance">
+      <h2>包内参考值核对</h2>
+      <p class="hint">载入样例后自动与 <code>expected.json</code> 比对（容差 1e-9 相对）。</p>
+      <ul class="check-list" id="conformance-list">
+        <li class="muted">尚未载入样例。</li>
+      </ul>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  <p>
+    所有计算在本地完成，无外部请求。
+    约定：θ 自 +Y 起算，φ 自 +X 转向 +Z；基为整球正交归一的实球谐（ACN 顺序）。
+  </p>
+</footer>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
