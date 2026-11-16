@@ -1,0 +1,1 @@
+{"main_visible_targets":["left-target","right-target"],"main_required_candidate_rooms":["a","b","left","right"],"cycle":["a","b","side","a"],"boundary_z4_room":"a"}

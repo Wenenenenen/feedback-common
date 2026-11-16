@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>门洞可见性调试器</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{"imports":{"three":"https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js"}}
+</script>
+</head>
+<body>
+<header>
+  <h1>门洞可见性调试器</h1>
+  <div class="toolbar">
+    <label>场景
+      <select id="sceneSelect">
+        <option value="samples/gallery.json">gallery.json（样例展厅）</option>
+        <option value="samples/invalid-portal.json">invalid-portal.json（非法门洞）</option>
+      </select>
+    </label>
+    <label class="file-label">加载 JSON<input type="file" id="fileInput" accept=".json,application/json"></label>
+    <div class="mode-switch" role="group" aria-label="主视图模式">
+      <button id="modeFull" type="button">完整场景</button>
+      <button id="modeCulled" type="button" class="active">裁剪结果</button>
+    </div>
+    <button id="exportBtn" type="button">导出报告</button>
+  </div>
+</header>
+
+<div id="errorBanner" class="error-banner" hidden></div>
+
+<main>
+  <section class="viewport-wrap">
+    <canvas id="view"></canvas>
+    <div id="hud">
+      <span id="hudRoom">房间: —</span>
+      <span id="hudMode">裁剪结果</span>
+      <span class="hud-hint">拖动旋转 · WASD 移动 · Q/E 升降 · Shift 加速</span>
+    </div>
+  </section>
+
+  <aside>
+    <section class="panel">
+      <h2>测试机位</h2>
+      <div id="cameraPresets" class="btn-row"></div>
+    </section>
+    <section class="panel">
+      <h2>门洞开关</h2>
+      <div id="portalList" class="portal-list"></div>
+    </section>
+    <section class="panel">
+      <h2>候选房间 <span id="candCount" class="badge"></span></h2>
+      <div id="candidateList" class="chips"></div>
+      <div id="truncatedNote" class="warn" hidden>路径过多已截断，候选集合退化为门洞图连通性（保守多报）</div>
+    </section>
+    <section class="panel">
+      <h2>提交面数</h2>
+      <table class="tri-table">
+        <tr><td>完整场景</td><td id="trisFull">—</td></tr>
+        <tr><td>裁剪结果</td><td id="trisCulled">—</td></tr>
+      </table>
+    </section>
+    <section class="panel grow">
+      <h2>遍历路径 <span id="pathCount" class="badge"></span></h2>
+      <div id="pathList" class="path-list"></div>
+    </section>
+    <section class="panel">
+      <h2>裁剪窗口（NDC）</h2>
+      <canvas id="ndcView" width="260" height="260"></canvas>
+    </section>
+  </aside>
+</main>
+
+<section class="id-compare">
+  <h2>物体编号对比 <span class="hint">同分辨率 · 无抗锯齿 · 无光照 · 墙体参与深度遮挡；正常可见像素应一致</span></h2>
+  <div class="id-row">
+    <figure><canvas id="idFull"></canvas><figcaption>完整场景 ID</figcaption></figure>
+    <figure><canvas id="idCulled"></canvas><figcaption>裁剪结果 ID</figcaption></figure>
+    <figure><canvas id="idDiff"></canvas><figcaption>差异（红=不一致）</figcaption></figure>
+    <div id="diffStats" class="diff-stats">—</div>
+  </div>
+</section>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>
