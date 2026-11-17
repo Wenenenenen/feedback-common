@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>级联阴影调试台</title>
+<style>
+  :root {
+    --bg: #1b1d21; --panel: #24262c; --border: #3a3d45;
+    --text: #d8dae0; --dim: #9a9ea8; --accent: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.5 "SF Mono", Consolas, "Courier New", monospace;
+    display: flex; height: 100vh; overflow: hidden;
+  }
+  #canvasWrap { position: relative; flex: 1; min-width: 0; }
+  #gl { width: 100%; height: 100%; display: block; touch-action: none; }
+  .viewLabel, .thumbLabel {
+    position: absolute; pointer-events: none;
+    background: rgba(0,0,0,.55); padding: 1px 6px; border-radius: 3px;
+    font-size: 11px; color: #fff;
+  }
+  .thumbLabel { font-size: 10px; color: #cfd3dc; }
+  #panel {
+    width: 360px; flex: none; overflow-y: auto;
+    background: var(--panel); border-left: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+  h1 { font-size: 15px; margin: 2px 0 8px; }
+  h2 {
+    font-size: 12px; margin: 14px 0 6px; color: var(--accent);
+    border-bottom: 1px solid var(--border); padding-bottom: 3px;
+  }
+  .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .row label:first-child { width: 92px; flex: none; color: var(--dim); }
+  .row input[type=range] { flex: 1; min-width: 0; }
+  .row .val { width: 52px; text-align: right; flex: none; }
+  .row select { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+  .checks label { color: var(--text); }
+  button {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; cursor: pointer; margin: 2px 4px 2px 0;
+  }
+  button:hover { border-color: var(--accent); }
+  pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 8px; margin: 6px 0; white-space: pre-wrap; word-break: break-all;
+    max-height: 220px; overflow-y: auto; font-size: 12px;
+  }
+  textarea {
+    width: 100%; height: 120px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; font: 11px/1.4 monospace;
+  }
+  .hint { color: var(--dim); font-size: 11px; margin: 4px 0; }
+</style>
+</head>
+<body>
+  <div id="canvasWrap">
+    <canvas id="gl"></canvas>
+  </div>
+  <div id="panel">
+    <h1>级联阴影调试台（3 级 CSM）</h1>
+    <div class="hint">左键拖动旋转 / 右键或 Shift 拖动平移 / 滚轮缩放 / 单击地面探针</div>
+
+    <h2>相机</h2>
+    <div class="row"><label>近面 near</label><input id="near" type="range" min="0.1" max="10" step="0.1" value="1"><span class="val" id="nearVal"></span></div>
+    <div class="row"><label>远面 far</label><input id="far" type="range" min="20" max="300" step="1" value="81"><span class="val" id="farVal"></span></div>
+    <div class="row"><label>视场角 fov</label><input id="fov" type="range" min="20" max="100" step="1" value="50"><span class="val" id="fovVal"></span></div>
+    <div class="row"><button id="resetCam">重置相机</button><button id="animBtn">播放平移测试</button></div>
+
+    <h2>级联</h2>
+    <div class="row"><label>线性/对数 λ</label><input id="lambda" type="range" min="0" max="1" step="0.01" value="0.5"><span class="val" id="lambdaVal"></span></div>
+    <div class="row"><label>阴影分辨率</label><select id="resolution">
+      <option value="256">256</option>
+      <option value="512" selected>512</option>
+      <option value="1024">1024</option>
+    </select></div>
+    <div class="row"><label>过渡带比例</label><input id="transition" type="range" min="0" max="0.2" step="0.005" value="0.1"><span class="val" id="transitionVal"></span></div>
+    <div class="row"><label>深度偏置</label><input id="bias" type="range" min="0" max="0.01" step="0.0001" value="0.0005"><span class="val" id="biasVal"></span></div>
+    <div class="row"><label>PCF</label><select id="pcf">
+      <option value="1">1×1</option>
+      <option value="3" selected>3×3</option>
+    </select></div>
+
+    <h2>显示</h2>
+    <div class="checks">
+      <label><input id="tint" type="checkbox" checked> 级联颜色</label>
+      <label><input id="frusta" type="checkbox" checked> 视锥叠加</label>
+      <label><input id="depthMaps" type="checkbox" checked> 深度图</label>
+      <label><input id="splitView" type="checkbox" checked> 稳定对比</label>
+    </div>
+    <div class="row"><label>单视图模式</label><select id="singleMode">
+      <option value="unstabilized">未稳定</option>
+      <option value="stabilized" selected>稳定</option>
+    </select></div>
+
+    <h2>探针</h2>
+    <pre id="probeOut">单击地面查看所属级联与阴影值</pre>
+
+    <h2>实时数据</h2>
+    <pre id="infoOut"></pre>
+
+    <h2>自检</h2>
+    <div class="row"><button id="selfcheckBtn">运行自检</button></div>
+    <pre id="selfcheckOut">对照 expected.json / translation-path.json 核对分段、取整边界、视锥外遮挡与 GPU 探针</pre>
+
+    <h2>导出 / 导入</h2>
+    <div class="row"><button id="exportBtn">导出当前参数</button><button id="importBtn">从文本导入</button></div>
+    <textarea id="ioText" spellcheck="false" placeholder="导出的 JSON（参数、分段距离、各级光空间矩阵、纹素世界尺寸）会出现在这里；粘贴后点导入可复现"></textarea>
+  </div>
+
+  <script src="js/mat.js"></script>
+  <script src="js/csm.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

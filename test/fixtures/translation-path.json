@@ -1,0 +1,1 @@
+{"description":"保持朝向，沿导出光空间x轴平移；以各级当前纹素尺寸独立归一化观察取整边界","offsets_in_texels":[0,0.1,0.2,0.4,0.6,1.1],"keep_orientation":true}
