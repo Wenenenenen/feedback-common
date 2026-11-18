@@ -1,0 +1,1 @@
+{"trade":{"hitFrame":4,"hp":[950,950],"act":["hitstun","hitstun"],"stun":[12,12],"idleAgainFrame":16},"block":{"blockFrame":10,"p2":{"act":"blockstun","hp":1000,"x":35300,"stun":14}},"ko":{"koFrame":266,"hits":9,"p2hp":0}}

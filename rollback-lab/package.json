@@ -1,0 +1,12 @@
+{
+  "name": "rollback-duel-netlab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "双人格斗回滚联机确定性调试台（纯整数逻辑，无浮点无随机）",
+  "scripts": {
+    "test": "node tests/run-tests.js",
+    "test:lab": "node tests/run-lab.js",
+    "serve": "python3 -m http.server 8923 --bind 127.0.0.1"
+  },
+  "engines": { "node": ">=18" }
+}
