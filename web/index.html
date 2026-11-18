@@ -1,0 +1,346 @@
+<title>HiZ 保守遮挡校验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+/* ---- 设计令牌：工程仪表台，冷灰蓝底 + 青色分析色 + 状态语义色 ---- */
+:root{
+  --bg:#0e131b; --bg-2:#151c27; --bg-3:#1c2532; --line:#283344; --line-2:#36445a;
+  --fg:#e4eaf2; --fg-dim:#93a1b5; --fg-faint:#5f6e83;
+  --accent:#3dd7c6; --accent-dim:#1d5b57; --accent-ink:#06201d;
+  --ok:#54d28a; --warn:#f2b84b; --bad:#f06c7a; --info:#6aa9ff; --violet:#b48cf0;
+  --tile:#171f2b; --shadow:0 1px 0 rgba(255,255,255,.04), 0 8px 24px rgba(0,0,0,.35);
+  --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --radius:10px;
+}
+:root[data-theme="light"]{
+  --bg:#f4f6fa; --bg-2:#ffffff; --bg-3:#eef1f7; --line:#d7deea; --line-2:#c2ccdb;
+  --fg:#17202e; --fg-dim:#51607a; --fg-faint:#8290a5;
+  --accent:#0c8f83; --accent-dim:#b8ece6; --accent-ink:#04302c;
+  --ok:#1f9d57; --warn:#c07f10; --bad:#d23b4e; --info:#2f6fd0; --violet:#7a4fd0;
+  --tile:#ffffff; --shadow:0 1px 2px rgba(20,30,50,.06), 0 10px 28px rgba(20,30,50,.08);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f4f6fa; --bg-2:#ffffff; --bg-3:#eef1f7; --line:#d7deea; --line-2:#c2ccdb;
+    --fg:#17202e; --fg-dim:#51607a; --fg-faint:#8290a5;
+    --accent:#0c8f83; --accent-dim:#b8ece6; --accent-ink:#04302c;
+    --ok:#1f9d57; --warn:#c07f10; --bad:#d23b4e; --info:#2f6fd0; --violet:#7a4fd0;
+    --tile:#ffffff; --shadow:0 1px 2px rgba(20,30,50,.06), 0 10px 28px rgba(20,30,50,.08);
+    color-scheme:light;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans);
+  font-size:14px; line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+}
+h1,h2,h3{margin:0; font-weight:650; text-wrap:balance}
+h1{font-size:18px; letter-spacing:.2px}
+h2{font-size:13px; text-transform:uppercase; letter-spacing:1.2px; color:var(--fg-dim)}
+h3{font-size:13.5px}
+code,kbd,.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+button,input,select,textarea{font-family:inherit; font-size:13px; color:var(--fg)}
+button{
+  background:var(--bg-3); border:1px solid var(--line-2); color:var(--fg);
+  border-radius:8px; padding:7px 12px; cursor:pointer; transition:border-color .15s,background .15s;
+}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:650}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent}
+button:disabled{opacity:.45; cursor:not-allowed}
+button.small{padding:4px 8px; font-size:12px; border-radius:6px}
+input,select,textarea{
+  background:var(--bg); border:1px solid var(--line-2); border-radius:8px;
+  padding:7px 9px; width:100%; min-width:0;
+}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent)}
+label{font-size:12px; color:var(--fg-dim); display:block; margin-bottom:4px}
+a{color:var(--info)}
+[hidden]{display:none!important}
+
+/* ---- 布局 ---- */
+.app{max-width:1500px; margin:0 auto; padding-block:16px 28px; display:flex; flex-direction:column; gap:14px}
+.topbar{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius);
+  padding:12px 16px; box-shadow:var(--shadow);
+}
+.topbar .sub{color:var(--fg-dim); font-size:12.5px}
+.topbar .spacer{flex:1}
+.pill{
+  display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px;
+  font-size:12px; font-weight:600; border:1px solid var(--line-2); background:var(--bg-3);
+  white-space:nowrap;
+}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.info{color:var(--info)}
+.grid{display:grid; gap:14px; min-width:0}
+.grid.main{grid-template-columns:minmax(0,1.35fr) minmax(340px,1fr)}
+.grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:1080px){.grid.main{grid-template-columns:1fr}}
+.card{
+  background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px; box-shadow:var(--shadow); min-width:0; overflow:hidden;
+}
+.card .head{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap}
+.card .head .spacer{flex:1}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end}
+.row .field{flex:1; min-width:110px}
+@media (max-width:640px){
+  .row .field{min-width:0; flex-basis:100%; max-width:none!important}
+  .row .field button{width:100%}
+}
+.stat-tiles{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px}
+@media (max-width:640px){.stat-tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{
+  background:var(--tile); border:1px solid var(--line); border-radius:9px; padding:10px 12px;
+}
+.tile .k{font-size:11px; color:var(--fg-faint); text-transform:uppercase; letter-spacing:.8px}
+.tile .v{font-family:var(--mono); font-size:19px; font-weight:650; margin-top:2px; font-variant-numeric:tabular-nums}
+.tile .v.small{font-size:15px}
+.tile.accent{border-color:var(--accent-dim)}
+.tile.accent .v{color:var(--accent)}
+
+/* ---- 画布 ---- */
+.canvas-wrap{position:relative; width:100%; overflow:hidden; border-radius:9px; border:1px solid var(--line); background:var(--bg)}
+canvas{display:block; width:100%; height:auto; image-rendering:pixelated; cursor:crosshair}
+.canvas-toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px}
+.legend{display:flex; gap:12px; flex-wrap:wrap; font-size:11.5px; color:var(--fg-dim)}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px}
+
+/* ---- 表格 ---- */
+.table-scroll{overflow:auto; max-width:100%; min-width:0; max-height:340px; border:1px solid var(--line); border-radius:8px}
+table{border-collapse:collapse; width:100%; font-size:12.5px}
+th,td{padding:7px 9px; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line)}
+th{position:sticky; top:0; background:var(--bg-3); color:var(--fg-dim); font-weight:600; z-index:1}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--bg-3)}
+tbody tr.selected{background:var(--accent-dim); color:var(--fg)}
+tbody tr.selected td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+td.num,th.num{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums}
+.badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:650}
+.badge.occluded{background:rgba(240,108,122,.16); color:var(--bad)}
+.badge.visible{background:rgba(84,210,138,.16); color:var(--ok)}
+.badge.outside{background:rgba(106,169,255,.16); color:var(--info)}
+
+/* ---- 详情/轨迹 ---- */
+.kv{display:grid; grid-template-columns:118px 1fr; gap:5px 10px; font-size:12.5px; margin:0}
+.kv dt{color:var(--fg-dim)} .kv dd{margin:0; font-family:var(--mono); font-variant-numeric:tabular-nums; word-break:break-all}
+.trace{max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:8px; font-family:var(--mono); font-size:11.5px}
+.trace .node{display:flex; gap:8px; padding:4px 9px; border-bottom:1px solid var(--line); align-items:center}
+.trace .node:last-child{border-bottom:none}
+.trace .lv{color:var(--violet); font-weight:650; min-width:34px}
+.trace .coord{color:var(--fg-dim); min-width:74px}
+.trace .val{margin-left:auto; color:var(--accent)}
+.trace .node.used{background:rgba(61,215,198,.08)}
+.trace .tag{font-size:10px; padding:1px 6px; border-radius:4px; background:var(--accent-dim); color:var(--accent-ink); font-weight:700}
+.reason-box{border-radius:8px; padding:10px 12px; font-size:12.5px; border:1px solid var(--line-2); background:var(--bg-3)}
+.reason-box.occluded{border-color:var(--bad); background:rgba(240,108,122,.1)}
+.reason-box.visible{border-color:var(--ok); background:rgba(84,210,138,.09)}
+.reason-box.outside{border-color:var(--info); background:rgba(106,169,255,.09)}
+
+/* ---- 金字塔层选择 ---- */
+.level-tabs{display:flex; gap:6px; flex-wrap:wrap}
+.level-tabs button{padding:5px 10px; font-size:12px}
+.level-tabs button.active{background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:650}
+.seg{display:inline-flex; border:1px solid var(--line-2); border-radius:8px; overflow:hidden}
+.seg button{border:none; border-radius:0; padding:6px 12px}
+.seg button.active{background:var(--accent); color:var(--accent-ink); font-weight:650}
+
+/* ---- 消息 ---- */
+.msg{border-radius:8px; padding:10px 12px; font-size:12.5px; border:1px solid; margin-top:10px}
+.msg.error{border-color:var(--bad); background:rgba(240,108,122,.1); color:var(--bad)}
+.msg.ok{border-color:var(--ok); background:rgba(84,210,138,.1); color:var(--ok)}
+.msg.warn{border-color:var(--warn); background:rgba(242,184,75,.1); color:var(--warn)}
+.msg ul{margin:6px 0 0; padding-left:18px}
+.toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  background:var(--bg-3); border:1px solid var(--line-2); color:var(--fg);
+  padding:10px 18px; border-radius:999px; box-shadow:var(--shadow); z-index:50; font-size:13px;
+  opacity:0; transition:opacity .2s; pointer-events:none;
+}
+.toast.show{opacity:1}
+.muted{color:var(--fg-dim)} .faint{color:var(--fg-faint)}
+.mono-block{font-family:var(--mono); font-size:11.5px; white-space:pre; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; max-height:200px}
+.file-hint{font-size:11.5px; color:var(--fg-faint); margin-top:5px}
+input[type=file]{padding:6px; background:var(--bg-3)}
+input[type=checkbox]{width:auto}
+.inline-fields{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+.inline-fields input{padding:6px 8px}
+.switch-row{display:flex; gap:14px; flex-wrap:wrap; align-items:center}
+.switch-row label{display:flex; align-items:center; gap:6px; margin:0; color:var(--fg)}
+.gap{height:2px}
+::selection{background:var(--accent-dim)}
+.scroll-thin::-webkit-scrollbar{height:8px;width:8px}
+.scroll-thin::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}
+</style>
+
+<div class="app">
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div>
+      <h1>HiZ 保守遮挡校验台</h1>
+      <div class="sub">自构深度金字塔 · 节点精确分解查询 · 逐像素穷举对照（不使用任何现成剔除器）</div>
+    </div>
+    <div class="spacer"></div>
+    <span id="modePill" class="pill info"><span class="dot"></span><span id="modeText">—</span></span>
+    <span id="consistencyPill" class="pill ok" hidden><span class="dot"></span>金字塔=穷举</span>
+    <div class="seg" role="group" aria-label="主题">
+      <button id="themeSys" class="active small">系统</button>
+      <button id="themeLight" class="small">浅色</button>
+      <button id="themeDark" class="small">深色</button>
+    </div>
+  </header>
+
+  <!-- 输入与控制 -->
+  <section class="card">
+    <div class="head"><h2>输入</h2><span class="spacer"></span>
+      <span class="muted" id="datasetName">未加载</span>
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:230px">
+        <label>内置样例</label>
+        <select id="sampleSelect">
+          <option value="">— 选择样例 —</option>
+          <option value="odd-standard">odd-standard（7×5 普通深度）</option>
+          <option value="odd-reversed">odd-reversed（7×5 反向深度）</option>
+          <option value="stress">stress（513×385 · 2000 盒）</option>
+          <option value="invalid-depth">invalid-depth（含越界值，应报错）</option>
+        </select>
+      </div>
+      <div class="field" style="max-width:300px">
+        <label>导入 JSON（width/height/depth/mode/view_projection/boxes）</label>
+        <input type="file" id="fileInput" accept=".json,application/json">
+        <div class="file-hint">单文件，深度行优先浮点；尺寸上限 513×385，盒上限 2000</div>
+      </div>
+      <div class="field" style="max-width:130px">
+        <label>&nbsp;</label>
+        <button id="saveInputBtn" class="ghost">保存输入</button>
+      </div>
+      <div class="field" style="max-width:130px">
+        <label>&nbsp;</label>
+        <button id="loadSavedBtn" class="ghost">重载输入</button>
+      </div>
+      <div class="field" style="max-width:150px">
+        <label>&nbsp;</label>
+        <button id="exportBtn" class="primary">导出判定 JSON</button>
+      </div>
+    </div>
+    <div id="inputMsg"></div>
+  </section>
+
+  <!-- 统计 -->
+  <section class="stat-tiles" id="statTiles">
+    <div class="tile"><div class="k">总盒数</div><div class="v" id="stTotal">—</div></div>
+    <div class="tile"><div class="k">occluded / visible / outside</div><div class="v small" id="stVerdicts">—</div></div>
+    <div class="tile accent"><div class="k">金字塔节点访问</div><div class="v" id="stPyr">—</div></div>
+    <div class="tile"><div class="k">穷举像素读取（对照）</div><div class="v" id="stExh">—</div></div>
+  </section>
+
+  <div class="grid main">
+    <!-- 左：金字塔查看器 -->
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+      <section class="card">
+        <div class="head">
+          <h2>深度金字塔</h2><span class="spacer"></span>
+          <div class="level-tabs" id="levelTabs"></div>
+        </div>
+        <div class="canvas-toolbar">
+          <div class="seg" id="toolSeg">
+            <button data-tool="inspect" class="active">查看</button>
+            <button data-tool="paint">绘制孔洞</button>
+            <button data-tool="erase">擦除孔洞</button>
+          </div>
+          <button id="clearHolesBtn" class="small ghost">清除全部孔洞</button>
+          <span class="muted" id="paintHint" hidden>绘制=写入清屏值（普通 1.0 / 反向 0.0），松开即重算</span>
+          <span class="spacer" style="flex:1"></span>
+          <span class="muted mono" id="hoverInfo"></span>
+        </div>
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="pyrCanvas"></canvas>
+        </div>
+        <div class="legend" style="margin-top:9px">
+          <span><i style="background:var(--accent)"></i>查询访问节点</span>
+          <span><i style="background:var(--violet)"></i>消费节点（完全包含）</span>
+          <span><i style="background:var(--warn)"></i>投影矩形边界</span>
+          <span><i style="background:var(--bad)"></i>孔洞（清屏值）</span>
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:7px" id="pyrMeta"></div>
+      </section>
+
+      <!-- 盒列表 -->
+      <section class="card">
+        <div class="head">
+          <h2>盒判定列表</h2><span class="spacer"></span>
+          <input id="boxFilter" style="max-width:200px" placeholder="按 id 过滤…">
+          <select id="verdictFilter" style="max-width:140px">
+            <option value="">全部判定</option>
+            <option value="occluded">occluded</option>
+            <option value="visible">visible</option>
+            <option value="outside">outside</option>
+          </select>
+        </div>
+        <div class="table-scroll scroll-thin">
+          <table>
+            <thead><tr><th>id</th><th>判定</th><th class="num">近深度</th><th class="num">矩形聚合</th>
+            <th class="num">穷举值</th><th class="num">访问</th><th class="num">像素</th><th>原因</th></tr></thead>
+            <tbody id="boxTbody"></tbody>
+          </table>
+        </div>
+        <div class="muted" id="rowCapNote" style="padding:7px 9px 0;font-size:11.5px"></div>
+      </section>
+    </div>
+
+    <!-- 右：详情与编辑 -->
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+      <section class="card">
+        <div class="head"><h2>选中盒联动</h2></div>
+        <div id="boxDetail"><div class="muted">在左侧列表或画布投影上选择一个盒</div></div>
+      </section>
+
+      <section class="card" id="editCard" hidden>
+        <div class="head"><h2>编辑盒 AABB</h2><span class="spacer"></span>
+          <button id="applyBoxBtn" class="small primary">应用并重算</button>
+        </div>
+        <div class="switch-row" style="margin-bottom:8px">
+          <label>min</label>
+        </div>
+        <div class="inline-fields" id="minFields">
+          <input type="number" step="any" id="minX"><input type="number" step="any" id="minY"><input type="number" step="any" id="minZ">
+        </div>
+        <div class="switch-row" style="margin:10px 0 8px"><label>max</label></div>
+        <div class="inline-fields" id="maxFields">
+          <input type="number" step="any" id="maxX"><input type="number" step="any" id="maxY"><input type="number" step="any" id="maxZ">
+        </div>
+        <div id="editMsg"></div>
+      </section>
+
+      <section class="card">
+        <div class="head"><h2>查询轨迹（金字塔节点）</h2>
+          <span class="spacer"></span><span class="muted mono" id="traceCount"></span></div>
+        <div class="trace scroll-thin" id="traceBox"><div class="muted" style="padding:10px">深度查询发生后显示访问的 level/x/y/value</div></div>
+      </section>
+
+      <section class="card">
+        <div class="head"><h2>规则与校验说明</h2></div>
+        <div class="muted" style="font-size:12px;line-height:1.65">
+          金字塔每轴 ⌈½⌉ 减半、仅归约存在子节点；普通深度向上取 <b>max</b>，反向取 <b>min</b>。
+          盒八角先做同侧 outside 与近裁面保护（<code>w≤1e-9</code>、跨近面直接 visible 且不查深度）；
+          透视除法后矩形 <code>[floor(min),ceil(max))</code> 裁剪到图像，普通仅
+          <code>near &gt; max+1e-6</code>、反向仅 <code>near &lt; min-1e-6</code> 判 occluded，等深度保留 visible。
+          金字塔用节点精确分解（边界下降到叶），聚合值与矩形逐像素穷举逐盒对照。
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="samples.js"></script>
+<script src="app.js"></script>
