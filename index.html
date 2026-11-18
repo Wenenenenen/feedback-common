@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>索引色调色板工作室</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>索引色调色板工作室</h1>
+  <div class="actions">
+    <input type="file" id="fileInput" accept="image/png" multiple hidden>
+    <button id="importBtn">导入 PNG（≤8 张，≤512×512）</button>
+    <button id="exportBtn" disabled>导出 ZIP</button>
+    <button id="clearBtn">清空</button>
+  </div>
+</header>
+
+<section id="controls">
+  <label>色数 K（2–256，含透明槽）
+    <input type="range" id="colorCount" min="2" max="256" value="16">
+    <input type="number" id="colorCountNum" min="2" max="256" value="16">
+  </label>
+  <label><input type="checkbox" id="dither" checked> 蛇形误差扩散抖动</label>
+  <span id="status"></span>
+</section>
+
+<main>
+  <aside id="thumbs"></aside>
+  <section id="viewer">
+    <div id="tabs">
+      <button data-view="original">原图</button>
+      <button data-view="result" class="active">结果</button>
+      <button data-view="heat">误差热图</button>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="canvas" width="1" height="1"></canvas>
+    </div>
+    <div id="canvasInfo"></div>
+    <h3>共用调色板（槽 0 为透明）</h3>
+    <div id="paletteStrip"></div>
+    <div id="usage"></div>
+  </section>
+</main>
+
+<script src="js/ips-core.js"></script>
+<script src="js/ips-zip.js"></script>
+<script src="js/ips-png.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
