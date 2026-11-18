@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Node 依赖与本地工作目录（样例解压、截图、参照数据、venv）
+node_modules/
+package-lock.json
+.work/

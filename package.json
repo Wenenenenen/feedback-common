@@ -1,0 +1,12 @@
+{
+  "name": "heat-surface-ruler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/run-tests.mjs .work/samples-extract",
+    "e2e": "node test/e2e.mjs",
+    "build": "node test/build-artifact.mjs",
+    "smoke": "node test/artifact-smoke.mjs"
+  }
+}

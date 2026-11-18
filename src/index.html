@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>热方法曲面测距台</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <aside id="panel">
+      <header>
+        <h1>热方法曲面测距台</h1>
+        <p class="subtitle">Heat Method for Geodesic Distance · 手工组装离散算子</p>
+      </header>
+
+      <section class="card">
+        <h2>1 · 网格导入</h2>
+        <input type="file" id="fileInput" accept=".json,.obj,.ply" />
+        <p class="hint">支持样例 JSON / OBJ / ASCII PLY，最多 10000 面。可再载入第二份同拓扑网格做对比。</p>
+        <div class="row">
+          <button id="loadSampleBtn" class="secondary">载入内置平面样例</button>
+        </div>
+        <div id="meshInfo" class="kv"></div>
+        <div id="rejectMsg" class="error hidden"></div>
+        <div id="excludedBox" class="warnbox hidden">
+          <strong>已排除退化面 <span id="excludedCount"></span> 个：</strong>
+          <ul id="excludedList"></ul>
+        </div>
+        <div id="obtuseBox" class="infobox hidden">
+          钝角三角形 <span id="obtuseCount"></span> 个（负 cot 权重已保留，仍参与计算）；边界边 <span id="boundaryCount"></span> 条。
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2 · 源点与热时间</h2>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="multiMode" /> 多源模式（可累加选点）</label>
+        </div>
+        <div class="row">
+          <button id="clearSourcesBtn" class="secondary">清空源点</button>
+          <span id="sourceList" class="sourcelist"></span>
+        </div>
+        <label class="slider">
+          <span>热时间 τ = <b id="tauVal">1.00</b> <small>（范围 0.1–10）</small></span>
+          <input type="range" id="tauSlider" min="0.1" max="10" step="0.05" value="1" />
+        </label>
+        <p class="hint">t = τ ×（分量平均有效边长）²。移动源点复用热方程分解；改 τ 只重建热分解。</p>
+      </section>
+
+      <section class="card">
+        <h2>3 · 等值线</h2>
+        <label class="slider">
+          <span>间距 = <b id="isoVal">1.00</b></span>
+          <input type="range" id="isoSlider" min="0.05" max="5" step="0.05" value="1" />
+        </label>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="isoToggle" checked /> 显示等值线</label>
+          <label class="check"><input type="checkbox" id="meshToggle" checked /> 显示网格线</label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4 · 同拓扑对比</h2>
+        <input type="file" id="fileInputB" accept=".json,.obj,.ply" />
+        <div id="meshBInfo" class="kv"></div>
+        <div class="row">
+          <button id="compareBtn" disabled>计算距离场差异</button>
+          <button id="clearCompareBtn" class="secondary" disabled>退出对比</button>
+        </div>
+        <div id="compareResult" class="kv"></div>
+      </section>
+
+      <section class="card">
+        <h2>5 · 导出</h2>
+        <div class="row wrap">
+          <button id="exportDistBtn" class="secondary" disabled>顶点距离 JSON</button>
+          <button id="exportIsoBtn" class="secondary" disabled>等值线段 JSON</button>
+          <button id="exportDiagBtn" class="secondary" disabled>计算诊断 JSON</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>计算诊断</h2>
+        <div id="diagBox" class="diag">尚未求解。</div>
+      </section>
+
+      <footer>
+        <div id="legend" class="legend hidden">
+          <div class="legend-bar"></div>
+          <div class="legend-labels"><span>0</span><span id="legendMax">max</span></div>
+          <div class="legend-note">灰色 = 不可达分量</div>
+        </div>
+      </footer>
+    </aside>
+
+    <main id="viewport">
+      <canvas id="gl"></canvas>
+      <div id="tooltip" class="tooltip hidden"></div>
+      <div id="emptyHint" class="empty-hint">导入网格后在此点击顶点选择源点 · 左键旋转 / 滚轮缩放 / 右键平移</div>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
