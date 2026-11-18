@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解压的样例与导出产物
+samples/extracted/
+out/
+*.log

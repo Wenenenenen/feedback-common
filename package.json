@@ -1,0 +1,15 @@
+{
+  "name": "bayer-demosaic-bench",
+  "version": "1.0.0",
+  "description": "拜耳 RAW 去马赛克对比台：双线性 / Hamilton-Adams 边缘自适应，浏览器实时重算，Node 校验与批量导出",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "verify": "node tools/verify.js",
+    "serve": "node tools/serve.js",
+    "export": "node tools/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

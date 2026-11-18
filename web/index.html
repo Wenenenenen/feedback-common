@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拜耳 RAW 去马赛克对比台</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>拜耳去马赛克对比台</strong>
+    <span class="sub">双线性 / Hamilton-Adams · 16 位管线 · 镜像边界不裁剪</span>
+  </div>
+  <div class="controls">
+    <label>样例
+      <select id="caseSelect"></select>
+    </label>
+    <label>算法
+      <select id="algoSelect">
+        <option value="bilinear">双线性（约定基准）</option>
+        <option value="hamiltonAdams">Hamilton-Adams 边缘自适应</option>
+      </select>
+    </label>
+    <label class="file-label">打开本地 RAW
+      <input type="file" id="rawFile" accept=".raw">
+    </label>
+    <button id="exportPngBtn" disabled>导出 16 位 PNG</button>
+    <button id="exportJsonBtn" disabled>导出指标 JSON</button>
+  </div>
+</header>
+
+<section class="params" id="paramsPanel">
+  <div class="param-group">
+    <h4>白平衡增益（改后自动重算）</h4>
+    <label>R <input type="number" id="wbR" step="0.01" min="0"></label>
+    <label>G <input type="number" id="wbG" step="0.01" min="0"></label>
+    <label>B <input type="number" id="wbB" step="0.01" min="0"></label>
+    <button id="resetWbBtn" class="ghost">恢复样例值</button>
+  </div>
+  <div class="param-group">
+    <h4>RAW 参数（只读，来自文件头）</h4>
+    <div id="rawMeta" class="meta-grid"></div>
+  </div>
+  <div class="param-group">
+    <h4>显示</h4>
+    <label>通道
+      <select id="channelSelect">
+        <option value="-1">RGB 合成</option>
+        <option value="0">仅 R</option>
+        <option value="1">仅 G</option>
+        <option value="2">仅 B</option>
+      </select>
+    </label>
+    <label>放大
+      <select id="zoomSelect">
+        <option value="1">1×</option>
+        <option value="2" selected>2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+      </select>
+    </label>
+  </div>
+</section>
+
+<section class="metrics" id="metricsPanel">
+  <div class="metric"><span>PSNR（vs truth）</span><strong id="psnrOverall">—</strong></div>
+  <div class="metric"><span>R 通道</span><strong id="psnrR">—</strong></div>
+  <div class="metric"><span>G 通道</span><strong id="psnrG">—</strong></div>
+  <div class="metric"><span>B 通道</span><strong id="psnrB">—</strong></div>
+  <div class="metric"><span>计算耗时</span><strong id="elapsed">—</strong></div>
+  <div class="metric hint" id="statusLine">正在加载样例…</div>
+</section>
+
+<main class="workspace">
+  <div class="nav-pane">
+    <h4>全图导航（点击/拖拽移动放大区域）</h4>
+    <div class="nav-wrap">
+      <canvas id="navCanvas"></canvas>
+      <div id="navRect" class="nav-rect"></div>
+    </div>
+  </div>
+
+  <div class="zoom-pane">
+    <div class="zoom-col">
+      <h4 id="curTitle">当前算法结果</h4>
+      <div class="canvas-scroll" id="curScroll">
+        <canvas id="curCanvas"></canvas>
+      </div>
+    </div>
+    <div class="zoom-col">
+      <h4>参考 truth（理想画面）</h4>
+      <div class="canvas-scroll" id="refScroll">
+        <canvas id="refCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+</main>
+
+<section class="cfa-pane">
+  <h4>原始 CFA 采样位置（白平衡后、去马赛克前；每个像素只显示它实际采样的颜色）</h4>
+  <div class="cfa-controls">
+    <span>排列：<strong id="cfaName">—</strong></span>
+    <span class="legend"><i class="swatch r"></i>R 采样点</span>
+    <span class="legend"><i class="swatch g"></i>G 采样点</span>
+    <span class="legend"><i class="swatch b"></i>B 采样点</span>
+    <label class="ghost-check"><input type="checkbox" id="gridToggle"> 放大 ≥4× 时叠加采样格</label>
+  </div>
+  <div class="canvas-scroll cfa-scroll" id="cfaScroll">
+    <canvas id="cfaCanvas"></canvas>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>PSNR 定义：10·log₁₀(65535²/MSE)，三通道全部像素；边界镜像 −1→1、w→w−2，输出尺寸与 RAW 相同，不做裁剪。</span>
+</footer>
+
+<script type="module" src="/web/app.js"></script>
+</body>
+</html>
