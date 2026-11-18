@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>切线空间法线检查器</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>切线空间法线检查器</h1>
+  <div class="toolbar">
+    <label class="btn">导入场景 JSON<input type="file" id="fileScene" accept=".json" hidden></label>
+    <label class="btn">导入法线 PNG<input type="file" id="filePNG" accept=".png" hidden></label>
+    <button id="btnExport" class="btn">导出结果 JSON</button>
+    <button id="btnSelfTest" class="btn">自检（对照 reference）</button>
+  </div>
+  <div class="toolbar cases">
+    <span>样例：</span>
+    <button data-case="plane">plane</button>
+    <button data-case="mirror">mirror</button>
+    <button data-case="mirror-instance">mirror-instance</button>
+    <button data-case="zero-uv">zero-uv</button>
+    <button data-case="cancelling">cancelling</button>
+    <button data-case="angle-weight">angle-weight</button>
+    <button data-case="shared-mirror">shared-mirror</button>
+    <button data-case="invalid-normal">invalid-normal</button>
+  </div>
+</header>
+
+<main>
+  <section class="left">
+    <canvas id="view3d"></canvas>
+    <div class="row modes">
+      <span>着色：</span>
+      <label><input type="radio" name="shademode" value="0" checked>几何法线</label>
+      <label><input type="radio" name="shademode" value="1">切线法线</label>
+      <label><input type="radio" name="shademode" value="2">手性 h</label>
+      <label><input type="radio" name="shademode" value="3">UV 手性</label>
+      <span class="hint">拖动旋转 / Shift+拖动平移 / 滚轮缩放 / 点击选角</span>
+    </div>
+    <fieldset class="trs">
+      <legend>实例变换（平移 / 旋转° X→Y→Z / 非零缩放）</legend>
+      <div class="grid">
+        <span></span><span>X</span><span>Y</span><span>Z</span>
+        <span>平移</span>
+        <input id="tx" type="number" step="0.1" value="0">
+        <input id="ty" type="number" step="0.1" value="0">
+        <input id="tz" type="number" step="0.1" value="0">
+        <span>旋转</span>
+        <input id="rx" type="number" step="5" value="0">
+        <input id="ry" type="number" step="5" value="0">
+        <input id="rz" type="number" step="5" value="0">
+        <span>缩放</span>
+        <input id="sx" type="number" step="0.1" value="1">
+        <input id="sy" type="number" step="0.1" value="1">
+        <input id="sz" type="number" step="0.1" value="1">
+      </div>
+      <div class="row">
+        <button id="btnResetTRS">重置</button>
+        <button id="btnMirrorX">镜像 X（缩放取负）</button>
+        <span id="detInfo" class="hint"></span>
+      </div>
+    </fieldset>
+  </section>
+
+  <section class="right">
+    <div class="panel">
+      <h2>UV 视图（蓝=正向，橙=镜像；红箭头 +u，绿箭头 +v）</h2>
+      <canvas id="uvview"></canvas>
+    </div>
+    <div class="panel">
+      <h2>选中角 TBN（原始 → 实例后）</h2>
+      <table id="cornerInfo"></table>
+    </div>
+    <div class="panel">
+      <h2>法线贴图与重算预览</h2>
+      <div class="row previews">
+        <figure><canvas id="rawmap"></canvas><figcaption>原始贴图</figcaption></figure>
+        <figure><canvas id="preview"></canvas><figcaption>当前 TBN 重算</figcaption></figure>
+        <figure><canvas id="previewFlip"></canvas><figcaption>h 取反对比</figcaption></figure>
+      </div>
+      <div id="sampleInfo" class="hint"></div>
+    </div>
+    <div class="panel">
+      <h2>诊断</h2>
+      <div id="diagList"></div>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

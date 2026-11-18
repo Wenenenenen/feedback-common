@@ -1,0 +1,1 @@
+{"plane":{"T":[1,0,0],"h":1},"mirror":{"T":[-1,0,0],"h":-1},"mirror-instance":{"T":[-1,0,0],"N":[0,0,1],"h":-1},"zero-uv":{"T":[1,0,0],"h":1},"cancelling":{"T":[1,0,0],"h":1,"fallback_corners":[0]}}
