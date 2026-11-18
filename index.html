@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>漫反射 MIS 路径追踪参考</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>漫反射路径追踪 MIS 参考</h1>
+  <p class="sub">纯 BRDF / 纯灯光直接采样 / 幂启发式 MIS 三模式对照 · 64×64 · 最多 8 次散射 · 固定种子可复现</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>场景</h2>
+    <div class="row">
+      <label>内置样例
+        <select id="sampleSelect"></select>
+      </label>
+      <button id="loadSampleBtn">加载样例</button>
+      <label class="file">或导入 JSON
+        <input type="file" id="fileInput" accept=".json,application/json">
+      </label>
+    </div>
+    <div id="sceneInfo" class="info">未加载场景</div>
+  </section>
+
+  <section class="panel">
+    <h2>渲染</h2>
+    <div class="row wrap">
+      <fieldset id="modeGroup">
+        <legend>采样模式</legend>
+        <label><input type="radio" name="mode" value="brdf"> 纯 BRDF</label>
+        <label><input type="radio" name="mode" value="light"> 纯灯光直接</label>
+        <label><input type="radio" name="mode" value="mis" checked> MIS</label>
+      </fieldset>
+      <label>每像素样本 (1–1024)
+        <input type="number" id="sppInput" min="1" max="1024" value="64">
+      </label>
+      <label>最大散射次数 (0–8)
+        <input type="number" id="depthInput" min="0" max="8" value="8">
+      </label>
+      <label>种子
+        <input type="number" id="seedInput" min="0" value="1">
+      </label>
+    </div>
+    <div class="row">
+      <button id="startBtn" class="primary">开始</button>
+      <button id="pauseBtn" disabled>暂停</button>
+      <button id="resumeBtn" disabled>续算</button>
+      <button id="cancelBtn" disabled>取消</button>
+      <span id="progressText" class="info"></span>
+    </div>
+    <div class="views">
+      <figure>
+        <canvas id="imageCanvas" width="64" height="64"></canvas>
+        <figcaption>辐射亮度(L/(1+L) + sRGB 预览)</figcaption>
+      </figure>
+      <figure>
+        <canvas id="varCanvas" width="64" height="64"></canvas>
+        <figcaption>每像素亮度样本方差(对数热度)</figcaption>
+      </figure>
+    </div>
+    <div id="statsBox" class="stats"></div>
+    <div class="row">
+      <button id="exportJsonBtn" disabled>导出浮点 JSON</button>
+      <button id="exportPngBtn" disabled>导出 PNG</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>直接光探针</h2>
+    <p class="hint">只估计指定点无额外反弹的直接光(按功率选灯 + 面积采样)。</p>
+    <div class="row wrap">
+      <label>点 <input id="probePoint" size="18" value="0, 0, 0"></label>
+      <label>法线 <input id="probeNormal" size="12" value="0, 0, 1"></label>
+      <label>ρ <input id="probeRho" size="14" value="0.6, 0.6, 0.6"></label>
+      <label>样本数 <input type="number" id="probeSamples" min="1" value="100000"></label>
+      <label>种子 <input type="number" id="probeSeed" min="0" value="42"></label>
+      <button id="probeBtn">运行探针</button>
+    </div>
+    <div id="probeResult" class="info"></div>
+  </section>
+</main>
+
+<footer>
+  <p>求交、余弦半球采样、按功率选灯、面积↔立体角 PDF 换算与幂启发式 MIS 均为本页自实现(js/engine.js),未调用现成路径追踪器。</p>
+</footer>
+
+<script src="js/engine.js"></script>
+<script src="js/samples.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
