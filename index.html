@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>骨骼动作混合预览</title>
+<style>
+  :root { --bg:#14171c; --panel:#1d222b; --line:#2c333f; --fg:#d7dde6; --dim:#8a94a3; --acc:#4da3ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 "Segoe UI",system-ui,sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  header { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 8px 0 0; }
+  button, select, input[type=file]::file-selector-button { background:#2a3140; color:var(--fg); border:1px solid var(--line); border-radius:5px; padding:4px 10px; cursor:pointer; font-size:12px; }
+  button:hover { background:#35405a; }
+  input[type=number] { width:70px; background:#12151a; color:var(--fg); border:1px solid var(--line); border-radius:4px; padding:3px 6px; }
+  label { color:var(--dim); }
+  main { display:flex; flex:1; min-height:0; }
+  #view { flex:1; position:relative; min-width:0; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+  #hud { position:absolute; left:10px; top:8px; color:var(--dim); font-size:12px; pointer-events:none; white-space:pre; text-shadow:0 1px 2px #000; }
+  #panel { width:380px; overflow-y:auto; background:var(--panel); border-left:1px solid var(--line); padding:10px 12px; }
+  section { margin-bottom:14px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 6px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  .row { display:flex; align-items:center; gap:8px; margin:4px 0; flex-wrap:wrap; }
+  .row label { min-width:88px; }
+  input[type=range] { flex:1; accent-color:var(--acc); }
+  #timeline { width:100%; }
+  .bone-row { display:flex; align-items:center; gap:6px; padding:2px 4px; border-radius:4px; cursor:pointer; }
+  .bone-row:hover { background:#262d3a; }
+  .bone-row.sel { background:#2c3a55; }
+  .bone-row .name { width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bone-row .val { width:34px; text-align:right; color:var(--dim); }
+  table.mat { border-collapse:collapse; font-family:ui-monospace,Consolas,monospace; font-size:11px; margin:4px 0; }
+  table.mat td { border:1px solid var(--line); padding:2px 7px; text-align:right; min-width:64px; }
+  #msg { font-size:12px; white-space:pre-wrap; }
+  #msg .err { color:#ff7b72; }
+  #msg .ok { color:#7ee787; }
+  .mono { font-family:ui-monospace,Consolas,monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>骨骼动作混合预览</h1>
+  <input type="file" id="file" accept=".json" style="max-width:200px">
+  <select id="preset">
+    <option value="">内置样例…</option>
+    <option value="two-bone">two-bone（参考根位移）</option>
+    <option value="antipodal">antipodal（对极点四元数）</option>
+    <option value="blend">blend（淡化+速度+遮罩）</option>
+    <option value="invalid-cycle">invalid-cycle（应报错）</option>
+    <option value="invalid-weight">invalid-weight（应报错）</option>
+  </select>
+  <button id="selftest">运行自检</button>
+  <span id="loadstat" style="color:var(--dim)"></span>
+</header>
+<main>
+  <div id="view">
+    <canvas id="cv"></canvas>
+    <div id="hud"></div>
+  </div>
+  <div id="panel">
+    <section>
+      <h2>播放</h2>
+      <div class="row">
+        <button id="play">▶ 播放</button>
+        <button id="prev">◀ 一帧</button>
+        <button id="next">一帧 ▶</button>
+        <label><input type="checkbox" id="loop" checked> 循环</label>
+        <label><input type="checkbox" id="follow" checked> 跟随根</label>
+      </div>
+      <div class="row">
+        <label>时间轴长度(帧)</label><input type="number" id="maxframe" value="300" min="1" step="1">
+        <label>帧</label><input type="number" id="framebox" value="0" min="0" step="1">
+      </div>
+      <input type="range" id="timeline" min="0" max="300" value="0" step="1">
+      <div class="row mono" id="timeinfo" style="color:var(--dim)"></div>
+    </section>
+    <section>
+      <h2>混合参数</h2>
+      <div class="row"><label>start_frame</label><input type="number" id="start_frame" step="1" value="0">
+        <label>fade_frames</label><input type="number" id="fade_frames" step="1" min="0" value="30"></div>
+      <div class="row"><label>speed_a</label><input type="number" id="speed_a" step="0.05" min="0" value="1">
+        <label>speed_b</label><input type="number" id="speed_b" step="0.05" min="0" value="1"></div>
+    </section>
+    <section>
+      <h2>骨骼遮罩（点击行选中骨骼）</h2>
+      <div id="bones"></div>
+    </section>
+    <section>
+      <h2>选中骨骼矩阵</h2>
+      <div id="bonename" style="color:var(--dim)">未选中</div>
+      <div>局部矩阵（混合后，根已剥离水平位移）</div>
+      <table class="mat" id="localmat"></table>
+      <div>世界矩阵</div>
+      <table class="mat" id="worldmat"></table>
+    </section>
+    <section>
+      <h2>导出</h2>
+      <div class="row"><button id="savecfg">保存混合配置 JSON</button></div>
+      <div class="row">
+        <label>帧区间</label>
+        <input type="number" id="expfrom" value="0" step="1" min="0"> —
+        <input type="number" id="expto" value="120" step="1" min="0">
+        <button id="export">导出姿势+根位移</button>
+      </div>
+    </section>
+    <section>
+      <h2>消息</h2>
+      <div id="msg"></div>
+    </section>
+  </div>
+</main>
+
+<script src="engine.js"></script>
+<script>
+'use strict';
+const E = window.SkeletalEngine;
+
+/* ---------- 内置样例（来自 samples/skeletal-track-mixer-cases.zip） ---------- */
+const PRESETS = {
+  "two-bone": {"bones":[{"parent":-1,"t":[0,0,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},{"parent":0,"t":[0,1,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,-1,0,0,1,0,0,0,0,1]}],"mesh":{"positions":[[-0.2,0,0],[0.2,0,0],[0.2,2,0],[-0.2,2,0]],"triangles":[[0,1,2],[0,2,3]],"joints":[[0],[0],[1],[1]],"weights":[[1],[1],[1],[1]]},"clips":[{"duration":2,"tracks":[{"bone":0,"path":"t","times":[0,2],"values":[[0,0,0],[2,0,0]],"mode":"LINEAR"},{"bone":1,"path":"r","times":[0,1,2],"values":[[0,0,0,1],[0,0,1,0],[0,0,0,1]],"mode":"LINEAR"}]},{"duration":1,"tracks":[{"bone":0,"path":"t","times":[0,1],"values":[[0,0,0],[0,0,2]],"mode":"LINEAR"},{"bone":1,"path":"s","times":[0,0.5,1],"values":[[1,1,1],[2,1,0.5],[1,1,1]],"mode":"STEP"}]}],"config":{"start_frame":10000,"fade_frames":30,"speed_a":1,"speed_b":1,"mask":[1,1]}},
+  "antipodal": {"bones":[{"parent":-1,"t":[0,0,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},{"parent":0,"t":[0,1,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,-1,0,0,1,0,0,0,0,1]}],"mesh":{"positions":[[-0.2,0,0],[0.2,0,0],[0.2,2,0],[-0.2,2,0]],"triangles":[[0,1,2],[0,2,3]],"joints":[[0],[0],[1],[1]],"weights":[[1],[1],[1],[1]]},"clips":[{"duration":2,"tracks":[{"bone":0,"path":"t","times":[0,2],"values":[[0,0,0],[2,0,0]],"mode":"LINEAR"},{"bone":1,"path":"r","times":[0,2],"values":[[0,0,0,1],[0,0,0,-1]],"mode":"LINEAR"}]},{"duration":1,"tracks":[{"bone":0,"path":"t","times":[0,1],"values":[[0,0,0],[0,0,2]],"mode":"LINEAR"},{"bone":1,"path":"s","times":[0,0.5,1],"values":[[1,1,1],[2,1,0.5],[1,1,1]],"mode":"STEP"}]}],"config":{"start_frame":10000,"fade_frames":30,"speed_a":1,"speed_b":1,"mask":[1,1]}},
+  "blend": {"bones":[{"parent":-1,"t":[0,0,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},{"parent":0,"t":[0,1,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,-1,0,0,1,0,0,0,0,1]}],"mesh":{"positions":[[-0.2,0,0],[0.2,0,0],[0.2,2,0],[-0.2,2,0]],"triangles":[[0,1,2],[0,2,3]],"joints":[[0],[0],[1],[1]],"weights":[[1],[1],[1],[1]]},"clips":[{"duration":2,"tracks":[{"bone":0,"path":"t","times":[0,2],"values":[[0,0,0],[2,0,0]],"mode":"LINEAR"},{"bone":1,"path":"r","times":[0,1,2],"values":[[0,0,0,1],[0,0,1,0],[0,0,0,1]],"mode":"LINEAR"}]},{"duration":1,"tracks":[{"bone":0,"path":"t","times":[0,1],"values":[[0,0,0],[0,0,2]],"mode":"LINEAR"},{"bone":1,"path":"s","times":[0,0.5,1],"values":[[1,1,1],[2,1,0.5],[1,1,1]],"mode":"STEP"}]}],"config":{"start_frame":60,"fade_frames":45,"speed_a":1.25,"speed_b":0.75,"mask":[0.5,1]}},
+  "invalid-cycle": {"bones":[{"parent":1,"t":[0,0,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},{"parent":0,"t":[0,1,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,-1,0,0,1,0,0,0,0,1]}],"mesh":{"positions":[[-0.2,0,0],[0.2,0,0],[0.2,2,0],[-0.2,2,0]],"triangles":[[0,1,2],[0,2,3]],"joints":[[0],[0],[1],[1]],"weights":[[1],[1],[1],[1]]},"clips":[{"duration":2,"tracks":[{"bone":0,"path":"t","times":[0,2],"values":[[0,0,0],[2,0,0]],"mode":"LINEAR"},{"bone":1,"path":"r","times":[0,1,2],"values":[[0,0,0,1],[0,0,1,0],[0,0,0,1]],"mode":"LINEAR"}]},{"duration":1,"tracks":[{"bone":0,"path":"t","times":[0,1],"values":[[0,0,0],[0,0,2]],"mode":"LINEAR"},{"bone":1,"path":"s","times":[0,0.5,1],"values":[[1,1,1],[2,1,0.5],[1,1,1]],"mode":"STEP"}]}],"config":{"start_frame":10000,"fade_frames":30,"speed_a":1,"speed_b":1,"mask":[1,1]}},
+  "invalid-weight": {"bones":[{"parent":-1,"t":[0,0,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]},{"parent":0,"t":[0,1,0],"r":[0,0,0,1],"s":[1,1,1],"inverse_bind":[1,0,0,0,0,1,0,-1,0,0,1,0,0,0,0,1]}],"mesh":{"positions":[[-0.2,0,0],[0.2,0,0],[0.2,2,0],[-0.2,2,0]],"triangles":[[0,1,2],[0,2,3]],"joints":[[0],[0],[1],[1]],"weights":[[-1],[1],[1],[1]]},"clips":[{"duration":2,"tracks":[{"bone":0,"path":"t","times":[0,2],"values":[[0,0,0],[2,0,0]],"mode":"LINEAR"},{"bone":1,"path":"r","times":[0,1,2],"values":[[0,0,0,1],[0,0,1,0],[0,0,0,1]],"mode":"LINEAR"}]},{"duration":1,"tracks":[{"bone":0,"path":"t","times":[0,1],"values":[[0,0,0],[0,0,2]],"mode":"LINEAR"},{"bone":1,"path":"s","times":[0,0.5,1],"values":[[1,1,1],[2,1,0.5],[1,1,1]],"mode":"STEP"}]}],"config":{"start_frame":10000,"fade_frames":30,"speed_a":1,"speed_b":1,"mask":[1,1]}}
+};
+const REFERENCE = {"two-bone":{"frame_0_root":[0,0,0],"frame_60_root":[1,0,0],"frame_120_root":[2,0,0]},"antipodal":{"all_frames_child_r_equivalent_to":[0,0,0,1]}};
+
+/* ---------- 状态 ---------- */
+const state = {
+  model: null, raw: null, name: '',
+  cfg: null,            // 当前混合配置（UI 可改）
+  frameFloat: 0, frame: 0,
+  playing: false, loop: true, follow: true,
+  maxFrame: 300,
+  selected: 0,
+  accum: null,          // 增量式根累计器（纯函数缓存，拖动时自动重算）
+  cam: { theta: 0.6, phi: 1.1, dist: 6, target: [0, 1, 0] }
+};
+
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+
+function msg(text, cls) {
+  const el = $('msg');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = text;
+  el.prepend(line);
+  while (el.children.length > 30) el.removeChild(el.lastChild);
+}
+
+/* ---------- 装载 ---------- */
+function loadData(raw, name) {
+  try {
+    const model = E.validate(raw);
+    state.model = model; state.raw = raw; state.name = name;
+    state.cfg = JSON.parse(JSON.stringify(model.config));
+    state.frameFloat = 0; state.frame = 0; state.selected = 0;
+    state.accum = E.makeRootAccumulator(model, state.cfg);
+    state.maxFrame = Math.max(300, Math.ceil(state.cfg.start_frame + state.cfg.fade_frames + 120));
+    $('maxframe').value = state.maxFrame;
+    $('timeline').max = state.maxFrame;
+    syncCfgToUI();
+    buildBoneList();
+    $('loadstat').textContent = `已载入 ${name}：${model.boneCount} 骨骼 / ${model.vertCount} 顶点 / 2 段动作`;
+    msg(`载入成功：${name}`, 'ok');
+  } catch (e) {
+    $('loadstat').textContent = '载入失败';
+    msg(`载入 ${name} 失败：${e.message}`, 'err');
+  }
+}
+
+function syncCfgToUI() {
+  $('start_frame').value = state.cfg.start_frame;
+  $('fade_frames').value = state.cfg.fade_frames;
+  $('speed_a').value = state.cfg.speed_a;
+  $('speed_b').value = state.cfg.speed_b;
+}
+function readCfgFromUI() {
+  const c = state.cfg;
+  c.start_frame = Math.max(0, Math.floor(+$('start_frame').value || 0));
+  c.fade_frames = Math.max(0, +$('fade_frames').value || 0);
+  c.speed_a = Math.max(0, +$('speed_a').value || 0);
+  c.speed_b = Math.max(0, +$('speed_b').value || 0);
+  state.accum = E.makeRootAccumulator(state.model, c); // 配置变化后重建缓存
+}
+['start_frame','fade_frames','speed_a','speed_b'].forEach(id => $(id).addEventListener('input', readCfgFromUI));
+
+function buildBoneList() {
+  const box = $('bones');
+  box.innerHTML = '';
+  state.model.bones.forEach((b, i) => {
+    const row = document.createElement('div');
+    row.className = 'bone-row' + (i === state.selected ? ' sel' : '');
+    row.dataset.bone = i;
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = `#${i} (父:${b.parent})`;
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = 0; slider.max = 1; slider.step = 0.01;
+    slider.value = state.cfg.mask[i];
+    const val = document.createElement('span');
+    val.className = 'val'; val.textContent = (+slider.value).toFixed(2);
+    slider.addEventListener('input', () => {
+      state.cfg.mask[i] = +slider.value;
+      val.textContent = (+slider.value).toFixed(2);
+      state.accum = E.makeRootAccumulator(state.model, state.cfg);
+    });
+    slider.addEventListener('click', e => e.stopPropagation());
+    row.addEventListener('click', () => { selectBone(i); });
+    row.append(name, slider, val);
+    box.appendChild(row);
+  });
+}
+
+function selectBone(i) {
+  state.selected = i;
+  document.querySelectorAll('.bone-row').forEach(r =>
+    r.classList.toggle('sel', +r.dataset.bone === i));
+}
+
+/* ---------- 播放控制 ---------- */
+function setFrame(k) {
+  const max = state.maxFrame;
+  k = Math.max(0, Math.min(max, Math.round(k)));
+  state.frame = k; state.frameFloat = k;
+  $('timeline').value = k;
+  $('framebox').value = k;
+}
+$('play').addEventListener('click', togglePlay);
+function togglePlay() {
+  state.playing = !state.playing;
+  $('play').textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+}
+$('prev').addEventListener('click', () => { state.playing = false; $('play').textContent = '▶ 播放'; setFrame(state.frame - 1); });
+$('next').addEventListener('click', () => { state.playing = false; $('play').textContent = '▶ 播放'; setFrame(state.frame + 1); });
+$('loop').addEventListener('change', e => state.loop = e.target.checked);
+$('follow').addEventListener('change', e => state.follow = e.target.checked);
+$('timeline').addEventListener('input', e => setFrame(+e.target.value));
+$('framebox').addEventListener('change', e => setFrame(+e.target.value));
+$('maxframe').addEventListener('change', e => {
+  state.maxFrame = Math.max(1, Math.floor(+e.target.value || 1));
+  $('timeline').max = state.maxFrame;
+  setFrame(state.frame);
+});
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'ArrowLeft') setFrame(state.frame - 1);
+  if (e.code === 'ArrowRight') setFrame(state.frame + 1);
+});
+
+/* ---------- 相机 ---------- */
+let drag = null;
+cv.addEventListener('mousedown', e => { drag = { x: e.clientX, y: e.clientY, moved: false }; });
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+  state.cam.theta -= dx * 0.008;
+  state.cam.phi = Math.max(0.15, Math.min(Math.PI - 0.15, state.cam.phi - dy * 0.008));
+  drag.x = e.clientX; drag.y = e.clientY;
+});
+window.addEventListener('mouseup', e => {
+  if (drag && !drag.moved) pickBone(e);
+  drag = null;
+});
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.cam.dist = Math.max(1, Math.min(60, state.cam.dist * (e.deltaY > 0 ? 1.12 : 0.89)));
+}, { passive: false });
+
+function cameraBasis() {
+  const c = state.cam;
+  const sp = Math.sin(c.phi), cp = Math.cos(c.phi);
+  const pos = [
+    c.target[0] + c.dist * sp * Math.sin(c.theta),
+    c.target[1] + c.dist * cp,
+    c.target[2] + c.dist * sp * Math.cos(c.theta)
+  ];
+  let f = [c.target[0] - pos[0], c.target[1] - pos[1], c.target[2] - pos[2]];
+  const fl = Math.hypot(...f); f = f.map(v => v / fl);
+  let r = [f[2], 0, -f[0]]; // cross(f, up) 的简化（up=+Y）
+  const rl = Math.hypot(...r) || 1; r = r.map(v => v / rl);
+  const u = [
+    r[1] * f[2] - r[2] * f[1],
+    r[2] * f[0] - r[0] * f[2],
+    r[0] * f[1] - r[1] * f[0]
+  ];
+  return { pos, r, u, f };
+}
+function project(basis, p, W, H) {
+  const d = [p[0] - basis.pos[0], p[1] - basis.pos[1], p[2] - basis.pos[2]];
+  const z = d[0] * basis.f[0] + d[1] * basis.f[1] + d[2] * basis.f[2];
+  if (z < 0.05) return null;
+  const x = d[0] * basis.r[0] + d[1] * basis.r[1] + d[2] * basis.r[2];
+  const y = d[0] * basis.u[0] + d[1] * basis.u[1] + d[2] * basis.u[2];
+  const focal = H * 1.1;
+  return [W / 2 + x / z * focal, H / 2 - y / z * focal, z];
+}
+
+function pickBone(e) {
+  if (!state.model) return;
+  const rect = cv.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const basis = cameraBasis();
+  const pose = E.poseAt(state.model, state.cfg, state.frame);
+  let best = -1, bestD = 14;
+  pose.worlds.forEach((w, i) => {
+    const s = project(basis, [w[3], w[7], w[11]], cv.width, cv.height);
+    if (!s) return;
+    const d = Math.hypot(s[0] - mx, s[1] - my);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  if (best >= 0) selectBone(best);
+}
+
+/* ---------- 渲染 ---------- */
+function resize() {
+  const r = cv.parentElement.getBoundingClientRect();
+  cv.width = r.width; cv.height = r.height;
+}
+window.addEventListener('resize', resize);
+
+function drawLine(a, b, color, width) {
+  ctx.strokeStyle = color; ctx.lineWidth = width || 1;
+  ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+}
+
+function render() {
+  resize();
+  const W = cv.width, H = cv.height;
+  ctx.fillStyle = '#14171c';
+  ctx.fillRect(0, 0, W, H);
+  if (!state.model) {
+    ctx.fillStyle = '#8a94a3';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('请导入动作 JSON 或选择内置样例', 30, 40);
+    return;
+  }
+  const k = state.frame, cfg = state.cfg, model = state.model;
+  const pose = E.poseAt(model, cfg, k);
+  const root = state.accum.accum(k);
+  if (state.follow) state.cam.target = [root[0], 1, root[2]];
+  const basis = cameraBasis();
+  const P = p => project(basis, p, W, H);
+
+  // 地面网格（跟随根位置平移，避免走出网格）
+  const gx = Math.round(root[0]), gz = Math.round(root[2]), R = 8;
+  ctx.lineWidth = 1;
+  for (let i = -R; i <= R; i++) {
+    let a = P([gx + i, 0, gz - R]), b = P([gx + i, 0, gz + R]);
+    if (a && b) drawLine(a, b, i === 0 ? '#33415c' : '#232a36');
+    a = P([gx - R, 0, gz + i]); b = P([gx + R, 0, gz + i]);
+    if (a && b) drawLine(a, b, i === 0 ? '#33415c' : '#232a36');
+  }
+
+  // 根轨迹（最近 900 帧）
+  {
+    const traj = E.makeRootAccumulator(model, cfg);
+    const from = Math.max(0, k - 900);
+    traj.accum(from);
+    ctx.strokeStyle = '#e8b339'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    for (let f = from; f <= k; f++) {
+      const r = traj.accum(f);
+      const s = P([r[0], 0.02, r[2]]);
+      if (!s) { started = false; continue; }
+      if (!started) { ctx.moveTo(s[0], s[1]); started = true; }
+      else ctx.lineTo(s[0], s[1]);
+    }
+    ctx.stroke();
+    const cur = P([root[0], 0.02, root[2]]);
+    if (cur) {
+      ctx.fillStyle = '#e8b339';
+      ctx.beginPath(); ctx.arc(cur[0], cur[1], 4, 0, 7); ctx.fill();
+    }
+  }
+
+  // 蒙皮网格（画家算法）
+  const verts = E.skinVertices(model, pose.worlds, root);
+  const tris = model.mesh.triangles;
+  const light = [0.45, 0.75, 0.5];
+  const ll = Math.hypot(...light); light[0] /= ll; light[1] /= ll; light[2] /= ll;
+  const items = [];
+  for (let i = 0; i < tris.length; i++) {
+    const [a, b, c] = tris[i];
+    const pa = [verts[a*3], verts[a*3+1], verts[a*3+2]];
+    const pb = [verts[b*3], verts[b*3+1], verts[b*3+2]];
+    const pc = [verts[c*3], verts[c*3+1], verts[c*3+2]];
+    const sa = P(pa), sb = P(pb), sc = P(pc);
+    if (!sa || !sb || !sc) continue;
+    const u = [pb[0]-pa[0], pb[1]-pa[1], pb[2]-pa[2]];
+    const v = [pc[0]-pa[0], pc[1]-pa[1], pc[2]-pa[2]];
+    let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+    const nl = Math.hypot(...n) || 1; n = n.map(x => x / nl);
+    const lam = Math.abs(n[0]*light[0] + n[1]*light[1] + n[2]*light[2]);
+    items.push({ z: (sa[2]+sb[2]+sc[2]) / 3, s: [sa, sb, sc], lam });
+  }
+  items.sort((p, q) => q.z - p.z);
+  for (const it of items) {
+    const g = Math.round(70 + 120 * it.lam);
+    ctx.fillStyle = `rgb(${Math.round(g*0.55)},${Math.round(g*0.75)},${g})`;
+    ctx.strokeStyle = 'rgba(10,14,20,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(it.s[0][0], it.s[0][1]);
+    ctx.lineTo(it.s[1][0], it.s[1][1]);
+    ctx.lineTo(it.s[2][0], it.s[2][1]);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  }
+
+  // 骨架
+  const joints = pose.worlds.map(w => [w[3] + root[0], w[7] + root[1], w[11] + root[2]]);
+  for (let i = 0; i < model.boneCount; i++) {
+    const p = model.bones[i].parent;
+    if (p < 0) continue;
+    const a = P(joints[p]), b = P(joints[i]);
+    if (a && b) drawLine(a, b, '#9fb4d8', 2);
+  }
+  joints.forEach((j, i) => {
+    const s = P(j);
+    if (!s) return;
+    ctx.fillStyle = i === state.selected ? '#ff6b6b' : '#4da3ff';
+    ctx.beginPath(); ctx.arc(s[0], s[1], i === state.selected ? 5 : 3.5, 0, 7); ctx.fill();
+  });
+
+  // 选中骨骼坐标轴
+  {
+    const i = state.selected, w = pose.worlds[i];
+    const o = [w[3] + root[0], w[7] + root[1], w[11] + root[2]];
+    const L = 0.35;
+    const axes = [
+      [w[0], w[4], w[8], '#ff5f5f'],
+      [w[1], w[5], w[9], '#5fd75f'],
+      [w[2], w[6], w[10], '#5f9fff']
+    ];
+    const so = P(o);
+    for (const [ax, ay, az, col] of axes) {
+      const e = P([o[0] + ax * L, o[1] + ay * L, o[2] + az * L]);
+      if (so && e) drawLine(so, e, col, 2.5);
+    }
+  }
+
+  // HUD 与面板信息
+  const t = k / E.FPS;
+  $('hud').textContent =
+    `帧 ${k}  t=${t.toFixed(3)}s  α=${pose.alpha.toFixed(3)}\n` +
+    `根累计位移 [${root.map(v => v.toFixed(3)).join(', ')}]\n` +
+    `左键拖动旋转 / 滚轮缩放 / 单击选骨骼 / 空格播放 / ←→逐帧`;
+  $('timeinfo').textContent =
+    `帧 ${k} / ${state.maxFrame} · t=${t.toFixed(3)}s · α=${pose.alpha.toFixed(3)} · 根=[${root.map(v=>v.toFixed(3)).join(', ')}]`;
+
+  // 矩阵表
+  const i = state.selected;
+  $('bonename').textContent = `骨骼 #${i}（父: ${model.bones[i].parent}）`;
+  fillMat($('localmat'), E.composeTRS(pose.locals[i].t, pose.locals[i].r, pose.locals[i].s));
+  fillMat($('worldmat'), pose.worlds[i]);
+}
+
+function fillMat(table, m) {
+  if (!table.dataset.init) {
+    table.innerHTML = '';
+    for (let r = 0; r < 4; r++) {
+      const tr = document.createElement('tr');
+      for (let c = 0; c < 4; c++) tr.appendChild(document.createElement('td'));
+      table.appendChild(tr);
+    }
+    table.dataset.init = '1';
+  }
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 4; c++)
+      table.rows[r].cells[c].textContent = m[r * 4 + c].toFixed(4);
+}
+
+/* ---------- 主循环 ---------- */
+let lastT = performance.now();
+function tick(now) {
+  const dt = Math.min(0.1, (now - lastT) / 1000);
+  lastT = now;
+  if (state.playing && state.model) {
+    state.frameFloat += dt * E.FPS;
+    let k = Math.floor(state.frameFloat);
+    if (k > state.maxFrame) {
+      if (state.loop) { k = 0; state.frameFloat = 0; }
+      else { k = state.maxFrame; state.playing = false; $('play').textContent = '▶ 播放'; }
+    }
+    if (k !== state.frame) { state.frame = k; $('timeline').value = k; $('framebox').value = k; }
+  }
+  render();
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 导入 / 导出 ---------- */
+$('file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try { loadData(JSON.parse(rd.result), f.name); }
+    catch (err) { msg(`解析 ${f.name} 失败：${err.message}`, 'err'); }
+  };
+  rd.readAsText(f);
+});
+$('preset').addEventListener('change', e => {
+  const k = e.target.value;
+  if (k && PRESETS[k]) loadData(JSON.parse(JSON.stringify(PRESETS[k])), k + '.json');
+  e.target.value = '';
+});
+
+function download(obj, filename) {
+  const blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$('savecfg').addEventListener('click', () => {
+  if (!state.raw) { msg('尚未载入数据', 'err'); return; }
+  readCfgFromUI();
+  const out = JSON.parse(JSON.stringify(state.raw));
+  out.config = {
+    start_frame: state.cfg.start_frame,
+    fade_frames: state.cfg.fade_frames,
+    speed_a: state.cfg.speed_a,
+    speed_b: state.cfg.speed_b,
+    mask: state.cfg.mask.slice()
+  };
+  download(out, (state.name || 'model').replace(/\.json$/i, '') + '.config.json');
+  msg('已导出当前混合配置', 'ok');
+});
+
+$('export').addEventListener('click', () => {
+  if (!state.model) { msg('尚未载入数据', 'err'); return; }
+  readCfgFromUI();
+  const from = Math.max(0, Math.floor(+$('expfrom').value || 0));
+  const to = Math.floor(+$('expto').value || 0);
+  if (to < from) { msg('帧区间无效', 'err'); return; }
+  if (to - from > 100000) { msg('区间过大（>100000 帧）', 'err'); return; }
+  const data = E.exportFrames(state.model, state.cfg, from, to);
+  download(data, `poses_${from}_${to}.json`);
+  msg(`已导出帧 [${from}, ${to}] 的姿势与根位移`, 'ok');
+});
+
+/* ---------- 自检（对照包内 reference.json） ---------- */
+$('selftest').addEventListener('click', () => {
+  const out = [];
+  function check(name, cond, detail) {
+    out.push({ name, ok: !!cond, detail });
+  }
+  try {
+    // two-bone 根位移
+    const m1 = E.validate(JSON.parse(JSON.stringify(PRESETS['two-bone'])));
+    for (const k of [0, 60, 120]) {
+      const exp = REFERENCE['two-bone']['frame_' + k + '_root'];
+      const got = E.rootAccumAt(m1, m1.config, k);
+      check(`two-bone 帧${k}根位移=[${got.map(v=>v.toFixed(2))}]`,
+        got.every((v, i) => Math.abs(v - exp[i]) < 1e-9), '期望 ' + JSON.stringify(exp));
+    }
+    // 拖动 == 连续播放
+    const acc = E.makeRootAccumulator(m1, m1.config);
+    for (let k = 0; k <= 250; k++) acc.accum(k);
+    const fresh = E.rootAccumAt(m1, m1.config, 250);
+    check('拖动/连续播放根位移一致 @250',
+      acc.accum(250).every((v, i) => Math.abs(v - fresh[i]) < 1e-12));
+    // antipodal
+    const m2 = E.validate(JSON.parse(JSON.stringify(PRESETS['antipodal'])));
+    let ok = true;
+    for (let k = 0; k <= 240; k += 7) {
+      const w = E.poseAt(m2, m2.config, k).worlds[1];
+      const id = [1,0,0,0,1,0,0,0,1];
+      const rot = [w[0],w[1],w[2],w[4],w[5],w[6],w[8],w[9],w[10]];
+      for (let i = 0; i < 9; i++) if (Math.abs(rot[i] - id[i]) > 1e-9) ok = false;
+    }
+    check('antipodal 各帧 child 旋转等价于 [0,0,0,1]', ok);
+    // 非法输入
+    let cyc = false, wt = false;
+    try { E.validate(JSON.parse(JSON.stringify(PRESETS['invalid-cycle']))); }
+    catch (e) { cyc = /环/.test(e.message); }
+    try { E.validate(JSON.parse(JSON.stringify(PRESETS['invalid-weight']))); }
+    catch (e) { wt = /负/.test(e.message); }
+    check('invalid-cycle 检出骨骼环', cyc);
+    check('invalid-weight 检出负权重', wt);
+  } catch (e) {
+    out.push({ name: '自检异常：' + e.message, ok: false });
+  }
+  out.forEach(r => msg((r.ok ? 'PASS ' : 'FAIL ') + r.name + (r.ok ? '' : ' ' + (r.detail || '')), r.ok ? 'ok' : 'err'));
+  msg(`自检完成：${out.filter(r => r.ok).length}/${out.length} 通过`, out.every(r => r.ok) ? 'ok' : 'err');
+});
+
+/* ---------- 启动 ---------- */
+loadData(JSON.parse(JSON.stringify(PRESETS['blend'])), 'blend.json');
+requestAnimationFrame(t => { lastT = t; tick(t); });
+</script>
+</body>
+</html>
