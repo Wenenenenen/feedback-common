@@ -1,0 +1,15 @@
+{
+  "name": "marker-geodesic-segmenter",
+  "version": "1.0.0",
+  "description": "标记引导的灰度区域分割网页：手写多源最短路径（Dijkstra），支持四邻/八邻、等代价分界、掩膜隔离未到达、像素级点查与 RAW/PNG/JSON 导出",
+  "private": true,
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "test:perf": "node test/perf-tests.js",
+    "test:e2e": "node test/browser-e2e.js",
+    "test:all": "node test/run-tests.js && node test/perf-tests.js && node test/browser-e2e.js",
+    "serve": "node -e \"const http=require('http'),fs=require('fs'),path=require('path');const t={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.json':'application/json'};http.createServer((q,r)=>{let f=path.normalize(path.join(process.cwd(),decodeURIComponent(q.url.split('?')[0])));if(q.url==='/')f=path.join(process.cwd(),'app','index.html');fs.readFile(f,(e,d)=>{if(e){r.writeHead(404);return r.end()}r.writeHead(200,{'Content-Type':t[path.extname(f)]||'application/octet-stream'});r.end(d)})}).listen(8123,()=>console.log('http://127.0.0.1:8123/app/index.html'))\""
+  },
+  "keywords": ["segmentation", "geodesic", "dijkstra", "marker", "grayscale", "png"],
+  "license": "MIT"
+}

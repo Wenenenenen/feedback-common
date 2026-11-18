@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>标记引导测地分割</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <strong>标记引导测地分割</strong>
+      <span class="sub">多源最短路径 · 像素级归属核对</span>
+    </div>
+    <div class="toolbar">
+      <label class="btn">导入图像<input type="file" id="fileImage" accept=".png,image/png" hidden></label>
+      <label class="btn">导入掩膜（可选）<input type="file" id="fileMask" accept=".png,image/png" hidden></label>
+      <label class="btn">导入标记 JSON<input type="file" id="fileMarkers" accept=".json,application/json" hidden></label>
+      <div class="divider"></div>
+      <div class="conn-group" title="邻域连通模式">
+        连通
+        <label><input type="radio" name="connectivity" value="4" checked> 四邻</label>
+        <label><input type="radio" name="connectivity" value="8"> 八邻</label>
+      </div>
+      <div class="divider"></div>
+      <div class="export-group">
+        <button class="btn" id="btnExportRaw" disabled>导出标签 RAW</button>
+        <button class="btn" id="btnExportBoundary" disabled>导出边界 PNG</button>
+        <button class="btn" id="btnExportUnreached" disabled>导出未到达 PNG</button>
+        <button class="btn primary" id="btnExportJson" disabled>导出统计/配置 JSON</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="canvas-wrap">
+      <div class="canvas-toolbar">
+        <div class="tool-group" role="radiogroup" aria-label="鼠标工具">
+          <button class="tool active" data-tool="inspect" title="点查归属">点查</button>
+          <button class="tool" data-tool="seed" title="在选中标签下播入种子">播种子</button>
+          <button class="tool" data-tool="erase" title="删除点击处的种子">删种子</button>
+        </div>
+        <div class="view-toggles">
+          <label><input type="checkbox" id="tgOverlay" checked> 标签着色</label>
+          <label><input type="checkbox" id="tgBoundary" checked> 边界高亮</label>
+          <label><input type="checkbox" id="tgCost"> 代价热图</label>
+          <label><input type="checkbox" id="tgSeeds" checked> 种子</label>
+          <label><input type="checkbox" id="tgGrid"> 像素网格</label>
+        </div>
+        <div class="zoom-group">
+          <button class="btn small" id="zoomOut">−</button>
+          <span id="zoomLabel">100%</span>
+          <button class="btn small" id="zoomIn">+</button>
+          <button class="btn small" id="zoomFit">适应</button>
+          <button class="btn small" id="btnRerun">重算</button>
+        </div>
+      </div>
+      <div class="canvas-scroll" id="canvasScroll">
+        <canvas id="view"></canvas>
+        <div class="empty-hint" id="emptyHint">
+          <p>先导入 8 位灰度 PNG（单边 ≤ 512 像素）</p>
+          <p class="dim">可再导入有效区域掩膜 PNG 与标记 JSON；也可直接在图上播种子</p>
+        </div>
+      </div>
+      <div class="statusbar" id="statusbar">未载入图像</div>
+    </section>
+
+    <aside class="sidebar">
+      <section class="panel">
+        <h3>标签与种子</h3>
+        <div class="label-editor">
+          <div class="row">
+            <label>当前标签
+              <select id="labelSelect"></select>
+            </label>
+            <button class="btn small" id="btnAddLabel">新增标签</button>
+            <button class="btn small danger" id="btnRemoveLabel">删除标签</button>
+          </div>
+          <div class="row dim" id="seedCountLine">种子数：0</div>
+          <div class="seed-list" id="seedList"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>像素点查</h3>
+        <div id="inspector" class="inspector dim">将鼠标移到画布上查看像素信息</div>
+      </section>
+
+      <section class="panel">
+        <h3>区域统计</h3>
+        <div class="table-scroll">
+          <table id="statsTable">
+            <thead>
+              <tr><th>标签</th><th>面积</th><th>灰度均值</th><th>包围盒 [x0,y0,x1,y1)</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="counts" id="countsLine"></div>
+      </section>
+
+      <section class="panel">
+        <h3>消息</h3>
+        <div id="msgLog" class="msg-log"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="png.js"></script>
+  <script src="segment.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
