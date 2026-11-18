@@ -1,0 +1,29 @@
+{
+  "reference": 0,
+  "frames": [
+    {
+      "file": "frame-0.png",
+      "exposure": 0.25,
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "file": "frame-1.png",
+      "exposure": 1,
+      "offset": [
+        3,
+        -2
+      ]
+    },
+    {
+      "file": "moving-frame.png",
+      "exposure": 4,
+      "offset": [
+        -2,
+        1
+      ]
+    }
+  ]
+}
