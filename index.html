@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>解析隐线工作台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 工程技术工具风格：冷灰纸面 + 技术蓝主色，语义色表达边类型 */
+:root {
+  --bg: #eef1f5;
+  --panel: #ffffff;
+  --paper: #fbfcfd;
+  --fg: #16202e;
+  --muted: #5b6b7e;
+  --faint: #93a2b3;
+  --line: #d7dee7;
+  --accent: #2456d6;
+  --accent-soft: #e4ecfd;
+  --amber: #b45309;
+  --green: #15803d;
+  --red: #dc2626;
+  --violet: #7c3aed;
+  --shadow: 0 1px 2px rgba(20,30,45,.06), 0 4px 14px rgba(20,30,45,.06);
+  --radius: 10px;
+  --font-body: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c; --panel: #18202b; --paper: #11161e;
+    --fg: #e4eaf2; --muted: #93a2b3; --faint: #5e6e80;
+    --line: #2a3645; --accent: #6d97ff; --accent-soft: #1d2c49;
+    --amber: #f59e0b; --green: #4ade80; --red: #f87171; --violet: #a78bfa;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c; --panel: #18202b; --paper: #11161e;
+  --fg: #e4eaf2; --muted: #93a2b3; --faint: #5e6e80;
+  --line: #2a3645; --accent: #6d97ff; --accent-soft: #1d2c49;
+  --amber: #f59e0b; --green: #4ade80; --red: #f87171; --violet: #a78bfa;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+.mono { font-family: var(--font-mono); font-size: 12px; }
+.dim { color: var(--muted); font-weight: 400; }
+h1, h2, h3, h4, h5 { margin: 0; font-weight: 600; text-wrap: balance; }
+
+.app {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+header.topbar {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  box-shadow: var(--shadow);
+}
+header.topbar .logo {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--accent);
+  display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 13px;
+  flex: none;
+}
+header.topbar h1 { font-size: 16px; letter-spacing: .2px; }
+header.topbar .sub { color: var(--muted); font-size: 12px; }
+header.topbar .spacer { flex: 1; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  min-width: 0;
+  overflow: auto;
+}
+.sidebar { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+.panel h3 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin-bottom: 10px;
+}
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+select, input[type="number"], input[type="text"] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.range-row { display: flex; align-items: center; gap: 10px; }
+.range-row output { font-family: var(--font-mono); font-size: 12px; min-width: 42px; text-align: right; }
+
+button {
+  font-family: var(--font-body);
+  font-size: 13px; font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+button:hover { border-color: var(--accent); }
+button.primary {
+  background: var(--accent); border-color: var(--accent); color: #fff; width: 100%;
+}
+button.primary:hover { filter: brightness(1.08); }
+button.icon-btn { padding: 6px 10px; font-size: 12px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+#dropZone {
+  border: 1.5px dashed var(--faint);
+  border-radius: 8px;
+  padding: 16px 10px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+#dropZone.drag, #dropZone:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+#dropZone b { color: var(--accent); }
+#fileInput { display: none; }
+
+.legend { display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; }
+.legend .item { display: flex; align-items: center; gap: 9px; }
+.sw { width: 26px; height: 0; border-top-width: 2.5px; border-top-style: solid; flex: none; }
+
+.main {
+  grid-column: 2; grid-row: 2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0; min-width: 0;
+}
+.viewport {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+  min-height: 0; min-width: 0;
+  overflow: hidden;
+}
+.vp-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--muted);
+  flex: none;
+}
+.vp-head .tag {
+  font-family: var(--font-mono);
+  background: var(--accent-soft); color: var(--accent);
+  padding: 2px 7px; border-radius: 5px; font-size: 11px;
+}
+.vp-body { position: relative; flex: 1; min-height: 0; }
+#view3d { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#view3d:active { cursor: grabbing; }
+#view2d { width: 100%; height: 100%; padding: 8px; }
+#view2d svg { width: 100%; height: 100%; }
+#view2d .ln { cursor: pointer; transition: stroke-width .12s; pointer-events: stroke; }
+#view2d .ln:hover { stroke-width: 4; }
+#view2d .ln.sel { stroke: var(--violet) !important; stroke-width: 4 !important; }
+.placeholder, .hint { color: var(--faint); font-size: 13px; padding: 18px; }
+
+#tooltip {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  background: var(--fg);
+  color: var(--panel);
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  pointer-events: none;
+  max-width: 260px;
+  box-shadow: var(--shadow);
+}
+#tooltip b { color: #fff; }
+
+.inspector-col { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+#stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  flex: none;
+}
+.stat {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.stat b { display: block; font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
+.stat span { font-size: 11px; color: var(--muted); }
+
+#inspector h4 { font-size: 14px; margin-bottom: 8px; }
+#inspector h5 { font-size: 12px; margin: 14px 0 7px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+table.kv { width: 100%; border-collapse: collapse; }
+table.kv td { padding: 5px 0; vertical-align: top; font-size: 12.5px; }
+table.kv td:first-child { color: var(--muted); width: 74px; white-space: nowrap; }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.badge {
+  font-size: 11px; font-weight: 600;
+  padding: 2.5px 9px; border-radius: 999px;
+  border: 1px solid;
+}
+.b-boundary { color: var(--green); border-color: var(--green); }
+.b-crease { color: var(--accent); border-color: var(--accent); }
+.b-silhouette { color: var(--amber); border-color: var(--amber); }
+.b-nonmanifold { color: var(--red); border-color: var(--red); }
+.table-wrap { overflow-x: auto; }
+table.iv { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.iv th, table.iv td {
+  padding: 5px 7px; text-align: left;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+table.iv th { color: var(--muted); font-weight: 500; font-size: 11px; }
+tr.r-hid td { color: var(--muted); }
+ul.occ { margin: 0; padding-left: 18px; font-size: 12.5px; }
+ul.occ li { margin-bottom: 4px; }
+.alert {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border: 1px solid var(--red);
+  color: var(--red);
+  border-radius: 8px; padding: 8px 10px;
+  font-size: 12px; margin-bottom: 10px;
+}
+.msg { border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
+.msg.err { background: color-mix(in srgb, var(--red) 12%, transparent); border: 1px solid var(--red); color: var(--red); }
+.msg.warn { background: color-mix(in srgb, var(--amber) 12%, transparent); border: 1px solid var(--amber); color: var(--amber); }
+
+.size-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.size-row input { width: 96px; }
+#sizeNote { font-size: 12px; margin-top: 8px; }
+#sizeNote.ok { color: var(--green); }
+#sizeNote.bad { color: var(--red); }
+
+dialog-like, .modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(10, 16, 24, .55);
+  display: grid; place-items: center;
+  z-index: 50;
+  padding: 20px;
+}
+.modal-backdrop[hidden] { display: none !important; }
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  width: min(920px, 100%);
+  max-height: 86vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+}
+.modal-head h2 { font-size: 15px; }
+.modal-body { padding: 16px 18px; overflow: auto; display: grid; gap: 16px; }
+.modal pre {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0 0;
+  max-height: 300px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre;
+  color: var(--fg);
+}
+#expSVG svg { max-height: 320px; width: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+
+@media (max-width: 1080px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    height: auto;
+  }
+  header.topbar { grid-column: 1; }
+  .sidebar, .main, .inspector-col { grid-column: 1; grid-row: auto; }
+  .main { grid-template-rows: 320px 320px; }
+  body { height: auto; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="logo">隐</div>
+    <div>
+      <h1>解析隐线工作台</h1>
+      <div class="sub">齐次裁剪 · NDC 深度解析求交 · 无像素采样</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="themeToggle">切换主题</button>
+    <button class="icon-btn" id="btnExport">导出 SVG / JSON</button>
+  </header>
+
+  <!-- 左栏：输入与参数 -->
+  <aside class="sidebar panel">
+    <section>
+      <h3>数据输入（≤ 5000 面）</h3>
+      <label id="dropZone" for="fileInput">
+        拖入 JSON 网格文件，或 <b>点击选择</b><br>
+        <span class="dim">positions + triangles + camera</span>
+      </label>
+      <input type="file" id="fileInput" accept=".json,application/json">
+      <div class="field" style="margin-top:12px">
+        <label>内置样例</label>
+        <select id="sampleSelect">
+          <option value="">— 选择样例 —</option>
+          <option value="single-occluder">single-occluder（单遮挡体）</option>
+          <option value="overlapping-occluders">overlapping-occluders（重叠遮挡并集）</option>
+          <option value="coplanar">coplanar（共面等深）</option>
+          <option value="cube">cube（折痕/轮廓分类）</option>
+          <option value="perspective">perspective（透视相机）</option>
+          <option value="near-cross">near-cross（跨近平面裁剪）</option>
+          <option value="nonmanifold">nonmanifold（非流形边）</option>
+          <option value="invalid-index">invalid-index（非法索引）</option>
+        </select>
+      </div>
+      <div id="messages"></div>
+    </section>
+
+    <section>
+      <h3>相机与折痕</h3>
+      <div class="field">
+        <label>折痕角阈值 <span class="dim">[0°, 180°]</span></label>
+        <div class="range-row">
+          <input type="range" id="crease" min="0" max="180" step="1" value="45">
+          <output id="creaseVal">45°</output>
+        </div>
+      </div>
+      <button id="resetView" style="width:100%">重置相机到样例参数</button>
+      <p class="dim" style="font-size:12px;margin:10px 0 0">
+        3D 视图：左键拖动旋转，滚轮缩放（透视推拉 / 正交改取景高度）。
+      </p>
+    </section>
+
+    <section>
+      <h3>线型图例</h3>
+      <div class="legend">
+        <div class="item"><span class="sw" style="border-color:var(--accent)"></span>折痕边 crease</div>
+        <div class="item"><span class="sw" style="border-color:var(--amber)"></span>轮廓边 silhouette</div>
+        <div class="item"><span class="sw" style="border-color:var(--green)"></span>边界边 boundary</div>
+        <div class="item"><span class="sw" style="border-color:var(--red)"></span>非流形 nonmanifold</div>
+        <div class="item"><span class="sw" style="border-color:var(--muted);border-top-style:dashed"></span>隐藏区间（虚线）</div>
+        <div class="item"><span class="sw" style="border-color:var(--violet)"></span>当前选中</div>
+      </div>
+    </section>
+
+    <section>
+      <h3>导出分辨率</h3>
+      <div class="size-row">
+        <input type="number" id="expW" value="640" min="16" step="2">
+        <span class="dim">×</span>
+        <input type="number" id="expH" value="480" min="16" step="2">
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="size-preset" data-size="640x480">640×480</button>
+        <button class="size-preset" data-size="1280x960">1280×960</button>
+        <button class="size-preset" data-size="1920x1080">1920×1080</button>
+      </div>
+      <div id="sizeNote"></div>
+    </section>
+  </aside>
+
+  <!-- 中栏：双视图 -->
+  <main class="main">
+    <section class="viewport">
+      <div class="vp-head">
+        <span class="tag">3D</span> 三维网格 · 轨道相机
+        <span class="dim" style="margin-left:auto">点击边/面查看来源</span>
+      </div>
+      <div class="vp-body">
+        <canvas id="view3d"></canvas>
+      </div>
+    </section>
+    <section class="viewport">
+      <div class="vp-head">
+        <span class="tag">2D</span> 解析线稿 · 可见实线 / 隐藏虚线
+        <span class="dim" style="margin-left:auto">悬停查看区间与遮挡面</span>
+      </div>
+      <div class="vp-body">
+        <div id="view2d"></div>
+        <div id="tooltip"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 右栏：统计与检视 -->
+  <aside class="inspector-col">
+    <section class="panel" style="flex:none">
+      <h3>求解统计</h3>
+      <div id="stats"></div>
+    </section>
+    <section class="panel" style="flex:1;overflow:auto">
+      <h3>来源检视</h3>
+      <div id="inspector"></div>
+    </section>
+  </aside>
+</div>
+
+<!-- 导出预览弹窗 -->
+<div class="modal-backdrop" id="exportModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="导出预览">
+    <div class="modal-head">
+      <h2>导出预览</h2>
+      <span class="dim" id="expMeta"></span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="icon-btn" id="dlSvg">下载 SVG</button>
+      <button class="icon-btn" id="cpSvg">复制 SVG</button>
+      <button class="icon-btn" id="dlJson">下载 JSON</button>
+      <button class="icon-btn" id="cpJson">复制 JSON</button>
+      <button class="icon-btn" id="closeExport">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <h3>SVG（可见实线 + 隐藏虚线 + 非流形标注）</h3>
+        <div id="expSVG"></div>
+      </div>
+      <div>
+        <h3>区间 JSON（区间与分辨率无关）</h3>
+        <pre id="expJSON"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="src/math.js"></script>
+<script src="src/camera.js"></script>
+<script src="src/clipper.js"></script>
+<script src="src/mesh.js"></script>
+<script src="src/solver.js"></script>
+<script src="src/export.js"></script>
+<script src="src/samples.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

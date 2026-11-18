@@ -1,0 +1,16 @@
+{
+  "name": "analytic-hidden-line-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "解析隐线导出工作台：齐次裁剪 + NDC 深度解析求交，无像素采样、无隐线库依赖",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "test:robust": "node test/robustness.js",
+    "test:browser": "node test/browser-smoke.js",
+    "build:samples": "node tools/build-samples.js samples/extracted src/samples.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
