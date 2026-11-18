@@ -1,0 +1,1 @@
+{"sphere":{"outside":{"t":2,"normal":[0,0,1]},"inside":{"t":1,"normal":[1,0,0]},"miss":{"status":"miss"}},"shell":{"inside":{"t":0.5,"leaf":"inner","normal":[-1,0,0]}},"scaled":{"axis":{"t":1,"normal":[1,0,0]}},"sheared":{"thin":{"t":1.75,"normal":[0,0,1]}}}

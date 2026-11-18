@@ -1,0 +1,1 @@
+{"nodes":{"outer":{"kind":"sphere","radius":1}},"root":"outer","rays":[{"id":"outside","origin":[0,0,3],"direction":[0,0,-1]},{"id":"inside","origin":[0,0,0],"direction":[1,0,0]},{"id":"miss","origin":[0,0,3],"direction":[0,1,0]}]}

@@ -1,0 +1,1 @@
+{"nodes":{"box":{"kind":"box","half_size":[0.8,0.8,0.8]},"ring":{"kind":"torus","major":0.7,"minor":0.3},"op":{"kind":"union","left":"box","right":"ring"}},"root":"op","rays":[{"id":"outside","origin":[0,0,3],"direction":[0,0,-1]},{"id":"inside","origin":[0,0,0],"direction":[1,0,0]},{"id":"miss","origin":[0,0,3],"direction":[0,1,0]}]}

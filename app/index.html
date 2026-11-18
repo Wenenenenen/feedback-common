@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>隐式实体 CSG 预览台</title>
+<style>
+  :root {
+    --bg: #14171d;
+    --panel: #1c212b;
+    --panel-2: #232a36;
+    --border: #303949;
+    --text: #d8dee9;
+    --muted: #8b95a5;
+    --accent: #6ea8fe;
+    --ok: #4cc38a;
+    --warn: #e0a458;
+    --err: #f06c6c;
+    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px/1.5 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 8px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .spacer { flex: 1; }
+  .main { flex: 1; display: grid; grid-template-columns: 300px 1fr 340px; min-height: 0; }
+  .col { overflow-y: auto; padding: 12px; border-right: 1px solid var(--border); min-height: 0; }
+  .col:last-child { border-right: none; }
+  h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 16px 0 6px; }
+  h2:first-child { margin-top: 0; }
+  button, .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #23406e; border-color: #34599a; }
+  button.danger { border-color: #6e3030; }
+  input, textarea, select {
+    background: #11151c; color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 6px; font-size: 12px; width: 100%;
+  }
+  textarea { font-family: var(--mono); resize: vertical; }
+  label { display: block; font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .tree { font-family: var(--mono); font-size: 12px; }
+  .tree .node {
+    padding: 3px 6px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .tree .node:hover { background: var(--panel-2); }
+  .tree .node.selected { background: #2b3a55; }
+  .tree .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; border: 1px solid #0008; }
+  .tree .kind { color: var(--accent); }
+  .tree .neg-tag { color: var(--warn); font-size: 10px; }
+  .messages .msg { padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+  .msg.error { background: #3a2222; border-left: 3px solid var(--err); }
+  .msg.warning { background: #352c1c; border-left: 3px solid var(--warn); }
+  .msg.ok { background: #1f3328; border-left: 3px solid var(--ok); }
+  .msg .node-id { color: var(--accent); font-family: var(--mono); }
+  .canvas-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
+  canvas {
+    width: 640px; height: 480px; image-rendering: pixelated;
+    border: 1px solid var(--border); background: #10141b; cursor: crosshair;
+    max-width: 100%;
+  }
+  .canvas-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11px; }
+  .legend .item { display: flex; align-items: center; gap: 4px; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 2px; }
+  table.kv { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.kv td { padding: 3px 4px; border-bottom: 1px solid #232a36; vertical-align: top; }
+  table.kv td:first-child { color: var(--muted); width: 88px; white-space: nowrap; }
+  table.kv td:last-child { font-family: var(--mono); word-break: break-all; }
+  .matrix-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .matrix-grid input { font-family: var(--mono); padding: 3px; text-align: center; }
+  .samples { max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+  .samples table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+  .samples th, .samples td { padding: 2px 5px; text-align: right; border-bottom: 1px solid #232a36; }
+  .samples th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); }
+  .samples td.leaf-cell { text-align: left; }
+  .neg { color: var(--warn); }
+  .hint { color: var(--muted); font-size: 11px; }
+  .status-pill { font-family: var(--mono); padding: 1px 7px; border-radius: 10px; font-size: 11px; }
+  .status-hit { background: #1f3328; color: var(--ok); }
+  .status-miss { background: #222a38; color: var(--muted); }
+  .status-iteration_limit { background: #3a2f1a; color: var(--warn); }
+  .file-row { display: flex; gap: 6px; align-items: center; }
+  .file-row input[type=file] { display: none; }
+  .stat-line { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .small { font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>隐式实体 CSG 预览台</h1>
+  <span class="hint">球 / 盒 / 环面 · 保守距离场 · 并交差 · 球步进求交（无第三方 CSG/步进库）</span>
+  <span class="spacer"></span>
+  <span id="sceneStat" class="stat-line"></span>
+</header>
+
+<div class="main">
+  <!-- 左栏：导入与树 -->
+  <div class="col" id="leftCol">
+    <h2>场景</h2>
+    <div class="file-row">
+      <label class="btn" for="fileInput" style="margin:0;flex:none">导入场景 JSON</label>
+      <input type="file" id="fileInput" accept=".json,application/json">
+      <button id="loadSampleBtn" class="small">载入内置示例</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button id="exportSceneBtn">导出当前场景</button>
+      <button id="resetSceneBtn" class="danger">重置</button>
+    </div>
+    <div id="validation" class="messages" style="margin-top:8px"></div>
+
+    <h2>CSG 树 <span class="hint" id="treeMeta"></span></h2>
+    <div id="treeView" class="tree"></div>
+
+    <h2>节点编辑 <span class="hint" id="editNodeId"></span></h2>
+    <div id="editor">
+      <p class="hint">在树上选择一个节点进行编辑。</p>
+    </div>
+  </div>
+
+  <!-- 中栏：预览 -->
+  <div class="col" style="border-right:1px solid var(--border)">
+    <div class="canvas-wrap">
+      <canvas id="canvas" width="320" height="240" title="拖动旋转 · 滚轮缩放 · 单击表面拾取"></canvas>
+      <div class="canvas-bar">
+        <button id="resetCamBtn">复位相机</button>
+        <label style="margin:0;display:flex;align-items:center;gap:4px">
+          max_steps
+          <input type="number" id="maxStepsInput" value="512" min="1" max="4096" step="1" style="width:80px">
+        </label>
+        <label style="margin:0;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="autoRender" checked style="width:auto"> 编辑后自动重渲
+        </label>
+        <button id="renderBtn" class="primary">重新渲染</button>
+        <span id="renderStat" class="stat-line"></span>
+      </div>
+      <div class="canvas-bar">
+        <span>拖动旋转 · Shift+拖动 / 滚轮缩放 · 单击命中点拾取</span>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="legend">
+        <span class="item"><span class="swatch" style="background:#10141f;border:1px solid #303949"></span>miss（t&gt;20 未命中）</span>
+        <span class="item"><span class="swatch" style="background:#5c3e18"></span>iteration_limit（步数耗尽）</span>
+        <span class="item"><span class="swatch" style="background:#333"></span>深色叶 = 差集内壁（梯度反向）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右栏：拾取与批量射线 -->
+  <div class="col">
+    <h2>表面拾取</h2>
+    <div id="pickInfo"><p class="hint">在预览上点击表面，显示命中叶、距离、法线与每步采样。</p></div>
+
+    <h2>批量射线</h2>
+    <div class="file-row">
+      <label class="btn" for="rayFileInput" style="margin:0;flex:none">导入射线 JSON</label>
+      <input type="file" id="rayFileInput" accept=".json,application/json">
+    </div>
+    <p class="hint">格式：{"rays":[{"id","origin":[3],"direction":[3]} ...]}，也接受射线数组；方向自动归一化。</p>
+    <div class="row">
+      <button id="runBatchBtn" class="primary">运行批量求交</button>
+      <button id="exportHitsBtn">导出命中 JSON</button>
+    </div>
+    <div id="batchStat" class="stat-line" style="margin-top:6px"></div>
+    <div id="batchSummary"></div>
+  </div>
+</div>
+
+<script src="mat4.js"></script>
+<script src="validate.js"></script>
+<script src="sdf.js"></script>
+<script src="raymarch.js"></script>
+<script src="render.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
