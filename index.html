@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poisson 局部无缝合成</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>Poisson 局部无缝合成</h1>
+  <p class="sub">在线性 RGB 中求解 Poisson 方程，把源图选区无缝合成到底图上。直接粘贴对比、差值视图联动显示。</p>
+</header>
+
+<main>
+  <section class="panel" id="io-panel">
+    <h2>输入</h2>
+    <div class="row wrap">
+      <label class="file">源图（8 位 RGB PNG，≤512×512）
+        <input type="file" id="file-src" accept="image/png">
+      </label>
+      <label class="file">底图（8 位 RGB PNG，≤512×512）
+        <input type="file" id="file-tgt" accept="image/png">
+      </label>
+      <label class="file">掩膜（与源图同尺寸灰度 PNG，非零=选中）
+        <input type="file" id="file-mask" accept="image/png">
+      </label>
+      <label>样例
+        <select id="preset">
+          <option value="">— 选择样例 —</option>
+          <option value="gradient">渐变圆环（多区域+孔洞）</option>
+          <option value="identity">恒等（源=底图）</option>
+          <option value="constant">常量（零引导梯度）</option>
+          <option value="overshoot">过冲 3×3（未限幅 &gt; 1）</option>
+        </select>
+      </label>
+    </div>
+    <div class="row wrap" id="mask-tools">
+      <span class="group-label">选区画笔</span>
+      <label>模式
+        <select id="brush-mode">
+          <option value="add">添加</option>
+          <option value="erase">擦除</option>
+        </select>
+      </label>
+      <label>半径 <input type="number" id="brush-radius" min="1" max="64" value="8"></label>
+      <button id="mask-all" type="button">全选</button>
+      <button id="mask-none" type="button">清空</button>
+      <button id="mask-invert" type="button">反选</button>
+      <span class="hint">在「选区编辑」视图上涂抹；右键拖动=擦除</span>
+    </div>
+    <div class="row wrap">
+      <span class="group-label">平移（整数像素）</span>
+      <label>dx <input type="number" id="dx" value="0" step="1"></label>
+      <label>dy <input type="number" id="dy" value="0" step="1"></label>
+      <span class="hint">也可在「直接粘贴」视图上拖动源图</span>
+      <span class="sep"></span>
+      <span class="group-label">引导梯度</span>
+      <label><input type="radio" name="grad-mode" value="source" checked> 源梯度</label>
+      <label><input type="radio" name="grad-mode" value="mixed"> 混合梯度</label>
+      <span class="sep"></span>
+      <label>容差 <input type="number" id="tol" value="1e-8" min="1e-12" max="1e-2" step="any"></label>
+      <label>最大迭代 <input type="number" id="max-iter" value="3000" min="1" max="100000" step="1"></label>
+    </div>
+    <div class="row">
+      <button id="solve-btn" type="button" class="primary">重新求解</button>
+      <button id="cancel-btn" type="button" disabled>取消计算</button>
+      <span id="status" class="status">请先导入源图、底图与掩膜（或选择样例）。</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>视图 <span class="hint">联动缩放与像素探针</span></h2>
+    <div class="row">
+      <label>缩放
+        <select id="zoom">
+          <option value="1">1×</option>
+          <option value="2" selected>2×</option>
+          <option value="4">4×</option>
+          <option value="8">8×</option>
+        </select>
+      </label>
+      <label>差值增益
+        <select id="diff-gain">
+          <option value="1">1×</option>
+          <option value="4" selected>4×</option>
+          <option value="16">16×</option>
+        </select>
+      </label>
+      <span id="probe" class="probe">—</span>
+    </div>
+    <div class="views">
+      <figure>
+        <figcaption>选区编辑（源图 + 掩膜）</figcaption>
+        <div class="canvas-box"><canvas id="view-mask"></canvas><div id="brush-cursor"></div></div>
+      </figure>
+      <figure>
+        <figcaption>直接粘贴</figcaption>
+        <div class="canvas-box"><canvas id="view-paste"></canvas></div>
+      </figure>
+      <figure>
+        <figcaption>求解结果（显示限幅，不改变解）</figcaption>
+        <div class="canvas-box"><canvas id="view-result"></canvas></div>
+      </figure>
+      <figure>
+        <figcaption>差值 |结果 − 粘贴|</figcaption>
+        <div class="canvas-box"><canvas id="view-diff"></canvas></div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>导出与报告</h2>
+    <div class="row">
+      <button id="export-png" type="button" disabled>导出结果 PNG</button>
+      <button id="export-json" type="button" disabled>导出报告 JSON</button>
+    </div>
+    <pre id="report" class="report">（尚无求解结果）</pre>
+  </section>
+</main>
+
+<footer>
+  <p>通过 <code>python3 -m http.server</code> 等方式以 HTTP 打开本页（Worker 与样例加载不支持 file://）。求解在 Web Worker 中进行，修改参数会自动取消旧计算。</p>
+</footer>
+
+<script src="js/solver.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
