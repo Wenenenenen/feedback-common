@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>二值细管图骨架测量</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>二值细管图骨架测量</h1>
+  <span class="hint">Zhang–Suen 细化 · 精确欧氏距离变换 · 骨架图提取（全部本地实现）</span>
+</header>
+
+<section id="controls">
+  <label class="file-btn">
+    导入 PNG（8 位灰度，单边 ≤ 512）
+    <input type="file" id="fileInput" accept="image/png">
+  </label>
+  <label>阈值 <span id="thresholdVal">128</span>
+    <input type="range" id="threshold" min="0" max="255" step="1" value="128">
+  </label>
+  <label><input type="checkbox" id="invert"> 反色</label>
+  <label>像素间距
+    <input type="number" id="spacing" min="0.0001" step="any" value="0.25">
+  </label>
+  <label>单位
+    <input type="text" id="unit" value="毫米" size="4">
+  </label>
+  <span id="imageInfo"></span>
+</section>
+
+<section id="exports">
+  <button id="exportSkeleton" disabled>导出骨架 PNG</button>
+  <button id="exportRaw" disabled>导出宽度 RAW（float32）</button>
+  <button id="exportJson" disabled>导出节点边 JSON</button>
+  <span id="summary"></span>
+</section>
+
+<main>
+  <div id="views">
+    <figure><figcaption>二值图</figcaption><canvas data-view="binary"></canvas></figure>
+    <figure><figcaption>骨架</figcaption><canvas data-view="skeleton"></canvas></figure>
+    <figure><figcaption>宽度热图</figcaption><canvas data-view="heatmap"></canvas></figure>
+    <figure><figcaption>分支编号</figcaption><canvas data-view="graph"></canvas></figure>
+  </div>
+  <aside id="side">
+    <h2>分支列表</h2>
+    <div id="edgeList" class="panel">尚未导入图像</div>
+    <h2>选中分支</h2>
+    <div id="edgeDetail" class="panel">点击任意视图中的分支查看长度与宽度统计</div>
+    <h2>宽度色标</h2>
+    <canvas id="colorbar" width="220" height="18"></canvas>
+    <div id="colorbarLabels"><span id="cbMin">–</span><span id="cbMax">–</span></div>
+  </aside>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
