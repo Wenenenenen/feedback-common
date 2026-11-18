@@ -1,0 +1,170 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>CLAHE 分块均衡器</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* 布局概念：暗房工作台 —— 顶部参数条，中部原图/结果对照台，底部分块检验台 */
+  :root {
+    --bg: #211f1c;
+    --panel: #2a2823;
+    --panel-2: #32302a;
+    --line: #45423a;
+    --fg: #ece7dc;
+    --muted: #a39c8d;
+    --accent: #d9a441;
+    --accent-soft: rgba(217, 164, 65, 0.16);
+    --danger: #e07a5f;
+    --ok: #8fb573;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 48px;
+    max-width: 1480px;
+    margin: 0 auto;
+  }
+  h1, h2, h3 { font-family: "Space Grotesk", "Inter", sans-serif; text-wrap: balance; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  header.top {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px;
+    border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 16px;
+  }
+  header.top h1 { font-size: 22px; margin: 0; letter-spacing: 0.01em; }
+  header.top .sub { color: var(--muted); font-size: 13px; }
+  header.top .spacer { flex: 1; }
+
+  .btn {
+    appearance: none; border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--fg); font: 500 13px "Inter", sans-serif; padding: 8px 14px;
+    border-radius: 6px; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #211f1c; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn:disabled:hover { border-color: var(--line); filter: none; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-end;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 18px; margin-bottom: 16px;
+  }
+  .ctl { display: flex; flex-direction: column; gap: 6px; min-width: 180px; flex: 1; max-width: 300px; }
+  .ctl .lbl { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px;
+    color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .ctl .val { font-family: "IBM Plex Mono", monospace; font-size: 14px; color: var(--accent); text-transform: none; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .ctl .hint { font-size: 11px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+  .ctl-group { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+
+  .statusbar { font-size: 13px; color: var(--muted); margin-bottom: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .statusbar .err { color: var(--danger); }
+  .statusbar .ok { color: var(--ok); }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; font-size: 12px; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+  figure.pane { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; min-width: 0; }
+  figure.pane figcaption {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 14px; font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--muted); border-bottom: 1px solid var(--line);
+  }
+  .imgwrap { position: relative; line-height: 0; cursor: crosshair; }
+  .imgwrap canvas { width: 100%; height: auto; display: block; image-rendering: auto; }
+  .imgwrap canvas.grid { position: absolute; inset: 0; pointer-events: none; }
+
+  .inspector { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; }
+  .inspector h2 { font-size: 15px; margin: 0 0 4px; }
+  .inspector .meta { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .inspector .meta b { color: var(--fg); font-weight: 500; }
+  .charts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  .chart { min-width: 0; }
+  .chart h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 0 6px; letter-spacing: .04em; text-transform: uppercase; }
+  .chart canvas { width: 100%; height: auto; display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; }
+  .empty-note { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+
+  footer.spec { margin-top: 20px; color: var(--muted); font-size: 12px; line-height: 1.7; border-top: 1px solid var(--line); padding-top: 12px; }
+  footer.spec code { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--fg); }
+</style>
+
+<header class="top">
+  <h1>CLAHE 分块均衡器</h1>
+  <span class="sub">限制对比度的自适应直方图均衡 · 巡检照片暗部增强</span>
+  <span class="spacer"></span>
+  <label class="btn primary" for="fileInput" style="cursor:pointer">导入 PNG</label>
+  <input type="file" id="fileInput" accept=".png,image/png" hidden>
+</header>
+
+<section class="controls">
+  <div class="ctl">
+    <div class="lbl"><span>横向分块 tx</span><span class="val" id="txVal">8</span></div>
+    <input type="range" id="tx" min="1" max="16" step="1" value="8">
+  </div>
+  <div class="ctl">
+    <div class="lbl"><span>纵向分块 ty</span><span class="val" id="tyVal">8</span></div>
+    <input type="range" id="ty" min="1" max="16" step="1" value="8">
+  </div>
+  <div class="ctl">
+    <div class="lbl"><span>裁剪系数 clip</span><span class="val" id="clipVal">2.0</span></div>
+    <input type="range" id="clip" min="0" max="10" step="0.1" value="2">
+    <span class="hint">0 表示不裁剪；limit = max(1, ⌊clip·N/256⌋)</span>
+  </div>
+  <div class="ctl-group">
+    <button class="btn" id="exportPng" type="button">导出 PNG</button>
+    <button class="btn" id="exportJson" type="button">导出映射表 JSON</button>
+  </div>
+</section>
+
+<div class="statusbar" id="statusbar">
+  <span id="statusText">当前为内置示例图（合成），可导入自己的 PNG。</span>
+  <span class="chip mono" id="sizeChip"></span>
+</div>
+
+<section class="compare">
+  <figure class="pane">
+    <figcaption><span>原图</span><span class="mono" id="srcInfo"></span></figcaption>
+    <div class="imgwrap" id="srcWrap">
+      <canvas id="srcCanvas"></canvas>
+      <canvas class="grid" id="srcGrid"></canvas>
+    </div>
+  </figure>
+  <figure class="pane">
+    <figcaption><span>CLAHE 结果</span><span class="mono" id="resInfo"></span></figcaption>
+    <div class="imgwrap" id="resWrap">
+      <canvas id="resCanvas"></canvas>
+      <canvas class="grid" id="resGrid"></canvas>
+    </div>
+  </figure>
+</section>
+
+<section class="inspector" id="inspector">
+  <h2>分块检验</h2>
+  <div class="meta" id="tileMeta"></div>
+  <div class="charts" id="charts" hidden>
+    <div class="chart"><h3>原始直方图</h3><canvas id="histRaw"></canvas></div>
+    <div class="chart"><h3>裁剪 / 重分配后直方图</h3><canvas id="histClip"></canvas></div>
+    <div class="chart"><h3>映射曲线 map[v]</h3><canvas id="mapCurve"></canvas></div>
+  </div>
+  <div class="empty-note" id="emptyNote">点击上方任意一张图，查看该分块的直方图与映射曲线。</div>
+</section>
+
+<footer class="spec">
+  约定：分块 i 列覆盖 <code>x ∈ [⌊iW/tx⌋, ⌊(i+1)W/tx⌋−1]</code>（分块大小可不等）；超出上限的计数
+  <code>E</code> 截到 limit 后，每 bin 加 <code>⌊E/256⌋</code>，余数 <code>E mod 256</code> 分给下标 0 起的 bin；
+  <code>map[v]=⌊255·cdf[v]/N+0.5⌋</code>；分块中心间双线性插值消除接缝。彩色图只均衡亮度
+  <code>Y=0.299R+0.587G+0.114B</code>，按比例换回 RGB，不改变色调。支持 8 位灰度 / RGB 非隔行 PNG，单边 ≤ 2048。
+</footer>
+
+<script src="clahe.js"></script>
+<script src="app.js"></script>
