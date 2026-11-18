@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNG 扫描行实验室</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>PNG 扫描行实验室</h1>
+  <p class="sub">块解析 · CRC 校验 · 五种扫描行过滤 · Adam7 隔行重组 —— 全部自行实现，仅 zlib 使用平台能力，不借助图像库或浏览器解码</p>
+</header>
+
+<main>
+  <section id="dropzone" tabindex="0">
+    <p class="dz-main">拖入 PNG 文件，或点击选择</p>
+    <p class="dz-hint">灰度 8/16 位 · RGB / RGBA 8 位 · 索引色 1/2/4/8 位 · 含 tRNS 与 Adam7 · 单边 ≤ 2048 · 文件 ≤ 20MB</p>
+    <input type="file" id="file-input" accept=".png,image/png" hidden>
+  </section>
+
+  <section id="error-panel" class="hidden">
+    <h2>⚠ 校验失败 — 已停止，不输出部分图像</h2>
+    <p id="error-message"></p>
+    <p id="error-location"></p>
+    <div id="error-chunks"></div>
+  </section>
+
+  <section id="result" class="hidden">
+    <div id="summary"></div>
+
+    <div class="grid">
+      <div class="card" id="preview-card">
+        <h2>预览（RGBA8）</h2>
+        <div class="checker" id="preview-wrap">
+          <canvas id="preview"></canvas>
+        </div>
+        <p class="hint">点击图像查看原始通道值（不降位）</p>
+        <div id="pixel-info" class="pixel-info">未选择像素</div>
+      </div>
+
+      <div class="card">
+        <h2>块结构</h2>
+        <div class="table-wrap"><table id="chunk-table">
+          <thead><tr><th>#</th><th>类型</th><th>偏移</th><th>长度</th><th>CRC</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="card wide">
+        <h2>Pass 分析</h2>
+        <div class="legend" id="filter-legend"></div>
+        <div id="pass-list"></div>
+      </div>
+
+      <div class="card wide">
+        <h2>重编码（输出非隔行 PNG，保留原位深 / 调色板 / 像素 / 透明度）</h2>
+        <div class="renc-controls">
+          <label>过滤器：
+            <select id="filter-mode">
+              <option value="auto" selected>自动择优（逐行最小 |int8| 和）</option>
+              <option value="0">0 - None</option>
+              <option value="1">1 - Sub</option>
+              <option value="2">2 - Up</option>
+              <option value="3">3 - Average</option>
+              <option value="4">4 - Paeth</option>
+            </select>
+          </label>
+          <button id="renc-btn">重编码</button>
+        </div>
+        <div id="renc-result" class="hidden">
+          <div id="renc-stats"></div>
+          <div class="legend" id="renc-legend"></div>
+          <canvas id="renc-strip" class="strip"></canvas>
+          <div class="renc-actions">
+            <button id="dl-png">下载重编码 PNG</button>
+            <button id="dl-json">下载逐行过滤记录 JSON</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <button id="dl-src-json" class="hidden">下载原图逐行过滤记录 JSON</button>
+</footer>
+
+<script src="js/png-core.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
