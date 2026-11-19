@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解压的不受信任样例与临时测试输出
+work/samples-extract/
+work/tools/__pycache__/
+*.pyc
