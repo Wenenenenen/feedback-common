@@ -1,0 +1,68 @@
+{
+  "parameters": {
+    "sigma": 0.1,
+    "edge_threshold": 0.2,
+    "space": "depth",
+    "solver": "pcg",
+    "residual_tolerance": 0.00001
+  },
+  "global_stats": {
+    "width": 11,
+    "height": 5,
+    "validPixels": 50,
+    "outsidePixels": 5,
+    "anchorPixels": 2,
+    "completedPixels": 33,
+    "componentCount": 3,
+    "anchoredComponents": 2,
+    "unanchoredComponents": 1,
+    "solvedComponents": 2,
+    "ignoredMeasurements": 1,
+    "edgeCount": 75,
+    "residualTolerance": 0.00001,
+    "allConverged": true
+  },
+  "components": [
+    {
+      "id": 0,
+      "anchored": true,
+      "solved": true,
+      "pixel_count": 20,
+      "anchor_count": 1,
+      "completed_count": 19,
+      "iterations": 0,
+      "max_abs_normalized_residual": 0,
+      "output_depth_mm": {
+        "min": 1000,
+        "max": 1000,
+        "mean": 1000
+      }
+    },
+    {
+      "id": 1,
+      "anchored": true,
+      "solved": true,
+      "pixel_count": 15,
+      "anchor_count": 1,
+      "completed_count": 14,
+      "iterations": 0,
+      "max_abs_normalized_residual": 0,
+      "output_depth_mm": {
+        "min": 4000,
+        "max": 4000,
+        "mean": 4000
+      }
+    },
+    {
+      "id": 2,
+      "anchored": false,
+      "solved": false,
+      "pixel_count": 15,
+      "anchor_count": 0,
+      "completed_count": 0,
+      "iterations": 0,
+      "max_abs_normalized_residual": null,
+      "output_depth_mm": null
+    }
+  ]
+}

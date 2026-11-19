@@ -1,0 +1,11 @@
+{
+  "name": "guided-depth-completion",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sparse depth map completion via guided graph Laplacian (hand-assembled equations, generic sparse solver, no depth-completion/joint-bilateral/guided-filter APIs).",
+  "scripts": {
+    "verify": "node tools/verify.js",
+    "serve": "node tools/serve.js"
+  }
+}

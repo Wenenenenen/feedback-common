@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试产物与解包样例（原始 zip 保留在 samples/）
+test-output/
+samples/extracted/
+node_modules/

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>引导深度补全工作台</title>
+<style>
+/* Layout: fixed control rail + scrolling analysis canvas. Tokens drive both themes. */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --fg: #1a1d24;
+  --fg-muted: #5c6370;
+  --fg-faint: #8a919e;
+  --line: #d8dce3;
+  --accent: #2f6df0;
+  --accent-fg: #ffffff;
+  --good: #2e8b57;
+  --warn: #c25450;
+  --anchor: #f0dc5a;
+  --outside: #28282e;
+  --unanchored: #c85050;
+  --completed: #50aa6e;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(20, 24, 33, .08), 0 4px 16px rgba(20, 24, 33, .06);
+  --mono: "SFMono-Regular", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161b; --surface: #1c1f26; --surface-2: #242833;
+    --fg: #e8eaf0; --fg-muted: #a6adba; --fg-faint: #78808e;
+    --line: #333945; --accent: #5b8cff; --accent-fg: #0b0d12;
+    --good: #5cc98a; --warn: #e87875; --shadow: 0 1px 3px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161b; --surface: #1c1f26; --surface-2: #242833;
+  --fg: #e8eaf0; --fg-muted: #a6adba; --fg-faint: #78808e;
+  --line: #333945; --accent: #5b8cff; --accent-fg: #0b0d12;
+  --good: #5cc98a; --warn: #e87875; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans);
+  font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px; padding-block: 16px; min-height: 100%; }
+@media (max-width: 900px) { .app { grid-template-columns: 1fr; } }
+
+header.rail h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: .2px; }
+header.rail .sub { color: var(--fg-muted); font-size: 12px; margin-bottom: 14px; }
+.rail { position: sticky; top: 16px; align-self: start; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 4px; }
+@media (max-width: 900px) { .rail { position: static; max-height: none; } }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+.card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--fg-muted); margin: 0 0 10px; font-weight: 600; }
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.field:last-child { margin-bottom: 0; }
+.field label { font-size: 12.5px; color: var(--fg-muted); display: flex; justify-content: space-between; gap: 8px; }
+.field label .val { font-family: var(--mono); color: var(--fg); }
+input[type="file"] { width: 100%; font-size: 12.5px; color: var(--fg-muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+select, input[type="number"] {
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 8px; font-family: var(--sans); font-size: 13px; width: 100%;
+}
+.file-row { display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface-2); }
+.file-row .name { font-size: 12px; color: var(--fg); font-family: var(--mono); word-break: break-all; }
+.file-row .meta { font-size: 11px; color: var(--fg-faint); }
+.file-row.ok { border-color: var(--good); }
+button {
+  background: var(--accent); color: var(--accent-fg); border: none; border-radius: 8px;
+  padding: 9px 12px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: var(--sans);
+  width: 100%;
+}
+button.secondary { background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:not(:disabled):hover { filter: brightness(1.06); }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.radio-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.radio-row label { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--fg); }
+
+.main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.stat .k { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .6px; }
+.stat .v { font-size: 20px; font-weight: 650; font-family: var(--mono); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 12px; font-weight: 400; color: var(--fg-muted); }
+
+.canvas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) { .canvas-grid { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow); min-width: 0; }
+.panel .ptitle { font-size: 12.5px; font-weight: 600; margin-bottom: 7px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.panel .ptitle .hint { font-weight: 400; color: var(--fg-faint); font-size: 11px; }
+.canvas-wrap { position: relative; display: flex; justify-content: center; background: var(--surface-2); border-radius: 7px; padding: 6px; }
+canvas { image-rendering: pixelated; cursor: crosshair; max-width: 100%; height: auto; display: block; }
+.crosshair { position: absolute; pointer-events: none; border: 1.5px solid var(--accent); display: none; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--fg-muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.25); }
+
+.inspector { font-family: var(--mono); font-size: 12.5px; }
+.inspector .grid2 { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; }
+.inspector .k { color: var(--fg-faint); }
+.inspector .v { color: var(--fg); text-align: right; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; font-family: var(--sans); }
+.pill.anchor { background: var(--anchor); color: #2a2a00; }
+.pill.completed { background: var(--completed); color: #06230f; }
+.pill.unanchored { background: var(--unanchored); color: #fff; }
+.pill.outside { background: var(--outside); color: #ddd; }
+
+.colorbar { height: 12px; border-radius: 6px; margin-top: 6px; background: linear-gradient(90deg, #440154, #3b528b, #21918c, #5ec962, #fde725); }
+.colorbar-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--fg-faint); font-family: var(--mono); margin-top: 3px; }
+
+table.comps { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+table.comps th, table.comps td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.comps th:first-child, table.comps td:first-child { text-align: left; }
+table.comps th { color: var(--fg-faint); font-weight: 600; font-size: 11px; }
+.table-scroll { overflow-x: auto; }
+.msg { font-size: 12.5px; padding: 9px 11px; border-radius: 8px; }
+.msg.err { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+.msg.ok { background: color-mix(in srgb, var(--good) 12%, transparent); color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 35%, transparent); }
+.progress { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin-top: 8px; }
+.progress > div { height: 100%; background: var(--accent); width: 0; transition: width .15s; }
+.empty { color: var(--fg-faint); font-size: 13px; text-align: center; padding: 26px 12px; }
+.theme-toggle { position: fixed; top: 12px; right: max(14px, env(safe-area-inset-right, 0px)); z-index: 20;
+  background: var(--surface); border: 1px solid var(--line); color: var(--fg); width: 34px; height: 34px;
+  border-radius: 50%; padding: 0; font-size: 15px; box-shadow: var(--shadow); }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" title="切换明暗主题" aria-label="切换明暗主题">◐</button>
+<div class="app">
+  <aside class="rail">
+    <header class="rail">
+      <h1>引导深度补全工作台</h1>
+      <div class="sub">四邻接图拉普拉斯 · 自组方程 · 锚点严格保留</div>
+    </header>
+
+    <section class="card">
+      <h2>输入（同尺寸，单边 ≤ 512）</h2>
+      <div class="file-row" id="guideRow">
+        <input type="file" id="guideFile" accept="image/png">
+        <div class="name" id="guideName">引导图：8 位 RGB PNG</div>
+        <div class="meta" id="guideMeta"></div>
+      </div>
+      <div class="file-row" style="margin-top:8px" id="depthRow">
+        <input type="file" id="depthFile" accept="image/png">
+        <div class="name" id="depthName">深度图：16 位灰度 PNG（0 缺测，单位 mm）</div>
+        <div class="meta" id="depthMeta"></div>
+      </div>
+      <div class="file-row" style="margin-top:8px" id="maskRow">
+        <input type="file" id="maskFile" accept="image/png">
+        <div class="name" id="maskName">有效区域掩膜（可选，0 无效 / 255 有效）</div>
+        <div class="meta" id="maskMeta"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>求解参数</h2>
+      <div class="field">
+        <label>颜色尺度 σ <span class="val" id="sigmaVal">0.10</span></label>
+        <input type="range" id="sigma" min="0.01" max="1" step="0.01" value="0.1">
+      </div>
+      <div class="field">
+        <label>断边阈值 edge_threshold <span class="val" id="edgeVal">0.20</span></label>
+        <input type="range" id="edgeThreshold" min="0" max="1.732" step="0.01" value="0.2">
+      </div>
+      <div class="field">
+        <label>求解空间</label>
+        <div class="radio-row">
+          <label><input type="radio" name="space" value="depth" checked> 深度 z=d/1000 (m)</label>
+          <label><input type="radio" name="space" value="inverse"> 逆深度 z=1000/d (1/m)</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>稀疏求解器（均为手写实现）</label>
+        <select id="solver">
+          <option value="pcg" selected>预处理共轭梯度 PCG（Jacobi）</option>
+          <option value="gs">红黑 Gauss–Seidel</option>
+        </select>
+      </div>
+      <button id="runBtn" disabled>构建图并求解</button>
+      <div class="progress" id="progressWrap" hidden><div id="progressBar"></div></div>
+      <div id="runMsg"></div>
+    </section>
+
+    <section class="card">
+      <h2>导出</h2>
+      <div class="btn-row">
+        <button class="secondary" id="expDepth" disabled>16 位深度 PNG</button>
+        <button class="secondary" id="expStatus" disabled>状态 PNG</button>
+      </div>
+      <button class="secondary" id="expJson" disabled style="margin-top:8px">结果 JSON（参数 + 区域统计）</button>
+    </section>
+  </aside>
+
+  <main class="main">
+    <section class="stat-grid" id="statGrid">
+      <div class="stat"><div class="k">状态</div><div class="v" id="stState" style="font-size:14px">等待输入</div></div>
+      <div class="stat"><div class="k">有效像素</div><div class="v" id="stValid">–</div></div>
+      <div class="stat"><div class="k">锚点测量</div><div class="v" id="stAnchor">–</div></div>
+      <div class="stat"><div class="k">连通分量</div><div class="v" id="stComp">–</div></div>
+      <div class="stat"><div class="k">无锚点分量</div><div class="v" id="stUnanchored">–</div></div>
+      <div class="stat"><div class="k">域外忽略测量</div><div class="v" id="stIgnored">–</div></div>
+      <div class="stat"><div class="k">最大局部残差</div><div class="v" id="stRes" style="font-size:14px">–</div></div>
+    </section>
+
+    <section class="canvas-grid">
+      <div class="panel">
+        <div class="ptitle">原始稀疏深度 <span class="hint">viridis 着色 · 空点深色</span></div>
+        <div class="canvas-wrap"><canvas id="cvSparse"></canvas><div class="crosshair" id="ch0"></div></div>
+        <div class="colorbar" id="cb1"></div>
+        <div class="colorbar-labels"><span id="cb1min">–</span><span id="cb1max">–</span></div>
+      </div>
+      <div class="panel">
+        <div class="ptitle">补全深度 <span class="hint" id="completeHint">同色标</span></div>
+        <div class="canvas-wrap"><canvas id="cvComplete"></canvas><div class="crosshair" id="ch1"></div></div>
+      </div>
+      <div class="panel">
+        <div class="ptitle">状态图 <span class="hint">按约定状态码</span></div>
+        <div class="canvas-wrap"><canvas id="cvStatus"></canvas><div class="crosshair" id="ch2"></div></div>
+        <div class="legend">
+          <span><i class="sw" style="background:rgb(40,40,46)"></i>0 域外</span>
+          <span><i class="sw" style="background:rgb(200,80,80)"></i>64 无锚点分量</span>
+          <span><i class="sw" style="background:rgb(80,170,110)"></i>128 成功补全</span>
+          <span><i class="sw" style="background:rgb(240,220,90)"></i>255 原始测量</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ptitle">连通分量 <span class="hint">金色角分色 · 灰=无锚点</span></div>
+        <div class="canvas-wrap"><canvas id="cvComp"></canvas><div class="crosshair" id="ch3"></div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>像素检视（点选任一画布）</h2>
+      <div class="inspector" id="inspector"><div class="empty">在任一画布上点击或悬停像素，查看测量值 / 补全值与归一化残差。</div></div>
+    </section>
+
+    <section class="card">
+      <h2>各连通分量统计</h2>
+      <div class="table-scroll">
+        <table class="comps" id="compTable">
+          <thead><tr><th>分量</th><th>像素数</th><th>锚点数</th><th>状态</th><th>迭代</th><th>最大|残差|</th><th>深度 min(mm)</th><th>mean</th><th>max</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
