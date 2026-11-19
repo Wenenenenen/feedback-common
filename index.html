@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>重叠变换音频量化实验台</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1c2129; --panel2: #232a35; --line: #333c4a;
+    --text: #dfe6ef; --dim: #8b98a8; --accent: #4da3ff; --accent2: #ff9f43;
+    --ok: #3fce8b; --bad: #ff5f6b; --warn: #ffc94d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header { padding: 18px 24px 10px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+  main { padding: 0 24px 40px; max-width: 1200px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-top: 14px;
+  }
+  section h2 { margin: 0 0 10px; font-size: 15px; color: var(--accent); font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .col { display: flex; flex-direction: column; gap: 6px; }
+  label { color: var(--dim); font-size: 13px; }
+  input[type=file] { color: var(--dim); }
+  input[type=number], select {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 8px; width: 110px; font: inherit;
+  }
+  button {
+    background: var(--accent); color: #0b1420; border: 0; border-radius: 6px;
+    padding: 7px 16px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .radio-group { display: flex; gap: 12px; align-items: center; }
+  .radio-group label { color: var(--text); display: flex; gap: 4px; align-items: center; }
+  table.info { border-collapse: collapse; font-size: 13px; }
+  table.info td { padding: 2px 14px 2px 0; color: var(--dim); }
+  table.info td + td { color: var(--text); }
+  .msg { font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
+  .msg.error { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+  .msg.warn { color: var(--warn); }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; }
+  .card {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 14px; min-width: 220px; flex: 1;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 13px; color: var(--dim); font-weight: 600; }
+  .metric { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; }
+  .metric b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
+    background: var(--ok); color: #06281a; font-weight: 700;
+  }
+  .badge.src { background: var(--accent2); color: #2a1a05; }
+  canvas { display: block; width: 100%; background: #10131a; border: 1px solid var(--line); border-radius: 6px; }
+  .canvas-label { font-size: 12px; color: var(--dim); margin: 8px 0 3px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { background: var(--panel2); color: var(--text); border-radius: 0; padding: 6px 14px; font-weight: 500; }
+  .seg button.on { background: var(--accent); color: #0b1420; font-weight: 700; }
+  .progress { flex: 1; height: 8px; background: var(--panel2); border-radius: 4px; cursor: pointer; min-width: 160px; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); border-radius: 4px; }
+  .readout {
+    font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums;
+    min-height: 18px; margin-top: 3px;
+  }
+  input[type=range] { flex: 1; min-width: 200px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>重叠变换（MDCT）音频量化实验台</h1>
+  <p>按约定公式实现 MDCT / 反变换 / 正弦窗 / 重叠相加（仅基于基础 FFT 与矩阵运算）。支持浮点旁路与四频带独立步长的 16 位系数量化，可逐块检查系数、量化误差与重建波形。</p>
+</header>
+<main>
+
+<section>
+  <h2>1. 输入 WAV</h2>
+  <div class="row">
+    <input type="file" id="wavFile" accept=".wav,audio/wav">
+    <span class="msg" id="wavInfo"></span>
+  </div>
+  <div class="msg error" id="wavError"></div>
+  <table class="info hidden" id="wavTable">
+    <tr><td>采样率</td><td id="wiRate"></td><td>声道</td><td id="wiCh"></td></tr>
+    <tr><td>位深</td><td id="wiBits"></td><td>帧数 L</td><td id="wiFrames"></td></tr>
+    <tr><td>时长</td><td id="wiDur"></td><td>块数 K</td><td id="wiBlocks">—</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>2. 变换与量化参数</h2>
+  <div class="row">
+    <div class="col">
+      <label>半窗长 N</label>
+      <div class="radio-group" id="nGroup">
+        <label><input type="radio" name="n" value="128" checked>128</label>
+        <label><input type="radio" name="n" value="256">256</label>
+        <label><input type="radio" name="n" value="512">512</label>
+      </div>
+    </div>
+    <div class="col">
+      <label>链路</label>
+      <div class="radio-group" id="modeGroup">
+        <label><input type="radio" name="mode" value="float" checked>浮点旁路（float32le）</label>
+        <label><input type="radio" name="mode" value="int16">16 位系数量化（int16le）</label>
+      </div>
+    </div>
+    <div class="col" id="stepsCol" style="opacity:.45">
+      <label>四个频带步长 Δ（k 的频带 = ⌊4k/N⌋）</label>
+      <div class="row" style="gap:8px">
+        <span>带0 <input type="number" class="step" value="0.02" step="any" min="0"></span>
+        <span>带1 <input type="number" class="step" value="0.03" step="any" min="0"></span>
+        <span>带2 <input type="number" class="step" value="0.04" step="any" min="0"></span>
+        <span>带3 <input type="number" class="step" value="0.05" step="any" min="0"></span>
+      </div>
+    </div>
+    <button id="runBtn" disabled>运行变换链</button>
+  </div>
+  <div class="msg error" id="paramError"></div>
+</section>
+
+<section id="metricsSec" class="hidden">
+  <h2>3. 误差能量与信噪比</h2>
+  <div class="row" style="margin-bottom:8px">
+    <span class="badge src" id="srcBadge"></span>
+    <span class="msg" id="lenCheck"></span>
+  </div>
+  <div class="cards" id="metricCards"></div>
+  <div class="msg error" id="overflowMsg"></div>
+</section>
+
+<section id="playSec" class="hidden">
+  <h2>4. 试听（播放中可同步切换）</h2>
+  <div class="row">
+    <button id="playBtn" class="ghost" style="min-width:74px">▶ 播放</button>
+    <div class="seg" id="srcSeg">
+      <button data-src="orig">原声</button>
+      <button data-src="recon" class="on">重建</button>
+      <button data-src="diff">差分</button>
+    </div>
+    <div class="progress" id="progress"><div></div></div>
+    <span class="msg" id="timeLabel" style="font-variant-numeric:tabular-nums">0.000 / 0.000 s</span>
+    <label><input type="checkbox" id="loopChk" checked>循环</label>
+  </div>
+</section>
+
+<section id="overviewSec" class="hidden">
+  <h2>5. 波形总览（竖线为块边界，点击选中块）</h2>
+  <canvas id="overview" height="270"></canvas>
+</section>
+
+<section id="blockSec" class="hidden">
+  <h2>6. 块检查器</h2>
+  <div class="row">
+    <label>块 b <input type="number" id="blockNum" min="0" value="0" style="width:80px"></label>
+    <input type="range" id="blockSlider" min="0" value="0">
+    <label id="chSelLabel">声道
+      <select id="chSel"><option value="0">0</option><option value="1">1</option></select>
+    </label>
+    <span class="msg" id="blockInfo"></span>
+  </div>
+  <div class="canvas-label">系数 C[b,k]：原始（蓝） vs 重建用（橙）；灰带为四个量化频带</div>
+  <canvas id="coeffCanvas" height="220"></canvas>
+  <div class="readout" id="coeffReadout"></div>
+  <div class="canvas-label">量化误差（原始 − 重建用）</div>
+  <canvas id="errCanvas" height="120"></canvas>
+  <div class="canvas-label">本块重建波形（反变换输出 2N 点，已加窗，未重叠相加）</div>
+  <canvas id="reconCanvas" height="140"></canvas>
+</section>
+
+<section>
+  <h2>7. 导出 / 导入</h2>
+  <div class="row">
+    <button id="expZip" class="ghost" disabled>导出系数 ZIP</button>
+    <button id="expWav" class="ghost" disabled>导出 24 位 PCM WAV（重建）</button>
+    <label class="ghost" style="padding:7px 16px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);cursor:pointer">
+      导入系数 ZIP（独立解码）<input type="file" id="impZip" accept=".zip" class="hidden">
+    </label>
+  </div>
+  <div class="msg" id="ioMsg"></div>
+</section>
+
+</main>
+<script src="dsp.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
