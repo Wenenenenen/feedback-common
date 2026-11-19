@@ -15,3 +15,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试临时产物
+tools/tmp_enc/
+tools/py_medium.json
+tools/py_rgb.json
+# 解包的不可信样例（来自 samples 压缩包，不入库）
+_untrusted/
