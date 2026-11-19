@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>绕数填充三角化 · Winding Fill Tessellator</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --panel2: #1e2740; --line: #2a3550;
+    --txt: #e6ebf5; --dim: #8b97b0; --acc: #5b9dff; --acc2: #43d8c9;
+    --warn: #ffb454; --bad: #ff6b81;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; flex-direction: column; height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  .ctrl { display: flex; align-items: center; gap: 6px; }
+  select, button, input[type=file]::file-selector-button {
+    background: var(--panel2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--acc); }
+  button.primary { background: var(--acc); border-color: var(--acc); color: #08111f; font-weight: 600; }
+  .spacer { flex: 1; }
+  .rule-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .rule-seg button { border: 0; border-radius: 0; padding: 6px 14px; background: var(--panel2); }
+  .rule-seg button.on { background: var(--acc); color: #08111f; font-weight: 600; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px; padding: 10px; min-height: 0; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    display: flex; flex-direction: column; overflow: hidden; min-height: 0;
+  }
+  .card h2 {
+    margin: 0; padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--dim);
+    border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center;
+  }
+  .card h2 .tag { color: var(--acc2); font-weight: 500; }
+  .canvas-wrap { flex: 1; position: relative; min-height: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  aside#info {
+    position: fixed; right: 14px; bottom: 14px; width: 290px; max-height: 46vh; overflow: auto;
+    background: rgba(23,30,46,.96); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; font-size: 12px; box-shadow: 0 10px 40px rgba(0,0,0,.5); display: none;
+  }
+  aside#info.show { display: block; }
+  aside#info h3 { margin: 0 0 8px; font-size: 13px; }
+  aside#info .kv { display: flex; justify-content: space-between; color: var(--dim); margin: 3px 0; }
+  aside#info .kv b { color: var(--txt); font-weight: 600; }
+  aside#info .close { float: right; cursor: pointer; color: var(--dim); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 6px 12px; color: var(--dim); font-size: 11px; }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+  #status { padding: 6px 16px; background: var(--panel); border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; display: flex; gap: 18px; flex-wrap: wrap; }
+  #status b { color: var(--acc2); font-weight: 600; }
+  .hint { color: var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>绕数填充三角化</h1>
+  <span class="sub">精确有理数 · 自交/孔洞/重叠边 · 无第三方几何库</span>
+  <div class="ctrl rule-seg">
+    <button id="rule-eo" class="on">奇偶 evenodd</button>
+    <button id="rule-nz">非零 nonzero</button>
+  </div>
+  <div class="ctrl">
+    <select id="sample"></select>
+    <button id="reload">载入样例</button>
+    <label class="ctrl" style="gap:4px">导入 JSON <input type="file" id="file" accept=".json"></label>
+  </div>
+  <div class="spacer"></div>
+  <div class="ctrl">
+    <button id="export-json">导出网格/分区 JSON</button>
+    <button id="export-png" class="primary">导出预览 PNG</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>① 原始轮廓 <span class="tag" id="t1"></span></h2>
+    <div class="canvas-wrap"><canvas id="c1"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>② 细分边（剖分原子边 + 交点）<span class="tag" id="t2"></span></h2>
+    <div class="canvas-wrap"><canvas id="c2"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>③ 绕数分区 <span class="tag" id="t3"></span></h2>
+    <div class="canvas-wrap"><canvas id="c3"></canvas></div>
+    <div class="legend">
+      <span><i style="background:#5b9dff"></i>填充区</span>
+      <span><i style="background:#2a3550"></i>孔洞/外部</span>
+      <span class="hint">点按区域查看绕数与贡献轮廓</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>④ 最终三角形网格 <span class="tag" id="t4"></span></h2>
+    <div class="canvas-wrap"><canvas id="c4"></canvas></div>
+  </div>
+</main>
+
+<aside id="info">
+  <span class="close" id="info-close">✕</span>
+  <h3>区域信息</h3>
+  <div id="info-body"></div>
+</aside>
+
+<div id="status">
+  <span>顶点 <b id="s-v">–</b></span>
+  <span>原子边 <b id="s-e">–</b></span>
+  <span>三角形 <b id="s-t">–</b></span>
+  <span>分区 <b id="s-r">–</b></span>
+  <span>精确面积 <b id="s-a">–</b></span>
+  <span id="s-msg" class="hint"></span>
+</div>
+
+<script type="module">
+import { tessellate, meshToJSON } from './src/pipeline.js';
+import { ptKey } from './src/geometry.js';
+
+const SAMPLE_FILES = [
+  ['reference 样例集', null],
+  ['bowtie 自交', 'bowtie.json'],
+  ['collinear-touch 共线相切', 'collinear-touch.json'],
+  ['duplicate 重复描边', 'duplicate.json'],
+  ['opposite-hole 反向孔', 'opposite-hole.json'],
+  ['overlap 重叠', 'overlap.json'],
+  ['same-hole 同向孔', 'same-hole.json'],
+  ['stress 压力', 'stress.json'],
+];
+const sampleSel = document.getElementById('sample');
+for (const [label, val] of SAMPLE_FILES) {
+  const o = document.createElement('option');
+  o.textContent = label; o.value = val ?? '';
+  sampleSel.appendChild(o);
+}
+sampleSel.value = 'bowtie.json';
+
+let state = { contours: [], rule: 'evenodd', result: null, error: null };
+let drag = null; // {contour, index}
+
+// ---------- 载入 ----------
+async function loadSample(name) {
+  const res = await fetch('./samples/extracted/' + name);
+  if (!res.ok) throw new Error('无法加载 ' + name);
+  return await res.json();
+}
+function recompute() {
+  state.error = null;
+  try {
+    state.result = tessellate(state.contours, state.rule);
+    document.getElementById('s-msg').textContent = '';
+  } catch (e) {
+    state.result = null;
+    state.error = e.message;
+    document.getElementById('s-msg').textContent = '错误: ' + e.message;
+  }
+  renderAll();
+}
+async function loadSelected() {
+  const name = sampleSel.value;
+  if (!name) return;
+  const data = await loadSample(name);
+  state.contours = data.contours.map((r) => r.map((p) => p.slice()));
+  state.rule = data.rule || state.rule;
+  syncRuleButtons();
+  recompute();
+}
+document.getElementById('reload').onclick = loadSelected;
+sampleSel.onchange = loadSelected;
+
+document.getElementById('file').onchange = async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const data = JSON.parse(text);
+  state.contours = data.contours.map((r) => r.map((p) => p.slice()));
+  if (data.rule) { state.rule = data.rule; syncRuleButtons(); }
+  recompute();
+};
+
+function syncRuleButtons() {
+  document.getElementById('rule-eo').classList.toggle('on', state.rule === 'evenodd');
+  document.getElementById('rule-nz').classList.toggle('on', state.rule === 'nonzero');
+}
+document.getElementById('rule-eo').onclick = () => { state.rule = 'evenodd'; syncRuleButtons(); recompute(); };
+document.getElementById('rule-nz').onclick = () => { state.rule = 'nonzero'; syncRuleButtons(); recompute(); };
+
+// ---------- 视图变换 ----------
+function makeView(canvas) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  return {
+    ctx,
+    setup(points) {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const W = rect.width, H = rect.height;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const p of points) {
+        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+      }
+      if (!isFinite(minX)) { minX = 0; maxX = 1; minY = 0; maxY = 1; }
+      if (maxX === minX) maxX = minX + 1;
+      if (maxY === minY) maxY = minY + 1;
+      const pad = 28;
+      const sx = (W - 2 * pad) / (maxX - minX);
+      const sy = (H - 2 * pad) / (maxY - minY);
+      const s = Math.min(sx, sy);
+      const ox = (W - s * (maxX - minX)) / 2 - s * minX;
+      // 数学 Y 向上：翻转
+      const oy = (H - s * (maxY - minY)) / 2 + s * maxY;
+      this.toScreen = (x, y) => [ox + s * x, oy - s * y];
+      this.toMath = (sx2, sy2) => [(sx2 - ox) / s, (oy - sy2) / s];
+      this.scale = s;
+      ctx.clearRect(0, 0, W, H);
+      return { W, H };
+    },
+  };
+}
+const views = [1, 2, 3, 4].map((i) => makeView(document.getElementById('c' + i)));
+
+function allInputPoints() {
+  const pts = [];
+  for (const r of state.contours) for (const p of r) pts.push({ x: p[0], y: p[1] });
+  return pts;
+}
+function drawPolyline(ctx, view, ring, stroke, width, close = true, dash = []) {
+  if (ring.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  ring.forEach((p, i) => {
+    const [x, y] = view.toScreen(p[0], p[1]);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  if (close) ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 绕数分区配色
+function windingColor(w, rule) {
+  if (rule === 'evenodd') return w === 1 ? 'rgba(91,157,255,.55)' : 'rgba(42,53,80,.0)';
+  const mag = Math.abs(w);
+  const alpha = Math.min(0.75, 0.25 + mag * 0.18);
+  return w === 0 ? 'rgba(42,53,80,0)' : `rgba(67,216,201,${alpha})`;
+}
+
+function renderAll() {
+  const r = state.result;
+  // 状态
+  if (r) {
+    document.getElementById('s-v').textContent = r.compactVerts.length;
+    document.getElementById('s-e').textContent = r.arrangement.atomic.length;
+    document.getElementById('s-t').textContent = r.triangles.length;
+    document.getElementById('s-r').textContent = r.regions.length;
+    document.getElementById('s-a').textContent = r.area.toString() + '  ≈ ' + r.area.toNumber().toFixed(6);
+  } else {
+    for (const id of ['s-v', 's-e', 's-t', 's-r', 's-a']) document.getElementById(id).textContent = '–';
+  }
+  drawView1(); drawView2(); drawView3(); drawView4();
+}
+
+// ① 原始轮廓（可拖动）
+function drawView1() {
+  const view = views[0];
+  view.setup(allInputPoints());
+  const { ctx } = view;
+  const colors = ['#5b9dff', '#43d8c9', '#ffb454', '#ff6b81', '#b18cff', '#7ee08a'];
+  state.contours.forEach((ring, ci) => {
+    const col = colors[ci % colors.length];
+    drawPolyline(ctx, view, ring, col, 2);
+    ring.forEach((p) => {
+      const [x, y] = view.toScreen(p[0], p[1]);
+      ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = '#0f1420'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  });
+  document.getElementById('t1').textContent = state.contours.length + ' 条轮廓';
+}
+
+// ② 细分边
+function drawView2() {
+  const view = views[1];
+  const r = state.result;
+  const pts = allInputPoints();
+  view.setup(pts);
+  if (!r) { document.getElementById('t2').textContent = '–'; return; }
+  const { ctx } = view;
+  const V = r.arrangement.verts;
+  // 原子边
+  for (const g of r.arrangement.atomic) {
+    const [x1, y1] = view.toScreen(g.lo.x.toNumber(), g.lo.y.toNumber());
+    const [x2, y2] = view.toScreen(g.hi.x.toNumber(), g.hi.y.toNumber());
+    ctx.strokeStyle = 'rgba(139,151,176,.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  // 所有剖分顶点（含有理交点）
+  for (const v of V) {
+    const [x, y] = view.toScreen(v.x.toNumber(), v.y.toNumber());
+    ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = '#43d8c9'; ctx.fill();
+  }
+  document.getElementById('t2').textContent =
+    r.arrangement.atomic.length + ' 原子边 · ' + V.length + ' 剖分顶点';
+}
+
+// ③ 绕数分区
+function drawView3() {
+  const view = views[2];
+  const r = state.result;
+  view.setup(allInputPoints());
+  if (!r) { document.getElementById('t3').textContent = '–'; return; }
+  const { ctx } = view;
+  const V = r.arrangement.verts;
+  view._hit = []; // 供点选
+  r.regions.forEach((region, ri) => {
+    const col = windingColor(region.winding, state.rule);
+    // 外环填充
+    for (const ring of region.outerRings) {
+      ctx.beginPath();
+      ring.forEach((id, i) => {
+        const [x, y] = view.toScreen(V[id].x.toNumber(), V[id].y.toNumber());
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = 'rgba(91,157,255,.8)'; ctx.lineWidth = 1; ctx.stroke();
+      view._hit.push({ ring, region, ri });
+    }
+    // 孔环挖空（用面板色覆盖）
+    ctx.save();
+    for (const ring of region.innerRings) {
+      ctx.beginPath();
+      ring.forEach((id, i) => {
+        const [x, y] = view.toScreen(V[id].x.toNumber(), V[id].y.toNumber());
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = '#171e2e'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,107,129,.7)'; ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.restore();
+    // 绕数标注
+    if (region.sample) {
+      const [sx, sy] = view.toScreen(region.sample.x.toNumber(), region.sample.y.toNumber());
+      ctx.fillStyle = '#e6ebf5'; ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center'; ctx.fillText(String(region.winding), sx, sy + 4);
+    }
+  });
+  document.getElementById('t3').textContent = r.regions.length + ' 个填充分区';
+}
+
+// ④ 最终三角形
+function drawView4() {
+  const view = views[3];
+  const r = state.result;
+  view.setup(allInputPoints());
+  if (!r) { document.getElementById('t4').textContent = '–'; return; }
+  const { ctx } = view;
+  const V = r.compactVerts;
+  for (const t of r.triangles) {
+    ctx.beginPath();
+    t.forEach((id, i) => {
+      const [x, y] = view.toScreen(V[id].x.toNumber(), V[id].y.toNumber());
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(91,157,255,.35)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(180,205,255,.55)'; ctx.lineWidth = 0.7; ctx.stroke();
+  }
+  document.getElementById('t4').textContent = r.triangles.length + ' 个 CCW 三角形';
+}
+
+// ---------- 拖动整数顶点 ----------
+function eventMath(view, ev) {
+  const rect = ev.target.getBoundingClientRect();
+  return view.toMath(ev.clientX - rect.left, ev.clientY - rect.top);
+}
+const c1 = document.getElementById('c1');
+c1.addEventListener('pointerdown', (ev) => {
+  const view = views[0];
+  const [mx, my] = eventMath(view, ev);
+  let best = null, bestD = 0.6; // 屏幕吸附阈值换算成数学距离
+  state.contours.forEach((ring, ci) => ring.forEach((p, pi) => {
+    const d = Math.hypot(p[0] - mx, p[1] - my);
+    if (d < bestD) { bestD = d; best = { ci, pi }; }
+  }));
+  if (best) {
+    drag = best;
+    c1.setPointerCapture(ev.pointerId);
+  }
+});
+c1.addEventListener('pointermove', (ev) => {
+  if (!drag) return;
+  const view = views[0];
+  const [mx, my] = eventMath(view, ev);
+  const ring = state.contours[drag.ci];
+  const p = ring[drag.pi];
+  const nx = Math.max(-4096, Math.min(4096, Math.round(mx)));
+  const ny = Math.max(-4096, Math.min(4096, Math.round(my)));
+  if (nx !== p[0] || ny !== p[1]) { p[0] = nx; p[1] = ny; recompute(); }
+});
+c1.addEventListener('pointerup', () => { drag = null; });
+
+// ---------- 点选区域（视图③）----------
+document.getElementById('c3').addEventListener('click', (ev) => {
+  const r = state.result;
+  if (!r || !views[2]._hit) return;
+  const view = views[2];
+  const [mx, my] = eventMath(view, ev);
+  // 找包含点击点的区域
+  let picked = null;
+  for (const h of view._hit) {
+    const inside = pointInRingMath(mx, my, h.ring.map((id) => [r.arrangement.verts[id].x.toNumber(), r.arrangement.verts[id].y.toNumber()]));
+    if (inside) { picked = h; break; }
+  }
+  const panel = document.getElementById('info');
+  if (!picked) { panel.classList.remove('show'); return; }
+  const region = picked.region;
+  const contrib = region.contributors.map((c) => `轮廓#${c.contour}(绕数 ${c.winding})`).join('、') || '无';
+  document.getElementById('info-body').innerHTML = `
+    <div class="kv"><span>填充规则</span><b>${state.rule}</b></div>
+    <div class="kv"><span>区域绕数</span><b>${region.winding}</b></div>
+    <div class="kv"><span>外环数</span><b>${region.outerRings.length}</b></div>
+    <div class="kv"><span>孔环数</span><b>${region.innerRings.length}</b></div>
+    <div class="kv"><span>三角形数</span><b>${region.triangles.length}</b></div>
+    <div class="kv"><span>区域面积</span><b>${(meshRegionArea(region, r) / 2).toFixed(6)}</b></div>
+    <div style="margin-top:8px;color:var(--dim)">贡献轮廓</div>
+    <div style="color:var(--txt);margin-top:2px">${contrib}</div>
+    <div style="margin-top:8px;color:var(--dim)">采样点</div>
+    <div style="color:var(--txt)">(${region.sample ? region.sample.x.toNumber() + ', ' + region.sample.y.toNumber() : '–'})</div>
+  `;
+  panel.classList.add('show');
+});
+document.getElementById('info-close').onclick = () =>
+  document.getElementById('info').classList.remove('show');
+
+function meshRegionArea(region, r) {
+  // 用实际三角形累加（精确转数）
+  const V = r.arrangement.verts;
+  let s = 0;
+  for (const t of region.triangles) {
+    const a = V[t[0]], b = V[t[1]], c = V[t[2]];
+    s += b.x.sub(a.x).mul(c.y.sub(a.y)).sub(b.y.sub(a.y).mul(c.x.sub(a.x))).toNumber();
+  }
+  return s;
+}
+function pointInRingMath(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// ---------- 导出 ----------
+document.getElementById('export-json').onclick = () => {
+  if (!state.result) return;
+  const js = meshToJSON(state.result);
+  const blob = new Blob([JSON.stringify(js, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, 'tessellation.json');
+};
+document.getElementById('export-png').onclick = () => {
+  // 用离屏 canvas 以 2x 渲染最终网格
+  const r = state.result;
+  if (!r) return;
+  const size = 1024, dpr = 2;
+  const off = document.createElement('canvas');
+  off.width = size * dpr; off.height = size * dpr;
+  const ctx = off.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#0f1420'; ctx.fillRect(0, 0, size, size);
+  const pts = r.compactVerts.map((v) => [v.x.toNumber(), v.y.toNumber()]);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  pts.forEach(([x, y]) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); });
+  const pad = 40, s = Math.min((size - 2 * pad) / (maxX - minX), (size - 2 * pad) / (maxY - minY));
+  const ox = (size - s * (maxX - minX)) / 2 - s * minX;
+  const oy = (size - s * (maxY - minY)) / 2 + s * maxY;
+  const ts = (x, y) => [ox + s * x, oy - s * y];
+  for (const t of r.triangles) {
+    ctx.beginPath();
+    t.forEach((id, i) => { const [x, y] = ts(pts[id][0], pts[id][1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(91,157,255,.4)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(180,205,255,.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  off.toBlob((blob) => downloadBlob(blob, 'tessellation-preview.png'));
+};
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+window.addEventListener('resize', renderAll);
+loadSelected();
+</script>
+</body>
+</html>

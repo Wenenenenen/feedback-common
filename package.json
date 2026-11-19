@@ -1,0 +1,11 @@
+{
+  "name": "winding-fill-tessellator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "带孔洞/自交/重叠边的整数轮廓绕数填充与三角化（无第三方布尔/填充/三角化库）",
+  "scripts": {
+    "test": "node tests/run-tests.mjs",
+    "serve": "python3 -m http.server 8000"
+  }
+}

@@ -1,0 +1,1 @@
+{"same-hole":{"evenodd":48,"nonzero":64},"opposite-hole":{"evenodd":48,"nonzero":48},"bowtie":{"evenodd":32,"nonzero":32},"overlap":{"evenodd":36,"nonzero":54},"duplicate":{"evenodd":0,"nonzero":64},"collinear-touch":{"evenodd":84,"nonzero":84},"stress":{"nonzero":8192}}
