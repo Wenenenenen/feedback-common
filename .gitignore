@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 本地虚拟环境与解压的样例数据（不可信输入，不入库）
+.venv/
+_cases_extracted/

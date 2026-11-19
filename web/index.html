@@ -1,0 +1,695 @@
+<meta charset="utf-8">
+<title>BC 块压缩核对台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* layout: top control band, three-canvas compare row, block detail + stats below */
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --fg: #1a1d23;
+  --fg-dim: #5b6270;
+  --fg-faint: #8a919e;
+  --line: #d8dce3;
+  --accent: #2f6df0;
+  --accent-soft: #e3ecfe;
+  --good: #1e8e5a;
+  --warn: #b96b12;
+  --bad: #c93b3b;
+  --checker-a: #ffffff;
+  --checker-b: #e6e8ec;
+  --shadow: 0 1px 2px rgba(20, 24, 32, .06), 0 4px 14px rgba(20, 24, 32, .06);
+  --mono: "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a;
+    --panel: #1d2026;
+    --panel-2: #262a31;
+    --fg: #e8eaee;
+    --fg-dim: #a6adba;
+    --fg-faint: #717885;
+    --line: #333841;
+    --accent: #6b96f7;
+    --accent-soft: #243049;
+    --good: #4cc38a;
+    --warn: #e0a24f;
+    --bad: #ee7a7a;
+    --checker-a: #23262c;
+    --checker-b: #1a1d22;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161a; --panel: #1d2026; --panel-2: #262a31;
+  --fg: #e8eaee; --fg-dim: #a6adba; --fg-faint: #717885;
+  --line: #333841; --accent: #6b96f7; --accent-soft: #243049;
+  --good: #4cc38a; --warn: #e0a24f; --bad: #ee7a7a;
+  --checker-a: #23262c; --checker-b: #1a1d22;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+.app { max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+header.top {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+header.top h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+header.top .sub { color: var(--fg-dim); font-size: 12.5px; }
+.spacer { flex: 1; }
+
+.band {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn {
+  appearance: none; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--fg); font: inherit; font-weight: 550; padding: 7px 14px;
+  border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.file input { display: none; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button {
+  appearance: none; border: 0; background: var(--panel); color: var(--fg-dim);
+  font: inherit; font-weight: 550; padding: 7px 14px; cursor: pointer;
+}
+.seg button.on { background: var(--accent-soft); color: var(--accent); }
+.seg button + button { border-left: 1px solid var(--line); }
+
+.status { font-size: 12.5px; color: var(--fg-dim); min-height: 18px; }
+.status.err { color: var(--bad); font-weight: 550; }
+.status.ok { color: var(--good); }
+.progress { height: 4px; background: var(--panel-2); border-radius: 2px; overflow: hidden; margin-top: 8px; display: none; }
+.progress.on { display: block; }
+.progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .15s; }
+
+.metric-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; min-width: 0;
+}
+.tile .k { font-size: 11.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .06em; }
+.tile .v { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tile .v small { font-size: 12px; font-weight: 500; color: var(--fg-dim); }
+
+.canvas-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.canvas-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px; box-shadow: var(--shadow); min-width: 0; display: flex; flex-direction: column; gap: 8px;
+}
+.canvas-card h3 {
+  margin: 0; font-size: 13px; font-weight: 650; color: var(--fg-dim);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.canvas-card h3 .tag { font-weight: 500; color: var(--fg-faint); font-size: 11.5px; }
+.canvas-wrap {
+  position: relative; overflow: auto; border-radius: 6px;
+  background: var(--checker-b); border: 1px solid var(--line);
+}
+.canvas-wrap canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+.canvas-wrap .checker {
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(45deg, var(--checker-b) 25%, var(--checker-a) 25%, var(--checker-a) 75%, var(--checker-b) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.detail { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 860px) { .detail { grid-template-columns: 1fr; } }
+.detail h3 { margin: 0 0 8px; font-size: 13px; font-weight: 650; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; min-width: 0; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.pill {
+  display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600;
+  background: var(--accent-soft); color: var(--accent);
+}
+.pill.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.pill.good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+
+.swatch-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.swatch {
+  width: 42px; text-align: center; font-size: 10.5px; color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.swatch .chip {
+  width: 42px; height: 30px; border-radius: 6px; border: 1px solid var(--line);
+  margin-bottom: 3px; position: relative;
+}
+.swatch .chip span {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--mono); font-weight: 650; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.7); font-size: 12px;
+}
+table.idx { border-collapse: collapse; font-family: var(--mono); }
+table.idx td {
+  width: 34px; height: 30px; text-align: center; border: 1px solid var(--line);
+  font-size: 13px; font-variant-numeric: tabular-nums; position: relative;
+}
+table.idx td.t { outline: 2px solid var(--accent); outline-offset: -2px; }
+table.idx td .mini { display: block; font-size: 9px; color: var(--fg-faint); line-height: 1; }
+.alpha-table { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; font-family: var(--mono); font-size: 11px; text-align: center; }
+.alpha-table .cell { border: 1px solid var(--line); border-radius: 5px; padding: 4px 2px; }
+.alpha-table .cell .bar { height: 22px; border-radius: 3px; margin-bottom: 3px; border: 1px solid var(--line); }
+.empty {
+  border: 1.5px dashed var(--line); border-radius: 10px; padding: 42px 20px;
+  text-align: center; color: var(--fg-faint); background: var(--panel);
+}
+.empty b { color: var(--fg-dim); display: block; margin-bottom: 6px; font-size: 15px; }
+.hint { font-size: 12px; color: var(--fg-faint); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--fg-dim); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid var(--line); }
+.hidden { display: none !important; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>BC 块压缩核对台</h1>
+      <div class="sub">BC1（含 1-bit 透明）/ BC3 自研编码器 · 端点 PCA 优化 + 565 局部求精 · 解码严格按约定插值取整</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" role="group" aria-label="主题">
+      <button data-theme-v="auto" class="on">自动</button>
+      <button data-theme-v="light">浅色</button>
+      <button data-theme-v="dark">深色</button>
+    </div>
+  </header>
+
+  <section class="band">
+    <div class="controls">
+      <label class="btn primary file">导入 PNG
+        <input type="file" id="file-png" accept="image/png,.png">
+      </label>
+      <label class="btn file">导入参考 DDS（仅解码核对）
+        <input type="file" id="file-dds" accept=".dds">
+      </label>
+      <div class="seg" id="fmt-seg">
+        <button data-fmt="BC1" class="on">BC1</button>
+        <button data-fmt="BC3">BC3</button>
+      </div>
+      <button class="btn" id="btn-dds" disabled>导出 DDS</button>
+      <button class="btn" id="btn-json" disabled>导出逐块 JSON</button>
+    </div>
+    <div class="progress" id="progress"><div></div></div>
+    <div class="status" id="status" style="margin-top:8px">导入一张 8 位 RGBA/RGB PNG（单边 ≤ 1024）开始；非 4 倍数尺寸按复制边缘补边。</div>
+  </section>
+
+  <section class="band hidden" id="metric-band">
+    <div class="metric-row" id="metrics"></div>
+  </section>
+
+  <section id="work-area">
+    <div class="empty" id="empty-state">
+      <b>还没有图像</b>
+      支持渐变、镂空、软透明等场景。导入后点击任意 4×4 块查看端点、索引与模式。<br>
+      <span class="hint">样例：gradient.png / cutout.png / soft-alpha.png / odd-30x22.png / noise-64.png</span>
+    </div>
+    <div class="canvas-grid hidden" id="canvas-grid">
+      <div class="canvas-card">
+        <h3>原图 <span class="tag" id="tag-src"></span></h3>
+        <div class="canvas-wrap checker"><canvas id="cv-src"></canvas></div>
+      </div>
+      <div class="canvas-card">
+        <h3>解码结果 <span class="tag" id="tag-dec"></span></h3>
+        <div class="canvas-wrap checker"><canvas id="cv-dec"></canvas></div>
+      </div>
+      <div class="canvas-card">
+        <h3>误差图（RGB 平方误差热力） <span class="tag" id="tag-err"></span></h3>
+        <div class="canvas-wrap"><canvas id="cv-err"></canvas></div>
+        <div class="legend">
+          <span><i style="background:#23304f"></i>低</span>
+          <span><i style="background:#3f7dd8"></i></span>
+          <span><i style="background:#e0a24f"></i></span>
+          <span><i style="background:#c93b3b"></i>高</span>
+          <span class="hint" id="err-note"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band hidden" id="detail-band">
+    <div class="detail">
+      <div>
+        <h3 id="detail-title">块详情</h3>
+        <div id="detail-color"></div>
+      </div>
+      <div>
+        <h3>索引与逐块误差</h3>
+        <div id="detail-idx"></div>
+        <div id="detail-alpha" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="bc-inflate.js"></script>
+<script src="bc-codec.js"></script>
+<script src="bc-ioutil.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    mode: 'encode',          // 'encode' (png) | 'decode' (dds reference)
+    format: 'BC1',
+    src: null,               // {width,height,rgba} original
+    padded: null,            // {pw,ph,rgba}
+    payload: null,
+    records: null,
+    decCropped: null,        // rgba at original size
+    decPadded: null,
+    stats: null,
+    selected: null,          // {bx,by}
+    fileName: '',
+    worker: null,
+  };
+
+  // ---------- theme ----------
+  document.querySelectorAll('[data-theme-v]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-theme-v]').forEach((x) => x.classList.toggle('on', x === b));
+    const v = b.dataset.themeV;
+    if (v === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', v);
+    try { localStorage.setItem('bc-theme', v); } catch (e) {}
+    if (state.stats) renderAll();
+  }));
+  try {
+    const saved = localStorage.getItem('bc-theme');
+    if (saved === 'light' || saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', saved);
+      document.querySelectorAll('[data-theme-v]').forEach((x) => x.classList.toggle('on', x.dataset.themeV === saved));
+    }
+  } catch (e) {}
+
+  document.querySelectorAll('#fmt-seg button').forEach((b) => b.addEventListener('click', () => {
+    if (state.mode === 'decode') {
+      setStatus('参考 DDS 模式下格式由文件决定，导入 PNG 可重新编码', null);
+      return;
+    }
+    document.querySelectorAll('#fmt-seg button').forEach((x) => x.classList.toggle('on', x === b));
+    state.format = b.dataset.fmt;
+    if (state.src) scheduleEncode();
+  }));
+
+  function setFormatSegEnabled(enabled) {
+    document.querySelectorAll('#fmt-seg button').forEach((b) => {
+      b.disabled = !enabled;
+      b.style.opacity = enabled ? '' : '.45';
+      b.style.cursor = enabled ? '' : 'not-allowed';
+    });
+  }
+
+  function setStatus(msg, isErr) {
+    const el = $('status');
+    el.textContent = msg;
+    el.className = 'status' + (isErr === true ? ' err' : isErr === false ? ' ok' : '');
+  }
+  function setProgress(p) {
+    const bar = $('progress');
+    bar.classList.toggle('on', p < 1);
+    bar.firstElementChild.style.width = Math.round(p * 100) + '%';
+  }
+
+  // ---------- worker (encodes off the main thread) ----------
+  let workerPromise = null;
+  function ensureWorker() {
+    if (workerPromise) return workerPromise;
+    // The codec is framework-free classic JS; fetch it and wrap it in a Blob
+    // worker so the 1024px encode never blocks the UI thread.
+    workerPromise = fetch('bc-codec.js')
+      .then((r) => { if (!r.ok) throw new Error('bc-codec.js 加载失败'); return r.text(); })
+      .then((code) => {
+        const src = `${code}\nself.onmessage = (e) => {
+          const { rgba, pw, ph, format, seq } = e.data;
+          try {
+            const r = BCC.encodeImage({ rgba }, pw, ph, format, (p) => {
+              self.postMessage({ seq, progress: p });
+            });
+            self.postMessage({ seq, done: true, payload: r.payload, records: r.records });
+          } catch (err) {
+            self.postMessage({ seq, error: String(err && err.message || err) });
+          }
+        };`;
+        const blob = new Blob([src], { type: 'application/javascript' });
+        return new Worker(URL.createObjectURL(blob));
+      });
+    return workerPromise;
+  }
+  let encodeSeq = 0;
+  async function scheduleEncode() {
+    const seq = ++encodeSeq;
+    $('btn-dds').disabled = true; $('btn-json').disabled = true;
+    setStatus('编码中…');
+    try {
+      const w = await ensureWorker();
+      // Keep an untransferred copy for re-encodes (format switch / re-import).
+      const rgbaCopy = state.padded.rgba.slice();
+      w.onmessage = (e) => {
+        if (e.data.seq !== seq) return; // a newer encode superseded this one
+        if (e.data.progress !== undefined) { setProgress(e.data.progress); return; }
+        if (e.data.error) { setStatus('编码失败：' + e.data.error, true); setProgress(1); return; }
+        setProgress(1);
+        state.payload = e.data.payload;
+        state.records = e.data.records;
+        finishPipeline();
+      };
+      w.postMessage({ rgba: rgbaCopy, pw: state.padded.pw, ph: state.padded.ph, format: state.format, seq },
+        [rgbaCopy.buffer]);
+    } catch (err) {
+      setStatus(err.message || String(err), true);
+    }
+  }
+
+  // ---------- import ----------
+  $('file-png').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      setStatus('读取 ' + file.name + ' …');
+      const ab = await file.arrayBuffer();
+      const img = await BCUIO.decodePNGAsync(ab);
+      BCUIO.validateImage(img);
+      state.mode = 'encode';
+      state.fileName = file.name;
+      state.src = img;
+      state.padded = BCUIO.padImage(img);
+      state.selected = null;
+      setFormatSegEnabled(true);
+      // A fresh PNG import starts on BC1 (the 1-bit-alpha mode); switching to
+      // BC3 afterwards keeps the choice until the next import.
+      state.format = 'BC1';
+      document.querySelectorAll('#fmt-seg button').forEach((x) => x.classList.toggle('on', x.dataset.fmt === 'BC1'));
+      scheduleEncode();
+    } catch (err) {
+      setStatus(err.message || String(err), true);
+    }
+  });
+
+  $('file-dds').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      setStatus('解码参考 DDS ' + file.name + ' …');
+      const dds = BCUIO.parseDDS(new Uint8Array(await file.arrayBuffer()));
+      state.mode = 'decode';
+      state.format = dds.format;
+      state.fileName = file.name;
+      setFormatSegEnabled(false);
+      document.querySelectorAll('#fmt-seg button').forEach((x) => x.classList.toggle('on', x.dataset.fmt === dds.format));
+      const pw = (dds.width + 3) & ~3, ph = (dds.height + 3) & ~3;
+      const { rgba, blockInfos } = BCC.decodePayload(dds.payload, pw, ph, dds.format);
+      const cropped = BCUIO.cropToOriginal(rgba, pw, ph, dds.width, dds.height);
+      // Reference-decode view: source == decoded, so "original" is the DDS output.
+      state.src = { width: dds.width, height: dds.height, rgba: cropped };
+      state.padded = { pw, ph, rgba, reused: true };
+      state.payload = dds.payload;
+      state.records = blockInfosToRecords(blockInfos, dds.format);
+      state.decPadded = rgba;
+      state.decCropped = cropped;
+      state.selected = null;
+      computeAndRender('参考 DDS 解码完成（' + dds.format + '，' + dds.width + '×' + dds.height + '）');
+      $('btn-dds').disabled = true;   // re-exporting a reference decode is meaningless
+      $('btn-json').disabled = false;
+    } catch (err) {
+      setStatus(err.message || String(err), true);
+    }
+  });
+
+  // decodePayload gives blockInfos; reshape into the record layout the UI expects.
+  function blockInfosToRecords(blockInfos, format) {
+    return blockInfos.map((info, bi) => {
+      const bw = state.padded.pw >> 2;
+      const rec = { bx: bi % bw, by: (bi / bw) | 0, color: info.color };
+      if (format === 'BC3') rec.alpha = info.alpha;
+      return rec;
+    });
+  }
+
+  function finishPipeline() {
+    const { pw, ph } = state.padded;
+    const dec = BCC.decodePayload(state.payload, pw, ph, state.format);
+    state.decPadded = dec.rgba;
+    state.decCropped = BCUIO.cropToOriginal(dec.rgba, pw, ph, state.src.width, state.src.height);
+    computeAndRender('编码并解码完成：' + state.format + ' · ' + state.fileName);
+    $('btn-dds').disabled = false; $('btn-json').disabled = false;
+  }
+
+  function computeAndRender(okMsg) {
+    const bw = state.padded.pw >> 2, bh = state.padded.ph >> 2;
+    state.stats = BCUIO.computeStats(state.src, state.decCropped, state.src.width, state.src.height,
+      state.format, { bw, bh });
+    setStatus(okMsg, false);
+    renderAll();
+  }
+
+  // ---------- rendering ----------
+  function renderAll() {
+    $('empty-state').classList.add('hidden');
+    $('metric-band').classList.remove('hidden');
+    $('canvas-grid').classList.remove('hidden');
+    $('detail-band').classList.remove('hidden');
+    renderMetrics();
+    renderCanvases();
+    if (state.selected) renderDetail(state.selected.bx, state.selected.by);
+    else {
+      // default select: worst block by RGB MSE
+      let worst = 0, worstV = -1;
+      state.stats.perBlock.forEach((b, i) => {
+        const v = b.rgbMse ?? -1;
+        if (v > worstV) { worstV = v; worst = i; }
+      });
+      const bw = state.padded.pw >> 2;
+      selectBlock(worst % bw, (worst / bw) | 0);
+    }
+  }
+
+  function renderMetrics() {
+    const s = state.stats, fmt = state.format;
+    const tiles = [
+      ['格式', fmt + (state.mode === 'decode' ? '（参考解码）' : '')],
+      ['原始 / 补边尺寸', `${state.src.width}×${state.src.height} <small>/ ${state.padded.pw}×${state.padded.ph}</small>`],
+      ['块数', String((state.padded.pw >> 2) * (state.padded.ph >> 2))],
+      ['RGB PSNR', s.rgbPsnr === null ? '—' : (isFinite(s.rgbPsnr) ? s.rgbPsnr.toFixed(2) + ' <small>dB</small>' : '∞ dB')],
+      ['RGB MSE', s.rgbMse === null ? '—' : s.rgbMse.toFixed(2)],
+      ['最大通道误差', String(s.maxAbs)],
+    ];
+    if (fmt === 'BC3') {
+      tiles.push(['Alpha PSNR', s.alphaPsnr === null ? '—' : (isFinite(s.alphaPsnr) ? s.alphaPsnr.toFixed(2) + ' <small>dB</small>' : '∞ dB')]);
+      tiles.push(['Alpha MSE', s.alphaMse === null ? '—' : s.alphaMse.toFixed(2)]);
+    }
+    $('metrics').innerHTML = tiles.map(([k, v]) =>
+      `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+    $('err-note').textContent = fmt === 'BC1' ? 'BC1 仅统计源 alpha≥128 像素' : 'BC3 全像素统计，另给 Alpha PSNR';
+  }
+
+  function makeCanvas(cv, w, h) {
+    const scale = Math.max(1, Math.min(8, Math.floor(900 / Math.max(w, h))));
+    cv.width = w; cv.height = h;
+    cv.style.width = (w * scale) + 'px';
+    cv.style.height = (h * scale) + 'px';
+    return cv.getContext('2d');
+  }
+
+  function renderCanvases() {
+    const { width: w, height: h } = state.src;
+    const srcCtx = makeCanvas($('cv-src'), w, h);
+    const decCtx = makeCanvas($('cv-dec'), w, h);
+    const errCtx = makeCanvas($('cv-err'), w, h);
+    const srcImg = new ImageData(state.src.rgba.slice(), w, h);
+    const decImg = new ImageData(state.decCropped.slice(), w, h);
+    srcCtx.putImageData(srcImg, 0, 0);
+    decCtx.putImageData(decImg, 0, 0);
+
+    // error heatmap: normalize per-image max pixel SE, blue->red ramp
+    const out = errCtx.createImageData(w, h);
+    let maxSE = 1e-6;
+    for (const v of state.stats.perPixel) maxSE = Math.max(maxSE, v);
+    const heat = (t) => {
+      // 0 -> dark navy, .45 -> blue, .7 -> amber, 1 -> red
+      const stops = [[35, 48, 79], [63, 125, 216], [224, 162, 79], [201, 59, 59]];
+      const x = Math.min(1, Math.sqrt(t)) * (stops.length - 1);
+      const i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+      return stops[i].map((c, k) => Math.round(c + (stops[i + 1][k] - c) * f));
+    };
+    for (let i = 0; i < w * h; i++) {
+      const t = state.stats.perPixel[i] / maxSE;
+      const [r, g, b] = heat(t);
+      out.data[i * 4] = r; out.data[i * 4 + 1] = g; out.data[i * 4 + 2] = b; out.data[i * 4 + 3] = 255;
+    }
+    errCtx.putImageData(out, 0, 0);
+
+    $('tag-src').textContent = `${w}×${h}`;
+    $('tag-dec').textContent = `${w}×${h}`;
+    $('tag-err').textContent = `峰值像素 SE ${Math.round(maxSE)}`;
+    bindBlockPick($('cv-src')); bindBlockPick($('cv-dec')); bindBlockPick($('cv-err'));
+    if (state.selected) drawSelectionOverlays();
+  }
+
+  function bindBlockPick(cv) {
+    cv.onclick = (ev) => {
+      const rect = cv.getBoundingClientRect();
+      const x = ((ev.clientX - rect.left) / rect.width) * cv.width;
+      const y = ((ev.clientY - rect.top) / rect.height) * cv.height;
+      selectBlock(Math.floor(x / 4), Math.floor(y / 4));
+    };
+  }
+
+  function selectBlock(bx, by) {
+    const bw = state.padded.pw >> 2, bh = state.padded.ph >> 2;
+    if (bx < 0 || by < 0 || bx >= bw || by >= bh) return;
+    state.selected = { bx, by };
+    drawSelectionOverlays();
+    renderDetail(bx, by);
+  }
+
+  function drawSelectionOverlays() {
+    if (!state.selected) return;
+    const { bx, by } = state.selected;
+    ['cv-src', 'cv-dec', 'cv-err'].forEach((id) => {
+      const cv = $(id);
+      // redraw base image then overlay border (cheap: re-putImageData via stored)
+      const ctx = cv.getContext('2d');
+      ctx.save();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = id === 'cv-err' ? '#ffffff' : getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#2f6df0';
+      ctx.strokeRect(bx * 4 + .5, by * 4 + .5, 3, 3);
+      ctx.restore();
+    });
+  }
+
+  // ---------- detail panel ----------
+  function renderDetail(bx, by) {
+    const bw = state.padded.pw >> 2;
+    const bi = by * bw + bx;
+    const rec = state.records[bi];
+    const st = state.stats.perBlock[bi];
+    const color = rec.color;
+    $('detail-title').textContent = `Block (${bx}, ${by}) · ${bi + 1}/${state.records.length}`;
+
+    const modePill = color.mode === '3-color+alpha'
+      ? '<span class="pill warn">3 色 + 1 透明（c0≤c1）</span>'
+      : color.mode === '4-color'
+        ? '<span class="pill good">4 色（c0&gt;c1）</span>'
+        : '<span class="pill">BC3 恒 4 色</span>';
+    const swatches = color.palette.map((p, k) => {
+      const a = p[3] === 0 ? 0 : 255;
+      const bg = a === 0
+        ? 'repeating-linear-gradient(45deg,#bbb 0 4px,#fff 4px 8px)'
+        : `rgb(${p[0]},${p[1]},${p[2]})`;
+      const label = a === 0 ? '透明' : `${p[0]},${p[1]},${p[2]}`;
+      return `<div class="swatch"><div class="chip" style="background:${bg}"><span>${k}</span></div>${label}</div>`;
+    }).join('');
+
+    $('detail-color').innerHTML = `
+      <dl class="kv">
+        <dt>颜色模式</dt><dd>${modePill}</dd>
+        <dt>端点 c0 / c1</dt><dd>0x${pad4(color.c0)} / 0x${pad4(color.c1)} <small style="color:var(--fg-faint)">RGB565 小端</small></dd>
+        <dt>调色板</dt><dd><div class="swatch-row">${swatches}</div></dd>
+        <dt>块 RGB MSE</dt><dd>${st.rgbMse === null ? '—（无统计像素）' : st.rgbMse.toFixed(2)}</dd>
+        <dt>块 RGB PSNR</dt><dd>${st.rgbPsnr === null ? '—' : (isFinite(st.rgbPsnr) ? st.rgbPsnr.toFixed(2) + ' dB' : '∞ dB')}</dd>
+        <dt>块最大通道误差</dt><dd>${st.maxAbs}</dd>
+      </dl>`;
+
+    // index grid with source alpha marker for BC1
+    let idxHtml = '<table class="idx"><tbody>';
+    for (let row = 0; row < 4; row++) {
+      idxHtml += '<tr>';
+      for (let col = 0; col < 4; col++) {
+        const i = row * 4 + col;
+        const x = bx * 4 + col, y = by * 4 + row;
+        let trans = false;
+        if (x < state.src.width && y < state.src.height) {
+          trans = state.src.rgba[(y * state.src.width + x) * 4 + 3] < 128;
+        }
+        const t = trans ? ' t' : '';
+        idxHtml += `<td class="${t}">${color.indices[i]}${trans ? '<span class="mini">透明</span>' : ''}</td>`;
+      }
+      idxHtml += '</tr>';
+    }
+    idxHtml += '</tbody></table>';
+    $('detail-idx').innerHTML = idxHtml +
+      `<p class="hint" style="margin:8px 0 0">数字为调色板索引；蓝框表示该像素源 alpha&lt;128。BC1 透明像素必须落在索引 3。</p>`;
+
+    if (state.format === 'BC3' && rec.alpha) {
+      const a = rec.alpha;
+      const cells = a.table.map((v, k) =>
+        `<div class="cell"><div class="bar" style="background:rgb(${v},${v},${v})"></div>${k}<br><small>${v}</small></div>`).join('');
+      let aIdx = '<table class="idx"><tbody>';
+      for (let row = 0; row < 4; row++) {
+        aIdx += '<tr>';
+        for (let col = 0; col < 4; col++) aIdx += `<td>${a.indices[row * 4 + col]}</td>`;
+        aIdx += '</tr>';
+      }
+      aIdx += '</tbody></table>';
+      $('detail-alpha').innerHTML = `
+        <h3 style="margin-bottom:8px">Alpha 子块</h3>
+        <dl class="kv" style="margin-bottom:10px">
+          <dt>端点 a0 / a1</dt><dd>${a.a0} / ${a.a1}</dd>
+          <dt>表模式</dt><dd><span class="pill">${a.mode}</span></dd>
+          <dt>块 Alpha PSNR</dt><dd>${st.alphaPsnr === null ? '—' : (isFinite(st.alphaPsnr) ? st.alphaPsnr.toFixed(2) + ' dB' : '∞ dB')}</dd>
+        </dl>
+        <div class="alpha-table">${cells}</div>
+        <div style="margin-top:10px">${aIdx}</div>`;
+    } else {
+      $('detail-alpha').innerHTML = '';
+    }
+  }
+
+  function pad4(v) { return v.toString(16).padStart(4, '0'); }
+
+  // ---------- exports ----------
+  $('btn-dds').addEventListener('click', () => {
+    if (!state.payload || state.mode !== 'encode') return;
+    const dds = BCUIO.buildDDS(state.payload, state.src.width, state.src.height, state.format);
+    const base = state.fileName.replace(/\.png$/i, '');
+    BCUIO.downloadBlob(new Blob([dds], { type: 'application/octet-stream' }),
+      `${base}-${state.format}.dds`);
+  });
+
+  $('btn-json').addEventListener('click', () => {
+    const bw = state.padded.pw >> 2, bh = state.padded.ph >> 2;
+    const json = BCUIO.buildExportJSON({
+      fileName: state.fileName, format: state.format, src: state.src,
+      width: state.src.width, height: state.src.height,
+      paddedW: state.padded.pw, paddedH: state.padded.ph,
+      stats: state.stats, records: state.records, bw, bh,
+    });
+    const base = state.fileName.replace(/\.(png|dds)$/i, '');
+    BCUIO.downloadBlob(new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' }),
+      `${base}-${state.format}-blocks.json`);
+  });
+})();
+</script>
