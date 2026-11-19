@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>麦克风阵列方位分析</title>
+<style>
+/* ---- 设计 token：声学工程仪器风格，冷灰中性色 + 信号蓝主色 ---- */
+:root {
+  --page: #f4f5f3;
+  --surface: #fcfcfb;
+  --surface-2: #f0f0ec;
+  --ink: #101214;
+  --ink-2: #4a4d4f;
+  --muted: #83868a;
+  --line: #dcdcd6;
+  --grid: #e6e6df;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.12);
+  --good: #0ca30c;
+  --warn: #b97900;
+  --critical: #c23b3b;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #b37d00;
+  --s5: #d04f82; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --shadow: 0 1px 2px rgba(16, 18, 20, .06), 0 2px 8px rgba(16, 18, 20, .05);
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0c0d0e;
+    --surface: #181a1c;
+    --surface-2: #212326;
+    --ink: #eef0f2;
+    --ink-2: #b7babd;
+    --muted: #83868a;
+    --line: #2d3033;
+    --grid: #26282b;
+    --accent: #3987e5;
+    --accent-soft: rgba(57, 135, 229, .18);
+    --good: #34c759;
+    --warn: #f2b233;
+    --critical: #f06b6b;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 10px rgba(0, 0, 0, .3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0c0d0e;
+  --surface: #181a1c;
+  --surface-2: #212326;
+  --ink: #eef0f2;
+  --ink-2: #b7babd;
+  --muted: #83868a;
+  --line: #2d3033;
+  --grid: #26282b;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, .18);
+  --good: #34c759;
+  --warn: #f2b233;
+  --critical: #f06b6b;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 10px rgba(0, 0, 0, .3);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 0 max(16px, env(safe-area-inset-left, 0px))
+           0 max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 48px; }
+
+/* ---- 顶部 ---- */
+.app-header {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.app-header h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+.app-header .sub { color: var(--muted); font-size: 13px; }
+.app-header .spacer { flex: 1; }
+.theme-btn {
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.theme-btn:hover { border-color: var(--muted); }
+
+/* ---- 卡片 ---- */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px; margin-bottom: 16px; min-width: 0;
+}
+.card > h2 {
+  font-size: 13px; font-weight: 650; margin: 0 0 12px;
+  color: var(--ink-2); text-transform: uppercase; letter-spacing: .08em;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ---- 文件输入 ---- */
+.file-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.file-slot { flex: 1 1 260px; min-width: 0; }
+.file-slot label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+.drop {
+  border: 1px dashed var(--line); border-radius: 8px; padding: 14px;
+  background: var(--surface-2); cursor: pointer;
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+}
+.drop:hover, .drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+.drop .fname { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop input { display: none; }
+.drop .ico { flex: none; width: 26px; height: 26px; border-radius: 6px; background: var(--accent-soft);
+  color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.meta-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip {
+  font-size: 12px; font-family: var(--mono); color: var(--ink-2);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 10px;
+}
+.chip.bad { color: var(--critical); border-color: var(--critical); }
+.chip.good { color: var(--good); border-color: var(--good); }
+
+/* ---- 波形与区间 ---- */
+.wave-box { width: 100%; }
+.wave-box svg { display: block; width: 100%; height: 150px; touch-action: none; }
+.range-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 10px; }
+.range-controls .field { display: flex; align-items: center; gap: 6px; }
+.range-controls label { font-size: 12.5px; color: var(--muted); }
+.range-controls input[type="number"] {
+  width: 92px; font-family: var(--mono); font-size: 13px;
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  background: var(--surface); color: var(--ink);
+}
+.range-controls .dur { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+button.btn {
+  font: inherit; font-size: 13px; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+button.btn:hover { border-color: var(--muted); }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* ---- 结果条 ---- */
+.status-banner {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.status-banner.ok { border-left: 4px solid var(--good); }
+.status-banner.err { border-left: 4px solid var(--critical); }
+.status-banner.warn { border-left: 4px solid var(--warn); }
+.status-banner .big { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.status-banner .lbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.status-banner .msg { color: var(--ink-2); font-size: 13.5px; }
+.status-banner.err .big { color: var(--critical); }
+.stat-line { display: flex; gap: 22px; flex-wrap: wrap; margin-left: auto; }
+.stat-line .stat .v { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; }
+.stat-line .stat .k { font-size: 11.5px; color: var(--muted); }
+.warn-list { width: 100%; margin: 0; padding-left: 18px; color: var(--warn); font-size: 12.5px; }
+.warn-list li { margin-top: 2px; }
+
+/* ---- 阵列图 / GCC ---- */
+svg text { font-family: var(--sans); }
+.axis-grid { stroke: var(--grid); stroke-width: 1; }
+.axis-label { fill: var(--muted); font-size: 11px; }
+.mic-dot { stroke: var(--surface); stroke-width: 2; }
+.mic-tag { font-size: 11.5px; font-weight: 600; fill: var(--ink); }
+.mic-off { opacity: .28; }
+.bearing-arrow { stroke: var(--accent); stroke-width: 2.5; fill: none; stroke-linecap: round; }
+.bearing-cone { fill: var(--accent); opacity: .12; }
+.pair-line { stroke: var(--muted); stroke-width: 1; opacity: .35; }
+.pair-line.off { opacity: .12; stroke-dasharray: 3 3; }
+.gcc-curve { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.gcc-curve.off { opacity: .25; }
+.gcc-peak { stroke: var(--critical); stroke-width: 1.4; stroke-dasharray: 4 3; }
+.gcc-pred { stroke: var(--good); stroke-width: 1.4; }
+.gcc-zero { stroke: var(--line); stroke-width: 1; }
+.small-title { font-size: 12px; font-weight: 600; fill: var(--ink-2); }
+.small-sub { font-size: 10.5px; fill: var(--muted); font-family: var(--mono); }
+
+/* ---- 通道对表 ---- */
+.table-scroll { overflow-x: auto; }
+table.pairs { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 720px; }
+table.pairs th {
+  text-align: left; color: var(--muted); font-weight: 600; font-size: 11.5px;
+  padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+table.pairs td { padding: 7px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+table.pairs tr.off td { opacity: .4; }
+table.pairs td.mono, table.pairs th.mono { font-family: var(--mono); }
+.sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+input.weight { width: 64px; font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 6px; background: var(--surface); color: var(--ink); }
+input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); }
+.resid-bar { height: 6px; border-radius: 3px; background: var(--surface-2); position: relative; min-width: 70px; }
+.resid-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--accent); }
+.resid-bar.warn i { background: var(--warn); }
+.resid-bar.bad i { background: var(--critical); }
+
+/* ---- 导出 ---- */
+.export-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+pre.json-out {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; max-height: 340px; overflow: auto; font-family: var(--mono);
+  font-size: 11.5px; line-height: 1.5; margin: 12px 0 0; white-space: pre;
+}
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--page); padding: 9px 18px; border-radius: 8px;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50;
+}
+.toast.show { opacity: .94; }
+.empty-note { color: var(--muted); font-size: 13px; padding: 26px 0; text-align: center; }
+.legend-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.legend-row span { display: inline-flex; align-items: center; gap: 6px; }
+.legend-row i { width: 16px; height: 0; border-top-width: 2px; border-top-style: solid; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app-header">
+    <h1>麦克风阵列方位分析</h1>
+    <span class="sub">GCC-PHAT 时延估计 · 单位圆约束方位拟合 · 平面远场单声源</span>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <section class="card">
+    <h2>数据导入</h2>
+    <div class="file-row">
+      <div class="file-slot">
+        <label for="wavInput">同步 PCM WAV（3–8 声道，44.1/48 kHz，16/24 位，≤10 秒）</label>
+        <div class="drop" id="wavDrop">
+          <span class="ico">WAV</span>
+          <span class="fname" id="wavName">点击选择或拖入 WAV 文件</span>
+          <input type="file" id="wavInput" accept=".wav,audio/wav,audio/x-wav">
+        </div>
+      </div>
+      <div class="file-slot">
+        <label for="jsonInput">阵列 JSON（coordinates_m、speed_m_s）</label>
+        <div class="drop" id="jsonDrop">
+          <span class="ico">JSON</span>
+          <span class="fname" id="jsonName">点击选择或拖入 JSON 文件</span>
+          <input type="file" id="jsonInput" accept=".json,application/json">
+        </div>
+      </div>
+    </div>
+    <div class="meta-chips" id="metaChips"></div>
+  </section>
+
+  <section class="card" id="waveCard" hidden>
+    <h2>分析区间（拖动两端或输入帧号，最短 0.2 秒）</h2>
+    <div class="wave-box" id="waveBox"></div>
+    <div class="range-controls">
+      <div class="field">
+        <label for="startInput">起始帧</label>
+        <input type="number" id="startInput" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="endInput">结束帧（不含）</label>
+        <input type="number" id="endInput" min="1" step="1">
+      </div>
+      <span class="dur" id="rangeDur"></span>
+      <button class="btn" id="selectAllBtn" type="button">全选</button>
+      <button class="btn primary" id="analyzeBtn" type="button">分析所选区间</button>
+    </div>
+    <p class="hint">区间按 [start_frame, end_frame) 计；拖动波形上的两个手柄与数字输入双向同步。</p>
+  </section>
+
+  <div id="resultSlot"></div>
+
+  <section class="card" id="arrayCard" hidden>
+    <h2>阵列布局与方位</h2>
+    <div class="grid-2">
+      <div id="arrayBox"></div>
+      <div id="pairCurvesBox"></div>
+    </div>
+    <div class="legend-row">
+      <span><i style="border-top-color: var(--critical)"></i>实测 GCC 峰时延</span>
+      <span><i style="border-top-color: var(--good)"></i>拟合预测时延</span>
+      <span><i style="border-top-color: var(--muted)"></i>通道对基线</span>
+    </div>
+  </section>
+
+  <section class="card" id="pairsCard" hidden>
+    <h2>逐通道对测量与权重</h2>
+    <div class="range-controls" style="margin:0 0 10px">
+      <button class="btn" id="enableAllBtn" type="button">全部启用</button>
+      <button class="btn" id="resetWeightBtn" type="button">权重复位为 1</button>
+      <span class="hint" style="margin:0">取消勾选即禁用该对（等价于权重 0）；修改后自动重算方位，GCC 测量保持不变。</span>
+    </div>
+    <div class="table-scroll">
+      <table class="pairs" id="pairTable">
+        <thead>
+          <tr>
+            <th>启用</th><th>通道对</th><th>基线 (m)</th><th class="mono">物理上限 (样本)</th>
+            <th class="mono">实测滞后 (样本)</th><th class="mono">实测时延 (µs)</th>
+            <th class="mono">GCC 峰</th><th>权重</th>
+            <th style="width:150px">残差 (样本)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" id="exportCard" hidden>
+    <h2>结果导出</h2>
+    <div class="export-row">
+      <button class="btn primary" id="exportBtn" type="button">生成导出 JSON</button>
+      <button class="btn" id="copyBtn" type="button">复制到剪贴板</button>
+      <button class="btn" id="downloadBtn" type="button">下载 .json</button>
+      <span class="hint" style="margin:0">包含坐标约定、分析区间、逐对测量与最终方位。</span>
+    </div>
+    <pre class="json-out" id="jsonOut" hidden></pre>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="dsp.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
