@@ -15,3 +15,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 运行时数据
+data/
+*.db
+*.db-wal
+*.db-shm

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>三对三匹配调试台</title>
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">3v3</span>
+    <div>
+      <h1>三对三匹配调试台</h1>
+      <p class="sub">整队匹配 · 精确六人组合 · 原子分房</p>
+    </div>
+  </div>
+  <dl class="stats">
+    <div><dt>逻辑时钟</dt><dd id="stat-clock">0</dd></div>
+    <div><dt>排队票</dt><dd id="stat-queued">0</dd></div>
+    <div><dt>排队玩家</dt><dd id="stat-members">0</dd></div>
+    <div><dt>房间</dt><dd id="stat-rooms">0</dd></div>
+  </dl>
+  <div class="clock-controls">
+    <label for="tick-now">推进到 (ms)</label>
+    <input id="tick-now" type="number" min="0" step="1000" value="0" />
+    <button class="primary" id="btn-tick">推进匹配</button>
+    <button class="ghost" id="btn-tick-5s">+5 秒并推进</button>
+    <button class="ghost danger" id="btn-reset" title="清空数据库，仅调试用">重置</button>
+  </div>
+</header>
+
+<div class="banner" id="banner" hidden></div>
+
+<main class="layout">
+  <!-- 左栏：队列与入队编辑器 -->
+  <section class="panel" aria-labelledby="queue-title">
+    <div class="panel-head">
+      <h2 id="queue-title">队列</h2>
+      <span class="hint" id="queue-hint"></span>
+    </div>
+    <div class="ticket-list" id="ticket-list"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="editor-title">
+    <div class="panel-head">
+      <h2 id="editor-title">编辑票据</h2>
+      <span class="hint">1–3 人 · 留空表示该地区不可用</span>
+    </div>
+    <div class="editor">
+      <label class="field">
+        <span>ticketId</span>
+        <input id="draft-id" placeholder="例如 t1" autocomplete="off" />
+      </label>
+      <div id="member-rows" class="member-rows"></div>
+      <div class="editor-actions">
+        <button class="ghost" id="btn-add-member">+ 添加成员</button>
+        <button class="primary" id="btn-join">入队</button>
+      </div>
+    </div>
+    <div class="race-lab">
+      <div class="panel-head tight">
+        <h3>取消 / 推进 并发实验</h3>
+        <span class="hint">同时发出取消与推进，观察谁先提交</span>
+      </div>
+      <label class="field inline">
+        <span>ticketId</span>
+        <input id="race-ticket" placeholder="要竞争的票" />
+      </label>
+      <button class="ghost warn" id="btn-race">并发：取消 + 推进</button>
+      <pre class="race-result" id="race-result" hidden></pre>
+    </div>
+  </section>
+
+  <!-- 右栏：候选与淘汰原因 -->
+  <section class="panel wide" aria-labelledby="cand-title">
+    <div class="panel-head">
+      <h2 id="cand-title">候选分房</h2>
+      <div class="toolbar">
+        <label class="field inline">
+          <span>预览时钟</span>
+          <input id="preview-now" type="number" min="0" step="1000" placeholder="当前" />
+        </label>
+        <button class="ghost" id="btn-refresh">刷新</button>
+      </div>
+    </div>
+    <p class="legend">
+      排序键依次为：<b>入选票 (createdAt, id) 序列</b> → <b>两队实力差</b> →
+      <b>地区最大延迟</b> → <b>地区名</b> → <b>A 队成员</b> → <b>B 队成员</b>。
+      每轮取全局最小者分房。
+    </p>
+    <div class="candidates" id="candidates"></div>
+    <div class="diagnosis" id="diagnosis"></div>
+  </section>
+
+  <section class="panel wide" aria-labelledby="room-title">
+    <div class="panel-head">
+      <h2 id="room-title">房间</h2>
+      <span class="hint">房间号随 tick 递增，重启后继续</span>
+    </div>
+    <div class="rooms" id="rooms"></div>
+  </section>
+
+  <section class="panel wide" aria-labelledby="req-title">
+    <div class="panel-head">
+      <h2 id="req-title">请求记录</h2>
+      <span class="hint">同键同载荷重试返回原结果，永久保留</span>
+    </div>
+    <div class="requests" id="requests"></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>POST /tickets · POST /cancel · POST /tick · GET /state · GET /requests/{key} · GET /debug/candidates</span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
