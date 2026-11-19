@@ -1,0 +1,12 @@
+{
+  "name": "quest-branch-replayer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "游戏任务链网页演算工具：事件重放、互斥分支、存档校验",
+  "scripts": {
+    "test": "node tests/engine.test.js",
+    "test:ui": "node tests/ui.smoke.mjs",
+    "sync": "cp engine.js web/engine.js",
+    "serve": "python3 -m http.server 8000 --directory web"
+  }
+}

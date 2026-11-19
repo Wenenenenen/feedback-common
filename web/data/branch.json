@@ -1,0 +1,157 @@
+{
+  "quests": [
+    {
+      "id": "left",
+      "requires": [],
+      "requireMode": "all",
+      "choiceGroup": "route",
+      "objectives": [
+        {
+          "id": "a",
+          "kind": "count",
+          "eventType": "kill",
+          "match": {
+            "tag": "wolf"
+          },
+          "target": 1
+        }
+      ],
+      "reward": {
+        "gold": 10
+      }
+    },
+    {
+      "id": "right",
+      "requires": [],
+      "requireMode": "all",
+      "choiceGroup": "route",
+      "objectives": [
+        {
+          "id": "b",
+          "kind": "count",
+          "eventType": "kill",
+          "match": {
+            "tag": "wolf"
+          },
+          "target": 1
+        }
+      ],
+      "reward": {
+        "gold": 20
+      }
+    },
+    {
+      "id": "next",
+      "requires": [
+        "left"
+      ],
+      "requireMode": "all",
+      "choiceGroup": "",
+      "objectives": [
+        {
+          "id": "c",
+          "kind": "count",
+          "eventType": "kill",
+          "match": {
+            "tag": "wolf"
+          },
+          "target": 1
+        }
+      ],
+      "reward": {
+        "gold": 5
+      }
+    },
+    {
+      "id": "either",
+      "requires": [
+        "left",
+        "right"
+      ],
+      "requireMode": "any",
+      "choiceGroup": "",
+      "objectives": [
+        {
+          "id": "d",
+          "kind": "unique",
+          "eventType": "collect",
+          "match": {
+            "tag": "relic"
+          },
+          "target": 2
+        }
+      ],
+      "reward": {
+        "gold": 3
+      }
+    },
+    {
+      "id": "rightOnly",
+      "requires": [
+        "right"
+      ],
+      "requireMode": "all",
+      "choiceGroup": "",
+      "objectives": [
+        {
+          "id": "e",
+          "kind": "count",
+          "eventType": "kill",
+          "match": {
+            "tag": "wolf"
+          },
+          "target": 1
+        }
+      ],
+      "reward": {}
+    }
+  ],
+  "events": [
+    {
+      "eventId": "e1",
+      "type": "kill",
+      "tag": "wolf",
+      "amount": 1
+    },
+    {
+      "eventId": "e2",
+      "type": "claim",
+      "questId": "left"
+    },
+    {
+      "eventId": "e2",
+      "type": "claim",
+      "questId": "left"
+    },
+    {
+      "eventId": "e3",
+      "type": "collect",
+      "tag": "relic",
+      "objectId": "r1"
+    },
+    {
+      "eventId": "e4",
+      "type": "collect",
+      "tag": "relic",
+      "objectId": "r1"
+    },
+    {
+      "eventId": "e5",
+      "type": "collect",
+      "tag": "relic",
+      "objectId": "r2"
+    }
+  ],
+  "expected": {
+    "states": {
+      "left": "claimed",
+      "right": "failed",
+      "next": "active",
+      "either": "ready",
+      "rightOnly": "failed"
+    },
+    "gold": 10,
+    "nextCount": 0,
+    "uniqueCount": 2
+  }
+}

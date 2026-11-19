@@ -1,0 +1,45 @@
+{
+  "quests": [
+    {
+      "id": "a",
+      "requires": [
+        "b"
+      ],
+      "requireMode": "all",
+      "choiceGroup": "",
+      "objectives": [
+        {
+          "id": "o",
+          "kind": "count",
+          "eventType": "kill",
+          "match": {
+            "tag": "wolf"
+          },
+          "target": 1
+        }
+      ],
+      "reward": {}
+    },
+    {
+      "id": "b",
+      "requires": [
+        "a"
+      ],
+      "requireMode": "all",
+      "choiceGroup": "",
+      "objectives": [
+        {
+          "id": "o",
+          "kind": "count",
+          "eventType": "kill",
+          "match": {
+            "tag": "wolf"
+          },
+          "target": 1
+        }
+      ],
+      "reward": {}
+    }
+  ],
+  "events": []
+}
