@@ -335,10 +335,9 @@
       $('kv-ticks').textContent = String(view.tick);
       $('kv-sum').textContent = pad8(view.checksum);
       if (s.mode === 'drive') {
-        var rp = s.exportReplay();
-        $('kv-inputs').textContent = rp.inputs.length + ' 条变化';
+        $('kv-inputs').textContent = s.inputCount() + ' 条变化';
       } else {
-        $('kv-inputs').textContent = '只读回放';
+        $('kv-inputs').textContent = s.inputCount() + ' 段（只读）';
       }
     }
 

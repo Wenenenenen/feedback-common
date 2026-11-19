@@ -343,6 +343,12 @@
         return recorder.toReplay(race.tick, track.laps);
       },
 
+      // 记录的变化条数（HUD 每帧读取；不构造整个回放对象）
+      inputCount: function () {
+        if (mode === 'replay') return Array.isArray(opts.replay.inputs) ? opts.replay.inputs.length : 0;
+        return recorder ? recorder.inputCount() : 0;
+      },
+
       exportResult: function () {
         var result = race.getResult();
         return {

@@ -1,6 +1,16 @@
 // 浏览器端到端测试：真实驾驶、HUD、违规记录、幽灵、导入导出与一致性。
 // 依赖本机 Playwright Chromium；HTTP 服务由本文件自起自停（127.0.0.1）。
-import { chromium } from '/home/wendy/.nvm/versions/node/v22.23.2/lib/node_modules/playwright/index.mjs';
+// Playwright 从全局 npm 目录解析，找不到再退回本机固定路径
+async function loadChromium() {
+  try {
+    const mod = await import('playwright');
+    return mod.chromium;
+  } catch {
+    const mod = await import('/home/wendy/.nvm/versions/node/v22.23.2/lib/node_modules/playwright/index.mjs');
+    return mod.chromium;
+  }
+}
+const chromium = await loadChromium();
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, dirname, normalize } from 'node:path';
