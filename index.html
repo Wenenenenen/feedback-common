@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>多相重采样校验台 · Polyphase Resampling Bench</title>
+<style>
+:root {
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --good: #006300;
+  --warn: #b97a00;
+  --bad: #d03b3b;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #232321;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --good: #0ca30c;
+    --warn: #fab219;
+    --bad: #e66767;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #232321;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --bad: #e66767;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+header h1 { font-size: 21px; margin: 0 0 4px; font-weight: 650; }
+header p { margin: 0 0 20px; color: var(--ink-2); font-size: 13px; }
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.card h2 { font-size: 15px; margin: 0 0 14px; font-weight: 620; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; color: var(--ink-2); font-weight: 550; }
+.field .hint { font-size: 11px; color: var(--muted); }
+input, select, button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+input[type="number"] { width: 100%; }
+button {
+  cursor: pointer;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+}
+button.secondary { background: var(--surface-2); color: var(--ink); border: 1px solid var(--border); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button#cancelBtn { background: var(--bad); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.drop {
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  text-align: center;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.drop.drag { border-color: var(--accent); background: var(--surface-2); }
+.drop strong { color: var(--ink); }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.meta-table td { padding: 5px 8px; border-bottom: 1px solid var(--grid); }
+.meta-table td:first-child { color: var(--ink-2); width: 150px; }
+.progress-wrap { height: 8px; background: var(--surface-2); border-radius: 5px; overflow: hidden; margin: 10px 0; }
+.progress-bar { height: 100%; width: 0%; background: var(--accent); transition: width .15s; }
+.status { font-size: 13px; color: var(--ink-2); min-height: 20px; }
+.status.error { color: var(--bad); font-weight: 550; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.metric {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.metric .name { font-size: 11.5px; color: var(--ink-2); margin-bottom: 4px; }
+.metric .val { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.metric .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pass { color: var(--good); font-weight: 650; }
+.fail { color: var(--bad); font-weight: 650; }
+.warn { color: var(--warn); font-weight: 650; }
+canvas { width: 100%; height: 300px; display: block; border-radius: 8px; }
+canvas.tall { height: 360px; }
+.chart-block { margin-bottom: 18px; }
+.chart-block h3 { font-size: 13px; margin: 0 0 8px; font-weight: 600; color: var(--ink-2); }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tabs button { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); padding: 7px 14px; font-weight: 550; font-size: 13px; }
+.tabs button.active { background: var(--accent); color: #fff; border-color: transparent; }
+.hidden { display: none !important; }
+.badge {
+  display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2);
+}
+details { margin-top: 8px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+pre.json {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; overflow: auto; font-size: 11.5px; max-height: 360px;
+}
+.theme-toggle { float: right; }
+@media (max-width: 640px) {
+  .wrap { padding: 16px 12px 48px; }
+  canvas { height: 240px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <button class="secondary theme-toggle" id="themeBtn" style="padding:6px 12px;font-size:12px">切换主题</button>
+    <h1>多相重采样校验台</h1>
+    <p>手写带限多相重采样（Kaiser 窗加窗 sinc），支持任意有理比例 L/M；不使用 Web Audio 重采样或第三方库。
+      零群延迟对齐，输出长度 N<sub>out</sub>=⌈N·f<sub>o</sub>/f<sub>i</sub>⌉。</p>
+  </header>
+
+  <!-- 输入与参数 -->
+  <section class="card">
+    <h2>1. 输入文件与转换参数</h2>
+    <div class="drop" id="drop">
+      <div><strong>点击选择 WAV</strong> 或拖拽到此处</div>
+      <div class="hint" style="margin-top:6px">PCM 整数 16/24 位 · 单/双声道 · 8k–192kHz · 最长 60 秒</div>
+      <input type="file" id="fileInput" accept=".wav,audio/wav,audio/wave" class="hidden" />
+    </div>
+    <div id="inputMeta" class="hidden" style="margin-top:14px">
+      <table class="meta-table" id="metaTable"></table>
+    </div>
+
+    <div class="grid2" style="margin-top:16px">
+      <div class="field">
+        <label for="targetRate">目标采样率 f<sub>o</sub> (Hz)</label>
+        <select id="targetRate">
+          <option value="8000">8000</option>
+          <option value="11025">11025</option>
+          <option value="16000">16000</option>
+          <option value="22050">22050</option>
+          <option value="32000">32000</option>
+          <option value="44100" selected>44100</option>
+          <option value="48000">48000</option>
+          <option value="88200">88200</option>
+          <option value="96000">96000</option>
+          <option value="176400">176400</option>
+          <option value="192000">192000</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="taps">每分支滤波器长度 P（抽头数，偶数）</label>
+        <input type="number" id="taps" value="208" min="8" max="2048" step="8" />
+        <span class="hint">越长阻带衰减越高、计算越慢</span>
+      </div>
+      <div class="field">
+        <label for="atten">目标阻带衰减 (dB)</label>
+        <input type="number" id="atten" value="80" min="21" max="160" step="1" />
+        <span class="hint">决定 Kaiser 窗 β 参数</span>
+      </div>
+      <div class="field">
+        <label for="cutoff">通带边沿系数（× min(f<sub>i</sub>,f<sub>o</sub>)/2）</label>
+        <input type="number" id="cutoff" value="0.95" min="0.5" max="0.999" step="0.01" />
+      </div>
+      <div class="field">
+        <label for="chunkSize">分块大小（输入帧）</label>
+        <input type="number" id="chunkSize" value="4096" min="1" step="1" />
+        <span class="hint">任意值结果与整段处理逐位一致</span>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <button id="runBtn" disabled>开始重采样</button>
+      <button id="cancelBtn" class="hidden">取消处理</button>
+      <span class="badge" id="ratioBadge">比例 L/M = —</span>
+      <span class="badge" id="filterBadge">滤波器 —</span>
+    </div>
+    <div class="progress-wrap hidden" id="progWrap"><div class="progress-bar" id="progBar"></div></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <!-- 测量结果 -->
+  <section class="card hidden" id="resultCard">
+    <h2>2. 测量结果</h2>
+    <div class="metrics" id="metrics"></div>
+    <details>
+      <summary>查看完整 JSON 测量数据</summary>
+      <pre class="json" id="jsonView"></pre>
+    </details>
+  </section>
+
+  <!-- 图表 -->
+  <section class="card hidden" id="chartCard">
+    <h2>3. 频谱与滤波器分析</h2>
+    <div class="tabs" id="chartTabs">
+      <button data-tab="spectrum" class="active">输入/输出频谱</button>
+      <button data-tab="filter">滤波器响应</button>
+      <button data-tab="waveform">波形与边界</button>
+      <button data-tab="spectrogram" id="specTab" class="hidden">扫频谱图（混叠）</button>
+    </div>
+
+    <div class="chart-block" data-pane="spectrum">
+      <h3>输入 vs 输出 幅度谱（dBFS，Hann 窗）</h3>
+      <canvas id="spectrumCanvas"></canvas>
+    </div>
+    <div class="chart-block hidden" data-pane="filter">
+      <h3>原型低通频率响应（通带纹波 / -3dB / 阻带）</h3>
+      <canvas id="filterCanvas"></canvas>
+    </div>
+    <div class="chart-block hidden" data-pane="waveform">
+      <h3>输出波形概览（首样本零延迟，无整体偏移）</h3>
+      <canvas id="waveCanvas"></canvas>
+    </div>
+    <div class="chart-block hidden" data-pane="spectrogram">
+      <h3>输出 STFT 谱图与主频轨迹（扫频混叠可视化）</h3>
+      <canvas id="specCanvas" class="tall"></canvas>
+      <div class="status" id="specStatus"></div>
+    </div>
+  </section>
+
+  <!-- 导出 -->
+  <section class="card hidden" id="exportCard">
+    <h2>4. 导出</h2>
+    <div class="row">
+      <button id="exportWavBtn" class="secondary">导出重采样 WAV（位深同输入）</button>
+      <button id="exportJsonBtn" class="secondary">导出测量结果 JSON</button>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
