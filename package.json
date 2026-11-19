@@ -1,0 +1,11 @@
+{
+  "name": "projective-photo-mosaic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "平面展板照片投影拼接：自实现归一化 DLT、RANSAC、逆映射双线性与直线光预乘融合的零依赖静态网页",
+  "scripts": {
+    "test": "node tests/run-tests.mjs samples/extracted/translation samples/extracted/projective && node tests/synthetic.mjs && node tests/e2e.mjs samples/extracted/translation samples/extracted/projective",
+    "serve": "node tests/serve.mjs"
+  }
+}

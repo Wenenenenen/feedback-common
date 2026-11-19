@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>平面展板照片投影拼接</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>平面展板照片投影拼接</h1>
+    <div class="topbar-actions">
+      <button id="btn-run" class="primary" disabled>运行拼接</button>
+      <button id="btn-export-png" disabled>导出 PNG</button>
+      <button id="btn-export-json" disabled>导出 JSON</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左栏：输入与参数 -->
+    <aside class="sidebar">
+      <section class="card">
+        <h2>1. 输入</h2>
+        <label class="file-label">
+          PNG 图片（2–4 张，单边 ≤1024）
+          <input type="file" id="file-images" accept="image/png" multiple>
+        </label>
+        <ul id="image-list" class="image-list"></ul>
+        <label class="file-label">
+          对应点 JSON（matches.json）
+          <input type="file" id="file-json" accept=".json,application/json">
+        </label>
+        <div id="json-status" class="hint"></div>
+      </section>
+
+      <section class="card">
+        <h2>2. 参数</h2>
+        <label class="field">
+          参考图
+          <select id="select-reference"></select>
+        </label>
+        <label class="field">
+          RANSAC 误差阈值（像素）
+          <input type="number" id="input-threshold" value="3" min="0.1" step="0.1">
+        </label>
+        <div class="hint">固定采样种子，结果可复现；内点重估计使用归一化 DLT。</div>
+      </section>
+
+      <section class="card">
+        <h2>3. 对应点</h2>
+        <div class="edge-controls">
+          <select id="select-edge"></select>
+          <button id="btn-add-edge" disabled>新建边</button>
+          <button id="btn-del-edge" class="danger" disabled>删除边</button>
+        </div>
+        <div class="point-panels">
+          <figure>
+            <figcaption>图 <span id="cap-a"></span>（点击加点 / 拖动点）</figcaption>
+            <div class="canvas-wrap"><canvas id="canvas-a"></canvas></div>
+          </figure>
+          <figure>
+            <figcaption>图 <span id="cap-b"></span></figcaption>
+            <div class="canvas-wrap"><canvas id="canvas-b"></canvas></div>
+          </figure>
+        </div>
+        <div class="point-actions">
+          <button id="btn-del-point" class="danger" disabled>删除选中点</button>
+          <span id="point-count" class="hint"></span>
+        </div>
+      </section>
+    </aside>
+
+    <!-- 右栏：预览与诊断 -->
+    <section class="workarea">
+      <div class="preview-toolbar card">
+        <div class="mode-tabs" id="mode-tabs">
+          <button data-mode="result" class="active">拼接结果</button>
+          <button data-mode="points">内/外点</button>
+          <button data-mode="seams">拼接边界</button>
+          <button data-mode="layers">各层覆盖</button>
+          <button data-mode="overlap">重叠区差异</button>
+        </div>
+        <div id="canvas-size" class="hint"></div>
+      </div>
+      <div class="preview-scroll">
+        <div class="preview-frame">
+          <canvas id="canvas-preview"></canvas>
+        </div>
+      </div>
+      <div class="card diagnostics">
+        <h2>诊断信息</h2>
+        <div id="diagnostics" class="hint">尚未运行。</div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="dialog-error">
+    <h3>无法生成</h3>
+    <p id="error-message"></p>
+    <form method="dialog"><button>知道了</button></form>
+  </dialog>
+
+  <script type="module" src="js/ui/app.js"></script>
+</body>
+</html>
