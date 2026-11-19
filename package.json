@@ -1,0 +1,13 @@
+{
+  "name": "rally-gate-steward",
+  "version": "1.0.0",
+  "private": true,
+  "description": "俯视拉力计时：固定 120Hz 逻辑步、有向检查门判定、幽灵回放与一致性验收",
+  "scripts": {
+    "serve": "node tools/serve.mjs",
+    "test": "node tests/engine.test.cjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "sample-check": "node -e \"const E=require('./js/engine.js');const S=require('./js/samples-data.js');console.log(E.runSegmentCases(S.segmentCases).ok, E.runStraightReference(S.straightReference).ok, E.simulateReplay(Object.assign({},S.race,{ticks:10000})).checksum)\""
+  },
+  "engines": { "node": ">=18" }
+}
