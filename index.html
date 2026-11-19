@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>分包音频播放校验台</title>
+<style>
+/* ---- 设计 token：中性灰偏冷蓝，状态色经 dataviz 调色板验证（明暗双模式全门槛通过） ---- */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7;
+  --surface-1: #fcfcfd;
+  --surface-2: #eef0f4;
+  --border: rgba(11, 18, 32, 0.12);
+  --text-primary: #0c1018;
+  --text-secondary: #4a5160;
+  --muted: #818896;
+  --grid: #e3e5ea;
+  --axis: #c2c7d0;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.12);
+  --c-accepted: #2a78d6;   /* 蓝 · 圆点 */
+  --c-late: #eb6834;       /* 橙 · 三角 */
+  --c-duplicate: #6250d6;  /* 紫 · 方块 */
+  --c-invalid: #d03b3b;    /* 红 · 空心叉圆 */
+  --c-deadline: #818896;
+  --c-conceal-zero: rgba(129, 136, 150, 0.55);
+  --c-conceal-decay: #b8860b;
+  --shadow: 0 1px 2px rgba(12, 16, 24, 0.06), 0 4px 14px rgba(12, 16, 24, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1014;
+    --surface-1: #181b20;
+    --surface-2: #20242b;
+    --border: rgba(240, 242, 248, 0.1);
+    --text-primary: #eef0f4;
+    --text-secondary: #b6bcc8;
+    --muted: #828a99;
+    --grid: #262b33;
+    --axis: #3a414c;
+    --accent: #3987e5;
+    --accent-soft: rgba(57, 135, 229, 0.18);
+    --c-accepted: #3987e5;
+    --c-late: #d95926;
+    --c-duplicate: #9085e9;
+    --c-invalid: #e66767;
+    --c-deadline: #828a99;
+    --c-conceal-zero: rgba(130, 138, 153, 0.45);
+    --c-conceal-decay: #d8a929;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.28);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1014;
+  --surface-1: #181b20;
+  --surface-2: #20242b;
+  --border: rgba(240, 242, 248, 0.1);
+  --text-primary: #eef0f4;
+  --text-secondary: #b6bcc8;
+  --muted: #828a99;
+  --grid: #262b33;
+  --axis: #3a414c;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.18);
+  --c-accepted: #3987e5;
+  --c-late: #d95926;
+  --c-duplicate: #9085e9;
+  --c-invalid: #e66767;
+  --c-deadline: #828a99;
+  --c-conceal-zero: rgba(130, 138, 153, 0.45);
+  --c-conceal-decay: #d8a929;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+header.app-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.app-head h1 { font-size: 20px; margin: 0; letter-spacing: 0.2px; }
+header.app-head .sub { color: var(--text-secondary); font-size: 13px; }
+header.app-head .spacer { flex: 1; }
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.card h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: var(--muted);
+  margin: 0 0 12px;
+  font-weight: 650;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ---- 导入区 ---- */
+.drop-zone {
+  border: 1.5px dashed var(--axis);
+  border-radius: 10px;
+  padding: 18px;
+  text-align: center;
+  color: var(--text-secondary);
+  transition: border-color .15s, background .15s;
+  cursor: pointer;
+}
+.drop-zone.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+.drop-zone input { display: none; }
+.drop-zone .strong { color: var(--accent); font-weight: 600; }
+.row-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+button, select {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; }
+#file-label { color: var(--text-secondary); font-size: 13px; }
+#import-error {
+  margin-top: 10px; padding: 10px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--c-invalid) 12%, transparent);
+  color: var(--c-invalid); font-size: 13px;
+}
+
+/* ---- 概要 kv ---- */
+.kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.kv-grid > div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.kv-k { display: block; font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+.kv-v { display: block; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---- 统计块 ---- */
+#stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.stat { border-radius: 10px; padding: 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.stat-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.stat-accepted .stat-value { color: var(--c-accepted); }
+.stat-late .stat-value { color: var(--c-late); }
+.stat-duplicate .stat-value { color: var(--c-duplicate); }
+.stat-invalid .stat-value { color: var(--c-invalid); }
+
+/* ---- 控制条 ---- */
+.controls { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
+.control-group { display: flex; align-items: center; gap: 10px; }
+.control-group label { color: var(--text-secondary); font-size: 13px; }
+input[type="range"] { width: 220px; accent-color: var(--accent); }
+.range-val { font-variant-numeric: tabular-nums; font-weight: 650; min-width: 62px; }
+.radio-pill { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.radio-pill label { padding: 7px 12px; cursor: pointer; background: var(--surface-2); color: var(--text-secondary); }
+.radio-pill input { display: none; }
+.radio-pill input:checked + label { background: var(--accent); color: #fff; }
+
+/* ---- 图例 ---- */
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 12px; height: 12px; display: inline-block; }
+.sw-circle { border-radius: 50%; background: var(--c-accepted); }
+.sw-triangle { width: 0 !important; height: 0 !important; background: transparent !important; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid var(--c-late); }
+.sw-square { background: var(--c-duplicate); }
+.sw-cross { border: 2px solid var(--c-invalid); border-radius: 50%; position: relative; }
+.sw-deadline { width: 22px; height: 0; border-top: 2px dashed var(--c-deadline); }
+.sw-zero { background: var(--c-conceal-zero); }
+.sw-decay { background: var(--c-conceal-decay); }
+
+/* ---- 图表 ---- */
+.chart-box { width: 100%; }
+canvas { display: block; width: 100%; max-width: 100%; }
+#chart-tooltip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 280px;
+}
+.chart-caption { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* ---- 表格 ---- */
+.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; min-width: 760px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { position: sticky; top: 0; background: var(--surface-2); color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.reason { color: var(--text-secondary); min-width: 280px; }
+tbody tr:hover, tbody tr.row-hot { background: var(--accent-soft); }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.badge-accepted { background: color-mix(in srgb, var(--c-accepted) 16%, transparent); color: var(--c-accepted); }
+.badge-late { background: color-mix(in srgb, var(--c-late) 16%, transparent); color: var(--c-late); }
+.badge-duplicate { background: color-mix(in srgb, var(--c-duplicate) 16%, transparent); color: var(--c-duplicate); }
+.badge-invalid { background: color-mix(in srgb, var(--c-invalid) 16%, transparent); color: var(--c-invalid); }
+.badge-conceal { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+.pager { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.pager .info { color: var(--muted); font-size: 12px; flex: 1; }
+
+.audio-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+#play-time { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.export-meta { font-size: 12px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+.note { font-size: 12px; color: var(--muted); }
+@media (max-width: 560px) {
+  input[type="range"] { width: 150px; }
+  .card { padding: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app-head">
+    <h1>分包音频播放校验台</h1>
+    <span class="sub">乱序 / 重复 / 迟到 / 无效包判定 · 固定缓冲播放 · 补偿与导出</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="theme-btn" type="button">切换明暗主题</button>
+  </header>
+
+  <section class="card">
+    <h2>1 · 导入抓包 JSON</h2>
+    <label class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".json,application/json">
+      <div>把含 <span class="strong">arrival_us / seq / timestamp / pcm_b64</span> 的 JSON 拖到这里，或点击选择文件</div>
+      <div class="note" style="margin-top:6px">约定：48kHz、16-bit、单/双声道、每包 480 帧、总长 ≤ 60 秒；序号与时间戳按 16/32 位回绕</div>
+    </label>
+    <div class="row-actions">
+      <button type="button" id="demo-btn">载入内置演示</button>
+      <span id="file-label">未选择文件</span>
+    </div>
+    <div id="import-error" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>2 · 文档概要</h2>
+    <div class="kv-grid" id="doc-summary"></div>
+  </section>
+
+  <section class="card">
+    <h2>3 · 缓冲参数（修改即重算）</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label for="delay-slider">固定缓冲延迟</label>
+        <input type="range" id="delay-slider" min="0" max="200" step="1" value="30">
+        <span class="range-val" id="delay-value">30 ms</span>
+      </div>
+      <div class="control-group">
+        <label>丢包补偿</label>
+        <div class="radio-pill">
+          <input type="radio" name="policy" id="policy-zero" value="zero" checked>
+          <label for="policy-zero">补零 zero</label>
+          <input type="radio" name="policy" id="policy-decay" value="repeat_decay">
+          <label for="policy-decay">衰减重复 repeat_decay</label>
+        </div>
+      </div>
+    </div>
+    <p class="note" style="margin-bottom:0">
+      截止时刻 = origin_us + delay_ms×1000 + 10000×k；arrival 恰好等于截止也判接收。
+      迟到包只占序号槽、不进播放，绝不改写已经播放的内容。
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>4 · 判定统计</h2>
+    <div id="stats"></div>
+  </section>
+
+  <section class="card">
+    <h2>5 · 到达时间线与播放槽</h2>
+    <div class="chart-box">
+      <canvas id="jitter-canvas" height="340" aria-label="到达抖动散点图"></canvas>
+      <div class="legend">
+        <span class="item"><span class="swatch sw-circle"></span>接收 accepted</span>
+        <span class="item"><span class="swatch sw-triangle"></span>迟到 late</span>
+        <span class="item"><span class="swatch sw-square"></span>重复 duplicate</span>
+        <span class="item"><span class="swatch sw-cross"></span>无效 invalid</span>
+        <span class="item"><span class="swatch sw-deadline"></span>每槽截止时间</span>
+      </div>
+      <p class="chart-caption">横轴为播放槽 k（序号回绕后按 (seq−anchor_seq) mod 65536 定位），纵轴为相对 origin 的时间；悬停查看每个包的判定原因。</p>
+    </div>
+    <div class="chart-box" style="margin-top:14px">
+      <canvas id="strip-canvas" height="64" aria-label="播放槽条带"></canvas>
+      <div class="legend">
+        <span class="item"><span class="swatch sw-circle"></span>实际播放用包</span>
+        <span class="item"><span class="swatch" style="background:var(--c-late)"></span>迟到槽（补偿）</span>
+        <span class="item"><span class="swatch sw-decay"></span>衰减重复段</span>
+        <span class="item"><span class="swatch sw-zero"></span>补零段</span>
+      </div>
+      <p class="chart-caption">每格一个播放槽，标出该槽实际使用了哪个包；首尾缺失槽保留不移除。</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>6 · 波形与试听</h2>
+    <canvas id="wave-canvas" height="220" aria-label="播放 PCM 波形"></canvas>
+    <p class="chart-caption">阴影区为补偿区间（灰=补零，金=衰减重复）；点击或拖动波形定位播放头。</p>
+    <div class="audio-bar" style="margin-top:12px">
+      <button class="primary" type="button" id="play-btn">播放</button>
+      <span id="play-time">0.00 / 0.00 s</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>7 · 逐包判定</h2>
+    <div class="control-group" style="margin-bottom:10px">
+      <label for="filter-select">状态筛选</label>
+      <select id="filter-select">
+        <option value="all">全部</option>
+        <option value="accepted">接收</option>
+        <option value="late">迟到</option>
+        <option value="duplicate">重复</option>
+        <option value="invalid">无效</option>
+      </select>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>包 ID</th><th class="num">输入索引</th><th class="num">到达时间</th>
+          <th class="num">seq</th><th class="num">槽位</th><th class="num">截止时间</th>
+          <th>状态</th><th>判定原因</th>
+        </tr></thead>
+        <tbody id="packet-rows"></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <button type="button" id="packet-prev">上一页</button>
+      <button type="button" id="packet-next">下一页</button>
+      <span class="info" id="packet-page-info"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>8 · 逐槽来源</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th class="num">槽位</th><th class="num">deadline_us</th><th>实际来源</th><th>说明</th>
+        </tr></thead>
+        <tbody id="slot-rows"></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <button type="button" id="slot-prev">上一页</button>
+      <button type="button" id="slot-next">下一页</button>
+      <span class="info" id="slot-page-info"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>9 · 导出</h2>
+    <div class="row-actions">
+      <button class="primary" type="button" id="export-wav">导出 WAV</button>
+      <button class="primary" type="button" id="export-json">导出判定 JSON</button>
+    </div>
+    <p class="export-meta" id="export-info"></p>
+    <p class="note">JSON 含每个包的状态与原因、每槽 deadline_us 与 source（另附 conceal 补偿说明）；WAV 为精确长度 PCM s16le。</p>
+  </section>
+</div>
+
+<div id="chart-tooltip" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

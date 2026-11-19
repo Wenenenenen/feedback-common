@@ -15,3 +15,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Node
+node_modules/
+# 测试产物
+tools/*.png
+# 样例解压目录（不可信输入，不入库）
+samples/extracted/
