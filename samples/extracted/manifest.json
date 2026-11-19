@@ -1,0 +1,9 @@
+{
+  "images": [
+    "focus-0.png",
+    "focus-1.png",
+    "focus-2.png"
+  ],
+  "levels": 5,
+  "lock": "lock.png"
+}

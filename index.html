@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>焦点堆栈 · 多尺度金字塔融合</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <strong>焦点堆栈 · 多尺度金字塔融合</strong>
+    <span class="sub">2..7 张已配准 8 位 RGB PNG · 单边 ≤512 · 高斯/拉普拉斯金字塔 · 锁定画笔</span>
+  </div>
+  <div class="controls">
+    <label class="inline">样例
+      <select id="caseSelect"></select>
+    </label>
+    <button id="loadSampleBtn" class="ghost" type="button">加载样例</button>
+    <label class="file-label">导入项目 JSON
+      <input type="file" id="projectFile" accept=".json,application/json">
+    </label>
+    <label class="file-label">导入 2..7 张 PNG
+      <input type="file" id="imageFiles" accept="image/png" multiple>
+    </label>
+    <button id="resetBtn" class="ghost" type="button">复位</button>
+  </div>
+</header>
+
+<section class="param-bar">
+  <div class="param">
+    <label for="levelsInput">金字塔层数 <output id="levelsOut">5 层</output></label>
+    <input type="range" id="levelsInput" min="1" max="6" step="1" value="5">
+  </div>
+  <div class="param grow">
+    <label>视图</label>
+    <div class="tabs" id="viewTabs" role="tablist">
+      <button type="button" data-view="result" class="active">融合结果</button>
+      <button type="button" data-view="weight">权重图</button>
+      <button type="button" data-view="dominant">主导来源</button>
+      <button type="button" data-view="diff">结果差值</button>
+      <button type="button" data-view="source">原图</button>
+    </div>
+  </div>
+  <div class="param" id="weightIndexWrap">
+    <label for="weightIndex">选择帧</label>
+    <select id="weightIndex"></select>
+  </div>
+  <div class="param" id="diffTargetWrap">
+    <label for="diffTarget">差值目标</label>
+    <select id="diffTarget"></select>
+  </div>
+  <div class="param" id="diffGainWrap">
+    <label for="diffGain">差值增益 <output id="diffGainOut">4×</output></label>
+    <input type="range" id="diffGain" min="1" max="64" step="1" value="4">
+  </div>
+  <div class="param">
+    <label for="zoomSelect">放大</label>
+    <select id="zoomSelect">
+      <option value="0" selected>适应窗口</option>
+      <option value="1">1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+      <option value="8">8×</option>
+    </select>
+  </div>
+  <div class="param check">
+    <label class="chk"><input type="checkbox" id="overlayToggle" checked> 锁定高亮</label>
+  </div>
+</section>
+
+<div class="warn" id="warnLine" hidden></div>
+
+<main class="workspace">
+  <section class="viewer-pane">
+    <div class="viewer-head">
+      <h3 id="viewTitle">融合结果（含锁定）</h3>
+      <span id="viewHint" class="hint"></span>
+    </div>
+    <div class="canvas-scroll" id="viewerScroll">
+      <canvas id="viewCanvas" class="pixelated"></canvas>
+      <div class="drop-hint" id="dropHint">把 PNG 或项目 JSON 拖到这里</div>
+    </div>
+    <div class="under-viewer">
+      <div class="legend" id="legendPanel" hidden></div>
+      <div class="probe" id="probePanel"><span class="muted">把鼠标移到图像上查看像素信息</span></div>
+    </div>
+  </section>
+
+  <aside class="side-pane">
+    <div class="card status-card">
+      <div class="status-line" id="statusLine">正在加载样例…</div>
+      <div class="stats" id="statPanel"></div>
+      <div class="hint">「实际层数」可能小于请求值：最粗一层到 1×1 后不再下采样。</div>
+    </div>
+
+    <div class="card">
+      <h4>金字塔层诊断</h4>
+      <p class="note">每层权重按 Σ 重新归一化；「兜底」= 该层权重和为零而强制均分的像素数（正常应为 0）。</p>
+      <div class="diag" id="diagnosticPanel"></div>
+    </div>
+
+    <div class="card">
+      <h4>锁定画笔</h4>
+      <p class="note">在「融合结果」视图上按住左键涂抹：命中的像素完全取自所选原图。右键拖动擦除。锁定不改自动权重，只覆盖最终像素。</p>
+      <div class="brush-grid">
+        <label>来源
+          <select id="brushLabel"></select>
+        </label>
+        <label>笔刷半径 <output id="brushSizeOut">3</output>
+          <input type="range" id="brushSize" min="1" max="21" step="1" value="3">
+        </label>
+      </div>
+      <div class="brush-actions">
+        <label class="chk"><input type="checkbox" id="eraseToggle"> 擦除模式</label>
+        <button id="undoBtn" class="ghost" type="button">撤销</button>
+        <button id="clearLockBtn" class="ghost" type="button" disabled>清空锁定</button>
+      </div>
+      <div class="lock-count" id="lockCount">无锁定</div>
+    </div>
+
+    <div class="card">
+      <h4>导出</h4>
+      <div class="export-grid">
+        <button id="exportPngBtn" type="button" disabled>合成 PNG</button>
+        <button id="exportLockBtn" type="button" disabled>锁定标签 PNG</button>
+        <button id="exportProjectBtn" type="button" disabled>项目 / 参数 JSON</button>
+      </div>
+      <p class="note">项目 JSON 内嵌输入 PNG、实际层数与锁定标签，重新导入后可继续修改。</p>
+    </div>
+
+    <div class="card">
+      <h4>输入帧</h4>
+      <div class="thumb-strip" id="thumbStrip"></div>
+    </div>
+
+    <details class="card conventions">
+      <summary>计算口径（约定.json）</summary>
+      <ul>
+        <li>sRGB 解码为线性 RGB；亮度 = 0.2126R + 0.7152G + 0.0722B。</li>
+        <li>清晰度 S = |左+右+上+下−4×中心| 的 3×3 均值；W=(S+1e-6)/Σ(S+1e-6)，平局取最小索引。</li>
+        <li>核 [1,4,6,4,1]/16 可分离；低通后取偶数坐标，尺寸向上取半；图像与权重都建高斯金字塔，每层重新归一化。</li>
+        <li>展开：目标精确尺寸零图 → 偶数坐标放低层值 → 同核卷积 ×4；拉普拉斯层 = 本层 − 下一层展开，顶层为高斯图。</li>
+        <li>边界一律 reflect101（−1→1，n→n−2，长度 1 恒取唯一像素），因此奇数尺寸不会错位。</li>
+        <li>锁定在重建后逐像素覆盖原图线性值，最终限幅并编码 sRGB。</li>
+      </ul>
+    </details>
+  </aside>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

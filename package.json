@@ -1,0 +1,16 @@
+{
+  "name": "focus-pyramid-stack",
+  "version": "1.0.0",
+  "description": "焦点堆栈：自实现多尺度高斯/拉普拉斯金字塔融合，浏览器可调层数、权重图、主导来源、差值、锁定画笔，导出 PNG/标签/项目 JSON",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "extract": "node tools/extract-samples.js",
+    "verify": "node test/verify.js",
+    "serve": "node tools/serve.js",
+    "e2e": "node test/e2e.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
