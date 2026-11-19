@@ -1,0 +1,257 @@
+<title>齐次光栅化校验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: left control rail + center canvas + right inspector, wrapping
+     to a single column on phones. Engineering workbench, dark-first. */
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1c232d;
+    --fg: #e6edf3;
+    --muted: #9aa7b4;
+    --line: #2a323d;
+    --accent: #4cc2ff;
+    --accent-strong: #1f9fe0;
+    --good: #3fb97a;
+    --warn: #e0a13c;
+    --bad: #ef6a6a;
+    --pick: #f472b6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232d;
+    --fg: #e6edf3; --muted: #9aa7b4; --line: #2a323d;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #f4f6f8; --panel: #ffffff; --panel-2: #eef1f5;
+      --fg: #18212b; --muted: #5a6672; --line: #d4dae1;
+      --accent: #0b76b8; --accent-strong: #0a6399;
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f4f6f8; --panel: #ffffff; --panel-2: #eef1f5;
+    --fg: #18212b; --muted: #5a6672; --line: #d4dae1;
+    --accent: #0b76b8; --accent-strong: #0a6399;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  [hidden] { display: none !important; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 8px; }
+  h3 { font-size: 14px; margin: 0 0 8px; }
+  h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 14px 0 6px; }
+  .sub { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+
+  header.app {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr) 340px;
+    gap: 14px;
+    align-items: start;
+  }
+  .rail, .inspector-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    min-width: 0;
+  }
+  .rail section + section { margin-top: 18px; }
+  .center { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+  label.field { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  select, input[type="file"] {
+    width: 100%;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 8px; font-family: var(--sans); font-size: 13px;
+  }
+  input[type="file"] { padding: 5px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .seg label {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 8px; font-size: 13px; cursor: pointer;
+  }
+  .seg input { accent-color: var(--accent); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  button {
+    border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--fg);
+    border-radius: 7px; padding: 8px 12px; font-size: 13px;
+    cursor: pointer; font-family: var(--sans);
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; font-weight: 600; }
+  button.danger { border-color: var(--bad); color: var(--bad); }
+  .btn-block { width: 100%; }
+  .btn-stack { display: flex; flex-direction: column; gap: 8px; }
+
+  .progress {
+    height: 8px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 999px; overflow: hidden;
+  }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .12s linear; }
+  #status-line { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  .canvas-frame {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; display: flex; align-items: center; justify-content: center;
+    overflow: auto; min-height: 280px;
+  }
+  canvas#raster-canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid var(--line);
+    background: #000;
+    cursor: crosshair;
+    max-width: 100%;
+  }
+  #scene-meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td {
+    text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+  }
+  th { color: var(--muted); font-weight: 500; }
+  .stats td { font-family: var(--mono); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; }
+  .table-wrap td { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0; }
+  .kv span { color: var(--muted); font-size: 12px; }
+  .kv strong { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); }
+
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+  @media (max-width: 1080px) {
+    .workspace { grid-template-columns: 1fr; }
+    .inspector-panel { order: 3; }
+  }
+</style>
+
+<header class="app">
+  <div>
+    <h1>齐次光栅化校验台</h1>
+    <p class="sub">六平面齐次裁剪 · 像素中心覆盖 · 透视正确插值 · 严格深度测试（无图形 API）</p>
+  </div>
+  <div class="row" style="margin-left:auto">
+    <label class="row" style="gap:6px"><input type="checkbox" id="opt-coverage" checked> <span class="hint">JSON 含 coverage</span></label>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- LEFT CONTROL RAIL -->
+  <aside class="rail">
+    <section>
+      <h2>场景输入</h2>
+      <label class="field" for="sample-select">内置样例</label>
+      <select id="sample-select">
+        <option value="perspective">perspective（透视颜色）</option>
+        <option value="shared-edge">shared-edge（共享边）</option>
+        <option value="equal-depth">equal-depth（等深度）</option>
+        <option value="degenerate">degenerate（退化面）</option>
+        <option value="near-cross">near-cross（跨近裁面）</option>
+        <option value="behind-eye">behind-eye（眼后顶点）</option>
+        <option value="invalid-index">invalid-index（非法索引）</option>
+        <option value="stress">stress（5000 面压力）</option>
+      </select>
+      <label class="field" style="margin-top:10px" for="file-input">或导入 JSON（width/height/vertices/triangles）</label>
+      <input type="file" id="file-input" accept=".json,application/json">
+      <p class="hint" id="scene-meta"></p>
+    </section>
+
+    <section>
+      <h2>视图</h2>
+      <div class="seg">
+        <label><input type="radio" name="view" value="color" checked> 颜色</label>
+        <label><input type="radio" name="view" value="depth"> 深度</label>
+        <label><input type="radio" name="view" value="face"> 面编号</label>
+        <label><input type="radio" name="view" value="coverage"> 覆盖</label>
+      </div>
+      <label class="field" style="margin-top:10px" for="mesh-select">网格叠加</label>
+      <select id="mesh-select">
+        <option value="off">关闭</option>
+        <option value="pre">裁剪前（蓝）</option>
+        <option value="post" selected>裁剪后（黄）</option>
+      </select>
+      <label class="field" style="margin-top:10px" for="zoom-select">显示缩放</label>
+      <select id="zoom-select">
+        <option value="1">1×（像素 1:1）</option>
+        <option value="2">2×</option>
+        <option value="3" selected>3×</option>
+        <option value="4">4×</option>
+        <option value="6">6×</option>
+      </select>
+      <div class="legend" style="margin-top:8px">
+        <span><i style="background:#7dd3fc"></i>裁剪前</span>
+        <span><i style="background:#fde047"></i>裁剪后</span>
+        <span><i style="background:#f472b6"></i>选中像素</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>计算与导出</h2>
+      <div class="btn-stack">
+        <button class="primary btn-block" id="btn-run">重新计算</button>
+        <button class="danger btn-block" id="btn-cancel" hidden>取消任务</button>
+        <button class="btn-block" id="btn-export-png" disabled>导出 PNG（sRGB）</button>
+        <button class="btn-block" id="btn-export-json" disabled>导出逐像素 JSON</button>
+      </div>
+      <div class="progress" style="margin-top:12px"><div id="progress-bar"></div></div>
+      <p id="status-line" style="margin-top:8px"></p>
+    </section>
+
+    <section>
+      <h2>统计</h2>
+      <table class="stats">
+        <tbody id="stats-body"></tbody>
+      </table>
+    </section>
+  </aside>
+
+  <!-- CENTER CANVAS -->
+  <main class="center">
+    <div class="canvas-frame">
+      <canvas id="raster-canvas" width="4" height="4" aria-label="光栅化输出，点击像素查看详情"></canvas>
+    </div>
+    <p class="hint">采样点取像素中心；共享边按 top-left 规则仅填一次，等深度保留先提交面，深度严格小于才写入。</p>
+  </main>
+
+  <!-- RIGHT INSPECTOR -->
+  <aside class="inspector-panel">
+    <h2>像素检视</h2>
+    <div id="inspector">
+      <p class="hint">点击任意像素查看原始面、裁剪顶点、重心权重与逐通道插值。</p>
+    </div>
+  </aside>
+</div>
+
+<script type="module" src="src/app.js"></script>
