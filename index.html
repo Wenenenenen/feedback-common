@@ -1,0 +1,652 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>组件树面积过滤台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ---- 设计令牌：工程仪器风，冷灰底 + 钴蓝强调 ---- */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --fg: #1b2430;
+  --fg-soft: #5a6675;
+  --fg-faint: #8a94a3;
+  --line: #d6dce4;
+  --accent: #2667d8;
+  --accent-soft: #e3ecfb;
+  --good: #1f9c6d;
+  --warn: #d15848;
+  --amber: #c98a12;
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161c;
+    --surface: #1a2029;
+    --surface-2: #222a35;
+    --fg: #e6ebf2;
+    --fg-soft: #a3aebd;
+    --fg-faint: #6d7888;
+    --line: #303a47;
+    --accent: #6ea2ff;
+    --accent-soft: #1f2c44;
+    --good: #46c793;
+    --warn: #f08375;
+    --amber: #e0b04c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161c; --surface: #1a2029; --surface-2: #222a35;
+  --fg: #e6ebf2; --fg-soft: #a3aebd; --fg-faint: #6d7888;
+  --line: #303a47; --accent: #6ea2ff; --accent-soft: #1f2c44;
+  --good: #46c793; --warn: #f08375; --amber: #e0b04c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding-block: 18px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+}
+header.app-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+header.app-head h1 {
+  font-size: 19px;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+header.app-head .sub { color: var(--fg-soft); font-size: 13px; }
+header.app-head .spacer { flex: 1; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-faint);
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; }
+.ctl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ctl label { font-size: 12px; color: var(--fg-soft); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button {
+  border: 0;
+  background: var(--surface);
+  color: var(--fg-soft);
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent); color: #fff; }
+.seg button:not(.on):hover { background: var(--surface-2); }
+input[type="range"] { width: 220px; max-width: 60vw; accent-color: var(--accent); }
+input[type="number"], input[type="file"] {
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  width: 110px;
+}
+input[type="file"] { width: auto; max-width: 100%; font-size: 12px; padding: 6px 8px; }
+.btn {
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.thr-row { display: flex; align-items: center; gap: 10px; }
+.thr-val { font-family: var(--mono); font-size: 15px; color: var(--accent); min-width: 64px; }
+
+.canvas-wrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.canvas-box { min-width: 0; }
+.canvas-box h3 {
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-soft);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.canvas-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--ar, 1);
+  background: #0a0d11;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.canvas-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.canvas-stage canvas.overlay { cursor: crosshair; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; font-size: 12px; color: var(--fg-soft); }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.stat {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+.stat .k { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.stat .v { font-family: var(--mono); font-size: 15px; margin-top: 2px; }
+
+#path-list, #tree-list { overflow: auto; max-height: 320px; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface-2); color: var(--fg-faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+tr.node-row { cursor: pointer; }
+tr.node-row:hover { background: var(--accent-soft); }
+tr.node-row.sel { background: var(--accent-soft); }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.pill.keep { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.pill.drop { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+.pill.root { background: var(--accent-soft); color: var(--accent); }
+.empty { color: var(--fg-faint); font-size: 13px; padding: 14px; text-align: center; }
+.status-line { font-size: 12.5px; color: var(--fg-soft); display: flex; gap: 14px; flex-wrap: wrap; }
+.status-line b { color: var(--fg); font-family: var(--mono); font-weight: 600; }
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s;
+  z-index: 50;
+  max-width: 86vw;
+}
+.toast.show { opacity: 0.95; }
+.dropzone.drag { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.muted { color: var(--fg-faint); font-size: 12px; }
+.diff-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--amber) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  margin-bottom: 10px;
+}
+.diff-banner.on { display: flex; flex-wrap: wrap; }
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  .canvas-wrap { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="app">
+  <header class="app-head">
+    <h1>组件树面积过滤台</h1>
+    <span class="sub">自研 max-tree / min-tree · 同灰度平台规范合并 · 节点面积含全部后代</span>
+    <span class="spacer"></span>
+    <button class="btn" id="theme-toggle" type="button">切换主题</button>
+  </header>
+
+  <section class="panel dropzone" id="dropzone">
+    <h2>导入</h2>
+    <div class="controls">
+      <div class="ctl">
+        <label for="file-img">8 位灰度 PNG（单边 ≤ 1024）</label>
+        <input type="file" id="file-img" accept="image/png,.png">
+      </div>
+      <div class="ctl">
+        <label for="file-mask">可选：同尺寸二值区域掩膜</label>
+        <input type="file" id="file-mask" accept="image/png,.png">
+      </div>
+      <div class="ctl">
+        <label>&nbsp;</label>
+        <button class="btn" id="mask-clear" type="button" disabled>移除掩膜</button>
+      </div>
+      <div class="ctl">
+        <label>当前图像</label>
+        <span class="status-line" id="file-status"><span class="muted">尚未导入</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>建树与过滤参数</h2>
+    <div class="controls">
+      <div class="ctl">
+        <label>树类型</label>
+        <div class="seg" id="seg-tree">
+          <button data-v="max" class="on" type="button">最大树（亮斑过滤）</button>
+          <button data-v="min" type="button">最小树（暗坑过滤）</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>邻接</label>
+        <div class="seg" id="seg-conn">
+          <button data-v="4" class="on" type="button">四邻接</button>
+          <button data-v="8" type="button">八邻接</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label for="thr-range">面积阈值 A（像素，根始终保留）</label>
+        <div class="thr-row">
+          <input type="range" id="thr-range" min="1" max="100" value="10" disabled>
+          <input type="number" id="thr-num" min="1" value="10" disabled>
+          <span class="thr-val" id="thr-display">A = 10</span>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>&nbsp;</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="btn-snapshot" type="button" disabled>快照当前阈值用于对比</button>
+          <button class="btn" id="btn-clear-compare" type="button" disabled>清除对比</button>
+        </div>
+      </div>
+    </div>
+    <div class="diff-banner" id="diff-banner">
+      <span>对比模式：相对快照阈值 <b id="diff-snap-A"></b>，绿色=过滤后灰度升高，红色=降低</span>
+      <span class="spacer" style="flex:1"></span>
+      <span>变化像素 <b id="diff-count">0</b></span>
+    </div>
+    <div class="status-line" id="build-status" style="margin-top:10px"></div>
+  </section>
+
+  <div class="layout">
+    <div class="col">
+      <section class="panel">
+        <h2>图像视图（点选像素查看所属节点）</h2>
+        <div class="canvas-wrap" id="canvas-wrap">
+          <div class="canvas-box">
+            <h3><span>原图</span><span id="orig-cap" class="muted"></span></h3>
+            <div class="canvas-stage" id="stage-orig">
+              <canvas id="cv-orig-base"></canvas>
+              <canvas id="cv-orig-overlay" class="overlay"></canvas>
+            </div>
+          </div>
+          <div class="canvas-box">
+            <h3><span>过滤结果</span><span id="filt-cap" class="muted"></span></h3>
+            <div class="canvas-stage" id="stage-filt">
+              <canvas id="cv-filt-base"></canvas>
+              <canvas id="cv-filt-diff"></canvas>
+              <canvas id="cv-filt-overlay" class="overlay"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:#2684ff"></span>节点完整连通区域</span>
+          <span><span class="dot" style="background:#ffb020"></span>点选像素</span>
+          <span><span class="dot" style="background:#22a06e"></span>灰度升高</span>
+          <span><span class="dot" style="background:#dc5848"></span>灰度降低</span>
+          <span><span class="dot" style="background:#484848"></span>掩膜外（不参与建树）</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>统计</h2>
+        <div class="stats" id="stats">
+          <div class="stat"><div class="k">节点数</div><div class="v" id="st-nodes">—</div></div>
+          <div class="stat"><div class="k">独立区域根</div><div class="v" id="st-roots">—</div></div>
+          <div class="stat"><div class="k">有效像素</div><div class="v" id="st-valid">—</div></div>
+          <div class="stat"><div class="k">被过滤节点</div><div class="v" id="st-dropped">—</div></div>
+          <div class="stat"><div class="k">改变像素</div><div class="v" id="st-changed">—</div></div>
+          <div class="stat"><div class="k">建树耗时</div><div class="v" id="st-time">—</div></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel">
+        <h2>点选像素 → 根路径</h2>
+        <div id="pixel-info"><div class="empty">在左图任意像素上点选</div></div>
+        <div id="path-list" style="margin-top:10px" hidden></div>
+      </section>
+
+      <section class="panel">
+        <h2>节点列表（点击行高亮完整区域）</h2>
+        <div class="ctl" style="margin-bottom:9px">
+          <label for="node-filter">显示节点</label>
+          <div class="seg" id="seg-node-filter">
+            <button data-v="all" class="on" type="button">全部</button>
+            <button data-v="dropped" type="button">本阈值过滤</button>
+            <button data-v="kept" type="button">本阈值保留</button>
+          </div>
+        </div>
+        <div id="tree-list"><div class="empty">导入图像后显示节点</div></div>
+        <p class="muted" style="margin:8px 0 0">面积 = 平台像素 + 全部后代像素；保留判定 area ≥ A，根无条件保留。列表按面积降序，最多展示 600 行，完整层级见 JSON 导出。</p>
+      </section>
+
+      <section class="panel">
+        <h2>导出（供独立复核层级）</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn primary" id="btn-export-png" type="button" disabled>导出过滤 PNG</button>
+          <button class="btn primary" id="btn-export-json" type="button" disabled>导出层级 JSON</button>
+        </div>
+        <p class="muted" style="margin:10px 0 0">
+          JSON 含 width、height、tree、connectivity、area_threshold、nodes（id / parent / level / area / plateau_area / representative）
+          与行优先 pixel_nodes（掩膜外为 -1）。
+        </p>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import {
+  state, bindUI, loadImageFile, loadMaskFile, clearMask,
+  setTreeKind, setConnectivity, setThreshold, selectPixel, selectNode,
+  snapshotCompare, clearCompare, pixelPathInfo, exportFilteredPNG, exportTreeJSON,
+} from './src/app-state.mjs';
+import { renderBase, renderOverlay, renderDiff, eventToPixel } from './src/canvas-view.mjs';
+
+const $ = (id) => document.getElementById(id);
+let buildMs = 0;
+let nodeFilter = 'all';
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+// ---------- 主题 ----------
+$('theme-toggle').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme === 'dark';
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('ctaf-theme', root.dataset.theme); } catch {}
+});
+try {
+  const saved = localStorage.getItem('ctaf-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+} catch {}
+
+// ---------- 文件导入 ----------
+async function handleImage(file) {
+  if (!file) return;
+  try {
+    const t0 = performance.now();
+    await loadImageFile(file);
+    buildMs = performance.now() - t0;
+    toast(`已导入 ${file.name}`);
+  } catch (e) {
+    toast(e.message);
+  }
+}
+$('file-img').addEventListener('change', (e) => handleImage(e.target.files[0]));
+$('file-mask').addEventListener('change', async (e) => {
+  try { await loadMaskFile(e.target.files[0]); toast('掩膜已应用'); }
+  catch (err) { toast(err.message); }
+});
+$('mask-clear').addEventListener('click', () => { clearMask(); $('file-mask').value = ''; toast('已移除掩膜'); });
+
+const dz = $('dropzone');
+['dragover', 'dragenter'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', (e) => {
+  const f = e.dataTransfer.files[0];
+  if (f && /\.png$/i.test(f.name)) handleImage(f);
+});
+
+// ---------- 参数控件 ----------
+function bindSeg(segId, fn) {
+  $(segId).addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    [...$(segId).children].forEach((b) => b.classList.toggle('on', b === btn));
+    fn(btn.dataset.v === '4' || btn.dataset.v === '8' ? Number(btn.dataset.v) : btn.dataset.v);
+  });
+}
+bindSeg('seg-tree', setTreeKind);
+bindSeg('seg-conn', setConnectivity);
+
+const thrRange = $('thr-range'), thrNum = $('thr-num');
+function onThrInput(v) {
+  setThreshold(v);
+  thrRange.value = state.threshold;
+  thrNum.value = state.threshold;
+  $('thr-display').textContent = `A = ${state.threshold}`;
+}
+thrRange.addEventListener('input', () => onThrInput(Number(thrRange.value)));
+thrNum.addEventListener('input', () => onThrInput(Number(thrNum.value)));
+
+$('btn-snapshot').addEventListener('click', () => { snapshotCompare(); toast(`已快照阈值 A=${state.threshold}`); });
+$('btn-clear-compare').addEventListener('click', () => clearCompare());
+
+// ---------- 画布点选 ----------
+for (const id of ['cv-orig-overlay', 'cv-filt-overlay']) {
+  $(id).addEventListener('click', (ev) => {
+    const [x, y] = eventToPixel($(id), ev);
+    selectPixel(x, y);
+  });
+}
+
+// ---------- 导出 ----------
+$('btn-export-png').addEventListener('click', () => { try { exportFilteredPNG(); } catch (e) { toast(e.message); } });
+$('btn-export-json').addEventListener('click', () => { try { exportTreeJSON(); } catch (e) { toast(e.message); } });
+
+// ---------- UI 刷新 ----------
+bindUI({
+  onTreeChange: renderAll,
+  onFilterChange: renderFilterViews,
+  onSelectionChange: renderSelection,
+});
+
+function renderAll() {
+  const t = state.tree;
+  if (!t) return;
+  const N = t.width * t.height;
+  $('file-status').innerHTML = `<b>${state.fileName}</b> <span>${t.width}×${t.height}</span>`;
+  $('mask-clear').disabled = !state.mask;
+  $('orig-cap').textContent = state.mask ? `有效 ${t.validPixelCount}/${N}` : `${N} 像素`;
+  $('filt-cap').textContent = `${state.treeKind}-tree · ${state.connectivity}邻接`;
+  thrRange.disabled = thrNum.disabled = false;
+  thrRange.max = Math.max(1, t.validPixelCount);
+  thrRange.max = Math.max(Number(thrRange.max), state.threshold);
+  $('btn-export-png').disabled = $('btn-export-json').disabled = $('btn-snapshot').disabled = false;
+  $('stage-orig').style.setProperty('--ar', `${t.width} / ${t.height}`);
+  $('stage-filt').style.setProperty('--ar', `${t.width} / ${t.height}`);
+  renderBase($('cv-orig-base'), 'original');
+  renderFilterViews();
+  renderStats();
+  renderTreeList();
+  renderSelection();
+}
+
+function renderFilterViews() {
+  const t = state.tree;
+  if (!t) return;
+  renderBase($('cv-filt-base'), 'filtered');
+  const diffCanvas = $('cv-filt-diff');
+  let changed = 0;
+  if (state.compareFiltered) {
+    changed = renderDiff(diffCanvas) ?? 0;
+    $('diff-banner').classList.add('on');
+    $('diff-snap-A').textContent = String(state.compareThreshold);
+    $('diff-count').textContent = String(changed);
+    $('btn-clear-compare').disabled = false;
+  } else {
+    diffCanvas.getContext('2d').clearRect(0, 0, diffCanvas.width, diffCanvas.height);
+    $('diff-banner').classList.remove('on');
+    $('btn-clear-compare').disabled = true;
+  }
+  renderOverlay($('cv-orig-overlay'));
+  renderOverlay($('cv-filt-overlay'));
+  renderStats(changed);
+  renderTreeList();
+}
+
+function renderStats(forcedChanged) {
+  const t = state.tree;
+  if (!t) return;
+  let dropped = 0, changedPixels = 0;
+  for (const nd of t.nodes) {
+    const kept = nd.parent === null || nd.area >= state.threshold;
+    if (!kept) dropped++;
+  }
+  for (let p = 0; p < t.width * t.height; p++) {
+    if (t.valid[p] && state.filtered[p] !== t.gray[p]) changedPixels++;
+  }
+  $('st-nodes').textContent = t.nodeCount.toLocaleString();
+  $('st-roots').textContent = t.roots.length.toLocaleString();
+  $('st-valid').textContent = t.validPixelCount.toLocaleString();
+  $('st-dropped').textContent = dropped.toLocaleString();
+  $('st-changed').textContent = (forcedChanged ?? changedPixels).toLocaleString();
+  $('st-time').textContent = `${buildMs.toFixed(1)} ms`;
+  $('build-status').innerHTML =
+    `<span>树 <b>${t.tree}</b></span><span>邻接 <b>${t.connectivity}</b></span>` +
+    `<span>节点 <b>${t.nodeCount}</b></span><span>阈值 <b>A=${state.threshold}</b></span>`;
+}
+
+function renderTreeList() {
+  const t = state.tree;
+  const box = $('tree-list');
+  if (!t) { box.innerHTML = '<div class="empty">导入图像后显示节点</div>'; return; }
+  const isKept = (nd) => nd.parent === null || nd.area >= state.threshold;
+  let ordered = [...t.nodes].sort((a, b) => b.area - a.area || a.id - b.id);
+  if (nodeFilter === 'dropped') ordered = ordered.filter((nd) => !isKept(nd));
+  else if (nodeFilter === 'kept') ordered = ordered.filter(isKept);
+  const shown = ordered.slice(0, 600);
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr>
+    <th class="num">id</th><th class="num">灰度</th><th class="num">面积</th><th class="num">平台</th><th class="num">代表像素</th><th>状态</th>
+  </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  for (const nd of shown) {
+    const kept = isKept(nd);
+    const tag = nd.parent === null ? '<span class="pill root">根</span>'
+      : kept ? '<span class="pill keep">保留</span>' : '<span class="pill drop">过滤</span>';
+    const tr = document.createElement('tr');
+    tr.className = 'node-row' + (state.selectedNode === nd.id ? ' sel' : '');
+    tr.dataset.id = nd.id;
+    tr.innerHTML = `<td class="num">${nd.id}</td><td class="num">${nd.level}</td>
+      <td class="num">${nd.area}</td><td class="num">${nd.plateauArea}</td>
+      <td class="num">(${nd.representative[0]},${nd.representative[1]})</td><td>${tag}</td>`;
+    tr.addEventListener('click', () => selectNode(Number(tr.dataset.id)));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  box.replaceChildren(table);
+  if (ordered.length > 600) {
+    box.appendChild(Object.assign(document.createElement('div'),
+      { className: 'muted', textContent: `符合条件 ${ordered.length} 个，仅显示面积最大的 600 个，完整层级见 JSON 导出` }));
+  }
+  if (!shown.length) {
+    box.replaceChildren(Object.assign(document.createElement('div'),
+      { className: 'empty', textContent: '当前筛选下没有节点' }));
+  }
+}
+
+$('seg-node-filter').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  nodeFilter = btn.dataset.v;
+  [...$('seg-node-filter').children].forEach((b) => b.classList.toggle('on', b === btn));
+  renderTreeList();
+});
+
+function renderSelection() {
+  const t = state.tree;
+  renderOverlay($('cv-orig-overlay'));
+  renderOverlay($('cv-filt-overlay'));
+  // 只更新行高亮，不整表重建（阈值未变时行内容不变）
+  document.querySelectorAll('#tree-list tr.node-row').forEach((tr) => {
+    tr.classList.toggle('sel', Number(tr.dataset.id) === state.selectedNode);
+  });
+  if (!t || !state.selectedPixel) return;
+  const [x, y] = state.selectedPixel;
+  const info = pixelPathInfo(x, y);
+  const head = $('pixel-info');
+  if (info.masked) {
+    head.innerHTML = `<div class="empty">像素 (${x},${y}) 位于掩膜外，灰度 <b>${info.gray}</b>，不参与建树、过滤时照抄原值。</div>`;
+    $('path-list').hidden = true;
+    return;
+  }
+  head.innerHTML = `<div class="status-line">
+    <span>像素 <b>(${x},${y})</b></span>
+    <span>原灰度 <b>${info.gray}</b></span>
+    <span>过滤后 <b>${state.filtered[y * t.width + x]}</b></span>
+    <span>所属节点 <b>#${info.nodeId}</b></span>
+  </div>`;
+  const list = $('path-list');
+  list.hidden = false;
+  list.innerHTML = `<table><thead><tr>
+    <th class="num">节点</th><th class="num">灰度</th><th class="num">面积</th><th class="num">平台</th><th class="num">代表像素</th><th>本阈值下</th>
+  </tr></thead><tbody>${info.path.map((n) => `
+    <tr class="node-row${state.selectedNode === n.id ? ' sel' : ''}" data-id="${n.id}">
+      <td class="num">#${n.id}</td><td class="num">${n.level}</td><td class="num">${n.area}</td>
+      <td class="num">${n.plateauArea}</td><td class="num">(${n.representative[0]},${n.representative[1]})</td>
+      <td>${n.kept ? '<span class="pill keep">保留</span>' : '<span class="pill drop">降到祖先</span>'}</td>
+    </tr>`).join('')}</tbody></table>`;
+  list.querySelectorAll('tr.node-row').forEach((tr) => {
+    tr.addEventListener('click', () => selectNode(Number(tr.dataset.id)));
+  });
+}
+</script>

@@ -1,0 +1,15 @@
+{
+  "name": "component-tree-area-filter",
+  "version": "1.0.0",
+  "description": "自研最大树/最小树组件树面积过滤网页（含四/八邻接、二值掩膜、节点层级复核导出）",
+  "type": "module",
+  "scripts": {
+    "test": "node test/component-tree.test.mjs",
+    "test:e2e": "node test/e2e-browser.mjs",
+    "test:export": "node test/verify-export.mjs",
+    "serve": "node tools/serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
