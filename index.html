@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>响应式行为树调试器</title>
+<style>
+  :root {
+    --c-idle: #9aa3b2; --c-running: #2b8cff; --c-success: #2faf5f;
+    --c-failure: #e5484d; --c-aborted: #f59e0b;
+    --bg: #f4f6fa; --panel: #ffffff; --line: #dde2ea; --text: #1f2733;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+           background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; }
+  button, select { font: inherit; padding: 4px 10px; border: 1px solid var(--line);
+                   border-radius: 6px; background: #fff; cursor: pointer; }
+  button:hover { background: #eef2f8; }
+  button.primary { background: var(--c-running); color: #fff; border-color: var(--c-running); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .tick-badge { font-variant-numeric: tabular-nums; font-weight: 600; padding: 3px 10px;
+                background: #eef2f8; border-radius: 6px; }
+  .version-badge { color: #667; font-size: 12px; }
+  main { display: grid; grid-template-columns: 320px 1fr 340px; gap: 8px; padding: 8px;
+         height: calc(100vh - 49px); }
+  .col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+           display: flex; flex-direction: column; min-height: 0; }
+  .panel > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #667;
+                margin: 0; padding: 8px 10px 4px; }
+  .panel .body { padding: 6px 10px 10px; overflow: auto; min-height: 0; }
+  textarea { width: 100%; font: 11px/1.4 ui-monospace, Consolas, monospace; border: 1px solid var(--line);
+             border-radius: 6px; padding: 6px; resize: vertical; }
+  .errors { color: var(--c-failure); white-space: pre-wrap; font-size: 12px; margin-top: 4px; }
+  #treeWrap { overflow: auto; flex: 1; }
+  #stageWrap { height: 240px; }
+  #stage { width: 100%; height: 100%; display: block; }
+  table.bb { width: 100%; border-collapse: collapse; }
+  table.bb td { padding: 2px 4px; border-bottom: 1px solid var(--line); }
+  table.bb input { width: 100%; font: 12px ui-monospace, monospace; border: 1px solid var(--line);
+                   border-radius: 4px; padding: 2px 4px; }
+  .trace-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .trace-table td, .trace-table th { padding: 2px 6px; border-bottom: 1px solid var(--line);
+                                     text-align: left; white-space: nowrap; }
+  .st { display: inline-block; padding: 0 6px; border-radius: 8px; color: #fff; font-size: 11px; }
+  .st-running { background: var(--c-running); } .st-success { background: var(--c-success); }
+  .st-failure { background: var(--c-failure); } .st-aborted { background: var(--c-aborted); }
+  .st-idle { background: var(--c-idle); }
+  .legend span { margin-right: 10px; font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; }
+  .field { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  .field label { width: 70px; color: #556; flex: none; }
+  .field input, .field select { flex: 1; font: inherit; padding: 3px 6px;
+                                border: 1px solid var(--line); border-radius: 5px; min-width: 0; }
+  .child-row { display: flex; align-items: center; gap: 4px; margin: 2px 0; }
+  .child-row .cid { flex: 1; font-family: ui-monospace, monospace; font-size: 12px; }
+  .child-row button { padding: 1px 6px; font-size: 12px; }
+  .snap-row { display: flex; align-items: center; gap: 6px; padding: 3px 0;
+              border-bottom: 1px solid var(--line); }
+  .snap-row .name { flex: 1; }
+  .snap-row .stale { color: var(--c-failure); font-size: 11px; }
+  .hint { color: #889; font-size: 12px; }
+  .toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>响应式行为树调试器</h1>
+  <select id="preset">
+    <option value="">载入示例…</option>
+    <option value="preemption">抢占：高优先级任务打断移动</option>
+    <option value="memory">记忆序列：不重复执行已完成节点</option>
+    <option value="stress">压力：128 节点</option>
+    <option value="invalidCycle">非法：环（校验演示）</option>
+  </select>
+  <button id="btnImport">导入 JSON…</button>
+  <input type="file" id="fileInput" accept=".json" hidden>
+  <button id="btnExport">导出 JSON</button>
+  <span style="flex:1"></span>
+  <span class="tick-badge">tick <span id="tickNum">0</span></span>
+  <div class="toolbar">
+    <button id="btnStep" class="primary">单步 (50ms)</button>
+    <button id="btnPlay">▶ 播放</button>
+    <button id="btnReset">复位</button>
+    <button id="btnSnap">保存快照</button>
+  </div>
+  <span class="version-badge">树版本 <span id="verHash">-</span></span>
+</header>
+<main>
+  <div class="col">
+    <div class="panel" style="flex:0 0 auto">
+      <h2>选中节点</h2>
+      <div class="body" id="nodeEditor"><span class="hint">在树图中点击节点进行编辑</span></div>
+    </div>
+    <div class="panel" style="flex:0 0 auto">
+      <h2>黑板输入事件（tick / seq / key / value）</h2>
+      <div class="body">
+        <textarea id="inputsJson" rows="4"></textarea>
+        <div style="margin-top:4px"><button id="btnApplyInputs">应用输入事件</button></div>
+        <div class="errors" id="inputsErrors"></div>
+      </div>
+    </div>
+    <div class="panel" style="flex:1">
+      <h2>树定义 JSON（编辑后应用，含校验）</h2>
+      <div class="body" style="display:flex;flex-direction:column">
+        <textarea id="treeJson" rows="12" style="flex:1"></textarea>
+        <div style="margin-top:4px"><button id="btnApplyTree">校验并应用</button></div>
+        <div class="errors" id="treeErrors"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel" style="flex:1">
+      <h2>树图 <span class="legend" style="float:right;text-transform:none">
+        <span><i style="background:var(--c-running)"></i>运行</span>
+        <span><i style="background:var(--c-success)"></i>成功</span>
+        <span><i style="background:var(--c-failure)"></i>失败</span>
+        <span><i style="background:var(--c-aborted)"></i>中止</span>
+        <span><i style="background:var(--c-idle)"></i>空闲</span>
+      </span></h2>
+      <div class="body" id="treeWrap"></div>
+    </div>
+    <div class="panel" id="stageWrap">
+      <h2>角色预览（位置可观察，网格间距 1m）</h2>
+      <div class="body" style="padding:0;flex:1"><canvas id="stage"></canvas></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel" style="flex:0 0 auto;max-height:30%">
+      <h2>黑板（可直接修改，JSON 值）</h2>
+      <div class="body" id="bbPanel"></div>
+    </div>
+    <div class="panel" style="flex:0 0 auto;max-height:28%">
+      <h2>快照（绑定树版本）</h2>
+      <div class="body" id="snapPanel"></div>
+    </div>
+    <div class="panel" style="flex:1">
+      <h2>轨迹（tick / 节点 / 旧状态 → 新状态 / abort 原因）</h2>
+      <div class="body" id="tracePanel"></div>
+    </div>
+  </div>
+</main>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+{
+  "root": "s",
+  "nodes": [
+    {
+      "id": "s",
+      "type": "memorySequence",
+      "children": [
+        "set",
+        "wait",
+        "done"
+      ]
+    },
+    {
+      "id": "set",
+      "type": "set",
+      "key": "counter",
+      "value": 1
+    },
+    {
+      "id": "wait",
+      "type": "wait",
+      "ticks": 3
+    },
+    {
+      "id": "done",
+      "type": "set",
+      "key": "done",
+      "value": true
+    }
+  ],
+  "position": [
+    0,
+    0
+  ],
+  "blackboard": {},
+  "inputs": [
+    {
+      "tick": 1,
+      "seq": 1,
+      "key": "counter",
+      "value": 9
+    }
+  ],
+  "expected": {
+    "counterAt2": 9,
+    "doneAt3": true,
+    "setExecutionsThrough3": 1
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "root": "r",
+  "nodes": [
+    {
+      "id": "r",
+      "type": "reactiveSelector",
+      "children": [
+        "urgentSeq",
+        "normal"
+      ]
+    },
+    {
+      "id": "urgentSeq",
+      "type": "memorySequence",
+      "children": [
+        "test",
+        "urgentMove"
+      ]
+    },
+    {
+      "id": "test",
+      "type": "condition",
+      "key": "urgent",
+      "equals": true
+    },
+    {
+      "id": "urgentMove",
+      "type": "move",
+      "target": [
+        -1,
+        0
+      ],
+      "speed": 1
+    },
+    {
+      "id": "normal",
+      "type": "move",
+      "target": [
+        1,
+        0
+      ],
+      "speed": 1
+    }
+  ],
+  "blackboard": {
+    "urgent": false
+  },
+  "position": [
+    0,
+    0
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "seq": 1,
+      "key": "urgent",
+      "value": true
+    }
+  ],
+  "expected": {
+    "positions": {
+      "0": [
+        0.05,
+        0
+      ],
+      "1": [
+        0.1,
+        0
+      ],
+      "2": [
+        0.05,
+        0
+      ]
+    },
+    "abortAt2": "normal"
+  }
+}

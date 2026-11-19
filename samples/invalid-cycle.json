@@ -1,0 +1,24 @@
+{
+  "root": "a",
+  "nodes": [
+    {
+      "id": "a",
+      "type": "memorySequence",
+      "children": [
+        "b"
+      ]
+    },
+    {
+      "id": "b",
+      "type": "reactiveSelector",
+      "children": [
+        "a"
+      ]
+    }
+  ],
+  "position": [
+    0,
+    0
+  ],
+  "blackboard": {}
+}
