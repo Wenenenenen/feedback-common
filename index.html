@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>单声部音高校对</title>
+<style>
+/* ---- design tokens: neutral studio surfaces, blue pitch ink, status hues reserved ---- */
+:root {
+  color-scheme: light;
+  --page: #f6f6f4;
+  --surface: #fcfcfb;
+  --surface-2: #f0efeb;
+  --ink: #141412;
+  --ink-2: #52514e;
+  --muted: #8a8881;
+  --grid: #e3e2dc;
+  --axis: #c6c4bc;
+  --border: rgba(20, 20, 18, 0.12);
+  --accent: #2a78d6;        /* final pitch curve */
+  --accent-soft: #cde2fb;
+  --candidate: #eb6834;     /* raw candidates */
+  --candidate-soft: #f6c9b4;
+  --good: #0ca30c;
+  --serious: #d03b3b;
+  --playhead: #141412;
+  --shadow: 0 1px 2px rgba(20,20,18,.06), 0 4px 14px rgba(20,20,18,.06);
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0c;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #3a3a37;
+    --border: rgba(255, 255, 255, 0.12);
+    --accent: #5fa0ec;
+    --accent-soft: #1c3a5e;
+    --candidate: #e8835a;
+    --candidate-soft: #5a3120;
+    --good: #37c437;
+    --serious: #e66767;
+    --playhead: #f0efec;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0c;
+  --surface: #1a1a19;
+  --surface-2: #242422;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #3a3a37;
+  --border: rgba(255, 255, 255, 0.12);
+  --accent: #5fa0ec;
+  --accent-soft: #1c3a5e;
+  --candidate: #e8835a;
+  --candidate-soft: #5a3120;
+  --good: #37c437;
+  --serious: #e66767;
+  --playhead: #f0efec;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 1180px; margin: 0 auto; padding-block: 18px 40px; display: flex; flex-direction: column; gap: 14px; }
+
+header.app-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.app-head h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+header.app-head .sub { color: var(--muted); font-size: 12.5px; }
+header.app-head .spacer { flex: 1; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+/* ---- controls ---- */
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 18px; }
+.ctl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ctl label { font-size: 12px; color: var(--ink-2); display: flex; justify-content: space-between; gap: 8px; }
+.ctl label .val { font-family: var(--mono); color: var(--ink); font-size: 12px; }
+.ctl input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+.ctl select, .ctl input[type="number"] {
+  background: var(--surface-2); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 7px; padding: 6px 8px; font: inherit; font-variant-numeric: tabular-nums;
+}
+.ctl input[type="number"] { width: 100%; }
+.ctl .hint { font-size: 11px; color: var(--muted); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+button {
+  font: inherit; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 13px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.file-drop {
+  border: 1.5px dashed var(--axis); border-radius: var(--radius); padding: 18px;
+  text-align: center; color: var(--ink-2); background: var(--surface);
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.file-drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+.file-drop strong { color: var(--ink); }
+.file-drop .spec { font-size: 12px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.file-meta { font-size: 12.5px; color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.file-meta b { color: var(--ink); font-weight: 600; }
+
+/* ---- readout tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface-2); border-radius: 9px; padding: 10px 12px; min-width: 0; }
+.tile .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.tile .v { font-size: 19px; font-weight: 620; font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .v small { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.pill.voiced { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.pill.unvoiced { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+.cents-neg { color: var(--candidate); }
+.cents-pos { color: var(--accent); }
+
+/* ---- charts ---- */
+.chart-wrap { display: flex; flex-direction: column; gap: 4px; }
+.chart-wrap .chart-title { font-size: 12px; color: var(--ink-2); display: flex; justify-content: space-between; }
+canvas.chart { width: 100%; height: 150px; display: block; border-radius: 8px; background: var(--surface); touch-action: none; }
+#pitchCanvas { height: 260px; }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
+.legend .sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend .sw.dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ---- tooltip / inspector ---- */
+.inspector { font-size: 12.5px; }
+.inspector h3 { margin: 0 0 8px; font-size: 13px; }
+.inspector .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 6px 18px; }
+.inspector .kv { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+.inspector .kv .k { color: var(--muted); }
+.inspector table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.inspector th, .inspector td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); }
+.inspector th:first-child, .inspector td:first-child { text-align: left; }
+.inspector th { color: var(--muted); font-weight: 500; }
+.inspector tr.shadowed td { color: var(--muted); }
+.inspector tr.picked td { font-weight: 650; color: var(--accent); }
+.tag-ghost { font-size: 10.5px; color: var(--serious); border: 1px solid color-mix(in srgb, var(--serious) 45%, transparent); border-radius: 5px; padding: 0 5px; }
+
+#tooltip {
+  position: fixed; z-index: 40; pointer-events: none; display: none; max-width: 300px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: var(--shadow); padding: 9px 11px; font-size: 12px; font-variant-numeric: tabular-nums;
+}
+#tooltip .tt-title { font-weight: 650; margin-bottom: 3px; }
+#tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-2); }
+#tooltip .tt-row b { color: var(--ink); font-weight: 600; }
+
+.progress { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; display: none; }
+.progress.on { display: block; }
+.progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+.status-line { font-size: 12.5px; color: var(--ink-2); min-height: 18px; }
+.status-line.err { color: var(--serious); }
+
+@media (max-width: 640px) {
+  .card { padding: 12px; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <h1>单声部音高校对</h1>
+    <span class="sub">差分函数 + 累计均值归一化 · 时间连续性跟踪 · 10 ms/帧</span>
+    <span class="spacer"></span>
+    <div class="btn-row">
+      <button id="themeBtn" type="button">主题</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <div id="drop" class="file-drop" tabindex="0" role="button" aria-label="选择 WAV 文件">
+      <div><strong>点击选择或拖入 WAV 文件</strong></div>
+      <div class="spec">单声道 PCM · 44.1/48 kHz · 16/24 位 · 最长 60 秒</div>
+      <input id="fileInput" type="file" accept=".wav,audio/wav,audio/wave,audio/x-wav" hidden>
+    </div>
+    <div id="fileMeta" class="file-meta" style="margin-top:10px" hidden></div>
+  </div>
+
+  <section class="card">
+    <div class="controls">
+      <div class="ctl">
+        <label for="windowSel">分析窗 <span class="val" id="windowVal">80 ms</span></label>
+        <select id="windowSel">
+          <option value="40">40 ms</option>
+          <option value="80" selected>80 ms</option>
+        </select>
+        <span class="hint">窗越长，低频与弱基频越稳</span>
+      </div>
+      <div class="ctl">
+        <label for="fMin">最低频率 <span class="val"><span id="fMinVal">60</span> Hz</span></label>
+        <input id="fMin" type="range" min="60" max="300" step="1" value="60">
+      </div>
+      <div class="ctl">
+        <label for="fMax">最高频率 <span class="val"><span id="fMaxVal">1000</span> Hz</span></label>
+        <input id="fMax" type="range" min="200" max="1000" step="1" value="1000">
+      </div>
+      <div class="ctl">
+        <label for="yinTh">周期性阈值 d′ <span class="val" id="yinVal">0.15</span></label>
+        <input id="yinTh" type="range" min="0.05" max="0.4" step="0.01" value="0.15">
+        <span class="hint">越小越严格，候选 d′ 低于该值才接受</span>
+      </div>
+      <div class="ctl">
+        <label for="voiceTh">有声阈值 <span class="val" id="voiceVal">0.50</span></label>
+        <input id="voiceTh" type="range" min="0.1" max="0.9" step="0.01" value="0.5">
+        <span class="hint">越大越严格，停顿与噪声更易留空</span>
+      </div>
+      <div class="ctl">
+        <label for="a4">A4 基准 <span class="val"><span id="a4Val">440</span> Hz</span></label>
+        <input id="a4" type="range" min="416" max="466" step="0.5" value="440">
+        <span class="hint">可调范围 416–466 Hz</span>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button id="analyzeBtn" class="primary" type="button" disabled>开始分析</button>
+      <button id="playBtn" type="button" disabled>试听</button>
+      <button id="csvBtn" type="button" disabled>导出 CSV</button>
+      <button id="jsonBtn" type="button" disabled>导出 JSON</button>
+      <span id="defaultHint" class="hint" style="color:var(--muted)"></span>
+    </div>
+    <div class="progress" id="progress" style="margin-top:10px"><div id="progressBar"></div></div>
+    <div class="status-line" id="statusLine"></div>
+  </section>
+
+  <section class="card">
+    <div class="tiles">
+      <div class="tile"><div class="k">光标时间</div><div class="v" id="tTime">—</div></div>
+      <div class="tile"><div class="k">音高</div><div class="v" id="tHz">—</div></div>
+      <div class="tile"><div class="k">置信度</div><div class="v" id="tConf">—</div></div>
+      <div class="tile"><div class="k">有声状态</div><div class="v" id="tVoiced">—</div></div>
+      <div class="tile"><div class="k">最近音名</div><div class="v" id="tNote">—</div></div>
+      <div class="tile"><div class="k">音分偏差</div><div class="v" id="tCents">—</div></div>
+    </div>
+  </section>
+
+  <section class="card chart-wrap">
+    <div class="chart-title"><span>波形（峰值包络，每 10 ms 一帧）</span><span id="waveHint"></span></div>
+    <canvas id="waveCanvas" class="chart" height="150"></canvas>
+  </section>
+
+  <section class="card chart-wrap">
+    <div class="chart-title">
+      <span>对数音高曲线（半音刻度，无声段留空）</span>
+    </div>
+    <canvas id="pitchCanvas" class="chart" height="260"></canvas>
+    <div class="legend" style="margin-top:6px">
+      <span><span class="sw" style="background:var(--accent)"></span>最终音高</span>
+      <span><span class="sw dot" style="background:var(--candidate)"></span>原始候选（悬停查看）</span>
+      <span><span class="sw" style="background:var(--playhead);height:2px"></span>播放/光标位置</span>
+    </div>
+  </section>
+
+  <section class="card inspector" id="inspector" hidden>
+    <h3>帧检查器 <span id="inspTitle" style="color:var(--muted);font-weight:400"></span></h3>
+    <div class="grid2" id="inspKV"></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>候选</th><th>周期 (采样)</th><th>周期性分数 d′</th><th>f0 带能量</th><th>2f0 带能量</th><th>3f0 带能量</th><th></th></tr></thead>
+        <tbody id="inspRows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div id="tooltip" role="status"></div>
+<audio id="audio" hidden></audio>
+
+<script type="importmap">
+{ "imports": {
+  "./src/fft.js": "./src/fft.js",
+  "./src/pitch.js": "./src/pitch.js",
+  "./src/tracker.js": "./src/tracker.js",
+  "./src/wav.js": "./src/wav.js",
+  "./src/export.js": "./src/export.js"
+} }
+</script>
+<script type="module">
+import { decodeWav } from "./src/wav.js";
+import { trackPitch, noteFromHz, centerFrames } from "./src/tracker.js";
+import { buildRows, toCSV, toJSON, downloadText } from "./src/export.js";
+
+const $ = (id) => document.getElementById(id);
+const DEFAULTS = { windowMs: 80, fMin: 60, fMax: 1000, yinThreshold: 0.15, voicedThreshold: 0.5, a4: 440 };
+let audio = null;          // decoded {sampleRate, bitsPerSample, samples, duration, name}
+let result = null;         // tracker output
+let params = { ...DEFAULTS };
+let audioCtx = null, audioBuffer = null, sourceNode = null, playing = false;
+let cursorTime = 0;
+
+/* ---------------- theme ---------------- */
+function setTheme(mode) {
+  if (mode === "dark") document.documentElement.setAttribute("data-theme", "dark");
+  else if (mode === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  try { localStorage.setItem("mpc-theme", mode); } catch { /* ignore */ }
+  if (result) drawAll();
+}
+try {
+  const saved = localStorage.getItem("mpc-theme");
+  if (saved) setTheme(saved);
+} catch { /* ignore */ }
+$("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  setTheme(dark ? "light" : "dark");
+});
+
+/* ---------------- controls ---------------- */
+const bindRange = (id, key, fmt = (v) => v, target) => {
+  const el = $(id);
+  el.addEventListener("input", () => {
+    params[key] = parseFloat(el.value);
+    $(target).textContent = fmt(params[key]);
+    if (key === "a4" && result) renderPitchLayer(), updateReadouts();
+  });
+};
+bindRange("fMin", "fMin", (v) => v, "fMinVal");
+bindRange("fMax", "fMax", (v) => v, "fMaxVal");
+bindRange("yinTh", "yinThreshold", (v) => v.toFixed(2), "yinVal");
+bindRange("voiceTh", "voicedThreshold", (v) => v.toFixed(2), "voiceVal");
+bindRange("a4", "a4", (v) => v, "a4Val");
+$("windowSel").addEventListener("change", (e) => {
+  params.windowMs = parseInt(e.target.value, 10);
+  $("windowVal").textContent = params.windowMs + " ms";
+});
+$("defaultHint").textContent =
+  `默认值：窗 ${DEFAULTS.windowMs} ms · 范围 ${DEFAULTS.fMin}–${DEFAULTS.fMax} Hz · d′ ${DEFAULTS.yinThreshold} · 有声 ${DEFAULTS.voicedThreshold.toFixed(2)}`;
+
+/* ---------------- file loading ---------------- */
+const drop = $("drop"), fileInput = $("fileInput");
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") fileInput.click(); });
+["dragover", "dragenter"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function setStatus(msg, isErr = false) {
+  const el = $("statusLine");
+  el.textContent = msg;
+  el.classList.toggle("err", isErr);
+}
+
+async function loadFile(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const decoded = decodeWav(buf);
+    audio = { ...decoded, name: file.name };
+    result = null; cursorTime = 0;
+    stopPlayback();
+    $("fileMeta").hidden = false;
+    $("fileMeta").innerHTML =
+      `<span>文件 <b>${escapeHtml(file.name)}</b></span>` +
+      `<span>采样率 <b>${decoded.sampleRate} Hz</b></span>` +
+      `<span>位深 <b>${decoded.bitsPerSample} 位</b></span>` +
+      `<span>时长 <b>${decoded.duration.toFixed(3)} s</b></span>` +
+      `<span>帧数(10ms) <b>${centerFrames(decoded.samples.length, decoded.sampleRate).frames.length}</b></span>`;
+    $("analyzeBtn").disabled = false;
+    $("playBtn").disabled = false;
+    $("csvBtn").disabled = $("jsonBtn").disabled = true;
+    $("inspector").hidden = true;
+    buildAudioBuffer();
+    drawWaveform();
+    $("pitchCanvas").getContext("2d").clearRect(0, 0, $("pitchCanvas").width, $("pitchCanvas").height);
+    setStatus("文件就绪，点击“开始分析”。");
+  } catch (err) {
+    setStatus(err.message || String(err), true);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ---------------- analysis (chunked, keeps UI responsive) ---------------- */
+$("analyzeBtn").addEventListener("click", runAnalysis);
+
+async function runAnalysis() {
+  if (!audio) return;
+  if (params.fMin >= params.fMax) { setStatus("最低频率必须小于最高频率。", true); return; }
+  $("analyzeBtn").disabled = true;
+  const prog = $("progress"); prog.classList.add("on");
+  const bar = $("progressBar");
+  setStatus("分析中…");
+  await new Promise((r) => setTimeout(r, 30));
+  try {
+    // chunked via microtask boundaries inside tracker callbacks
+    let lastPaint = 0;
+    result = await trackPitch(audio.samples, audio.sampleRate, params, (p, msg) => {
+      const now = performance.now();
+      if (now - lastPaint > 60) {
+        bar.style.width = (p * 100).toFixed(1) + "%";
+        setStatus(msg);
+        lastPaint = now;
+      }
+    });
+    bar.style.width = "100%";
+    setStatus(`分析完成：${result.frames.length} 帧，窗 ${result.windowMs} ms，能量门限 ${result.gate.energyGate.toExponential(2)}`);
+    $("csvBtn").disabled = $("jsonBtn").disabled = false;
+    cursorTime = 0;
+    drawAll();
+  } catch (err) {
+    setStatus("分析失败：" + (err.message || err), true);
+  } finally {
+    setTimeout(() => prog.classList.remove("on"), 400);
+    $("analyzeBtn").disabled = false;
+  }
+}
+
+/* ---------------- audio playback ---------------- */
+function buildAudioBuffer() {
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  audioBuffer = audioCtx.createBuffer(1, audio.samples.length, audio.sampleRate);
+  audioBuffer.copyToChannel(Float32Array.from(audio.samples), 0);
+  const url = URL.createObjectURL(new Blob([wavToBlob(audio)], { type: "audio/wav" }));
+  $("audio").src = url;
+}
+// Re-encode decoded PCM back to a 16-bit WAV blob for the <audio> element fallback.
+function wavToBlob(a) {
+  const n = a.samples.length, bytes = n * 2 + 44;
+  const ab = new ArrayBuffer(bytes), dv = new DataView(ab);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); dv.setUint32(4, bytes - 8, true); w(8, "WAVE"); w(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, a.sampleRate, true); dv.setUint32(28, a.sampleRate * 2, true);
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) {
+    const s = Math.max(-1, Math.min(1, a.samples[i]));
+    dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return ab;
+}
+
+const audioEl = $("audio");
+$("playBtn").addEventListener("click", togglePlay);
+let startCtxTime = 0, startOffset = 0;
+function togglePlay() {
+  if (!audio) return;
+  if (playing) { pausePlayback(); return; }
+  audioCtx.resume();
+  if (cursorTime >= audio.duration - 0.02) cursorTime = 0;
+  sourceNode = audioCtx.createBufferSource();
+  sourceNode.buffer = audioBuffer;
+  sourceNode.connect(audioCtx.destination);
+  sourceNode.onended = () => { if (playing) stopPlayback(); };
+  startOffset = cursorTime;
+  startCtxTime = audioCtx.currentTime;
+  sourceNode.start(0, startOffset);
+  playing = true; $("playBtn").textContent = "停止";
+  rafLoop();
+}
+function pausePlayback() {
+  if (sourceNode) { try { sourceNode.onended = null; sourceNode.stop(); } catch { /* already stopped */ } sourceNode = null; }
+  playing = false;
+  $("playBtn").textContent = "试听";
+}
+function stopPlayback() {
+  pausePlayback();
+}
+function rafLoop() {
+  if (!playing) return;
+  cursorTime = startOffset + (audioCtx.currentTime - startCtxTime);
+  drawAll(); // full redraw clears the previous playhead
+  updateReadouts();
+  if (result) fillInspector(frameAt(cursorTime));
+  if (cursorTime >= audio.duration) {
+    stopPlayback(); cursorTime = 0; drawAll(); updateReadouts(); return;
+  }
+  requestAnimationFrame(rafLoop);
+}
+
+/* ---------------- canvas helpers ---------------- */
+const waveCanvas = $("waveCanvas"), pitchCanvas = $("pitchCanvas");
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+function fitCanvas(cv) {
+  const rect = cv.getBoundingClientRect();
+  cv.width = Math.round(rect.width * DPR);
+  cv.height = Math.round(rect.height * DPR);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return { ctx, w: rect.width, h: rect.height };
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+let waveGeom = null, pitchGeom = null;
+
+function drawWaveform() {
+  const { ctx, w, h } = fitCanvas(waveCanvas);
+  ctx.clearRect(0, 0, w, h);
+  const dur = audio.duration, padL = 46, padR = 10, padT = 10, padB = 18;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  waveGeom = { padL, padR, padT, padB, plotW, plotH, dur };
+  // grid + zero line
+  ctx.strokeStyle = cssVar("--grid"); ctx.fillStyle = cssVar("--muted");
+  ctx.lineWidth = 1; ctx.font = "10px " + cssVar("--sans");
+  for (let sec = 0; sec <= dur; sec += Math.max(0.5, Math.round(dur / 8))) {
+    const x = padL + (sec / dur) * plotW;
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
+    ctx.fillText(sec.toFixed(1) + "s", x + 2, h - 5);
+  }
+  ctx.strokeStyle = cssVar("--axis");
+  ctx.beginPath(); ctx.moveTo(padL, padT + plotH / 2); ctx.lineTo(padL + plotW, padT + plotH / 2); ctx.stroke();
+  // 10ms peak envelope
+  const H = Math.round(audio.sampleRate / 100);
+  const frames = centerFrames(audio.samples.length, audio.sampleRate).frames;
+  const colW = Math.max(1, plotW / frames.length);
+  ctx.fillStyle = cssVar("--ink-2");
+  for (let i = 0; i < frames.length; i++) {
+    const c = frames[i];
+    let peak = 0;
+    for (let k = Math.max(0, c - H / 2); k < Math.min(audio.samples.length, c + H / 2); k++) {
+      const v = Math.abs(audio.samples[k]);
+      if (v > peak) peak = v;
+    }
+    const x = padL + (i / frames.length) * plotW;
+    const bh = Math.max(1, peak * plotH / 2);
+    ctx.fillRect(x, padT + plotH / 2 - bh, Math.max(1, colW - 0.3), bh * 2);
+  }
+  drawPlayhead();
+}
+
+function renderPitchLayer() {
+  if (!result) return;
+  const { ctx, w, h } = fitCanvas(pitchCanvas);
+  ctx.clearRect(0, 0, w, h);
+  const padL = 46, padR = 10, padT = 12, padB = 20;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  const dur = audio.duration;
+  pitchGeom = { padL, padR, padT, padB, plotW, plotH, dur };
+  const fLo = params.fMin, fHi = params.fMax;
+  const mLo = 69 + 12 * Math.log2(fLo / params.a4);
+  const mHi = 69 + 12 * Math.log2(fHi / params.a4);
+  const xOf = (t) => padL + (t / dur) * plotW;
+  const yOfM = (m) => padT + (1 - (m - mLo) / (mHi - mLo)) * plotH;
+  const yOfF = (f) => yOfM(69 + 12 * Math.log2(f / params.a4));
+
+  // horizontal semitone grid with note names
+  ctx.font = "10px " + cssVar("--sans");
+  ctx.strokeStyle = cssVar("--grid"); ctx.fillStyle = cssVar("--muted");
+  const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  for (let m = Math.ceil(mLo); m <= Math.floor(mHi); m++) {
+    const y = yOfM(m);
+    const isC = m % 12 === 0;
+    ctx.strokeStyle = isC ? cssVar("--axis") : cssVar("--grid");
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    if (isC || m % 12 === 6) {
+      const nm = NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+      ctx.fillText(nm, 4, y + 3);
+    }
+  }
+  // time axis ticks
+  for (let sec = 0; sec <= dur; sec += Math.max(0.5, Math.round(dur / 8))) {
+    const x = xOf(sec);
+    ctx.fillText(sec.toFixed(1) + "s", x + 2, h - 6);
+  }
+
+  // raw candidates (small dots) — unvoiced frames are noise/silence, so their
+  // candidates are drawn much fainter than voiced-frame candidates
+  ctx.fillStyle = cssVar("--candidate");
+  for (const f of result.frames) {
+    if (f.candidates.length === 0) continue;
+    const x = xOf(f.timeS);
+    ctx.globalAlpha = f.voiced ? 1 : 0.18;
+    for (const c of f.candidates) {
+      if (c.hz < fLo || c.hz > fHi) continue;
+      const y = yOfF(c.hz);
+      if (f.voiced && c.shadowed) ctx.globalAlpha = 0.25;
+      ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+      if (f.voiced) ctx.globalAlpha = 1;
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // final pitch contour, connected per voiced run (unvoiced gaps stay empty)
+  ctx.strokeStyle = cssVar("--accent");
+  ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  let pen = false;
+  ctx.beginPath();
+  for (const f of result.frames) {
+    const x = xOf(f.timeS);
+    if (!f.voiced || f.hz == null || f.hz < fLo || f.hz > fHi) { pen = false; continue; }
+    const y = yOfF(f.hz);
+    if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  drawPlayhead();
+}
+
+function drawPlayhead() {
+  for (const [cv, geom] of [[waveCanvas, waveGeom], [pitchCanvas, pitchGeom]]) {
+    if (!geom || !audio) continue;
+    const ctx = cv.getContext("2d");
+    const x = geom.padL + (cursorTime / geom.dur) * geom.plotW;
+    ctx.strokeStyle = cssVar("--playhead");
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x, geom.padT); ctx.lineTo(x, geom.padT + geom.plotH); ctx.stroke();
+  }
+}
+function drawAll() { if (audio) drawWaveform(); if (result) renderPitchLayer(); }
+
+/* ---------------- hover / cursor interaction ---------------- */
+function timeFromEvent(cv, geom, ev) {
+  const rect = cv.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const t = ((x - geom.padL) / geom.plotW) * geom.dur;
+  return Math.max(0, Math.min(audio.duration, t));
+}
+function frameAt(t) {
+  const idx = Math.round(t / (result.hop / audio.sampleRate));
+  return Math.max(0, Math.min(result.frames.length - 1, idx));
+}
+const tooltip = $("tooltip");
+function onHover(cv, geom, ev) {
+  if (!audio || !geom) return;
+  const t = timeFromEvent(cv, geom, ev);
+  cursorTime = t;
+  drawAll();
+  updateReadouts();
+  if (result) fillInspector(frameAt(t));
+  // tooltip
+  const fi = result ? result.frames[frameAt(t)] : null;
+  tooltip.style.display = "block";
+  const left = Math.min(window.innerWidth - 310, ev.clientX + 14);
+  tooltip.style.left = Math.max(8, left) + "px";
+  tooltip.style.top = Math.max(8, ev.clientY - 10) + "px";
+  let rows = `<div class="tt-title">t = ${t.toFixed(3)} s</div>`;
+  if (fi) {
+    rows += fi.voiced
+      ? `<div class="tt-row"><span>最终</span><b>${fi.hz.toFixed(2)} Hz</b></div>
+         <div class="tt-row"><span>置信度</span><b>${fi.confidence.toFixed(3)}</b></div>
+         <div class="tt-row"><span>候选数</span><b>${fi.candidates.length}</b></div>`
+      : `<div class="tt-row"><span>状态</span><b>无声（留空）</b></div>
+         <div class="tt-row"><span>RMS</span><b>${fi.rms.toExponential(2)}</b></div>`;
+  }
+  tooltip.innerHTML = rows;
+}
+function onLeave() { tooltip.style.display = "none"; }
+for (const [cv, getGeom] of [[waveCanvas, () => waveGeom], [pitchCanvas, () => pitchGeom]]) {
+  cv.addEventListener("pointermove", (e) => onHover(cv, getGeom(), e));
+  cv.addEventListener("pointerleave", onLeave);
+  cv.addEventListener("pointerdown", (e) => {
+    cv.setPointerCapture(e.pointerId);
+    if (audio) { cursorTime = timeFromEvent(cv, getGeom(), e); drawAll(); updateReadouts(); if (result) fillInspector(frameAt(cursorTime)); }
+  });
+}
+
+/* ---------------- readouts + inspector ---------------- */
+function updateReadouts() {
+  $("tTime").textContent = cursorTime.toFixed(3) + " s";
+  if (!result) { ["tHz", "tConf", "tNote", "tCents"].forEach((id) => $(id).textContent = "—"); $("tVoiced").textContent = "—"; return; }
+  const f = result.frames[frameAt(cursorTime)];
+  if (f.voiced && f.hz != null) {
+    const { note, cents } = noteFromHz(f.hz, params.a4);
+    $("tHz").innerHTML = `${f.hz.toFixed(2)} <small>Hz</small>`;
+    $("tConf").textContent = f.confidence.toFixed(3);
+    $("tVoiced").innerHTML = `<span class="pill voiced">有声</span>`;
+    $("tNote").textContent = note;
+    const sign = cents >= 0 ? "+" : "";
+    $("tCents").innerHTML = `<span class="${cents >= 0 ? "cents-pos" : "cents-neg"}">${sign}${cents.toFixed(1)}</span> <small>cent</small>`;
+  } else {
+    $("tHz").textContent = "null";
+    $("tConf").textContent = f.confidence.toFixed(3);
+    $("tVoiced").innerHTML = `<span class="pill unvoiced">无声</span>`;
+    $("tNote").textContent = "null";
+    $("tCents").textContent = "null";
+  }
+}
+
+function fillInspector(i) {
+  const f = result.frames[i];
+  $("inspector").hidden = false;
+  $("inspTitle").textContent = `帧 #${i} · center_frame=${f.centerFrame} · t=${f.timeS.toFixed(3)}s`;
+  const kv = [
+    ["RMS 电平", f.rms.toExponential(3)],
+    ["频谱平坦度", f.sfm.toFixed(3)],
+    ["过零率", f.zcr.toFixed(3)],
+    ["主候选 d′", f.periodScore == null ? "—" : f.periodScore.toFixed(4)],
+    ["能量门限", result.gate.energyGate.toExponential(3)],
+  ];
+  $("inspKV").innerHTML = kv.map(([k, v]) => `<div class="kv"><span class="k">${k}</span><span>${v}</span></div>`).join("");
+  const pickedLag = f.primary ? f.primary.lag : null;
+  $("inspRows").innerHTML = f.candidates.map((c) => {
+    const picked = c.lag === pickedLag;
+    return `<tr class="${c.shadowed ? "shadowed" : ""} ${picked ? "picked" : ""}">
+      <td>${c.hz.toFixed(2)} Hz</td>
+      <td>${c.lag.toFixed(2)}</td>
+      <td>${c.periodScore.toFixed(4)}</td>
+      <td>${c.e0.toExponential(2)}</td>
+      <td>${c.e2.toExponential(2)}</td>
+      <td>${c.e3.toExponential(2)}</td>
+      <td>${c.shadowed ? '<span class="tag-ghost">子谐波剔除</span>' : picked ? "最终采用" : ""}</td>
+    </tr>`;
+  }).join("");
+}
+
+/* ---------------- export ---------------- */
+function meta() {
+  return {
+    sampleRate: audio.sampleRate, hop: result.hop, hopMs: 10,
+    windowMs: result.windowMs, fMin: params.fMin, fMax: params.fMax,
+    yinThreshold: params.yinThreshold, voicedThreshold: params.voicedThreshold,
+    a4: params.a4, gate: result.gate,
+  };
+}
+$("csvBtn").addEventListener("click", () => {
+  const rows = buildRows(result.frames, params.a4);
+  const base = audio.name.replace(/\.wav$/i, "");
+  downloadText(`${base}-pitch.csv`, toCSV(rows, meta()), "text/csv");
+});
+$("jsonBtn").addEventListener("click", () => {
+  const rows = buildRows(result.frames, params.a4);
+  const base = audio.name.replace(/\.wav$/i, "");
+  downloadText(`${base}-pitch.json`, toJSON(rows, meta()), "application/json");
+});
+
+/* ---------------- resize + init ---------------- */
+let resizeT;
+window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(drawAll, 120); });
+function idleCanvas(cv, text) {
+  const { ctx, w, h } = fitCanvas(cv);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = cssVar("--muted");
+  ctx.font = "13px " + cssVar("--sans");
+  ctx.fillText(text, 16, h / 2);
+}
+idleCanvas(waveCanvas, "载入 WAV 后显示波形");
+idleCanvas(pitchCanvas, "分析后显示对数音高曲线与原始候选");
+</script>
+</body>
+</html>
