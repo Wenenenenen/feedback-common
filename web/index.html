@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>瞬态变速工作台</title>
+<style>
+/* 设计令牌：专业音频工作站的中性色 + 青绿信号色，明暗双主题 */
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #eceef1;
+  --fg: #16181d;
+  --fg-dim: #5b616b;
+  --line: #d3d7dd;
+  --accent: #0e7c7b;
+  --accent-soft: #d6efee;
+  --mark: #d64545;
+  --ok: #1a7f4b;
+  --warn: #b25e09;
+  --track: #16181d;
+  --grid: rgba(22,24,29,0.12);
+  --shadow: 0 1px 2px rgba(20,24,30,.06), 0 6px 20px rgba(20,24,30,.06);
+  --radius: 12px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --panel: #181b20; --panel-2: #20242b; --fg: #e8eaee;
+    --fg-dim: #9aa1ac; --line: #2c313a; --accent: #35c4c2; --accent-soft: #14383a;
+    --mark: #ff6b6b; --ok: #46c98a; --warn: #f0a94e; --track: #0a0c0f;
+    --grid: rgba(255,255,255,0.10);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --panel: #181b20; --panel-2: #20242b; --fg: #e8eaee;
+  --fg-dim: #9aa1ac; --line: #2c313a; --accent: #35c4c2; --accent-soft: #14383a;
+  --mark: #ff6b6b; --ok: #46c98a; --warn: #f0a94e; --track: #0a0c0f;
+  --grid: rgba(255,255,255,0.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+header.app { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.app h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+header.app .sub { color: var(--fg-dim); font-size: 13px; }
+header.app .spacer { flex: 1; }
+.theme-btn { background: var(--panel); border: 1px solid var(--line); color: var(--fg); border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; }
+.theme-btn:hover { border-color: var(--accent); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.panel .hd { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel .hd h2 { font-size: 14px; margin: 0; font-weight: 650; }
+.panel .bd { padding: 16px; min-width: 0; }
+
+.controls { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 26px 18px;
+  text-align: center; color: var(--fg-dim); cursor: pointer; transition: border-color .15s, background .15s;
+  background: var(--panel);
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--fg); }
+.drop strong { color: var(--accent); font-weight: 650; }
+.drop input { display: none; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 14px; }
+.meta { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.meta .k { font-size: 11px; color: var(--fg-dim); letter-spacing: .4px; text-transform: uppercase; }
+.meta .v { font-family: var(--mono); font-size: 14px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+.speed-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.speed-row label { font-weight: 600; }
+input[type=range] { flex: 1; min-width: 200px; accent-color: var(--accent); }
+.speed-val { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--accent); min-width: 72px; font-variant-numeric: tabular-nums; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.presets button, .btn {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; font: inherit;
+}
+.presets button:hover, .btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; }
+.btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+.btn.danger { color: var(--mark); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.progress { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; margin-top: 12px; display: none; }
+.progress.on { display: block; }
+.progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+.status { font-size: 13px; margin-top: 8px; color: var(--fg-dim); min-height: 20px; }
+.status.err { color: var(--mark); font-weight: 600; }
+.status.ok { color: var(--ok); }
+
+.viz-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.viz-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; min-width: 0; }
+.viz-card .hd { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.viz-card .hd h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.tag { font-size: 11px; font-family: var(--mono); padding: 2px 7px; border-radius: 99px; background: var(--panel-2); color: var(--fg-dim); border: 1px solid var(--line); }
+canvas { display: block; width: 100%; background: var(--track); }
+.canvas-scroll { overflow-x: auto; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--fg-dim); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.play-row { display: flex; gap: 8px; align-items: center; }
+.play-row button { padding: 5px 10px; font-size: 12px; }
+.hint { font-size: 12px; color: var(--fg-dim); }
+.table-scroll { max-height: 300px; overflow: auto; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { position: sticky; top: 0; background: var(--panel); color: var(--fg-dim); font-weight: 600; z-index: 1; }
+tr:hover td { background: var(--panel-2); }
+[hidden] { display: none !important; }
+@media (min-width: 880px) { .viz-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <h1>瞬态变速工作台</h1>
+    <span class="sub">瞬态保护 WSOLA · 变速不变调 · 双声道联动</span>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <section class="panel">
+    <div class="hd"><h2>1 · 导入与参数</h2></div>
+    <div class="bd">
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" accept=".wav,audio/wav,audio/wave,audio/x-wav">
+        <div><strong>点击选择 WAV</strong> 或拖拽到此处</div>
+        <div class="hint" style="margin-top:6px">44.1/48 kHz · 16/24 位 PCM · 单/双声道 · 最长 60 秒</div>
+      </label>
+      <div class="meta-grid" id="metaGrid" hidden>
+        <div class="meta"><div class="k">采样率</div><div class="v" id="mRate">—</div></div>
+        <div class="meta"><div class="k">位深</div><div class="v" id="mBits">—</div></div>
+        <div class="meta"><div class="k">声道</div><div class="v" id="mCh">—</div></div>
+        <div class="meta"><div class="k">输入帧数</div><div class="v" id="mFrames">—</div></div>
+        <div class="meta"><div class="k">时长</div><div class="v" id="mDur">—</div></div>
+        <div class="meta"><div class="k">检测敲击</div><div class="v" id="mHits">—</div></div>
+        <div class="meta"><div class="k">输出帧数</div><div class="v" id="mOut">—</div></div>
+      </div>
+
+      <div style="height:16px"></div>
+      <div class="speed-row">
+        <label for="speed">速度</label>
+        <input type="range" id="speed" min="0.5" max="2" step="0.01" value="1.25" disabled>
+        <span class="speed-val" id="speedVal">1.25×</span>
+        <div class="presets">
+          <button type="button" data-s="0.5" disabled>0.5×</button>
+          <button type="button" data-s="0.8" disabled>0.8×</button>
+          <button type="button" data-s="1" disabled>1×</button>
+          <button type="button" data-s="1.5" disabled>1.5×</button>
+          <button type="button" data-s="2" disabled>2×</button>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="actions">
+        <button class="btn primary" id="runBtn" disabled>开始处理</button>
+        <button class="btn danger" id="cancelBtn" hidden>取消</button>
+        <button class="btn" id="exportWav" disabled>导出 WAV</button>
+        <button class="btn" id="exportJson" disabled>导出敲击对照 JSON</button>
+      </div>
+      <div class="progress" id="progress"><div id="progressBar"></div></div>
+      <div class="status" id="status">等待导入文件。</div>
+    </div>
+  </section>
+
+  <section class="panel" id="vizPanel" hidden>
+    <div class="hd">
+      <h2>2 · 波形对比与敲击标记</h2>
+      <span class="tag">原始 / 处理后 各自时间轴</span>
+      <span style="flex:1"></span>
+      <span class="legend">
+        <span><i style="background:var(--accent)"></i>左声道/单声道</span>
+        <span><i style="background:#e0a13c"></i>右声道</span>
+        <span><i style="background:var(--mark)"></i>敲击位置</span>
+      </span>
+    </div>
+    <div class="bd viz-grid">
+      <div class="viz-card">
+        <div class="hd"><h3>原始波形</h3>
+          <div class="play-row"><button data-play="in" type="button">▶ 试听</button><span class="tag" id="inTag"></span></div>
+        </div>
+        <div class="canvas-scroll"><canvas id="waveIn" height="220"></canvas></div>
+      </div>
+      <div class="viz-card">
+        <div class="hd"><h3>处理后波形</h3>
+          <div class="play-row"><button data-play="out" type="button">▶ 试听</button><span class="tag" id="outTag"></span></div>
+        </div>
+        <div class="canvas-scroll"><canvas id="waveOut" height="220"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="specPanel" hidden>
+    <div class="hd"><h2>3 · 频谱对比（验证音高不变）</h2><span class="tag">汉宁窗 2048 点 FFT · 低频在下</span></div>
+    <div class="bd viz-grid">
+      <div class="viz-card"><div class="hd"><h3>原始频谱图</h3></div><canvas id="specIn" height="240"></canvas></div>
+      <div class="viz-card"><div class="hd"><h3>处理后频谱图</h3></div><canvas id="specOut" height="240"></canvas></div>
+    </div>
+  </section>
+
+  <section class="panel" id="tablePanel" hidden>
+    <div class="hd"><h2>4 · 敲击位置对照</h2><span class="tag" id="tableTag"></span></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>输入位置(样本)</th><th>输入时间(ms)</th><th>输出位置(样本)</th><th>输出时间(ms)</th><th>round(p/speed)</th><th>误差(样本)</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ================= 内联 DSP 模块与 Worker 源码（构建注入） ================= */
+const TSD = (function () {
+// wav-codec.js — 纯手写 WAV PCM 解析/编码（无依赖）
+// 支持 44.1/48kHz、16/24 位 PCM、单/双声道
+
+class WavError extends Error {}
+
+function readU32(b, o) { return (b[o]) | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24); }
+function readU16(b, o) { return b[o] | (b[o + 1] << 8); }
+
+function parseWav(buf) {
+  const b = new Uint8Array(buf);
+  if (b.length < 44) throw new WavError('文件过小，不是完整 WAV（少于 44 字节）');
+  if (b[0] !== 0x52 || b[1] !== 0x49 || b[2] !== 0x46 || b[3] !== 0x46) throw new WavError('缺少 RIFF 头，不是 WAV 文件');
+  if (b[8] !== 0x57 || b[9] !== 0x41 || b[10] !== 0x56 || b[11] !== 0x45) throw new WavError('缺少 WAVE 标识');
+
+  let pos = 12;
+  let fmt = null;
+  let dataView = null;
+  while (pos + 8 <= b.length) {
+    const id = String.fromCharCode(b[pos], b[pos + 1], b[pos + 2], b[pos + 3]);
+    const size = readU32(b, pos + 4);
+    const bodyStart = pos + 8;
+    const avail = Math.max(0, Math.min(size, b.length - bodyStart));
+    if (id === 'fmt ') {
+      if (avail < 16) throw new WavError('fmt 块不完整，文件可能已截断');
+      fmt = {
+        tag: readU16(b, bodyStart),
+        channels: readU16(b, bodyStart + 2),
+        rate: readU32(b, bodyStart + 4),
+        bits: readU16(b, bodyStart + 14),
+      };
+    } else if (id === 'data') {
+      if (avail < size) {
+        throw new WavError(`data 块声明 ${size} 字节但文件只剩 ${avail} 字节，WAV 已截断`);
+      }
+      dataView = b.subarray(bodyStart, bodyStart + size);
+    }
+    pos = bodyStart + size + (size & 1);
+    if (size === 0) break;
+  }
+  if (!fmt) throw new WavError('找不到 fmt 块');
+  if (dataView === null) throw new WavError('找不到 data 块');
+
+  if (fmt.tag !== 1) throw new WavError(`仅支持 PCM(format=1)，当前格式标记 ${fmt.tag}（浮点/压缩格式不支持）`);
+  if (fmt.bits !== 16 && fmt.bits !== 24) throw new WavError(`仅支持 16/24 位 PCM，当前为 ${fmt.bits} 位`);
+  if (fmt.channels !== 1 && fmt.channels !== 2) throw new WavError(`仅支持单声道或双声道，当前 ${fmt.channels} 声道`);
+  if (fmt.rate !== 44100 && fmt.rate !== 48000) throw new WavError(`仅支持 44100/48000 Hz，当前采样率 ${fmt.rate} Hz`);
+
+  const bytesPerFrame = (fmt.bits / 8) * fmt.channels;
+  if (dataView.length % bytesPerFrame !== 0) {
+    throw new WavError('data 长度与声道/位深不匹配，文件可能已截断');
+  }
+  const frames = dataView.length / bytesPerFrame;
+  if (frames === 0) throw new WavError('data 块为空');
+  if (frames > 60 * fmt.rate) throw new WavError(`音频长 ${(frames / fmt.rate).toFixed(2)} 秒，超过 60 秒上限`);
+
+  // 交错样本 -> 每声道 Float32，范围 [-1, 1)
+  const channels = [new Float32Array(frames)];
+  if (fmt.channels === 2) channels.push(new Float32Array(frames));
+
+  if (fmt.bits === 16) {
+    const iv = new Int16Array(dataView.buffer, dataView.byteOffset, dataView.length >> 1);
+    for (let n = 0; n < frames; n++) {
+      for (let c = 0; c < fmt.channels; c++) channels[c][n] = iv[n * fmt.channels + c] / 32768;
+    }
+  } else {
+    for (let n = 0; n < frames; n++) {
+      for (let c = 0; c < fmt.channels; c++) {
+        const o = (n * fmt.channels + c) * 3;
+        let v = dataView[o] | (dataView[o + 1] << 8) | (dataView[o + 2] << 16);
+        if (v & 0x800000) v -= 1 << 24;
+        channels[c][n] = v / 8388608;
+      }
+    }
+  }
+
+  return { rate: fmt.rate, bits: fmt.bits, channels: fmt.channels, frames, samples: channels };
+}
+
+// 四舍五入（+0.5 向零取整语义）后限幅，按原位深编码
+function encodeWav(channels, rate, bits) {
+  const ch = channels.length;
+  const frames = channels[0].length;
+  const blockAlign = (bits / 8) * ch;
+  const dataSize = frames * blockAlign;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const u8 = new Uint8Array(buf);
+  const dv = new DataView(buf);
+  dv.setUint32(0, 0x52494646, false); // RIFF
+  dv.setUint32(4, 36 + dataSize, true);
+  dv.setUint32(8, 0x57415645, false); // WAVE
+  dv.setUint32(12, 0x666d7420, false); // fmt
+  dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true);
+  dv.setUint16(22, ch, true);
+  dv.setUint32(24, rate, true);
+  dv.setUint32(28, rate * blockAlign, true);
+  dv.setUint16(32, blockAlign, true);
+  dv.setUint16(34, bits, true);
+  dv.setUint32(36, 0x64617461, false); // data
+  dv.setUint32(40, dataSize, true);
+
+  const maxI = bits === 16 ? 32767 : 8388607;
+  const minI = -(maxI + 1);
+  let o = 44;
+  for (let n = 0; n < frames; n++) {
+    for (let c = 0; c < ch; c++) {
+      let x = channels[c][n];
+      if (!(x > -1)) x = -1; // NaN / <=-1 保护
+      if (x > 1) x = 1;
+      let q = Math.round(x * maxI);
+      if (q > maxI) q = maxI;
+      else if (q < minI) q = minI;
+      if (bits === 16) {
+        u8[o++] = q & 0xff;
+        u8[o++] = (q >> 8) & 0xff;
+      } else {
+        u8[o++] = q & 0xff;
+        u8[o++] = (q >> 8) & 0xff;
+        u8[o++] = (q >> 16) & 0xff;
+      }
+    }
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+
+// transient-detect.js — 瞬态（敲击）检测，无依赖
+// 思路：短时能量包络 -> 正向通量（能量上升沿）-> 自适应局部阈值 + 噪声门
+// -> 局部峰选取（每簇只留一个）-> 不应期 -> 样本级能量起点精修。
+
+async function detectTransients(mono, sampleRate, onProgress = null, yieldHook = null) {
+  const N = mono.length;
+  const half = Math.max(64, Math.round(sampleRate * 0.005)); // 5ms 半窗
+  const hop = Math.max(32, Math.round(sampleRate * 0.0025)); // 2.5ms 跳幅
+
+  // ---- 1. 短时能量包络 ----
+  const nb = 1 + Math.floor((N - 1) / hop);
+  const env = new Float64Array(nb);
+  for (let k = 0; k < nb; k++) {
+    const c = k * hop;
+    const lo = Math.max(0, c - half);
+    const hi = Math.min(N, c + half);
+    let s = 0;
+    for (let i = lo; i < hi; i++) s += mono[i] * mono[i];
+    env[k] = s / (hi - lo);
+    if (onProgress && (k & 255) === 0) onProgress(0.2 * k / nb);
+    if (yieldHook && (k & 1023) === 0) await yieldHook();
+  }
+
+  // ---- 2. 正向通量 ----
+  const flux = new Float64Array(nb);
+  for (let k = 1; k < nb; k++) flux[k] = Math.max(0, env[k] - env[k - 1]);
+
+  // 噪声门：取全片能量的低分位作为底噪，门限设其上方，避免静音区误触发
+  const envSorted = Float64Array.from(env).sort();
+  const noiseFloor = envSorted[Math.floor(nb * 0.25)] + 1e-12;
+  const gate = noiseFloor * 8 + 1e-10;
+
+  // ---- 3. 自适应局部阈值，得到显著通量样本（暂不做局部峰约束）----
+  const medianWin = Math.max(8, Math.round(0.2 / 0.0025)); // 200ms
+  const refracBins = Math.max(1, Math.round(0.03 / 0.0025)); // 30ms 不应期
+  const hot = new Uint8Array(nb);
+  const buf = [];
+  for (let k = 1; k < nb - 1; k++) {
+    const lo = Math.max(0, k - medianWin);
+    const hi = Math.min(nb, k + medianWin + 1);
+    buf.length = 0;
+    for (let j = lo; j < hi; j++) buf.push(flux[j]);
+    buf.sort((a, b2) => a - b2);
+    const med = buf[buf.length >> 1];
+    const thr = med * 2.0 + 1e-12;
+    if (flux[k] > thr && env[k] > gate) hot[k] = 1;
+    if (onProgress && (k & 255) === 0) onProgress(0.2 + 0.3 * k / nb);
+    if (yieldHook && (k & 1023) === 0) await yieldHook();
+  }
+
+  // ---- 4. 非极大值抑制：把连续显著区聚成簇，每簇取通量最大的 bin；
+  //        再用不应期去重。多击鼓点会形成宽通量平台，取簇内主峰即起振点 ----
+  const picked = [];
+  let k = 1;
+  while (k < nb - 1) {
+    if (!hot[k]) { k++; continue; }
+    // 扩展当前连续簇（允许中间 1 个 bin 的小断裂）
+    let clusterEnd = k;
+    while (clusterEnd + 1 < nb - 1 && (hot[clusterEnd + 1] ||
+      (clusterEnd + 2 < nb - 1 && hot[clusterEnd + 2]))) {
+      clusterEnd++;
+    }
+    // 簇内取通量最大者：对瞬态（click）这就是起振峰；
+    // 缓升鼓点若峰稍后移，再由样本级精修回溯到坡脚
+    const bestK = (() => {
+      let bk = k;
+      for (let j = k + 1; j <= clusterEnd; j++) if (flux[j] > flux[bk]) bk = j;
+      return bk;
+    })();
+    if (!picked.length || bestK - picked[picked.length - 1] >= refracBins) {
+      picked.push(bestK);
+    } else if (flux[bestK] > flux[picked[picked.length - 1]]) {
+      picked[picked.length - 1] = bestK;
+    }
+    k = clusterEnd + 1;
+  }
+
+  // ---- 5. 样本级精修：从通量峰向前回溯到真正的起振起点。
+  // 鼓点起振后能量会持续上升数百样本，"最大能量"落在起振之后；
+  // ---- 5. 样本级精修：在通量峰附近定位起振沿的【第一个显著样本】。
+  // 能量包络窗会让通量峰位置相对真实起振偏移；无论瞬跳 click 还是缓升鼓点，
+  // 起振点都是能量首次越过"前导本底 + 起振后短窗能量的一定比例"的样本，
+  // 取第一个越界点可避免误选到起振之后更强的后续击打。
+  const refineHalf = Math.round(sampleRate * 0.012);
+  const riseWin = Math.max(8, Math.round(sampleRate * 0.002)); // 2ms
+  const out = [];
+  for (let i = 0; i < picked.length; i++) {
+    const center = picked[i] * hop;
+    const lo = Math.max(1, center - refineHalf);
+    const hi = Math.min(N - 1, center + refineHalf);
+    // 前导本底
+    let base = 0, bn = 0;
+    for (let j = Math.max(0, lo - refineHalf); j < lo; j++) { base += mono[j] * mono[j]; bn++; }
+    base = bn ? base / bn : 0;
+    // 起振后短窗能量，反映本次起振的量级
+    let riseE = 0, rn = 0;
+    for (let j = center; j < Math.min(hi, center + riseWin); j++) { riseE += mono[j] * mono[j]; rn++; }
+    riseE = rn ? riseE / rn : 0;
+    const thr = base + riseE * 0.25 + 1e-12;
+    // 从窗口左沿扫描，取第一个稳定越过门限的样本
+    let p = center;
+    let run = 0;
+    for (let j = lo; j <= hi; j++) {
+      if (mono[j] * mono[j] >= thr) {
+        if (++run >= 2) { p = j - 1; break; }
+      } else run = 0;
+    }
+    // 与已输出锚点保持最小 10ms 间隔
+    if (!out.length || p - out[out.length - 1] >= Math.round(sampleRate * 0.01)) out.push(p);
+    if (onProgress && (i & 63) === 0) onProgress(0.5 + 0.25 * i / picked.length);
+  }
+  return out;
+}
+
+
+// time-stretch.js — 瞬态保护 WSOLA，无依赖，无第三方库
+//
+// 标准 WSOLA（波形相似叠加）+ 瞬态锚点分段：
+//  1) 瞬态锚点把输入切段；每段独立做 WSOLA，首帧分析起点锁在段首锚点、
+//     合成起点锁在锚点映射位置 round(p/speed) —— 敲击精确定位、不重复不丢失；
+//  2) 段内恒定合成跳幅 hs，分析跳幅 ha = 段输入长/段帧数（每帧从 k*ha 重新
+//     标称，取整误差零均值，不产生长时音高漂移）；
+//  3) WSOLA 参考段取"上一选中分析点 + hs"（自然延续位置），在标称位置 ±SEARCH
+//     内选归一化互相关最大的候选，逐帧续上相位，音高不变；
+//  4) 搜索只在单声道混音做一次，左右声道共用同一偏移序列 —— 双声道联动，
+//     时间差/相位关系逐样本保持；
+//  5) 窗口：段首平顶汉宁窗（前半恒 1，敲击不被斜坡衰减），其余对称汉宁窗；
+//     逐样本权重归一化，重叠相加幅度无调制；
+//  6) 总长度精确等于 round(N/speed)。
+
+const W = 1024;  // 分析窗长（44.1k≈23ms / 48k≈21ms）
+const HS = 128;  // 合成跳幅（约 2.7ms）
+const SEARCH = 128;
+const LAMBDA = 0.1; // 连续性惩罚（NCC 归一量纲）
+
+function round(x) { return Math.floor(x + 0.5); }
+
+// 对称汉宁窗
+function hannWin(len) {
+  const win = new Float64Array(len);
+  for (let i = 0; i < len; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (len - 1));
+  return win;
+}
+
+// 平顶汉宁窗：前半恒 1（锚点/敲击起点权重为 1，瞬态满幅不被衰减），
+// 后半按汉宁斜坡降到 0，与后续对称汉宁帧在重叠区平滑衔接。
+function flatTopWin(len) {
+  const win = new Float64Array(len);
+  const half = len >> 1;
+  for (let i = 0; i < half; i++) win[i] = 1;
+  for (let i = half; i < len; i++) win[i] = 0.5 * (1 + Math.cos(Math.PI * (i - half) / half));
+  return win;
+}
+
+// 在标称位置 nom 附近搜索与参考段（ref 起）波形最相似的分析起点。
+// 搜索严格限制在 [segStart, segEnd-w] 内，不跨锚点。
+function bestOffset(mono, ref, nom, w, segEnd, segStart) {
+  const lo = Math.max(-SEARCH, segStart - nom, segStart - ref);
+  const hi = Math.min(SEARCH, segEnd - w - nom, segEnd - w - ref);
+  let a2 = 0;
+  for (let i = 0; i < w; i++) a2 += mono[ref + i] * mono[ref + i];
+  if (a2 < 1e-10) return 0;
+  let best = 0, bestScore = -Infinity;
+  for (let d = lo; d <= hi; d++) {
+    const b0 = nom + d;
+    let num = 0, b2 = 0;
+    for (let i = 0; i < w; i++) {
+      const x = mono[ref + i], y = mono[b0 + i];
+      num += x * y; b2 += y * y;
+    }
+    const ncc = b2 > 1e-12 ? num / Math.sqrt(a2 * b2) : -2;
+    const score = ncc - LAMBDA * (d * d) / (SEARCH * SEARCH);
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  return best;
+}
+
+// 处理一段：输入严格限定在 [segStart, segEnd)，输出从 outPos 起覆盖 segTarget 个样本。
+// 帧不跨锚点取内容 -> 段间无信号污染。
+// 首帧平顶汉宁窗（锚点权重为 1，敲击满幅），其余对称汉宁窗；
+// 逐样本权重归一化保证重叠区幅度连续。
+async function stretchSegment(channels, mono, segStart, segEnd, segTarget, out, weight, outPos,
+  winH, winFlat, N, speed, onProgress, progBase, progSpan, yieldHook) {
+  const segLen = segEnd - segStart;
+  let w = W, WH = winH, WF = winFlat, hs = HS;
+
+  // 极短段自适应缩窗（2 的幂），跳幅同比缩小
+  if (segLen < W) {
+    w = 8;
+    while (w * 2 <= segLen && w * 2 <= W) w *= 2;
+    WH = hannWin(w);
+    WF = flatTopWin(w);
+    hs = Math.max(1, w >> 3);
+  }
+  // 分析跳幅：保证 K 帧恰好走完输入段（零均值取整，无长时漂移）；
+  // 帧数由合成侧目标长度决定，合成重叠密度恒定。
+  const K = Math.max(2, Math.ceil(segTarget / hs) + 1);
+  let ha = segLen / K;
+  if (!isFinite(ha) || ha < 1) ha = 1;
+
+  let prevAna = -1;
+  for (let k = 0; k < K; k++) {
+    const synPos = outPos + k * hs;
+    if (synPos >= out[0].length) break;
+    const win = k === 0 ? WF : WH;
+    let aStart;
+    if (k === 0) {
+      aStart = segStart; // 锚点帧：锁死段首
+    } else {
+      const nom = segStart + Math.round(k * ha);
+      const ref = prevAna + hs; // 参考：上一分析点的自然延续
+      let d = 0;
+      if (ref >= segStart && ref + w <= segEnd && nom >= segStart && nom < segEnd) {
+        d = bestOffset(mono, ref, nom, w, segEnd, segStart);
+      }
+      aStart = nom + d;
+      // 严格钳制在段内，绝不跨越锚点
+      if (aStart < segStart) aStart = segStart;
+      if (aStart + w > segEnd) aStart = segEnd - w;
+    }
+    prevAna = aStart;
+
+    const L = Math.min(w, segEnd - aStart, out[0].length - synPos);
+    if (L <= 0) continue;
+    for (let c = 0; c < channels.length; c++) {
+      const src = channels[c], dst = out[c];
+      for (let i = 0; i < L; i++) dst[synPos + i] += src[aStart + i] * win[i];
+    }
+    for (let i = 0; i < L; i++) weight[synPos + i] += win[i];
+    if (onProgress && (k & 63) === 0) onProgress(progBase + progSpan * (k / K));
+    if (yieldHook && (k & 255) === 0) await yieldHook();
+  }
+}
+
+// 主入口（async：yieldHook 存在时定期让步，使 worker 能响应取消；不使用 await 时行为等同同步）
+// samples: [Float32Array,...]；speed>0；返回 {out, anchorsOut, Nout}
+async function timeStretch(samples, speed, anchorsIn, sampleRate, onProgress = null, yieldHook = null) {
+  const N = samples[0].length;
+  const ch = samples.length;
+  const Nout = round(N / speed);
+
+  // speed=1 直接透传，保证与输入逐样本一致
+  if (speed === 1) {
+    const out = samples.map(s => s.slice());
+    return { out, anchorsOut: Int32Array.from(anchorsIn), Nout: N };
+  }
+
+  // 单声道混音（仅用于搜索；双声道相等时与任一声道完全相同）
+  const mono = new Float32Array(N);
+  for (let c = 0; c < ch; c++) for (let i = 0; i < N; i++) mono[i] += 0.5 * samples[c][i];
+
+  // 锚点：始终包含 0，去掉过近的（<30ms），末尾补 N
+  const minGap = round(sampleRate * 0.03);
+  const anchors = [0];
+  for (const p of anchorsIn) {
+    if (p <= 0 || p >= N) continue;
+    if (p - anchors[anchors.length - 1] >= minGap) anchors.push(p);
+  }
+  anchors.push(N);
+
+  const out = [];
+  for (let c = 0; c < ch; c++) out.push(new Float64Array(Nout));
+  const weight = new Float64Array(Nout);
+  const winH = hannWin(W);
+  const winFlat = flatTopWin(W);
+
+  // 段目标输出位置：锚点 a 的映射 round(a/speed)
+  const mapped = anchors.map(a => (a === N ? Nout : round(a / speed)));
+
+  let outCursor = 0;
+  const segCount = anchors.length - 1;
+  for (let s = 0; s < segCount; s++) {
+    const segStart = anchors[s];
+    const segEnd = anchors[s + 1];
+    let segTarget = mapped[s + 1] - mapped[s];
+    if (segTarget <= 0) continue;
+    // 最后一段扩到输出末尾，保证尾部完整覆盖
+    if (s === segCount - 1) segTarget = Nout - outCursor;
+    await stretchSegment(samples, mono, segStart, segEnd, segTarget, out, weight, outCursor,
+      winH, winFlat, N, speed, onProgress, 0.1 + 0.85 * (s / segCount), 0.85 / segCount, yieldHook);
+    outCursor = mapped[s + 1];
+  }
+
+  // 逐样本归一化
+  const result = [];
+  for (let c = 0; c < ch; c++) {
+    const o = new Float32Array(Nout);
+    for (let i = 0; i < Nout; i++) {
+      const wgt = weight[i] > 1e-8 ? weight[i] : 1;
+      let v = out[c][i] / wgt;
+      if (v > 1) v = 1; else if (v < -1) v = -1;
+      o[i] = v;
+    }
+    result.push(o);
+  }
+
+  // 输出锚点：所有输入敲击的映射位置（含被最小间距合并的），用于导出对照表
+  const anchorsOut = new Int32Array(anchorsIn.length);
+  for (let i = 0; i < anchorsIn.length; i++) anchorsOut[i] = round(anchorsIn[i] / speed);
+
+  if (onProgress) onProgress(1);
+  return { out: result, anchorsOut, Nout };
+}
+
+
+// fft-spectrogram.js — 手写基-2 FFT 与频谱图，无依赖
+// 迭代 Cooley-Tukey radix-2，原地复数运算；提供幅度谱与对数频谱图。
+
+// 原地复数 FFT（n 必须是 2 的幂）。re/im 长度均为 n。
+function fft(re, im) {
+  const n = re.length;
+  // 位反转置换
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i]; re[i] = re[j]; re[j] = tr;
+      const ti = im[i]; im[i] = im[j]; im[j] = ti;
+    }
+  }
+  // 蝶形
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    const half = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      let curR = 1, curI = 0;
+      for (let k = 0; k < half; k++) {
+        const uR = re[i + k], uI = im[i + k];
+        const vR = re[i + k + half] * curR - im[i + k + half] * curI;
+        const vI = re[i + k + half] * curI + im[i + k + half] * curR;
+        re[i + k] = uR + vR;
+        im[i + k] = uI + vI;
+        re[i + k + half] = uR - vR;
+        im[i + k + half] = uI - vI;
+        const nR = curR * wr - curI * wi;
+        curI = curR * wi + curI * wr;
+        curR = nR;
+      }
+    }
+  }
+}
+
+// 计算一帧对数幅度谱（dB），返回长度 fftSize/2 的 Float32Array，已加汉宁窗
+function magnitudeSpectrum(samples, start, fftSize) {
+  const n = fftSize;
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const j = start + i;
+    const s = j >= 0 && j < samples.length ? samples[j] : 0;
+    // 汉宁窗
+    re[i] = s * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)));
+  }
+  fft(re, im);
+  const half = n >> 1;
+  const mag = new Float32Array(half);
+  const norm = 2 / n;
+  for (let i = 0; i < half; i++) {
+    const amp = Math.sqrt(re[i] * re[i] + im[i] * im[i]) * norm;
+    mag[i] = 20 * Math.log10(amp + 1e-8);
+  }
+  return mag;
+}
+
+// 生成频谱图：沿时间轴分帧，返回 {frames: Float32Array[帧][频点], hop, fftSize, binHz}
+function buildSpectrogram(samples, sampleRate, fftSize = 2048, hop = 512) {
+  const frames = [];
+  const last = samples.length - fftSize;
+  for (let start = 0; start <= last; start += hop) {
+    frames.push(magnitudeSpectrum(samples, start, fftSize));
+  }
+  return { frames, hop, fftSize, binHz: sampleRate / fftSize };
+}
+
+  return { parseWav, encodeWav, detectTransients, timeStretch, fft, magnitudeSpectrum, buildSpectrogram };
+})();
+const TSD_WORKER_SOURCE = "// 内联 Worker：瞬态保护 WSOLA 处理管线（独立作用域，Blob 内运行）\n(function () {\n// wav-codec.js — 纯手写 WAV PCM 解析/编码（无依赖）\n// 支持 44.1/48kHz、16/24 位 PCM、单/双声道\n\nclass WavError extends Error {}\n\nfunction readU32(b, o) { return (b[o]) | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24); }\nfunction readU16(b, o) { return b[o] | (b[o + 1] << 8); }\n\nfunction parseWav(buf) {\n  const b = new Uint8Array(buf);\n  if (b.length < 44) throw new WavError('文件过小，不是完整 WAV（少于 44 字节）');\n  if (b[0] !== 0x52 || b[1] !== 0x49 || b[2] !== 0x46 || b[3] !== 0x46) throw new WavError('缺少 RIFF 头，不是 WAV 文件');\n  if (b[8] !== 0x57 || b[9] !== 0x41 || b[10] !== 0x56 || b[11] !== 0x45) throw new WavError('缺少 WAVE 标识');\n\n  let pos = 12;\n  let fmt = null;\n  let dataView = null;\n  while (pos + 8 <= b.length) {\n    const id = String.fromCharCode(b[pos], b[pos + 1], b[pos + 2], b[pos + 3]);\n    const size = readU32(b, pos + 4);\n    const bodyStart = pos + 8;\n    const avail = Math.max(0, Math.min(size, b.length - bodyStart));\n    if (id === 'fmt ') {\n      if (avail < 16) throw new WavError('fmt 块不完整，文件可能已截断');\n      fmt = {\n        tag: readU16(b, bodyStart),\n        channels: readU16(b, bodyStart + 2),\n        rate: readU32(b, bodyStart + 4),\n        bits: readU16(b, bodyStart + 14),\n      };\n    } else if (id === 'data') {\n      if (avail < size) {\n        throw new WavError(`data 块声明 ${size} 字节但文件只剩 ${avail} 字节，WAV 已截断`);\n      }\n      dataView = b.subarray(bodyStart, bodyStart + size);\n    }\n    pos = bodyStart + size + (size & 1);\n    if (size === 0) break;\n  }\n  if (!fmt) throw new WavError('找不到 fmt 块');\n  if (dataView === null) throw new WavError('找不到 data 块');\n\n  if (fmt.tag !== 1) throw new WavError(`仅支持 PCM(format=1)，当前格式标记 ${fmt.tag}（浮点/压缩格式不支持）`);\n  if (fmt.bits !== 16 && fmt.bits !== 24) throw new WavError(`仅支持 16/24 位 PCM，当前为 ${fmt.bits} 位`);\n  if (fmt.channels !== 1 && fmt.channels !== 2) throw new WavError(`仅支持单声道或双声道，当前 ${fmt.channels} 声道`);\n  if (fmt.rate !== 44100 && fmt.rate !== 48000) throw new WavError(`仅支持 44100/48000 Hz，当前采样率 ${fmt.rate} Hz`);\n\n  const bytesPerFrame = (fmt.bits / 8) * fmt.channels;\n  if (dataView.length % bytesPerFrame !== 0) {\n    throw new WavError('data 长度与声道/位深不匹配，文件可能已截断');\n  }\n  const frames = dataView.length / bytesPerFrame;\n  if (frames === 0) throw new WavError('data 块为空');\n  if (frames > 60 * fmt.rate) throw new WavError(`音频长 ${(frames / fmt.rate).toFixed(2)} 秒，超过 60 秒上限`);\n\n  // 交错样本 -> 每声道 Float32，范围 [-1, 1)\n  const channels = [new Float32Array(frames)];\n  if (fmt.channels === 2) channels.push(new Float32Array(frames));\n\n  if (fmt.bits === 16) {\n    const iv = new Int16Array(dataView.buffer, dataView.byteOffset, dataView.length >> 1);\n    for (let n = 0; n < frames; n++) {\n      for (let c = 0; c < fmt.channels; c++) channels[c][n] = iv[n * fmt.channels + c] / 32768;\n    }\n  } else {\n    for (let n = 0; n < frames; n++) {\n      for (let c = 0; c < fmt.channels; c++) {\n        const o = (n * fmt.channels + c) * 3;\n        let v = dataView[o] | (dataView[o + 1] << 8) | (dataView[o + 2] << 16);\n        if (v & 0x800000) v -= 1 << 24;\n        channels[c][n] = v / 8388608;\n      }\n    }\n  }\n\n  return { rate: fmt.rate, bits: fmt.bits, channels: fmt.channels, frames, samples: channels };\n}\n\n// 四舍五入（+0.5 向零取整语义）后限幅，按原位深编码\nfunction encodeWav(channels, rate, bits) {\n  const ch = channels.length;\n  const frames = channels[0].length;\n  const blockAlign = (bits / 8) * ch;\n  const dataSize = frames * blockAlign;\n  const buf = new ArrayBuffer(44 + dataSize);\n  const u8 = new Uint8Array(buf);\n  const dv = new DataView(buf);\n  dv.setUint32(0, 0x52494646, false); // RIFF\n  dv.setUint32(4, 36 + dataSize, true);\n  dv.setUint32(8, 0x57415645, false); // WAVE\n  dv.setUint32(12, 0x666d7420, false); // fmt\n  dv.setUint32(16, 16, true);\n  dv.setUint16(20, 1, true);\n  dv.setUint16(22, ch, true);\n  dv.setUint32(24, rate, true);\n  dv.setUint32(28, rate * blockAlign, true);\n  dv.setUint16(32, blockAlign, true);\n  dv.setUint16(34, bits, true);\n  dv.setUint32(36, 0x64617461, false); // data\n  dv.setUint32(40, dataSize, true);\n\n  const maxI = bits === 16 ? 32767 : 8388607;\n  const minI = -(maxI + 1);\n  let o = 44;\n  for (let n = 0; n < frames; n++) {\n    for (let c = 0; c < ch; c++) {\n      let x = channels[c][n];\n      if (!(x > -1)) x = -1; // NaN / <=-1 保护\n      if (x > 1) x = 1;\n      let q = Math.round(x * maxI);\n      if (q > maxI) q = maxI;\n      else if (q < minI) q = minI;\n      if (bits === 16) {\n        u8[o++] = q & 0xff;\n        u8[o++] = (q >> 8) & 0xff;\n      } else {\n        u8[o++] = q & 0xff;\n        u8[o++] = (q >> 8) & 0xff;\n        u8[o++] = (q >> 16) & 0xff;\n      }\n    }\n  }\n  return new Blob([buf], { type: 'audio/wav' });\n}\n\n\n// transient-detect.js — 瞬态（敲击）检测，无依赖\n// 思路：短时能量包络 -> 正向通量（能量上升沿）-> 自适应局部阈值 + 噪声门\n// -> 局部峰选取（每簇只留一个）-> 不应期 -> 样本级能量起点精修。\n\nasync function detectTransients(mono, sampleRate, onProgress = null, yieldHook = null) {\n  const N = mono.length;\n  const half = Math.max(64, Math.round(sampleRate * 0.005)); // 5ms 半窗\n  const hop = Math.max(32, Math.round(sampleRate * 0.0025)); // 2.5ms 跳幅\n\n  // ---- 1. 短时能量包络 ----\n  const nb = 1 + Math.floor((N - 1) / hop);\n  const env = new Float64Array(nb);\n  for (let k = 0; k < nb; k++) {\n    const c = k * hop;\n    const lo = Math.max(0, c - half);\n    const hi = Math.min(N, c + half);\n    let s = 0;\n    for (let i = lo; i < hi; i++) s += mono[i] * mono[i];\n    env[k] = s / (hi - lo);\n    if (onProgress && (k & 255) === 0) onProgress(0.2 * k / nb);\n    if (yieldHook && (k & 1023) === 0) await yieldHook();\n  }\n\n  // ---- 2. 正向通量 ----\n  const flux = new Float64Array(nb);\n  for (let k = 1; k < nb; k++) flux[k] = Math.max(0, env[k] - env[k - 1]);\n\n  // 噪声门：取全片能量的低分位作为底噪，门限设其上方，避免静音区误触发\n  const envSorted = Float64Array.from(env).sort();\n  const noiseFloor = envSorted[Math.floor(nb * 0.25)] + 1e-12;\n  const gate = noiseFloor * 8 + 1e-10;\n\n  // ---- 3. 自适应局部阈值，得到显著通量样本（暂不做局部峰约束）----\n  const medianWin = Math.max(8, Math.round(0.2 / 0.0025)); // 200ms\n  const refracBins = Math.max(1, Math.round(0.03 / 0.0025)); // 30ms 不应期\n  const hot = new Uint8Array(nb);\n  const buf = [];\n  for (let k = 1; k < nb - 1; k++) {\n    const lo = Math.max(0, k - medianWin);\n    const hi = Math.min(nb, k + medianWin + 1);\n    buf.length = 0;\n    for (let j = lo; j < hi; j++) buf.push(flux[j]);\n    buf.sort((a, b2) => a - b2);\n    const med = buf[buf.length >> 1];\n    const thr = med * 2.0 + 1e-12;\n    if (flux[k] > thr && env[k] > gate) hot[k] = 1;\n    if (onProgress && (k & 255) === 0) onProgress(0.2 + 0.3 * k / nb);\n    if (yieldHook && (k & 1023) === 0) await yieldHook();\n  }\n\n  // ---- 4. 非极大值抑制：把连续显著区聚成簇，每簇取通量最大的 bin；\n  //        再用不应期去重。多击鼓点会形成宽通量平台，取簇内主峰即起振点 ----\n  const picked = [];\n  let k = 1;\n  while (k < nb - 1) {\n    if (!hot[k]) { k++; continue; }\n    // 扩展当前连续簇（允许中间 1 个 bin 的小断裂）\n    let clusterEnd = k;\n    while (clusterEnd + 1 < nb - 1 && (hot[clusterEnd + 1] ||\n      (clusterEnd + 2 < nb - 1 && hot[clusterEnd + 2]))) {\n      clusterEnd++;\n    }\n    // 簇内取通量最大者：对瞬态（click）这就是起振峰；\n    // 缓升鼓点若峰稍后移，再由样本级精修回溯到坡脚\n    const bestK = (() => {\n      let bk = k;\n      for (let j = k + 1; j <= clusterEnd; j++) if (flux[j] > flux[bk]) bk = j;\n      return bk;\n    })();\n    if (!picked.length || bestK - picked[picked.length - 1] >= refracBins) {\n      picked.push(bestK);\n    } else if (flux[bestK] > flux[picked[picked.length - 1]]) {\n      picked[picked.length - 1] = bestK;\n    }\n    k = clusterEnd + 1;\n  }\n\n  // ---- 5. 样本级精修：从通量峰向前回溯到真正的起振起点。\n  // 鼓点起振后能量会持续上升数百样本，\"最大能量\"落在起振之后；\n  // ---- 5. 样本级精修：在通量峰附近定位起振沿的【第一个显著样本】。\n  // 能量包络窗会让通量峰位置相对真实起振偏移；无论瞬跳 click 还是缓升鼓点，\n  // 起振点都是能量首次越过\"前导本底 + 起振后短窗能量的一定比例\"的样本，\n  // 取第一个越界点可避免误选到起振之后更强的后续击打。\n  const refineHalf = Math.round(sampleRate * 0.012);\n  const riseWin = Math.max(8, Math.round(sampleRate * 0.002)); // 2ms\n  const out = [];\n  for (let i = 0; i < picked.length; i++) {\n    const center = picked[i] * hop;\n    const lo = Math.max(1, center - refineHalf);\n    const hi = Math.min(N - 1, center + refineHalf);\n    // 前导本底\n    let base = 0, bn = 0;\n    for (let j = Math.max(0, lo - refineHalf); j < lo; j++) { base += mono[j] * mono[j]; bn++; }\n    base = bn ? base / bn : 0;\n    // 起振后短窗能量，反映本次起振的量级\n    let riseE = 0, rn = 0;\n    for (let j = center; j < Math.min(hi, center + riseWin); j++) { riseE += mono[j] * mono[j]; rn++; }\n    riseE = rn ? riseE / rn : 0;\n    const thr = base + riseE * 0.25 + 1e-12;\n    // 从窗口左沿扫描，取第一个稳定越过门限的样本\n    let p = center;\n    let run = 0;\n    for (let j = lo; j <= hi; j++) {\n      if (mono[j] * mono[j] >= thr) {\n        if (++run >= 2) { p = j - 1; break; }\n      } else run = 0;\n    }\n    // 与已输出锚点保持最小 10ms 间隔\n    if (!out.length || p - out[out.length - 1] >= Math.round(sampleRate * 0.01)) out.push(p);\n    if (onProgress && (i & 63) === 0) onProgress(0.5 + 0.25 * i / picked.length);\n  }\n  return out;\n}\n\n\n// time-stretch.js — 瞬态保护 WSOLA，无依赖，无第三方库\n//\n// 标准 WSOLA（波形相似叠加）+ 瞬态锚点分段：\n//  1) 瞬态锚点把输入切段；每段独立做 WSOLA，首帧分析起点锁在段首锚点、\n//     合成起点锁在锚点映射位置 round(p/speed) —— 敲击精确定位、不重复不丢失；\n//  2) 段内恒定合成跳幅 hs，分析跳幅 ha = 段输入长/段帧数（每帧从 k*ha 重新\n//     标称，取整误差零均值，不产生长时音高漂移）；\n//  3) WSOLA 参考段取\"上一选中分析点 + hs\"（自然延续位置），在标称位置 ±SEARCH\n//     内选归一化互相关最大的候选，逐帧续上相位，音高不变；\n//  4) 搜索只在单声道混音做一次，左右声道共用同一偏移序列 —— 双声道联动，\n//     时间差/相位关系逐样本保持；\n//  5) 窗口：段首平顶汉宁窗（前半恒 1，敲击不被斜坡衰减），其余对称汉宁窗；\n//     逐样本权重归一化，重叠相加幅度无调制；\n//  6) 总长度精确等于 round(N/speed)。\n\nconst W = 1024;  // 分析窗长（44.1k≈23ms / 48k≈21ms）\nconst HS = 128;  // 合成跳幅（约 2.7ms）\nconst SEARCH = 128;\nconst LAMBDA = 0.1; // 连续性惩罚（NCC 归一量纲）\n\nfunction round(x) { return Math.floor(x + 0.5); }\n\n// 对称汉宁窗\nfunction hannWin(len) {\n  const win = new Float64Array(len);\n  for (let i = 0; i < len; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (len - 1));\n  return win;\n}\n\n// 平顶汉宁窗：前半恒 1（锚点/敲击起点权重为 1，瞬态满幅不被衰减），\n// 后半按汉宁斜坡降到 0，与后续对称汉宁帧在重叠区平滑衔接。\nfunction flatTopWin(len) {\n  const win = new Float64Array(len);\n  const half = len >> 1;\n  for (let i = 0; i < half; i++) win[i] = 1;\n  for (let i = half; i < len; i++) win[i] = 0.5 * (1 + Math.cos(Math.PI * (i - half) / half));\n  return win;\n}\n\n// 在标称位置 nom 附近搜索与参考段（ref 起）波形最相似的分析起点。\n// 搜索严格限制在 [segStart, segEnd-w] 内，不跨锚点。\nfunction bestOffset(mono, ref, nom, w, segEnd, segStart) {\n  const lo = Math.max(-SEARCH, segStart - nom, segStart - ref);\n  const hi = Math.min(SEARCH, segEnd - w - nom, segEnd - w - ref);\n  let a2 = 0;\n  for (let i = 0; i < w; i++) a2 += mono[ref + i] * mono[ref + i];\n  if (a2 < 1e-10) return 0;\n  let best = 0, bestScore = -Infinity;\n  for (let d = lo; d <= hi; d++) {\n    const b0 = nom + d;\n    let num = 0, b2 = 0;\n    for (let i = 0; i < w; i++) {\n      const x = mono[ref + i], y = mono[b0 + i];\n      num += x * y; b2 += y * y;\n    }\n    const ncc = b2 > 1e-12 ? num / Math.sqrt(a2 * b2) : -2;\n    const score = ncc - LAMBDA * (d * d) / (SEARCH * SEARCH);\n    if (score > bestScore) { bestScore = score; best = d; }\n  }\n  return best;\n}\n\n// 处理一段：输入严格限定在 [segStart, segEnd)，输出从 outPos 起覆盖 segTarget 个样本。\n// 帧不跨锚点取内容 -> 段间无信号污染。\n// 首帧平顶汉宁窗（锚点权重为 1，敲击满幅），其余对称汉宁窗；\n// 逐样本权重归一化保证重叠区幅度连续。\nasync function stretchSegment(channels, mono, segStart, segEnd, segTarget, out, weight, outPos,\n  winH, winFlat, N, speed, onProgress, progBase, progSpan, yieldHook) {\n  const segLen = segEnd - segStart;\n  let w = W, WH = winH, WF = winFlat, hs = HS;\n\n  // 极短段自适应缩窗（2 的幂），跳幅同比缩小\n  if (segLen < W) {\n    w = 8;\n    while (w * 2 <= segLen && w * 2 <= W) w *= 2;\n    WH = hannWin(w);\n    WF = flatTopWin(w);\n    hs = Math.max(1, w >> 3);\n  }\n  // 分析跳幅：保证 K 帧恰好走完输入段（零均值取整，无长时漂移）；\n  // 帧数由合成侧目标长度决定，合成重叠密度恒定。\n  const K = Math.max(2, Math.ceil(segTarget / hs) + 1);\n  let ha = segLen / K;\n  if (!isFinite(ha) || ha < 1) ha = 1;\n\n  let prevAna = -1;\n  for (let k = 0; k < K; k++) {\n    const synPos = outPos + k * hs;\n    if (synPos >= out[0].length) break;\n    const win = k === 0 ? WF : WH;\n    let aStart;\n    if (k === 0) {\n      aStart = segStart; // 锚点帧：锁死段首\n    } else {\n      const nom = segStart + Math.round(k * ha);\n      const ref = prevAna + hs; // 参考：上一分析点的自然延续\n      let d = 0;\n      if (ref >= segStart && ref + w <= segEnd && nom >= segStart && nom < segEnd) {\n        d = bestOffset(mono, ref, nom, w, segEnd, segStart);\n      }\n      aStart = nom + d;\n      // 严格钳制在段内，绝不跨越锚点\n      if (aStart < segStart) aStart = segStart;\n      if (aStart + w > segEnd) aStart = segEnd - w;\n    }\n    prevAna = aStart;\n\n    const L = Math.min(w, segEnd - aStart, out[0].length - synPos);\n    if (L <= 0) continue;\n    for (let c = 0; c < channels.length; c++) {\n      const src = channels[c], dst = out[c];\n      for (let i = 0; i < L; i++) dst[synPos + i] += src[aStart + i] * win[i];\n    }\n    for (let i = 0; i < L; i++) weight[synPos + i] += win[i];\n    if (onProgress && (k & 63) === 0) onProgress(progBase + progSpan * (k / K));\n    if (yieldHook && (k & 255) === 0) await yieldHook();\n  }\n}\n\n// 主入口（async：yieldHook 存在时定期让步，使 worker 能响应取消；不使用 await 时行为等同同步）\n// samples: [Float32Array,...]；speed>0；返回 {out, anchorsOut, Nout}\nasync function timeStretch(samples, speed, anchorsIn, sampleRate, onProgress = null, yieldHook = null) {\n  const N = samples[0].length;\n  const ch = samples.length;\n  const Nout = round(N / speed);\n\n  // speed=1 直接透传，保证与输入逐样本一致\n  if (speed === 1) {\n    const out = samples.map(s => s.slice());\n    return { out, anchorsOut: Int32Array.from(anchorsIn), Nout: N };\n  }\n\n  // 单声道混音（仅用于搜索；双声道相等时与任一声道完全相同）\n  const mono = new Float32Array(N);\n  for (let c = 0; c < ch; c++) for (let i = 0; i < N; i++) mono[i] += 0.5 * samples[c][i];\n\n  // 锚点：始终包含 0，去掉过近的（<30ms），末尾补 N\n  const minGap = round(sampleRate * 0.03);\n  const anchors = [0];\n  for (const p of anchorsIn) {\n    if (p <= 0 || p >= N) continue;\n    if (p - anchors[anchors.length - 1] >= minGap) anchors.push(p);\n  }\n  anchors.push(N);\n\n  const out = [];\n  for (let c = 0; c < ch; c++) out.push(new Float64Array(Nout));\n  const weight = new Float64Array(Nout);\n  const winH = hannWin(W);\n  const winFlat = flatTopWin(W);\n\n  // 段目标输出位置：锚点 a 的映射 round(a/speed)\n  const mapped = anchors.map(a => (a === N ? Nout : round(a / speed)));\n\n  let outCursor = 0;\n  const segCount = anchors.length - 1;\n  for (let s = 0; s < segCount; s++) {\n    const segStart = anchors[s];\n    const segEnd = anchors[s + 1];\n    let segTarget = mapped[s + 1] - mapped[s];\n    if (segTarget <= 0) continue;\n    // 最后一段扩到输出末尾，保证尾部完整覆盖\n    if (s === segCount - 1) segTarget = Nout - outCursor;\n    await stretchSegment(samples, mono, segStart, segEnd, segTarget, out, weight, outCursor,\n      winH, winFlat, N, speed, onProgress, 0.1 + 0.85 * (s / segCount), 0.85 / segCount, yieldHook);\n    outCursor = mapped[s + 1];\n  }\n\n  // 逐样本归一化\n  const result = [];\n  for (let c = 0; c < ch; c++) {\n    const o = new Float32Array(Nout);\n    for (let i = 0; i < Nout; i++) {\n      const wgt = weight[i] > 1e-8 ? weight[i] : 1;\n      let v = out[c][i] / wgt;\n      if (v > 1) v = 1; else if (v < -1) v = -1;\n      o[i] = v;\n    }\n    result.push(o);\n  }\n\n  // 输出锚点：所有输入敲击的映射位置（含被最小间距合并的），用于导出对照表\n  const anchorsOut = new Int32Array(anchorsIn.length);\n  for (let i = 0; i < anchorsIn.length; i++) anchorsOut[i] = round(anchorsIn[i] / speed);\n\n  if (onProgress) onProgress(1);\n  return { out: result, anchorsOut, Nout };\n}\n\n// worker.js — 后台线程执行解析/检测/伸缩，避免 60s 文件卡死页面，支持取消。\n// DSP 函数通过 yieldHook 定期 await 让出事件循环，worker 借此处理取消消息。\n\nlet cancelled = false;\nlet runToken = 0;\nconst nextTick = () => new Promise((res) => setTimeout(res, 0));\n\nself.onmessage = (e) => {\n  const msg = e.data;\n  if (msg.type === 'cancel') { cancelled = true; return; }\n  if (msg.type !== 'process') return;\n  const token = ++runToken;\n  cancelled = false;\n\n  const throwIfCancelled = () => {\n    if (cancelled || token !== runToken) throw new Error('__CANCELLED__');\n  };\n  // 每次让步：先让事件循环处理积压消息（含 cancel），恢复后检查取消标志\n  const yieldHook = async () => { await nextTick(); throwIfCancelled(); };\n  const onProgress = (p) => {\n    throwIfCancelled();\n    self.postMessage({ type: 'progress', value: p });\n  };\n\n  (async () => {\n    try {\n      onProgress(0.02);\n      const audio = parseWav(msg.buffer);\n      await yieldHook();\n\n      const mono = new Float32Array(audio.frames);\n      for (let i = 0; i < audio.frames; i++) {\n        let s = 0;\n        for (let c = 0; c < audio.channels; c++) s += audio.samples[c][i];\n        mono[i] = s / audio.channels;\n      }\n      const anchorsIn = await detectTransients(mono, audio.rate,\n        (p) => onProgress(0.05 + 0.25 * p), yieldHook);\n      onProgress(0.3);\n\n      const { out, anchorsOut, Nout } = await timeStretch(\n        audio.samples, msg.speed, anchorsIn, audio.rate,\n        (p) => onProgress(0.3 + 0.65 * p), yieldHook\n      );\n      onProgress(0.98);\n\n      const blob = encodeWav(out, audio.rate, audio.bits);\n      throwIfCancelled();\n\n      self.postMessage({\n        type: 'done',\n        token,\n        result: {\n          rate: audio.rate,\n          bits: audio.bits,\n          channels: audio.channels,\n          frames: audio.frames,\n          Nout,\n          speed: msg.speed,\n          input: audio.samples,\n          output: out,\n          anchorsIn: Array.from(anchorsIn),\n          anchorsOut: Array.from(anchorsOut),\n          wavBlob: blob,\n        },\n      });\n    } catch (err) {\n      if (err && err.message === '__CANCELLED__') {\n        self.postMessage({ type: 'cancelled', token });\n      } else {\n        self.postMessage({ type: 'error', token, message: err.message || String(err) });\n      }\n    }\n  })();\n};\n\n})();";
+</script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const state = { audio: null, speed: 1.25, result: null, worker: null };
+  const fmt = (n) => n.toLocaleString('en-US');
+
+  // 主题
+  $('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  const setStatus = (msg, cls) => {
+    const el = $('status'); el.textContent = msg; el.className = 'status' + (cls ? ' ' + cls : '');
+  };
+  const enableControls = (on) => {
+    $('speed').disabled = !on;
+    document.querySelectorAll('.presets button').forEach(b => b.disabled = !on);
+    $('runBtn').disabled = !on;
+  };
+
+  // 文件导入
+  const drop = $('drop'), fileInput = $('fileInput');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+  fileInput.addEventListener('change', e => { const f = e.target.files[0]; if (f) handleFile(f); });
+
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const audio = TSD.parseWav(reader.result);
+        audio._buffer = reader.result;
+        state.audio = audio; state.result = null;
+        $('metaGrid').hidden = false;
+        $('mRate').textContent = fmt(audio.rate) + ' Hz';
+        $('mBits').textContent = audio.bits + ' 位';
+        $('mCh').textContent = audio.channels === 1 ? '单声道' : '双声道';
+        $('mFrames').textContent = fmt(audio.frames);
+        $('mDur').textContent = (audio.frames / audio.rate).toFixed(3) + ' s';
+        $('mHits').textContent = '待处理'; $('mOut').textContent = '—';
+        $('vizPanel').hidden = true; $('specPanel').hidden = true; $('tablePanel').hidden = true;
+        $('exportWav').disabled = true; $('exportJson').disabled = true;
+        enableControls(true);
+        setStatus(`已载入 ${file.name}，调整速度后点击“开始处理”。`, 'ok');
+      } catch (err) { setStatus('无法导入：' + err.message, 'err'); }
+    };
+    reader.onerror = () => setStatus('文件读取失败。', 'err');
+    reader.readAsArrayBuffer(file);
+  }
+
+  // 速度
+  const speedSlider = $('speed'), speedVal = $('speedVal');
+  speedSlider.addEventListener('input', () => { state.speed = parseFloat(speedSlider.value); speedVal.textContent = state.speed.toFixed(2) + '×'; });
+  document.querySelectorAll('.presets button').forEach(b => b.addEventListener('click', () => {
+    state.speed = parseFloat(b.dataset.s); speedSlider.value = state.speed; speedVal.textContent = state.speed.toFixed(2) + '×';
+  }));
+
+  function createWorker() {
+    const blob = new Blob([TSD_WORKER_SOURCE], { type: 'application/javascript' });
+    return new Worker(URL.createObjectURL(blob));
+  }
+
+  $('runBtn').addEventListener('click', () => {
+    if (!state.audio) return;
+    if (state.worker) state.worker.terminate();
+    const worker = createWorker(); state.worker = worker;
+    $('runBtn').disabled = true; $('cancelBtn').hidden = false;
+    $('progress').classList.add('on'); $('progressBar').style.width = '0%';
+    setStatus('处理中…');
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'progress') $('progressBar').style.width = Math.round(m.value * 100) + '%';
+      else if (m.type === 'done') { finishWorker(); state.result = m.result; onResult(m.result); }
+      else if (m.type === 'cancelled') { finishWorker(); setStatus('已取消。', ''); }
+      else if (m.type === 'error') { finishWorker(); setStatus('处理失败：' + m.message, 'err'); }
+    };
+    worker.onerror = (e) => { finishWorker(); setStatus('Worker 错误：' + e.message, 'err'); };
+    worker.postMessage({ type: 'process', buffer: state.audio._buffer, speed: state.speed }, [state.audio._buffer]);
+    state.audio._buffer = null;
+  });
+  function finishWorker() {
+    $('runBtn').disabled = false; $('cancelBtn').hidden = true; $('progress').classList.remove('on');
+    if (state.worker) { state.worker.terminate(); state.worker = null; }
+  }
+  $('cancelBtn').addEventListener('click', () => { if (state.worker) state.worker.postMessage({ type: 'cancel' }); });
+
+  function onResult(r) {
+    $('mHits').textContent = fmt(r.anchorsIn.length) + ' 个';
+    $('mOut').textContent = fmt(r.Nout);
+    $('inTag').textContent = fmt(r.frames) + ' 样本';
+    $('outTag').textContent = fmt(r.Nout) + ' 样本';
+    $('tableTag').textContent = r.anchorsIn.length + ' 个敲击 · speed=' + r.speed + '×';
+    $('exportWav').disabled = false; $('exportJson').disabled = false;
+    $('vizPanel').hidden = false; $('specPanel').hidden = false; $('tablePanel').hidden = false;
+    setStatus(`处理完成：${fmt(r.frames)} → ${fmt(r.Nout)} 样本，敲击 ${r.anchorsIn.length} 个，全部按速度比例映射。`, 'ok');
+    requestAnimationFrame(() => drawAll(r));
+  }
+  function drawAll(r) {
+    drawWaveform($('waveIn'), r.input, r.anchorsIn);
+    drawWaveform($('waveOut'), r.output, r.anchorsOut);
+    drawSpectrogram($('specIn'), r.input[0], r.rate);
+    drawSpectrogram($('specOut'), r.output[0], r.rate);
+    drawTable(r);
+  }
+
+  function cssPx(el) { return Math.max(320, el.parentElement.clientWidth); }
+  function drawWaveform(canvas, channels, anchors) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(640, cssPx(canvas)), cssH = 220;
+    canvas.style.width = cssW + 'px'; canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+    const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = cssW, H = cssH, n = channels[0].length, spp = n / W;
+    const st = getComputedStyle(document.documentElement);
+    const cL = st.getPropertyValue('--accent').trim(), cR = '#e0a13c';
+    const cMark = st.getPropertyValue('--mark').trim(), grid = st.getPropertyValue('--grid').trim();
+    const nCh = channels.length, rowH = H / nCh;
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g++) { const y = (g / 4) * H; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    for (let ch = 0; ch < nCh; ch++) {
+      const data = channels[ch], mid = ch * rowH + rowH / 2;
+      ctx.fillStyle = ch === 0 ? cL : cR;
+      for (let x = 0; x < W; x++) {
+        const s = Math.floor(x * spp), e = Math.min(n, Math.floor((x + 1) * spp) + 1);
+        let mx = 0, sum = 0, cnt = 0;
+        for (let i = s; i < e; i++) { const v = Math.abs(data[i]); if (v > mx) mx = v; sum += data[i] * data[i]; cnt++; }
+        const rms = cnt ? Math.sqrt(sum / cnt) : 0;
+        const yPeak = mx * rowH * 0.46, yRms = rms * rowH * 0.46;
+        ctx.globalAlpha = .28; ctx.fillRect(x, mid - yRms, 1, Math.max(1, 2 * yRms));
+        ctx.globalAlpha = .95; ctx.fillRect(x, mid - yPeak, 1, Math.max(1, 2 * yPeak));
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = cMark; ctx.lineWidth = 1;
+    for (const p of anchors) { const x = p / n * W; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  }
+
+  function drawSpectrogram(canvas, samples, rate) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(320, cssPx(canvas)), cssH = 240;
+    canvas.style.width = cssW + 'px'; canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+    const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const spec = TSD.buildSpectrogram(samples, rate, 2048, 512);
+    const nF = spec.frames.length, nB = spec.frames[0].length;
+    const img = ctx.createImageData(nF, nB);
+    for (let f = 0; f < nF; f++) for (let b = 0; b < nB; b++) {
+      let v = (spec.frames[f][b] + 90) / 80; v = v < 0 ? 0 : v > 1 ? 1 : v;
+      const [r, g, bl] = viridis(v), idx = (b * nF + f) * 4;
+      img.data[idx] = r; img.data[idx + 1] = g; img.data[idx + 2] = bl; img.data[idx + 3] = 255;
+    }
+    const off = document.createElement('canvas'); off.width = nF; off.height = nB;
+    off.getContext('2d').putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.save(); ctx.translate(0, cssH); ctx.scale(1, -1);
+    ctx.drawImage(off, 0, 0, nF, nB, 0, 0, cssW, cssH); ctx.restore();
+  }
+  function viridis(t) {
+    const stops = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+    const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+    const a = stops[i], b = stops[i + 1];
+    return [Math.round(a[0]+(b[0]-a[0])*f), Math.round(a[1]+(b[1]-a[1])*f), Math.round(a[2]+(b[2]-a[2])*f)];
+  }
+
+  function drawTable(r) {
+    const tb = $('tableBody'); tb.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    r.anchorsIn.forEach((p, i) => {
+      const mapped = r.anchorsOut[i], expect = Math.floor(p / r.speed + 0.5);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i + 1}</td><td>${fmt(p)}</td><td>${(p / r.rate * 1000).toFixed(2)}</td>` +
+        `<td>${fmt(mapped)}</td><td>${(mapped / r.rate * 1000).toFixed(2)}</td><td>${fmt(expect)}</td><td>${mapped - expect}</td>`;
+      frag.appendChild(tr);
+    });
+    tb.appendChild(frag);
+  }
+
+  // 试听：标准播放（仅回放，不参与时间伸缩算法）
+  let curSrc = null;
+  document.querySelectorAll('[data-play]').forEach(btn => btn.addEventListener('click', () => {
+    const r = state.result; if (!r) return;
+    if (curSrc) { try { curSrc.stop(); } catch (_) {} curSrc = null; }
+    const chs = btn.dataset.play === 'in' ? r.input : r.output;
+    const frames = chs[0].length, nCh = chs.length;
+    const act = new (window.AudioContext || window.webkitAudioContext)();
+    const ab = act.createBuffer(nCh, frames, r.rate);
+    for (let c = 0; c < nCh; c++) ab.copyToChannel(chs[c], c);
+    const src = act.createBufferSource(); src.buffer = ab; src.connect(act.destination); src.start();
+    curSrc = src; btn.textContent = '■ 停止';
+    src.onended = () => { btn.textContent = '▶ 试听'; curSrc = null; };
+  }));
+
+  $('exportWav').addEventListener('click', () => {
+    const r = state.result; if (!r) return;
+    downloadBlob(TSD.encodeWav(r.output, r.rate, r.bits), `stretched_${r.speed}x_${r.bits}bit.wav`);
+  });
+  $('exportJson').addEventListener('click', () => {
+    const r = state.result; if (!r) return;
+    const payload = {
+      algorithm: 'transient-anchored WSOLA',
+      sampleRate: r.rate, channels: r.channels, bits: r.bits, speed: r.speed,
+      inputFrames: r.frames, outputFrames: r.Nout,
+      outputLengthRule: 'Nout = floor(N / speed + 0.5)',
+      transientCount: r.anchorsIn.length,
+      transients: r.anchorsIn.map((p, i) => ({
+        index: i, inputSample: p, inputTimeMs: +(p / r.rate * 1000).toFixed(3),
+        outputSample: r.anchorsOut[i], outputTimeMs: +(r.anchorsOut[i] / r.rate * 1000).toFixed(3),
+        expected: Math.floor(p / r.speed + 0.5),
+      })),
+    };
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `transients_${r.speed}x.json`);
+  });
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+})();
+</script>
+</body>
+</html>

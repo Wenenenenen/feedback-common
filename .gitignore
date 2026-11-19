@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Node 依赖（仅本地测试用，通过全局 playwright 软链）
+node_modules/

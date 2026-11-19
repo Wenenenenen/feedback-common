@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>瞬态变速工作台</title>
+<style>
+/* 设计令牌：专业音频工作站的中性色 + 青绿信号色，明暗双主题 */
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #eceef1;
+  --fg: #16181d;
+  --fg-dim: #5b616b;
+  --line: #d3d7dd;
+  --accent: #0e7c7b;
+  --accent-soft: #d6efee;
+  --mark: #d64545;
+  --ok: #1a7f4b;
+  --warn: #b25e09;
+  --track: #16181d;
+  --grid: rgba(22,24,29,0.12);
+  --shadow: 0 1px 2px rgba(20,24,30,.06), 0 6px 20px rgba(20,24,30,.06);
+  --radius: 12px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --panel: #181b20; --panel-2: #20242b; --fg: #e8eaee;
+    --fg-dim: #9aa1ac; --line: #2c313a; --accent: #35c4c2; --accent-soft: #14383a;
+    --mark: #ff6b6b; --ok: #46c98a; --warn: #f0a94e; --track: #0a0c0f;
+    --grid: rgba(255,255,255,0.10);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --panel: #181b20; --panel-2: #20242b; --fg: #e8eaee;
+  --fg-dim: #9aa1ac; --line: #2c313a; --accent: #35c4c2; --accent-soft: #14383a;
+  --mark: #ff6b6b; --ok: #46c98a; --warn: #f0a94e; --track: #0a0c0f;
+  --grid: rgba(255,255,255,0.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 26px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+header.app { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.app h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+header.app .sub { color: var(--fg-dim); font-size: 13px; }
+header.app .spacer { flex: 1; }
+.theme-btn { background: var(--panel); border: 1px solid var(--line); color: var(--fg); border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; }
+.theme-btn:hover { border-color: var(--accent); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.panel .hd { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel .hd h2 { font-size: 14px; margin: 0; font-weight: 650; }
+.panel .bd { padding: 16px; min-width: 0; }
+
+.controls { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 26px 18px;
+  text-align: center; color: var(--fg-dim); cursor: pointer; transition: border-color .15s, background .15s;
+  background: var(--panel);
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--fg); }
+.drop strong { color: var(--accent); font-weight: 650; }
+.drop input { display: none; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 14px; }
+.meta { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.meta .k { font-size: 11px; color: var(--fg-dim); letter-spacing: .4px; text-transform: uppercase; }
+.meta .v { font-family: var(--mono); font-size: 14px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+.speed-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.speed-row label { font-weight: 600; }
+input[type=range] { flex: 1; min-width: 200px; accent-color: var(--accent); }
+.speed-val { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--accent); min-width: 72px; font-variant-numeric: tabular-nums; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.presets button, .btn {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; font: inherit;
+}
+.presets button:hover, .btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; }
+.btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+.btn.danger { color: var(--mark); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.progress { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; margin-top: 12px; display: none; }
+.progress.on { display: block; }
+.progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+.status { font-size: 13px; margin-top: 8px; color: var(--fg-dim); min-height: 20px; }
+.status.err { color: var(--mark); font-weight: 600; }
+.status.ok { color: var(--ok); }
+
+.viz-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.viz-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; min-width: 0; }
+.viz-card .hd { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.viz-card .hd h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.tag { font-size: 11px; font-family: var(--mono); padding: 2px 7px; border-radius: 99px; background: var(--panel-2); color: var(--fg-dim); border: 1px solid var(--line); }
+canvas { display: block; width: 100%; background: var(--track); }
+.canvas-scroll { overflow-x: auto; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--fg-dim); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.play-row { display: flex; gap: 8px; align-items: center; }
+.play-row button { padding: 5px 10px; font-size: 12px; }
+.hint { font-size: 12px; color: var(--fg-dim); }
+.table-scroll { max-height: 300px; overflow: auto; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { position: sticky; top: 0; background: var(--panel); color: var(--fg-dim); font-weight: 600; z-index: 1; }
+tr:hover td { background: var(--panel-2); }
+[hidden] { display: none !important; }
+@media (min-width: 880px) { .viz-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <h1>瞬态变速工作台</h1>
+    <span class="sub">瞬态保护 WSOLA · 变速不变调 · 双声道联动</span>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <section class="panel">
+    <div class="hd"><h2>1 · 导入与参数</h2></div>
+    <div class="bd">
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" accept=".wav,audio/wav,audio/wave,audio/x-wav">
+        <div><strong>点击选择 WAV</strong> 或拖拽到此处</div>
+        <div class="hint" style="margin-top:6px">44.1/48 kHz · 16/24 位 PCM · 单/双声道 · 最长 60 秒</div>
+      </label>
+      <div class="meta-grid" id="metaGrid" hidden>
+        <div class="meta"><div class="k">采样率</div><div class="v" id="mRate">—</div></div>
+        <div class="meta"><div class="k">位深</div><div class="v" id="mBits">—</div></div>
+        <div class="meta"><div class="k">声道</div><div class="v" id="mCh">—</div></div>
+        <div class="meta"><div class="k">输入帧数</div><div class="v" id="mFrames">—</div></div>
+        <div class="meta"><div class="k">时长</div><div class="v" id="mDur">—</div></div>
+        <div class="meta"><div class="k">检测敲击</div><div class="v" id="mHits">—</div></div>
+        <div class="meta"><div class="k">输出帧数</div><div class="v" id="mOut">—</div></div>
+      </div>
+
+      <div style="height:16px"></div>
+      <div class="speed-row">
+        <label for="speed">速度</label>
+        <input type="range" id="speed" min="0.5" max="2" step="0.01" value="1.25" disabled>
+        <span class="speed-val" id="speedVal">1.25×</span>
+        <div class="presets">
+          <button type="button" data-s="0.5" disabled>0.5×</button>
+          <button type="button" data-s="0.8" disabled>0.8×</button>
+          <button type="button" data-s="1" disabled>1×</button>
+          <button type="button" data-s="1.5" disabled>1.5×</button>
+          <button type="button" data-s="2" disabled>2×</button>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="actions">
+        <button class="btn primary" id="runBtn" disabled>开始处理</button>
+        <button class="btn danger" id="cancelBtn" hidden>取消</button>
+        <button class="btn" id="exportWav" disabled>导出 WAV</button>
+        <button class="btn" id="exportJson" disabled>导出敲击对照 JSON</button>
+      </div>
+      <div class="progress" id="progress"><div id="progressBar"></div></div>
+      <div class="status" id="status">等待导入文件。</div>
+    </div>
+  </section>
+
+  <section class="panel" id="vizPanel" hidden>
+    <div class="hd">
+      <h2>2 · 波形对比与敲击标记</h2>
+      <span class="tag">原始 / 处理后 各自时间轴</span>
+      <span style="flex:1"></span>
+      <span class="legend">
+        <span><i style="background:var(--accent)"></i>左声道/单声道</span>
+        <span><i style="background:#e0a13c"></i>右声道</span>
+        <span><i style="background:var(--mark)"></i>敲击位置</span>
+      </span>
+    </div>
+    <div class="bd viz-grid">
+      <div class="viz-card">
+        <div class="hd"><h3>原始波形</h3>
+          <div class="play-row"><button data-play="in" type="button">▶ 试听</button><span class="tag" id="inTag"></span></div>
+        </div>
+        <div class="canvas-scroll"><canvas id="waveIn" height="220"></canvas></div>
+      </div>
+      <div class="viz-card">
+        <div class="hd"><h3>处理后波形</h3>
+          <div class="play-row"><button data-play="out" type="button">▶ 试听</button><span class="tag" id="outTag"></span></div>
+        </div>
+        <div class="canvas-scroll"><canvas id="waveOut" height="220"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="specPanel" hidden>
+    <div class="hd"><h2>3 · 频谱对比（验证音高不变）</h2><span class="tag">汉宁窗 2048 点 FFT · 低频在下</span></div>
+    <div class="bd viz-grid">
+      <div class="viz-card"><div class="hd"><h3>原始频谱图</h3></div><canvas id="specIn" height="240"></canvas></div>
+      <div class="viz-card"><div class="hd"><h3>处理后频谱图</h3></div><canvas id="specOut" height="240"></canvas></div>
+    </div>
+  </section>
+
+  <section class="panel" id="tablePanel" hidden>
+    <div class="hd"><h2>4 · 敲击位置对照</h2><span class="tag" id="tableTag"></span></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>输入位置(样本)</th><th>输入时间(ms)</th><th>输出位置(样本)</th><th>输出时间(ms)</th><th>round(p/speed)</th><th>误差(样本)</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ================= 内联 DSP 模块与 Worker 源码（构建注入） ================= */
+/* __DSP_MODULES__ */
+</script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const state = { audio: null, speed: 1.25, result: null, worker: null };
+  const fmt = (n) => n.toLocaleString('en-US');
+
+  // 主题
+  $('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+
+  const setStatus = (msg, cls) => {
+    const el = $('status'); el.textContent = msg; el.className = 'status' + (cls ? ' ' + cls : '');
+  };
+  const enableControls = (on) => {
+    $('speed').disabled = !on;
+    document.querySelectorAll('.presets button').forEach(b => b.disabled = !on);
+    $('runBtn').disabled = !on;
+  };
+
+  // 文件导入
+  const drop = $('drop'), fileInput = $('fileInput');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+  fileInput.addEventListener('change', e => { const f = e.target.files[0]; if (f) handleFile(f); });
+
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const audio = TSD.parseWav(reader.result);
+        audio._buffer = reader.result;
+        state.audio = audio; state.result = null;
+        $('metaGrid').hidden = false;
+        $('mRate').textContent = fmt(audio.rate) + ' Hz';
+        $('mBits').textContent = audio.bits + ' 位';
+        $('mCh').textContent = audio.channels === 1 ? '单声道' : '双声道';
+        $('mFrames').textContent = fmt(audio.frames);
+        $('mDur').textContent = (audio.frames / audio.rate).toFixed(3) + ' s';
+        $('mHits').textContent = '待处理'; $('mOut').textContent = '—';
+        $('vizPanel').hidden = true; $('specPanel').hidden = true; $('tablePanel').hidden = true;
+        $('exportWav').disabled = true; $('exportJson').disabled = true;
+        enableControls(true);
+        setStatus(`已载入 ${file.name}，调整速度后点击“开始处理”。`, 'ok');
+      } catch (err) { setStatus('无法导入：' + err.message, 'err'); }
+    };
+    reader.onerror = () => setStatus('文件读取失败。', 'err');
+    reader.readAsArrayBuffer(file);
+  }
+
+  // 速度
+  const speedSlider = $('speed'), speedVal = $('speedVal');
+  speedSlider.addEventListener('input', () => { state.speed = parseFloat(speedSlider.value); speedVal.textContent = state.speed.toFixed(2) + '×'; });
+  document.querySelectorAll('.presets button').forEach(b => b.addEventListener('click', () => {
+    state.speed = parseFloat(b.dataset.s); speedSlider.value = state.speed; speedVal.textContent = state.speed.toFixed(2) + '×';
+  }));
+
+  function createWorker() {
+    const blob = new Blob([TSD_WORKER_SOURCE], { type: 'application/javascript' });
+    return new Worker(URL.createObjectURL(blob));
+  }
+
+  $('runBtn').addEventListener('click', () => {
+    if (!state.audio) return;
+    if (state.worker) state.worker.terminate();
+    const worker = createWorker(); state.worker = worker;
+    $('runBtn').disabled = true; $('cancelBtn').hidden = false;
+    $('progress').classList.add('on'); $('progressBar').style.width = '0%';
+    setStatus('处理中…');
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'progress') $('progressBar').style.width = Math.round(m.value * 100) + '%';
+      else if (m.type === 'done') { finishWorker(); state.result = m.result; onResult(m.result); }
+      else if (m.type === 'cancelled') { finishWorker(); setStatus('已取消。', ''); }
+      else if (m.type === 'error') { finishWorker(); setStatus('处理失败：' + m.message, 'err'); }
+    };
+    worker.onerror = (e) => { finishWorker(); setStatus('Worker 错误：' + e.message, 'err'); };
+    worker.postMessage({ type: 'process', buffer: state.audio._buffer, speed: state.speed }, [state.audio._buffer]);
+    state.audio._buffer = null;
+  });
+  function finishWorker() {
+    $('runBtn').disabled = false; $('cancelBtn').hidden = true; $('progress').classList.remove('on');
+    if (state.worker) { state.worker.terminate(); state.worker = null; }
+  }
+  $('cancelBtn').addEventListener('click', () => { if (state.worker) state.worker.postMessage({ type: 'cancel' }); });
+
+  function onResult(r) {
+    $('mHits').textContent = fmt(r.anchorsIn.length) + ' 个';
+    $('mOut').textContent = fmt(r.Nout);
+    $('inTag').textContent = fmt(r.frames) + ' 样本';
+    $('outTag').textContent = fmt(r.Nout) + ' 样本';
+    $('tableTag').textContent = r.anchorsIn.length + ' 个敲击 · speed=' + r.speed + '×';
+    $('exportWav').disabled = false; $('exportJson').disabled = false;
+    $('vizPanel').hidden = false; $('specPanel').hidden = false; $('tablePanel').hidden = false;
+    setStatus(`处理完成：${fmt(r.frames)} → ${fmt(r.Nout)} 样本，敲击 ${r.anchorsIn.length} 个，全部按速度比例映射。`, 'ok');
+    requestAnimationFrame(() => drawAll(r));
+  }
+  function drawAll(r) {
+    drawWaveform($('waveIn'), r.input, r.anchorsIn);
+    drawWaveform($('waveOut'), r.output, r.anchorsOut);
+    drawSpectrogram($('specIn'), r.input[0], r.rate);
+    drawSpectrogram($('specOut'), r.output[0], r.rate);
+    drawTable(r);
+  }
+
+  function cssPx(el) { return Math.max(320, el.parentElement.clientWidth); }
+  function drawWaveform(canvas, channels, anchors) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(640, cssPx(canvas)), cssH = 220;
+    canvas.style.width = cssW + 'px'; canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+    const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = cssW, H = cssH, n = channels[0].length, spp = n / W;
+    const st = getComputedStyle(document.documentElement);
+    const cL = st.getPropertyValue('--accent').trim(), cR = '#e0a13c';
+    const cMark = st.getPropertyValue('--mark').trim(), grid = st.getPropertyValue('--grid').trim();
+    const nCh = channels.length, rowH = H / nCh;
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    for (let g = 0; g <= 4; g++) { const y = (g / 4) * H; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    for (let ch = 0; ch < nCh; ch++) {
+      const data = channels[ch], mid = ch * rowH + rowH / 2;
+      ctx.fillStyle = ch === 0 ? cL : cR;
+      for (let x = 0; x < W; x++) {
+        const s = Math.floor(x * spp), e = Math.min(n, Math.floor((x + 1) * spp) + 1);
+        let mx = 0, sum = 0, cnt = 0;
+        for (let i = s; i < e; i++) { const v = Math.abs(data[i]); if (v > mx) mx = v; sum += data[i] * data[i]; cnt++; }
+        const rms = cnt ? Math.sqrt(sum / cnt) : 0;
+        const yPeak = mx * rowH * 0.46, yRms = rms * rowH * 0.46;
+        ctx.globalAlpha = .28; ctx.fillRect(x, mid - yRms, 1, Math.max(1, 2 * yRms));
+        ctx.globalAlpha = .95; ctx.fillRect(x, mid - yPeak, 1, Math.max(1, 2 * yPeak));
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = cMark; ctx.lineWidth = 1;
+    for (const p of anchors) { const x = p / n * W; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  }
+
+  function drawSpectrogram(canvas, samples, rate) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(320, cssPx(canvas)), cssH = 240;
+    canvas.style.width = cssW + 'px'; canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+    const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const spec = TSD.buildSpectrogram(samples, rate, 2048, 512);
+    const nF = spec.frames.length, nB = spec.frames[0].length;
+    const img = ctx.createImageData(nF, nB);
+    for (let f = 0; f < nF; f++) for (let b = 0; b < nB; b++) {
+      let v = (spec.frames[f][b] + 90) / 80; v = v < 0 ? 0 : v > 1 ? 1 : v;
+      const [r, g, bl] = viridis(v), idx = (b * nF + f) * 4;
+      img.data[idx] = r; img.data[idx + 1] = g; img.data[idx + 2] = bl; img.data[idx + 3] = 255;
+    }
+    const off = document.createElement('canvas'); off.width = nF; off.height = nB;
+    off.getContext('2d').putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.save(); ctx.translate(0, cssH); ctx.scale(1, -1);
+    ctx.drawImage(off, 0, 0, nF, nB, 0, 0, cssW, cssH); ctx.restore();
+  }
+  function viridis(t) {
+    const stops = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+    const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), f = x - i;
+    const a = stops[i], b = stops[i + 1];
+    return [Math.round(a[0]+(b[0]-a[0])*f), Math.round(a[1]+(b[1]-a[1])*f), Math.round(a[2]+(b[2]-a[2])*f)];
+  }
+
+  function drawTable(r) {
+    const tb = $('tableBody'); tb.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    r.anchorsIn.forEach((p, i) => {
+      const mapped = r.anchorsOut[i], expect = Math.floor(p / r.speed + 0.5);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i + 1}</td><td>${fmt(p)}</td><td>${(p / r.rate * 1000).toFixed(2)}</td>` +
+        `<td>${fmt(mapped)}</td><td>${(mapped / r.rate * 1000).toFixed(2)}</td><td>${fmt(expect)}</td><td>${mapped - expect}</td>`;
+      frag.appendChild(tr);
+    });
+    tb.appendChild(frag);
+  }
+
+  // 试听：标准播放（仅回放，不参与时间伸缩算法）
+  let curSrc = null;
+  document.querySelectorAll('[data-play]').forEach(btn => btn.addEventListener('click', () => {
+    const r = state.result; if (!r) return;
+    if (curSrc) { try { curSrc.stop(); } catch (_) {} curSrc = null; }
+    const chs = btn.dataset.play === 'in' ? r.input : r.output;
+    const frames = chs[0].length, nCh = chs.length;
+    const act = new (window.AudioContext || window.webkitAudioContext)();
+    const ab = act.createBuffer(nCh, frames, r.rate);
+    for (let c = 0; c < nCh; c++) ab.copyToChannel(chs[c], c);
+    const src = act.createBufferSource(); src.buffer = ab; src.connect(act.destination); src.start();
+    curSrc = src; btn.textContent = '■ 停止';
+    src.onended = () => { btn.textContent = '▶ 试听'; curSrc = null; };
+  }));
+
+  $('exportWav').addEventListener('click', () => {
+    const r = state.result; if (!r) return;
+    downloadBlob(TSD.encodeWav(r.output, r.rate, r.bits), `stretched_${r.speed}x_${r.bits}bit.wav`);
+  });
+  $('exportJson').addEventListener('click', () => {
+    const r = state.result; if (!r) return;
+    const payload = {
+      algorithm: 'transient-anchored WSOLA',
+      sampleRate: r.rate, channels: r.channels, bits: r.bits, speed: r.speed,
+      inputFrames: r.frames, outputFrames: r.Nout,
+      outputLengthRule: 'Nout = floor(N / speed + 0.5)',
+      transientCount: r.anchorsIn.length,
+      transients: r.anchorsIn.map((p, i) => ({
+        index: i, inputSample: p, inputTimeMs: +(p / r.rate * 1000).toFixed(3),
+        outputSample: r.anchorsOut[i], outputTimeMs: +(r.anchorsOut[i] / r.rate * 1000).toFixed(3),
+        expected: Math.floor(p / r.speed + 0.5),
+      })),
+    };
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), `transients_${r.speed}x.json`);
+  });
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+})();
+</script>
+</body>
+</html>
