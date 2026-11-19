@@ -1,0 +1,1 @@
+{"name":"bad-prob","base":1.2,"softStart":74,"softStep":0.06,"hard":90,"limitedRate":0.5,"guaranteeAfter":1,"carry":{"pity":0,"misses":0},"targets":[1,7]}

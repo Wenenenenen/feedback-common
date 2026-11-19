@@ -1,0 +1,1319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>抽卡保底核算台</title>
+<style>
+/* ---------- 设计令牌：中性灰底 + 蓝橙双序列（dataviz 参考调色板，双模式已验证） ---------- */
+:root {
+  color-scheme: light;
+  --bg: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-a: #2a78d6;
+  --series-b: #eb6834;
+  --critical: #d03b3b;
+  --good: #006300;
+  --warn-bg: #fdeaea;
+  --warn-border: #d03b3b;
+  --ok-bg: #eaf4ea;
+  --ok-border: #006300;
+  --focus: #2a78d6;
+  --shadow: 0 1px 2px rgba(11,11,11,0.05), 0 2px 8px rgba(11,11,11,0.04);
+  --radius: 10px;
+  --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --fg: #f0efec;
+    --fg-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-a: #3987e5;
+    --series-b: #d95926;
+    --critical: #e66767;
+    --good: #0ca30c;
+    --warn-bg: #33201f;
+    --warn-border: #e66767;
+    --ok-bg: #1d2b1d;
+    --ok-border: #0ca30c;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-a: #3987e5;
+  --series-b: #d95926;
+  --critical: #e66767;
+  --good: #0ca30c;
+  --warn-bg: #33201f;
+  --warn-border: #e66767;
+  --ok-bg: #1d2b1d;
+  --ok-border: #0ca30c;
+  --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 20px 48px; }
+
+h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+h3 { font-size: 13px; margin: 0 0 8px; color: var(--fg-2); font-weight: 600; }
+p.sub { margin: 0 0 20px; color: var(--fg-2); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+header.page {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin-bottom: 18px; flex-wrap: wrap;
+}
+.theme-toggle {
+  background: var(--surface); border: 1px solid var(--border); color: var(--fg);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer; font: inherit;
+}
+.theme-toggle:hover { background: var(--surface-2); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px; margin-bottom: 16px; min-width: 0;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ---------- 规则表单 ---------- */
+.rule-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.rule-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.rule-dot.a { background: var(--series-a); }
+.rule-dot.b { background: var(--series-b); }
+.rule-title { font-weight: 700; font-size: 15px; }
+.pill {
+  font-size: 12px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--fg-2); background: var(--surface-2);
+}
+.pill.off { opacity: 0.55; }
+
+.form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 12px; }
+@media (max-width: 560px) { .form-grid { grid-template-columns: repeat(2, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--fg-2); }
+.field input {
+  width: 100%; min-width: 0; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--axis); background: var(--bg); color: var(--fg);
+  font: inherit; font-variant-numeric: tabular-nums;
+}
+.field input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+.field input.invalid { border-color: var(--critical); background: var(--warn-bg); }
+.field .hint { font-size: 11px; color: var(--muted); }
+
+textarea.json {
+  width: 100%; min-height: 96px; resize: vertical; border-radius: 8px;
+  border: 1px solid var(--axis); background: var(--bg); color: var(--fg);
+  font-family: var(--mono); font-size: 12px; padding: 8px;
+}
+textarea.json:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+button.btn {
+  font: inherit; cursor: pointer; border-radius: 8px; padding: 7px 14px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--fg);
+}
+button.btn:hover { filter: brightness(0.97); }
+button.btn.primary { background: var(--series-a); border-color: var(--series-a); color: #fff; }
+button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+select, input[type="number"] { font-family: inherit; }
+select {
+  padding: 7px 9px; border-radius: 8px; border: 1px solid var(--axis);
+  background: var(--bg); color: var(--fg); font: inherit; max-width: 100%;
+}
+
+.preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.preset-row button { font-size: 12px; padding: 4px 10px; }
+
+/* ---------- 校验状态 ---------- */
+.valid-box { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+.valid-box.ok { background: var(--ok-bg); border: 1px solid var(--ok-border); color: var(--good); }
+.valid-box.err { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--critical); }
+.valid-box ul { margin: 6px 0 0; padding-left: 18px; }
+.valid-box li { margin: 2px 0; }
+.field-name { font-family: var(--mono); font-weight: 700; }
+
+/* ---------- KPI ---------- */
+.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 560px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+.kpi {
+  background: var(--surface-2); border-radius: 8px; padding: 10px 12px; min-width: 0;
+}
+.kpi .k-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.kpi .k-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .k-sub { font-size: 11px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- 图表 ---------- */
+.chart-wrap { position: relative; height: 320px; }
+@media (max-width: 560px) { .chart-wrap { height: 260px; } }
+.chart-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chart-tabs button {
+  font-size: 12px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--fg-2);
+}
+.chart-tabs button.active { background: var(--series-a); border-color: var(--series-a); color: #fff; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button {
+  border: 0; background: var(--surface-2); color: var(--fg-2); padding: 6px 14px;
+  cursor: pointer; font: inherit; font-size: 12px;
+}
+.seg button.active { background: var(--series-a); color: #fff; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+/* ---------- 表格 ---------- */
+.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  position: sticky; top: 0; background: var(--surface-2); color: var(--fg-2);
+  font-weight: 600; border-bottom: 1px solid var(--axis); z-index: 1;
+}
+tbody tr { border-bottom: 1px solid var(--grid); }
+tbody tr:last-child { border-bottom: 0; }
+tbody tr:hover { background: var(--surface-2); }
+td.flag, tr.row-flag td { color: var(--critical); font-weight: 700; }
+tr.row-flag { background: var(--warn-bg); }
+.legend-inline { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); margin-bottom: 8px; }
+.legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+.note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.sum-ok { color: var(--good); font-weight: 700; }
+.sum-bad { color: var(--critical); font-weight: 700; }
+
+.progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 10px 0; }
+.progress > div { height: 100%; background: var(--series-a); width: 0%; transition: width 0.15s; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 9px 18px; border-radius: 999px;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 50;
+  max-width: 90vw;
+}
+.toast.show { opacity: 0.95; }
+
+.sim-summary { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; margin: 8px 0; }
+.sim-summary b { font-variant-numeric: tabular-nums; }
+.diff-neg { color: var(--critical); }
+.hidden { display: none !important; }
+.copy-area { width: 100%; min-height: 120px; font-family: var(--mono); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div>
+      <h1>抽卡保底核算台</h1>
+      <p class="sub">按规则逐抽状态转移精确求解（非模拟），支持双规则对比、固定种子模拟校验与 CSV / JSON 导出</p>
+    </div>
+    <button class="theme-toggle" id="themeToggle" type="button">切换深浅色</button>
+  </header>
+
+  <!-- ============ 规则配置 ============ -->
+  <section class="card">
+    <h2>规则配置</h2>
+    <div class="grid-2">
+      <div id="rulePanelA"></div>
+      <div id="rulePanelB"></div>
+    </div>
+  </section>
+
+  <!-- ============ 精确核算结果 ============ -->
+  <section class="card" id="resultCard">
+    <h2>精确核算结果</h2>
+    <div id="resultBody"></div>
+  </section>
+
+  <!-- ============ 模拟校验 ============ -->
+  <section class="card">
+    <h2>固定种子模拟校验</h2>
+    <div class="form-grid" style="grid-template-columns: repeat(4,1fr); max-width: 640px;">
+      <div class="field">
+        <label for="simN">模拟次数</label>
+        <input id="simN" type="number" value="100000" min="100" step="1000">
+      </div>
+      <div class="field">
+        <label for="simSeed">随机种子</label>
+        <input id="simSeed" type="number" value="20261120" step="1">
+      </div>
+      <div class="field">
+        <label for="simRule">校验规则</label>
+        <select id="simRule"><option value="A">规则 A</option><option value="B">规则 B</option></select>
+      </div>
+      <div class="field" style="justify-content:flex-end;">
+        <button class="btn primary" id="simRun" type="button">运行模拟对比</button>
+      </div>
+    </div>
+    <div class="progress hidden" id="simProgressWrap"><div id="simProgress"></div></div>
+    <div id="simBody"><p class="note">模拟器使用 mulberry32 固定种子 PRNG，逐抽复现完整状态转移；对每个抽数点做单比例 z 检验，|z| &gt; 3（偏差超过三倍标准误）的项标红。</p></div>
+  </section>
+
+  <!-- ============ 导出 ============ -->
+  <section class="card">
+    <h2>导出</h2>
+    <div class="row-actions" id="exportBar"></div>
+    <p class="note">若浏览器拦截下载，点击“复制到剪贴板”，或展开文本框全选复制。</p>
+    <details style="margin-top:10px;">
+      <summary class="note" style="cursor:pointer;">展开导出文本（可手动全选复制）</summary>
+      <textarea class="copy-area" id="exportText" readonly></textarea>
+    </details>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/* ================= 精确核算引擎（与 src/gacha.js 同一份实现，已通过 reference.json 全量校验） ================= */
+(function (global) {
+  'use strict';
+  const EPS = 1e-12;
+  function isFiniteNumber(v) { return typeof v === 'number' && Number.isFinite(v); }
+  function isInteger(v) { return typeof v === 'number' && Number.isInteger(v); }
+
+  function validateRule(r) {
+    const errors = [];
+    const push = (field, message) => errors.push({ field, message });
+    if (r === null || typeof r !== 'object' || Array.isArray(r)) {
+      return { ok: false, errors: [{ field: '(根对象)', message: '规则必须是一个 JSON 对象' }] };
+    }
+    if (!isFiniteNumber(r.base)) push('base', '基础概率必须是有限数字');
+    else if (!(r.base > 0)) push('base', '基础概率 base 必须大于 0，当前为 ' + r.base);
+    else if (r.base > 1) push('base', '基础概率 base 不能大于 1，当前为 ' + r.base);
+
+    if (!isFiniteNumber(r.softStep)) push('softStep', '软保底每抽增量必须是有限数字');
+    else if (r.softStep < 0) push('softStep', '软保底增量 softStep 不能为负数，当前为 ' + r.softStep);
+
+    if (!isInteger(r.hard)) push('hard', '硬保底抽数 hard 必须是整数');
+    else if (!(r.hard >= 1)) push('hard', '硬保底抽数 hard 必须不小于 1，当前为 ' + r.hard);
+
+    if (!isInteger(r.softStart)) push('softStart', '软保底起点 softStart 必须是整数');
+    else if (isInteger(r.hard) && r.hard >= 1) {
+      if (!(r.softStart >= 1)) push('softStart', '软保底起点 softStart 必须不小于 1，当前为 ' + r.softStart);
+      if (r.softStart > r.hard) push('softStart', '软保底起点 softStart(' + r.softStart + ') 不能大于硬保底 hard(' + r.hard + ')');
+    } else if (!(r.softStart >= 1)) {
+      push('softStart', '软保底起点 softStart 必须不小于 1，当前为 ' + r.softStart);
+    }
+
+    if (!isFiniteNumber(r.limitedRate)) push('limitedRate', '限定五星比例必须是有限数字');
+    else if (r.limitedRate < 0 || r.limitedRate > 1) {
+      push('limitedRate', '限定五星比例 limitedRate 必须在 [0,1] 区间，当前为 ' + r.limitedRate);
+    }
+
+    if (!isInteger(r.guaranteeAfter)) push('guaranteeAfter', '大保底阈值 guaranteeAfter 必须是整数');
+    else if (r.guaranteeAfter < 1) push('guaranteeAfter', '大保底阈值 guaranteeAfter 必须不小于 1，当前为 ' + r.guaranteeAfter);
+
+    if (r.carry === null || typeof r.carry !== 'object' || Array.isArray(r.carry)) {
+      push('carry', '继承状态 carry 必须是对象 {pity, misses}');
+    } else {
+      if (!isInteger(r.carry.pity)) push('carry.pity', '继承垫抽 carry.pity 必须是整数');
+      else if (isInteger(r.hard) && r.hard >= 1) {
+        if (r.carry.pity < 0) push('carry.pity', '继承垫抽 carry.pity 不能为负数，当前为 ' + r.carry.pity);
+        if (r.carry.pity >= r.hard) push('carry.pity', '继承垫抽 carry.pity(' + r.carry.pity + ') 必须小于硬保底 hard(' + r.hard + ')');
+      } else if (r.carry.pity < 0) {
+        push('carry.pity', '继承垫抽 carry.pity 不能为负数，当前为 ' + r.carry.pity);
+      }
+      if (!isInteger(r.carry.misses)) push('carry.misses', '继承歪次数 carry.misses 必须是整数');
+      else if (isInteger(r.guaranteeAfter) && r.guaranteeAfter >= 1) {
+        if (r.carry.misses < 0) push('carry.misses', '继承歪次数 carry.misses 不能为负数，当前为 ' + r.carry.misses);
+        if (r.carry.misses > r.guaranteeAfter) {
+          push('carry.misses', '继承歪次数 carry.misses(' + r.carry.misses + ') 不能大于 guaranteeAfter(' + r.guaranteeAfter + ')');
+        }
+      } else if (r.carry.misses < 0) {
+        push('carry.misses', '继承歪次数 carry.misses 不能为负数，当前为 ' + r.carry.misses);
+      }
+    }
+
+    if (!Array.isArray(r.targets) || r.targets.length === 0) {
+      push('targets', 'targets 必须是非空数组，元素为正整数');
+    } else {
+      r.targets.forEach((t, i) => {
+        if (!isInteger(t) || t < 1) push('targets[' + i + ']', '目标限定五星数必须是正整数，当前为 ' + JSON.stringify(t));
+      });
+    }
+    return { ok: errors.length === 0, errors };
+  }
+
+  function fiveStarProb(r, k) {
+    if (k >= r.hard) return 1;
+    if (k < r.softStart) return r.base;
+    const p = r.base + (k - r.softStart + 1) * r.softStep;
+    return p >= 1 ? 1 : p;
+  }
+
+  function effectiveHard(r) {
+    if (r.softStep <= 0) return r.hard;
+    const need = (1 - r.base) / r.softStep;
+    const kAtOne = r.softStart - 1 + Math.ceil(need - 1e-15);
+    if (kAtOne >= r.softStart && kAtOne < r.hard) return kAtOne;
+    return r.hard;
+  }
+
+  function pmfSum(pmf) { let s = 0; for (let i = 0; i < pmf.length; i++) s += pmf[i]; return s; }
+  function pmfExpected(pmf) { let e = 0; for (let i = 1; i < pmf.length; i++) e += i * pmf[i]; return e; }
+  function pmfSecondMoment(pmf) { let e = 0; for (let i = 1; i < pmf.length; i++) e += i * i * pmf[i]; return e; }
+  function pmfQuantile(pmf, q) {
+    let cum = 0;
+    for (let i = 1; i < pmf.length; i++) { cum += pmf[i]; if (cum + EPS >= q) return i; }
+    return pmf.length - 1;
+  }
+  function summarize(pmf, quantiles) {
+    const sum = pmfSum(pmf);
+    const expected = pmfExpected(pmf);
+    const variance = Math.max(0, pmfSecondMoment(pmf) - expected * expected);
+    const out = { pmf, sum, expected, std: Math.sqrt(variance), quantiles: {} };
+    (quantiles || [0.5, 0.9, 0.99]).forEach((q) => { out.quantiles[q] = pmfQuantile(pmf, q); });
+    return out;
+  }
+
+  function firstFive(r) {
+    const start = r.carry.pity + 1;
+    const end = r.hard;
+    const pmf = new Float64Array(r.hard + 1);
+    let survival = 1;
+    for (let k = start; k <= end; k++) {
+      const q = fiveStarProb(r, k);
+      pmf[k] = survival * q;
+      survival *= 1 - q;
+    }
+    const summary = summarize(pmf);
+    summary.support = [start, end];
+    summary.pmfView = pmf.slice(start);
+    summary.viewStart = start;
+    summary.expectedRemaining = summary.expected - r.carry.pity;
+    return summary;
+  }
+
+  function limitedDists(r, quantileList) {
+    const M = Math.max.apply(null, r.targets);
+    const g = r.guaranteeAfter;
+    const h = effectiveHard(r);
+    const pity0 = r.carry.pity;
+    const misses0 = r.carry.misses;
+    const maxPulls = (h - pity0) + ((M - 1) * (g + 1) + (g - misses0)) * h;
+    const tightMax = (m) => (h - pity0) + ((m - 1) * (g + 1) + (g - misses0)) * h;
+    const nP = h, nS = g + 1, nJ = M + 1;
+    const size = nP * nS * nJ;
+    const idx = (p, s, j) => (p * nS + s) * nJ + j;
+    const pmfs = [];
+    for (let j = 0; j <= M; j++) pmfs.push(new Float64Array(maxPulls + 1));
+    let cur = new Float64Array(size);
+    cur[idx(pity0, misses0, 0)] = 1;
+    let activeMass = 1;
+    for (let t = 1; t <= maxPulls && activeMass > EPS * EPS; t++) {
+      const nxt = new Float64Array(size);
+      let remaining = 0;
+      for (let p = 0; p < nP; p++) {
+        const k = p + 1;
+        const q = fiveStarProb(r, k);
+        const missQ = 1 - q;
+        const baseP = p * nS * nJ;
+        const nextP = (p + 1) * nS * nJ;
+        for (let s = 0; s < nS; s++) {
+          const rowBase = baseP + s * nJ;
+          for (let j = 0; j < M; j++) {
+            const mass = cur[rowBase + j];
+            if (mass === 0) continue;
+            if (missQ > 0) {
+              const v = mass * missQ;
+              nxt[nextP + s * nJ + j] += v;
+              remaining += v;
+            }
+            const hit = mass * q;
+            if (s === g) {
+              pmfs[j + 1][t] += hit;
+              if (j + 1 < M) { nxt[idx(0, 0, j + 1)] += hit; remaining += hit; }
+            } else {
+              const lim = hit * r.limitedRate;
+              const off = hit - lim;
+              nxt[idx(0, s + 1, j)] += off;
+              remaining += off;
+              pmfs[j + 1][t] += lim;
+              if (j + 1 < M) { nxt[idx(0, 0, j + 1)] += lim; remaining += lim; }
+            }
+          }
+        }
+      }
+      cur = nxt;
+      activeMass = remaining;
+    }
+    const result = {};
+    r.targets.forEach((m) => {
+      result[m] = summarize(pmfs[m], quantileList);
+      result[m].maxPulls = tightMax(m);
+    });
+    result._maxPulls = maxPulls;
+    result._effectiveHard = h;
+    return result;
+  }
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function simulate(r, N, seed, onProgress, rand) {
+    const M = Math.max.apply(null, r.targets);
+    const g = r.guaranteeAfter;
+    const firstHist = new Float64Array(r.hard + 1);
+    const limHists = [];
+    for (let j = 0; j <= M; j++) limHists.push(new Float64Array(r.hard * (M * (g + 1) + 1) + 1));
+    if (!rand) rand = mulberry32(seed);
+    const reportEvery = Math.max(1000, Math.floor(N / 50));
+    for (let run = 0; run < N; run++) {
+      let p = r.carry.pity, s = r.carry.misses, got = 0, pulls = 0;
+      let firstRecorded = false;
+      while (got < M) {
+        pulls++;
+        const q = fiveStarProb(r, p + 1);
+        if (rand() < q) {
+          if (!firstRecorded) { firstHist[pulls]++; firstRecorded = true; }
+          if (s === g || rand() < r.limitedRate) {
+            got++; limHists[got][pulls]++; p = 0; s = 0;
+          } else { s++; p = 0; }
+        } else { p++; }
+      }
+      if (onProgress && (run + 1) % reportEvery === 0) onProgress(run + 1, N);
+    }
+    if (onProgress) onProgress(N, N);
+    return { N, seed, firstHist, limHists };
+  }
+
+  function comparePmf(exactPmf, simHist, N) {
+    const rows = [];
+    let flagged = 0;
+    for (let n = 1; n < exactPmf.length; n++) {
+      const p = exactPmf[n];
+      const count = n < simHist.length ? simHist[n] : 0;
+      const pHat = count / N;
+      if (p === 0 && count === 0) continue;
+      const se = Math.sqrt(p * (1 - p) / N);
+      const diff = pHat - p;
+      const z = se > 0 ? diff / se : (diff !== 0 ? Infinity : 0);
+      const flag = Math.abs(z) > 3;
+      if (flag) flagged++;
+      rows.push({ n, exact: p, sim: pHat, count, se, z, flag });
+    }
+    return { rows, flagged };
+  }
+  function compareExpectation(exactSummary, simHist, N) {
+    let sum = 0, count = 0;
+    for (let n = 1; n < simHist.length; n++) { sum += n * simHist[n]; count += simHist[n]; }
+    const simMean = count > 0 ? sum / count : NaN;
+    const seMean = exactSummary.std / Math.sqrt(N);
+    const z = seMean > 0 ? (simMean - exactSummary.expected) / seMean : 0;
+    return { simMean, exactMean: exactSummary.expected, seMean, z, flag: Math.abs(z) > 3 };
+  }
+  function simQuantile(simHist, N, q) {
+    let cum = 0;
+    const target = q * N;
+    for (let i = 1; i < simHist.length; i++) { cum += simHist[i]; if (cum >= target) return i; }
+    return simHist.length - 1;
+  }
+
+  global.Gacha = {
+    EPS, validateRule, fiveStarProb, effectiveHard, firstFive, limitedDists,
+    summarize, pmfQuantile, mulberry32, simulate, comparePmf, compareExpectation, simQuantile
+  };
+})(window);
+</script>
+
+<script>
+/* ================= 应用层 ================= */
+'use strict';
+const G = window.Gacha;
+
+/* ---------- 内置样例（来自样例包；invalid 用例用于演示逐项报错） ---------- */
+const PRESETS = {
+  standard: { name: 'standard', base: 0.006, softStart: 74, softStep: 0.06, hard: 90, limitedRate: 0.5, guaranteeAfter: 1, carry: { pity: 0, misses: 0 }, targets: [1, 7] },
+  simple:   { name: 'simple',   base: 0.5,   softStart: 2,  softStep: 0,    hard: 2,  limitedRate: 0.5, guaranteeAfter: 1, carry: { pity: 0, misses: 0 }, targets: [1, 2] },
+  carry:    { name: 'carry',    base: 0.006, softStart: 74, softStep: 0.06, hard: 90, limitedRate: 0.5, guaranteeAfter: 1, carry: { pity: 30, misses: 1 }, targets: [1, 3] },
+  weapon:   { name: 'weapon',   base: 0.007, softStart: 63, softStep: 0.07, hard: 80, limitedRate: 0.375, guaranteeAfter: 2, carry: { pity: 0, misses: 0 }, targets: [1, 5] },
+  'invalid-prob': { name: 'bad-prob', base: 1.2, softStart: 74, softStep: 0.06, hard: 90, limitedRate: 0.5, guaranteeAfter: 1, carry: { pity: 0, misses: 0 }, targets: [1, 7] },
+  'invalid-hard': { name: 'bad-hard', base: 0.006, softStart: 74, softStep: 0.06, hard: 70, limitedRate: 0.5, guaranteeAfter: 1, carry: { pity: 0, misses: 0 }, targets: [1, 7] }
+};
+const PRESET_LABELS = {
+  standard: '标准角色池', simple: '极简手算例', carry: '带垫抽继承',
+  weapon: '武器池(大保底2)', 'invalid-prob': '非法:概率>1', 'invalid-hard': '非法:硬保底<软保底'
+};
+
+const FIELDS = [
+  { key: 'base', label: '基础概率 base', step: 0.001 },
+  { key: 'softStart', label: '软保底起点 softStart', step: 1, integer: true },
+  { key: 'softStep', label: '软保底每抽增量 softStep', step: 0.01 },
+  { key: 'hard', label: '硬保底 hard', step: 1, integer: true },
+  { key: 'limitedRate', label: '限定比例 limitedRate', step: 0.05 },
+  { key: 'guaranteeAfter', label: '连歪几次必中 guaranteeAfter', step: 1, integer: true },
+  { key: 'carry.pity', label: '继承垫抽 carry.pity', step: 1, integer: true },
+  { key: 'carry.misses', label: '继承歪次数 carry.misses', step: 1, integer: true }
+];
+
+const state = {
+  A: { rule: clone(PRESETS.standard), enabled: true, result: null, validation: null },
+  B: { rule: clone(PRESETS.weapon), enabled: false, result: null, validation: null }
+};
+let charts = [];
+let chartMode = 'pmf';           // pmf | cdf
+let chartTarget = 'first';       // first | 数字（限定目标）
+let simState = null;
+let simTimer = null;
+
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function getPath(o, p) { return p.split('.').reduce((a, k) => (a == null ? a : a[k]), o); }
+function setPath(o, p, v) {
+  const ks = p.split('.');
+  const last = ks.pop();
+  const parent = ks.reduce((a, k) => a[k], o);
+  parent[last] = v;
+}
+function fmt(x, d) {
+  if (!Number.isFinite(x)) return '—';
+  if (Number.isInteger(x) && d === undefined) return String(x);
+  return x.toFixed(d === undefined ? 6 : d);
+}
+function pct(x, d) { return (x * 100).toFixed(d === undefined ? 4 : d) + '%'; }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---------- 主题 ---------- */
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('gacha-theme'); } catch (e) {}
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('gacha-theme', next); } catch (e) {}
+    rerenderCharts();
+  });
+})();
+
+/* ---------- 规则面板 ---------- */
+function renderRulePanel(which) {
+  const host = document.getElementById('rulePanel' + which);
+  const st = state[which];
+  const colorVar = which === 'A' ? 'var(--series-a)' : 'var(--series-b)';
+  host.innerHTML = `
+    <div class="rule-head">
+      <span class="rule-dot ${which.toLowerCase()}"></span>
+      <span class="rule-title">规则 ${which}</span>
+      <label class="pill" style="cursor:pointer;">
+        <input type="checkbox" ${st.enabled ? 'checked' : ''} data-role="enable" style="vertical-align:-2px;margin-right:4px;">
+        ${st.enabled ? '参与对比' : '已停用'}
+      </label>
+      <span class="pill mono">${escapeHtml(st.rule.name || '(未命名)')}</span>
+    </div>
+    <div class="preset-row" data-role="presets">
+      ${Object.keys(PRESETS).map((k) => `<button class="btn" type="button" data-preset="${k}">${PRESET_LABELS[k]}</button>`).join('')}
+    </div>
+    <div class="form-grid" style="margin-top:12px;">
+      ${FIELDS.map((f) => `
+        <div class="field">
+          <label for="${which}-${f.key}">${f.label}</label>
+          <input id="${which}-${f.key}" data-field="${f.key}" type="number" step="${f.step}"
+                 value="${getPath(st.rule, f.key)}" ${!st.enabled ? 'disabled' : ''}>
+        </div>`).join('')}
+      <div class="field" style="grid-column: 1 / -1;">
+        <label for="${which}-targets">目标限定五星数 targets（逗号分隔，正整数）</label>
+        <input id="${which}-targets" data-field="targets" type="text" inputmode="numeric"
+               value="${st.rule.targets.join(', ')}" ${!st.enabled ? 'disabled' : ''}>
+      </div>
+      <div class="field" style="grid-column: 1 / -1;">
+        <label for="${which}-name">规则名称 name</label>
+        <input id="${which}-name" data-field="name" type="text" value="${escapeHtml(st.rule.name)}" ${!st.enabled ? 'disabled' : ''}>
+      </div>
+    </div>
+    <div class="row-actions">
+      <button class="btn" type="button" data-action="json-in">粘贴 JSON 导入</button>
+      <button class="btn" type="button" data-action="json-out">查看当前 JSON</button>
+    </div>
+    <textarea class="json hidden" data-role="jsonbox" placeholder='{"base":0.006,...}'></textarea>
+    <div data-role="validbox"></div>`;
+
+  host.querySelector('[data-role="enable"]').addEventListener('change', (e) => {
+    st.enabled = e.target.checked;
+    renderRulePanel(which);
+    recomputeAll();
+  });
+  host.querySelectorAll('[data-preset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      st.rule = clone(PRESETS[btn.dataset.preset]);
+      st.enabled = true;
+      renderRulePanel(which);
+      recomputeAll();
+    });
+  });
+  host.querySelectorAll('input[data-field]').forEach((inp) => {
+    inp.addEventListener('input', () => readForm(which));
+  });
+  host.querySelector('[data-action="json-in"]').addEventListener('click', () => {
+    const box = host.querySelector('[data-role="jsonbox"]');
+    box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) { box.value = JSON.stringify(st.rule, null, 2); box.focus(); }
+  });
+  host.querySelector('[data-action="json-out"]').addEventListener('click', () => {
+    const box = host.querySelector('[data-role="jsonbox"]');
+    box.classList.remove('hidden');
+    box.value = JSON.stringify(st.rule, null, 2);
+  });
+  host.querySelector('[data-role="jsonbox"]').addEventListener('change', (e) => {
+    try {
+      const parsed = JSON.parse(e.target.value);
+      st.rule = normalizeRule(parsed);
+      st.enabled = true;
+      renderRulePanel(which);
+      recomputeAll();
+      showToast('规则 ' + which + ' 已从 JSON 导入');
+    } catch (err) {
+      showToast('JSON 解析失败：' + err.message);
+    }
+  });
+
+  renderValidation(which);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function normalizeRule(o) {
+  // 补齐缺失的 carry/targets，避免结构错误盖过数值错误
+  if (o.carry === undefined) o.carry = { pity: 0, misses: 0 };
+  if (o.targets === undefined) o.targets = [1];
+  if (o.name === undefined) o.name = '未命名规则';
+  return o;
+}
+
+function readForm(which) {
+  const host = document.getElementById('rulePanel' + which);
+  const st = state[which];
+  host.querySelectorAll('input[data-field]').forEach((inp) => {
+    const key = inp.dataset.field;
+    inp.classList.remove('invalid');
+    if (key === 'targets') {
+      st.rule.targets = inp.value.split(/[,，\s]+/).filter(Boolean).map(Number);
+    } else if (key === 'name') {
+      st.rule.name = inp.value;
+    } else {
+      const v = inp.value === '' ? NaN : Number(inp.value);
+      setPath(st.rule, key, v);
+    }
+  });
+  renderValidation(which);
+  if (st.validation && st.validation.ok) recomputeAll();
+  else { st.result = null; renderResults(); }
+}
+
+function renderValidation(which) {
+  const host = document.getElementById('rulePanel' + which);
+  const st = state[which];
+  const v = G.validateRule(st.rule);
+  st.validation = v;
+  const box = host.querySelector('[data-role="validbox"]');
+  // 高亮非法字段
+  FIELDS.forEach((f) => {
+    const inp = host.querySelector(`input[data-field="${f.key}"]`);
+    if (inp) inp.classList.toggle('invalid', v.errors.some((e) => e.field === f.key || e.field.startsWith(f.key + '.')));
+  });
+  const tinp = host.querySelector('input[data-field="targets"]');
+  if (tinp) tinp.classList.toggle('invalid', v.errors.some((e) => e.field.startsWith('targets')));
+
+  if (v.ok) {
+    box.innerHTML = `<div class="valid-box ok">规则合法，可以核算。有效保底抽数（软保底段内提前到 1 时取实际抽数）：<b class="mono">${G.effectiveHard(st.rule)}</b></div>`;
+  } else {
+    box.innerHTML = `<div class="valid-box err"><b>规则不合法，共 ${v.errors.length} 项：</b>
+      <ul>${v.errors.map((e) => `<li><span class="field-name">${escapeHtml(e.field)}</span>：${escapeHtml(e.message)}</li>`).join('')}</ul></div>`;
+  }
+}
+
+/* ---------- 精确核算 ---------- */
+function recomputeAll() {
+  ['A', 'B'].forEach((which) => {
+    const st = state[which];
+    if (st.enabled && st.validation && st.validation.ok) {
+      const ff = G.firstFive(st.rule);
+      const ld = G.limitedDists(st.rule, [0.5, 0.9, 0.95, 0.99]);
+      st.result = { ff, ld };
+    } else {
+      st.result = null;
+    }
+  });
+  renderResults();
+  buildExportButtons();
+}
+
+function activeResults() {
+  return ['A', 'B'].filter((w) => state[w].enabled && state[w].result).map((w) => ({ which: w, ...state[w] }));
+}
+
+function renderResults() {
+  const body = document.getElementById('resultBody');
+  const rs = activeResults();
+  if (rs.length === 0) {
+    body.innerHTML = '<p class="note">没有可核算的合法规则：请修正上方报错，或勾选启用规则 A / B。</p>';
+    charts.forEach((c) => c.destroy());
+    charts = [];
+    return;
+  }
+
+  const allTargets = [...new Set(rs.flatMap((r) => r.rule.targets))].sort((a, b) => a - b);
+  if (!allTargets.includes(Number(chartTarget)) && chartTarget !== 'first') chartTarget = 'first';
+
+  body.innerHTML = `
+    <div id="kpiZone"></div>
+    <div style="margin-top:18px;">
+      <div class="chart-head">
+        <h2 style="margin:0;">分布曲线</h2>
+        <div class="seg" id="modeSeg">
+          <button data-mode="pmf" class="${chartMode === 'pmf' ? 'active' : ''}">PMF 概率质量</button>
+          <button data-mode="cdf" class="${chartMode === 'cdf' ? 'active' : ''}">CDF 累计概率</button>
+        </div>
+      </div>
+      <div class="chart-tabs" id="chartTabs"></div>
+      <div class="legend-inline" id="chartLegend"></div>
+      <div id="chartMissing" class="note hidden"></div>
+      <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+    </div>
+    <div id="tableZone" style="margin-top:18px;"></div>`;
+
+  document.getElementById('modeSeg').querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => { chartMode = b.dataset.mode; renderResults(); });
+  });
+  const tabs = document.getElementById('chartTabs');
+  const tabDefs = [{ key: 'first', label: '第一个五星出现抽数' }]
+    .concat(allTargets.map((m) => ({ key: String(m), label: `拿到 ${m} 个限定五星所需抽数` })));
+  tabs.innerHTML = tabDefs.map((t) =>
+    `<button data-tab="${t.key}" class="${String(chartTarget) === t.key ? 'active' : ''}">${t.label}</button>`).join('');
+  tabs.querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => { chartTarget = b.dataset.tab; renderResults(); });
+  });
+
+  renderKpis(rs);
+  renderChart(rs);
+  renderTables(rs);
+}
+
+function chartVisibleResults(rs) {
+  if (chartTarget === 'first') return rs;
+  const m = Number(chartTarget);
+  return rs.filter((r) => r.result.ld[m]);
+}
+
+function renderKpis(rs) {
+  const zone = document.getElementById('kpiZone');
+  zone.innerHTML = rs.map((r) => {
+    const { rule, result } = r;
+    const ff = result.ff;
+    const m1 = result.ld[rule.targets[0]];
+    const fiveStarRate = 1 / ff.expectedRemaining;          // 每抽（从下一抽起）
+    const limitedRateLong = rule.targets[0] / m1.expected;  // 含继承垫抽口径
+    const sumOk = Math.abs(ff.sum - 1) <= 1e-12;
+    return `
+    <div style="margin-bottom:14px;">
+      <div class="rule-head">
+        <span class="rule-dot ${r.which.toLowerCase()}"></span>
+        <span class="rule-title">${escapeHtml(rule.name)}</span>
+        <span class="pill mono">概率和 ${fmt(ff.sum, 14)} <span class="${sumOk ? 'sum-ok' : 'sum-bad'}">${sumOk ? '✓ =1' : '✗ 超差'}</span></span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="k-label">首个五星期望抽数（剩余口径）</div>
+          <div class="k-value">${fmt(ff.expectedRemaining, 4)}</div>
+          <div class="k-sub">含继承垫抽：${fmt(ff.expected, 4)} 抽</div></div>
+        <div class="kpi"><div class="k-label">首个五星 P50 / P90 / P99</div>
+          <div class="k-value mono">${ff.quantiles[0.5]} / ${ff.quantiles[0.9]} / ${ff.quantiles[0.99]}</div>
+          <div class="k-sub">支撑区间 第 ${ff.support[0]}–${ff.support[1]} 抽</div></div>
+        <div class="kpi"><div class="k-label">综合五星出率（每抽）</div>
+          <div class="k-value">${pct(fiveStarRate, 4)}</div>
+          <div class="k-sub">= 1 / ${fmt(ff.expectedRemaining, 4)}</div></div>
+        ${rule.targets.map((m) => `
+        <div class="kpi"><div class="k-label">${m} 个限定期望抽数</div>
+          <div class="k-value">${fmt(result.ld[m].expected, 3)}</div>
+          <div class="k-sub">P50 ${result.ld[m].quantiles[0.5]} · P90 ${result.ld[m].quantiles[0.9]} · P99 ${result.ld[m].quantiles[0.99]}</div></div>
+        <div class="kpi"><div class="k-label">${m} 个限定最坏抽数</div>
+          <div class="k-value mono">${result.ld[m].maxPulls}</div>
+          <div class="k-sub">标准差 ${fmt(result.ld[m].std, 2)}</div></div>
+        <div class="kpi"><div class="k-label">限定五星综合出率（每抽）</div>
+          <div class="k-value">${pct(m / result.ld[m].expected, 4)}</div>
+          <div class="k-sub">= ${m} / ${fmt(result.ld[m].expected, 3)}</div></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- 图表 ---------- */
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function seriesFor(r) {
+  const ff = r.result.ff;
+  let pmf, label;
+  if (chartTarget === 'first') {
+    pmf = ff.pmf; // 完整 1-based 坐标，保证双规则同横轴对齐
+    label = '首个五星';
+  } else {
+    const m = Number(chartTarget);
+    if (!r.result.ld[m]) return null; // 该规则没有这个目标
+    pmf = r.result.ld[m].pmf;
+    label = `${m} 限定`;
+  }
+  let data;
+  if (chartMode === 'cdf') {
+    let cum = 0;
+    data = [];
+    for (let i = 1; i < pmf.length; i++) { cum += pmf[i]; data.push({ x: i, y: cum }); }
+  } else {
+    data = [];
+    for (let i = 1; i < pmf.length; i++) data.push({ x: i, y: pmf[i] });
+  }
+  return {
+    label: `${r.rule.name}（规则 ${r.which}）· ${label}`,
+    data,
+    borderColor: r.which === 'A' ? cssVar('--series-a') : cssVar('--series-b'),
+    backgroundColor: (r.which === 'A' ? cssVar('--series-a') : cssVar('--series-b')) + '22',
+    borderWidth: 2,
+    pointRadius: 0,
+    pointHoverRadius: 5,
+    tension: 0.15,
+    fill: false
+  };
+}
+function renderChart(rs) {
+  charts.forEach((c) => c.destroy());
+  charts = [];
+  const ctx = document.getElementById('mainChart');
+  const grid = cssVar('--grid'), axis = cssVar('--axis'), muted = cssVar('--muted'), fg2 = cssVar('--fg-2');
+  const visible = chartVisibleResults(rs);
+  const datasets = visible.map(seriesFor).filter(Boolean);
+
+  // 图例与“未配置该目标”说明
+  const legend = document.getElementById('chartLegend');
+  if (legend) {
+    legend.innerHTML = visible.map((r) =>
+      `<span><span class="sw" style="background:${r.which === 'A' ? 'var(--series-a)' : 'var(--series-b)'}"></span>${escapeHtml(r.rule.name)}（规则 ${r.which}）</span>`).join('');
+  }
+  const missingNote = document.getElementById('chartMissing');
+  if (missingNote) {
+    const missing = rs.filter((r) => !visible.includes(r));
+    if (missing.length && chartTarget !== 'first') {
+      missingNote.classList.remove('hidden');
+      missingNote.textContent = missing.map((r) => `${r.rule.name}（规则 ${r.which}）未配置目标 ${chartTarget}，曲线不绘制`).join('；');
+    } else {
+      missingNote.classList.add('hidden');
+      missingNote.textContent = '';
+    }
+  }
+
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => `第 ${items[0].parsed.x} 抽`,
+            label: (item) => {
+              const v = item.parsed.y;
+              return `${item.dataset.label}：${chartMode === 'cdf' ? pct(v, 4) : pct(v, 6)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: '抽数（含继承垫抽）', color: fg2 },
+          ticks: { color: muted, maxTicksLimit: 10 },
+          grid: { color: grid },
+          border: { color: axis }
+        },
+        y: {
+          title: { display: true, text: chartMode === 'cdf' ? '累计概率' : '概率', color: fg2 },
+          ticks: { color: muted, callback: (v) => (chartMode === 'cdf' ? (v * 100).toFixed(0) + '%' : (v * 100).toFixed(2) + '%') },
+          grid: { color: grid },
+          border: { color: axis },
+          beginAtZero: chartMode === 'pmf'
+        }
+      }
+    }
+  });
+  charts.push(chart);
+}
+function rerenderCharts() {
+  const rs = activeResults();
+  if (rs.length && document.getElementById('mainChart')) renderChart(rs);
+}
+
+/* ---------- 数据表（默认折叠；完整逐抽数据走 CSV/JSON 导出） ---------- */
+function renderTables(rs) {
+  const zone = document.getElementById('tableZone');
+  const blocks = [];
+  // 首个五星：双规则并列（按抽数对齐）
+  const maxHard = Math.max(...rs.map((r) => r.rule.hard));
+  let rows = '';
+  const cum = Object.fromEntries(rs.map((r) => [r.which, 0]));
+  for (let n = 1; n <= maxHard; n++) {
+    const tds = rs.map((r) => {
+      const pmf = r.result.ff.pmf;
+      const p = n < pmf.length ? pmf[n] : 0;
+      cum[r.which] += p;
+      return `<td class="mono">${p === 0 && n < r.result.ff.support[0] ? '—' : fmt(p, 8)}</td>
+              <td class="mono">${fmt(cum[r.which], 8)}</td>`;
+    }).join('');
+    rows += `<tr><td class="mono">${n}</td>${tds}</tr>`;
+  }
+  blocks.push(`
+    <details>
+      <summary class="note" style="cursor:pointer;font-size:13px;color:var(--fg);">
+        第一个五星出现抽数 · 逐抽分布（${maxHard} 行，点击展开；全量数据请用 CSV/JSON 导出）
+      </summary>
+      <div class="table-scroll" style="max-height:420px;margin-top:8px;"><table>
+        <thead><tr><th>抽数 n</th>${rs.map((r) =>
+          `<th colspan="2">${escapeHtml(r.rule.name)}（${r.which}）</th>`).join('')}</tr>
+        <tr><th></th>${rs.map(() => '<th>P(n)</th><th>累计</th>').join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </details>`);
+
+  // 限定目标（只列出至少一条规则拥有的目标）
+  const targets = [...new Set(rs.flatMap((r) => r.rule.targets))].sort((a, b) => a - b);
+  for (const m of targets) {
+    const have = rs.filter((r) => r.result.ld[m]);
+    if (!have.length) continue;
+    const missing = rs.filter((r) => !r.result.ld[m]).map((r) => `${r.rule.name}（${r.which}）`);
+    const maxN = Math.max(...have.map((r) => r.result.ld[m].maxPulls));
+    let rr = '';
+    const c2 = Object.fromEntries(have.map((r) => [r.which, 0]));
+    for (let n = 1; n <= maxN; n++) {
+      const tds = have.map((r) => {
+        const pmf = r.result.ld[m].pmf;
+        const p = n < pmf.length ? pmf[n] : 0;
+        c2[r.which] += p;
+        return `<td class="mono">${p === 0 ? '—' : fmt(p, 8)}</td><td class="mono">${fmt(c2[r.which], 8)}</td>`;
+      }).join('');
+      rr += `<tr><td class="mono">${n}</td>${tds}</tr>`;
+    }
+    blocks.push(`
+      <details style="margin-top:12px;">
+        <summary class="note" style="cursor:pointer;font-size:13px;color:var(--fg);">
+          拿到 ${m} 个限定五星所需总抽数 · 逐抽分布（${maxN} 行，点击展开）
+          ${missing.length ? ` · <span style="color:var(--muted);">${missing.join('、')} 未配置该目标</span>` : ''}
+        </summary>
+        <div class="table-scroll" style="max-height:420px;margin-top:8px;"><table>
+          <thead><tr><th>总抽数 n</th>${have.map((r) =>
+            `<th colspan="2">${escapeHtml(r.rule.name)}（${r.which}）</th>`).join('')}</tr>
+          <tr><th></th>${have.map(() => '<th>P(n)</th><th>累计</th>').join('')}</tr></thead>
+          <tbody>${rr}</tbody>
+        </table></div>
+      </details>`);
+  }
+  zone.innerHTML = blocks.join('');
+}
+
+/* ---------- 固定种子模拟（分块让出主线程，带进度条；跨块共享同一 PRNG 流，保证可复现） ---------- */
+function simulateChunked(rule, N, seed, onProgress) {
+  return new Promise((resolve) => {
+    const CHUNKS = 50;
+    const per = Math.max(1, Math.floor(N / CHUNKS));
+    let done = 0;
+    const M = Math.max.apply(null, rule.targets);
+    const g = rule.guaranteeAfter;
+    const firstHist = new Float64Array(rule.hard + 1);
+    const limHists = [];
+    for (let j = 0; j <= M; j++) limHists.push(new Float64Array(rule.hard * (M * (g + 1) + 1) + 1));
+    const rand = G.mulberry32(seed); // 整条模拟共用一个随机流
+    function step() {
+      const take = Math.min(per, N - done);
+      const part = G.simulate(rule, take, seed, null, rand);
+      for (let i = 0; i < firstHist.length; i++) firstHist[i] += part.firstHist[i];
+      for (let j = 1; j <= M; j++) {
+        for (let i = 0; i < limHists[j].length; i++) limHists[j][i] += part.limHists[j][i];
+      }
+      done += take;
+      onProgress(done, N);
+      if (done < N) simTimer = setTimeout(step, 0);
+      else resolve({ N, seed, firstHist, limHists });
+    }
+    step();
+  });
+}
+
+document.getElementById('simRun').addEventListener('click', async () => {
+  clearTimeout(simTimer);
+  const which = document.getElementById('simRule').value;
+  const st = state[which];
+  const N = Math.floor(Number(document.getElementById('simN').value));
+  const seed = Math.floor(Number(document.getElementById('simSeed').value)) >>> 0;
+  const body = document.getElementById('simBody');
+  if (!st.enabled || !st.validation || !st.validation.ok) {
+    body.innerHTML = `<div class="valid-box err">规则 ${which} 当前不合法或已停用，无法模拟。请先在上方修正。</div>`;
+    return;
+  }
+  if (!Number.isFinite(N) || N < 100) { showToast('模拟次数需为不小于 100 的整数'); return; }
+
+  const btn = document.getElementById('simRun');
+  btn.disabled = true;
+  const wrap = document.getElementById('simProgressWrap');
+  const bar = document.getElementById('simProgress');
+  wrap.classList.remove('hidden');
+  bar.style.width = '0%';
+  body.innerHTML = '<p class="note">模拟运行中……</p>';
+
+  const t0 = performance.now();
+  const sim = await simulateChunked(st.rule, N, seed, (d, total) => {
+    bar.style.width = (d / total * 100).toFixed(1) + '%';
+  });
+  const ms = performance.now() - t0;
+  btn.disabled = false;
+  simState = { which, sim, result: st.result, rule: st.rule, N, seed };
+  renderSim(simState, ms);
+});
+
+function renderSim(s, ms) {
+  const { sim, result, rule, N } = s;
+  const cmpFF = G.comparePmf(result.ff.pmf, sim.firstHist, N);
+  const meanFF = G.compareExpectation(result.ff, sim.firstHist, N);
+  const blocks = [];
+
+  blocks.push(`
+    <div class="sim-summary">
+      <span>规则：<b>${escapeHtml(rule.name)}</b></span>
+      <span>N=<b class="mono">${N}</b></span>
+      <span>种子=<b class="mono">${sim.seed}</b></span>
+      <span>耗时=<b class="mono">${ms.toFixed(0)} ms</b></span>
+    </div>`);
+
+  blocks.push(simTableBlock('第一个五星出现抽数', result.ff, sim.firstHist, N, cmpFF, meanFF,
+    [0.5, 0.9, 0.99], rule.hard));
+
+  for (const m of rule.targets) {
+    const cmp = G.comparePmf(result.ld[m].pmf, sim.limHists[m], N);
+    const mean = G.compareExpectation(result.ld[m], sim.limHists[m], N);
+    blocks.push(simTableBlock(`拿到 ${m} 个限定五星所需总抽数`, result.ld[m], sim.limHists[m], N, cmp, mean,
+      [0.5, 0.9, 0.99], result.ld[m].maxPulls));
+  }
+  document.getElementById('simBody').innerHTML = blocks.join('');
+}
+
+function simTableBlock(title, exact, hist, N, cmp, mean, qs, maxN) {
+  const totalFlag = cmp.flagged + (mean.flag ? 1 : 0);
+  // 裁掉精确概率与模拟计数全为 0 的前导行（长分布的支撑区间之外没有信息量）
+  const visibleRows = cmp.rows;
+  const rows = visibleRows.map((r) => `
+    <tr class="${r.flag ? 'row-flag' : ''}">
+      <td class="mono">${r.n}</td>
+      <td class="mono">${fmt(r.exact, 8)}</td>
+      <td class="mono">${fmt(r.sim, 8)}</td>
+      <td class="mono">${r.count}</td>
+      <td class="mono">${fmt(r.se, 8)}</td>
+      <td class="mono ${r.flag ? 'flag' : ''}">${fmt(r.z, 3)}</td>
+    </tr>`).join('');
+  const firstN = visibleRows.length ? visibleRows[0].n : 1;
+  const lastN = visibleRows.length ? visibleRows[visibleRows.length - 1].n : 0;
+  const qRows = qs.map((q) => {
+    const sq = G.simQuantile(hist, N, q);
+    const eq = exact.quantiles[q];
+    return `<tr><td>P${q * 100}</td><td class="mono">${eq}</td><td class="mono">${sq}</td><td class="mono">${sq - eq >= 0 ? '+' : ''}${sq - eq}</td></tr>`;
+  }).join('');
+  return `
+    <h3 style="margin-top:14px;">${title}
+      <span class="note" style="font-weight:400;">支撑抽数 ${firstN}–${lastN}</span>
+      <span class="pill ${totalFlag ? '' : 'pill.off'}" style="color:${totalFlag ? 'var(--critical)' : 'var(--good)'}">
+        ${totalFlag === 0 ? '全部在 3 倍标准误内' : totalFlag + ' 项超 3 倍标准误（标红）'}
+      </span>
+    </h3>
+    <div class="sim-summary">
+      <span>精确期望 <b class="mono">${fmt(mean.exactMean, 4)}</b></span>
+      <span>模拟均值 <b class="mono">${fmt(mean.simMean, 4)}</b></span>
+      <span>均值标准误 <b class="mono">${fmt(mean.seMean, 4)}</b></span>
+      <span>z=<b class="mono ${mean.flag ? 'diff-neg' : ''}">${fmt(mean.z, 3)}</b> ${mean.flag ? '✗' : '✓'}</span>
+    </div>
+    <div class="table-scroll" style="max-height:360px;overflow-y:auto;"><table>
+      <thead><tr><th>抽数</th><th>精确概率</th><th>模拟频率</th><th>模拟计数</th><th>标准误 SE</th><th>z 值</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <h3 style="margin-top:10px;">分位数对比</h3>
+    <div class="table-scroll"><table>
+      <thead><tr><th>分位</th><th>精确（抽）</th><th>模拟（抽）</th><th>差值</th></tr></thead>
+      <tbody>${qRows}</tbody>
+    </table></div>`;
+}
+
+/* ---------- 导出 CSV / JSON ---------- */
+function buildExportPayload() {
+  const rs = activeResults();
+  const payload = { generatedAt: new Date().toISOString(), tool: '抽卡保底核算台', rules: [] };
+  rs.forEach((r) => {
+    const { rule, result } = r;
+    const entry = {
+      which: r.which,
+      rule,
+      effectiveHard: G.effectiveHard(rule),
+      firstFive: {
+        viewStart: result.ff.viewStart,
+        support: result.ff.support,
+        expectedRemaining: result.ff.expectedRemaining,
+        expectedTotal: result.ff.expected,
+        std: result.ff.std,
+        sum: result.ff.sum,
+        quantiles: result.ff.quantiles,
+        pmf: Array.from(result.ff.pmf).map((p, n) => ({ pulls: n, probability: p })).filter((x) => x.pulls >= result.ff.viewStart)
+      },
+      limited: rule.targets.map((m) => ({
+        target: m,
+        expected: result.ld[m].expected,
+        std: result.ld[m].std,
+        sum: result.ld[m].sum,
+        maxPulls: result.ld[m].maxPulls,
+        quantiles: result.ld[m].quantiles,
+        pmf: Array.from(result.ld[m].pmf).map((p, n) => ({ pulls: n, probability: p })).filter((x) => x.pulls >= 1 && x.probability !== 0)
+      }))
+    };
+    if (simState && simState.which === r.which) {
+      entry.simulation = {
+        N: simState.N, seed: simState.seed,
+        firstFiveFlagged: G.comparePmf(result.ff.pmf, simState.sim.firstHist, simState.N).flagged
+      };
+    }
+    payload.rules.push(entry);
+  });
+  return payload;
+}
+
+function toCsv(payload) {
+  const lines = ['section,rule,which,index,probability,cumulative,expected,std,sum,quantile,qValue'];
+  for (const e of payload.rules) {
+    const tag = `${e.which} ${e.rule.name}`.replace(/[",\n]/g, ' ');
+    let cum = 0;
+    for (const row of e.firstFive.pmf) {
+      cum += row.probability;
+      lines.push(`firstFive,"${tag}",${e.which},${row.pulls},${row.probability.toExponential(12)},${cum.toExponential(12)},,,,`);
+    }
+    for (const lm of e.limited) {
+      cum = 0;
+      for (const row of lm.pmf) {
+        cum += row.probability;
+        lines.push(`limited${lm.target},"${tag}",${e.which},${row.pulls},${row.probability.toExponential(12)},${cum.toExponential(12)},,,,`);
+      }
+      for (const [q, v] of Object.entries(lm.quantiles)) {
+        lines.push(`limited${lm.target}Quantile,"${tag}",${e.which},,,,${lm.expected.toExponential(12)},${lm.std.toExponential(12)},${lm.sum.toExponential(12)},${q},${v}`);
+      }
+    }
+    lines.push(`firstFiveQuantile,"${tag}",${e.which},,,,${e.firstFive.expectedRemaining.toExponential(12)},${e.firstFive.std.toExponential(12)},${e.firstFive.sum.toExponential(12)},0.5,${e.firstFive.quantiles[0.5]}`);
+    for (const [q, v] of Object.entries(e.firstFive.quantiles)) {
+      if (q === '0.5') continue;
+      lines.push(`firstFiveQuantile,"${tag}",${e.which},,,,,,${e.firstFive.sum.toExponential(12)},${q},${v}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function copyText(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(label + ' 已复制到剪贴板');
+  } catch (e) {
+    const ta = document.getElementById('exportText');
+    ta.value = text;
+    ta.scrollIntoView({ behavior: 'smooth' });
+    showToast('剪贴板不可用，已填入下方文本框，请手动全选复制');
+  }
+}
+
+function buildExportButtons() {
+  const bar = document.getElementById('exportBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  const mk = (text, fn, primary) => {
+    const b = document.createElement('button');
+    b.className = 'btn' + (primary ? ' primary' : '');
+    b.type = 'button';
+    b.textContent = text;
+    b.addEventListener('click', fn);
+    bar.appendChild(b);
+  };
+  mk('导出 JSON（全部启用规则）', () => {
+    const content = JSON.stringify(buildExportPayload(), null, 2);
+    document.getElementById('exportText').value = content;
+    try { download('gacha-audit.json', content, 'application/json'); showToast('JSON 已下载'); }
+    catch (e) { copyText(content, 'JSON'); }
+  }, true);
+  mk('导出 CSV（逐抽分布长表）', () => {
+    const content = toCsv(buildExportPayload());
+    document.getElementById('exportText').value = content;
+    try { download('gacha-audit.csv', content, 'text/csv;charset=utf-8'); showToast('CSV 已下载'); }
+    catch (e) { copyText(content, 'CSV'); }
+  });
+  mk('复制 JSON', () => copyText(JSON.stringify(buildExportPayload(), null, 2), 'JSON'));
+  mk('复制 CSV', () => copyText(toCsv(buildExportPayload()), 'CSV'));
+}
+
+/* ---------- 启动 ---------- */
+renderRulePanel('A');
+renderRulePanel('B');
+recomputeAll();
+</script>
+</body>
+</html>

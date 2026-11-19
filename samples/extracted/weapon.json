@@ -1,0 +1,1 @@
+{"name":"weapon","base":0.007,"softStart":63,"softStep":0.07,"hard":80,"limitedRate":0.375,"guaranteeAfter":2,"carry":{"pity":0,"misses":0},"targets":[1,5]}

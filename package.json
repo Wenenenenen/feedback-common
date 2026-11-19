@@ -1,0 +1,14 @@
+{
+  "name": "gacha-pity-auditor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "抽卡保底规则概率精确核算工具：逐抽状态转移 DP、固定种子模拟校验、双规则对比与 CSV/JSON 导出",
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "check-html": "node test/check-html.js",
+    "verify": "node test/run-tests.js && node test/check-html.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
