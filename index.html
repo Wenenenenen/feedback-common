@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小队流场寻路调试台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <h1>小队流场寻路调试台</h1>
+      <p class="sub" id="subtitle">加载地图后显示代价场、积分场、流场方向与单位轨迹</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <select id="caseSelect" aria-label="样例地图">
+      <option value="">— 选择样例地图 —</option>
+    </select>
+    <button id="btnLoadFile" class="btn">导入 JSON…</button>
+    <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    <button id="btnExportAll" class="btn">导出全部 JSON</button>
+    <button id="btnSelfCheck" class="btn">自检</button>
+    <button id="btnHelp" class="btn ghost">说明</button>
+  </div>
+</header>
+
+<div id="banner" class="banner" hidden></div>
+
+<main class="layout">
+  <section class="stage-wrap">
+    <div class="stage-toolbar">
+      <div class="seg" role="group" aria-label="单位尺寸">
+        <button class="seg-btn active" data-size="1">尺寸 1</button>
+        <button class="seg-btn" data-size="2">尺寸 2</button>
+        <button class="seg-btn" data-size="3">尺寸 3</button>
+      </div>
+      <div class="seg" role="group" aria-label="显示图层">
+        <button class="chip active" data-layer="cost">代价场</button>
+        <button class="chip active" data-layer="integration">积分值</button>
+        <button class="chip active" data-layer="arrows">方向箭头</button>
+        <button class="chip" data-layer="numbers">数值</button>
+        <button class="chip" data-layer="passable">可通行区</button>
+        <button class="chip" data-layer="affected">受影响区</button>
+        <button class="chip active" data-layer="units">单位</button>
+        <button class="chip" data-layer="goals">目标格</button>
+      </div>
+      <div class="stage-tools">
+        <button id="btnEditTerrain" class="btn ghost" aria-pressed="false">改地形</button>
+        <span class="edit-palette" id="editPalette" hidden>
+          <button class="swatch active" data-char="#" style="--sw:#3a3f4b">墙</button>
+          <button class="swatch" data-char="." style="--sw:#e9eef5">平地</button>
+          <button class="swatch" data-char="," style="--sw:#b98a4a">泥地</button>
+          <button class="swatch" data-char="G" style="--sw:#39c88a">目标</button>
+        </span>
+        <span class="zoom">
+          <button id="btnZoomOut" class="btn icon" aria-label="缩小">−</button>
+          <button id="btnZoomIn" class="btn icon" aria-label="放大">+</button>
+        </span>
+      </div>
+    </div>
+    <div class="canvas-scroll" id="canvasScroll">
+      <canvas id="mapCanvas" width="960" height="640"></canvas>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <aside class="side">
+    <section class="panel">
+      <h2>模拟</h2>
+      <div class="transport">
+        <button id="btnReset" class="btn">重置</button>
+        <button id="btnStep" class="btn primary">下一帧</button>
+        <button id="btnRun" class="btn">连续播放</button>
+        <button id="btnRunAll" class="btn">跑到结束</button>
+      </div>
+      <div class="timeline">
+        <input type="range" id="frameSlider" min="0" max="0" value="0" step="1">
+        <div class="timeline-labels">
+          <span>帧 <strong id="frameNow">0</strong> / <span id="frameMax">0</span></span>
+          <span id="simState" class="state">就绪</span>
+        </div>
+      </div>
+      <label class="speed">
+        <span>播放间隔</span>
+        <input type="range" id="speedRange" min="40" max="400" step="20" value="120">
+        <span id="speedLabel">120ms</span>
+      </label>
+      <div id="simSummary" class="summary"></div>
+      <div class="events">
+        <div class="events-head">事件日志<span id="eventCount" class="dim"></span></div>
+        <ul id="eventLog" class="event-log"></ul>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>单元格 / 单位详情</h2>
+      <div id="inspector" class="inspector empty">点击地图上的格子查看数值</div>
+    </section>
+
+    <section class="panel">
+      <h2>到达统计</h2>
+      <div id="arrivalTable" class="table-wrap"></div>
+    </section>
+
+    <section class="panel">
+      <h2>增量重算</h2>
+      <div id="recomputeInfo" class="mono small">改动地形后显示受影响区域与耗时</div>
+      <label class="check">
+        <input type="checkbox" id="verifyToggle" checked>
+        <span>改动后自动用全量重算校验一致性</span>
+      </label>
+      <div id="verifyResult" class="verify small"></div>
+      <div id="selfCheckResult" class="verify small"></div>
+    </section>
+
+    <section class="panel">
+      <h2>导出</h2>
+      <div class="export-grid">
+        <button class="btn" data-export="integration-1">积分场 尺寸1</button>
+        <button class="btn" data-export="integration-2">积分场 尺寸2</button>
+        <button class="btn" data-export="integration-3">积分场 尺寸3</button>
+        <button class="btn" data-export="trajectory">单位轨迹</button>
+        <button class="btn" data-export="map">当前地图</button>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<dialog id="helpDialog">
+  <form method="dialog" class="dialog-body">
+    <h2>怎么用</h2>
+    <ul>
+      <li><strong>尺寸切换</strong>：尺寸 1/2/3 分别按 1×1、2×2、3×3 占块计算可通行区与积分场。</li>
+      <li><strong>图层</strong>：可叠加代价场（平地 1 / 泥地 3）、积分值热力、方向箭头、数值、可通行区、受影响区、单位、目标格。尺寸 2/3 会淡色铺出锚点代表的 k×k 占块。</li>
+      <li><strong>查看数值</strong>：点击任意格子，右侧显示该格的字符、代价、三种尺寸下的可通行性与积分值。</li>
+      <li><strong>改地形</strong>：开启“改地形”后点或拖动格子切换墙/平地/泥地/目标，只重算受影响区域；“受影响区”图层会高亮重算过的锚点，右侧显示失效锚点数与耗时，并自动用全量重算核对一致性。</li>
+      <li><strong>逐帧播放</strong>：单位按 id 升序每帧最多走一格；到不了的单位、被堵死的单位会在统计里单独标出。</li>
+      <li><strong>导出</strong>：积分场按原图坐标行优先输出，不可达为 null；轨迹 JSON 含每帧位置与每个单位的到达帧，另附不可达/被堵死的单位列表。</li>
+      <li><strong>自检</strong>：顶栏“自检”会复跑参考数据对照、增量与全量一致性、模拟不变量（不穿墙、不重叠、每帧至多一格）。</li>
+      <li><strong>快捷键</strong>：← / → 逐帧，空格 播放/暂停。</li>
+    </ul>
+    <div class="dialog-actions"><button class="btn primary">知道了</button></div>
+  </form>
+</dialog>
+
+<script src="src/flow.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
