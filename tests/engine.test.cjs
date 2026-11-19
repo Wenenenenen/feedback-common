@@ -516,7 +516,6 @@ console.log('\n== 固定步驱动：不同渲染帧率结果一致');
     laps: norm.laps,
   };
   const reference = E.simulateReplay(replay);
-  const reader0 = E.createInputReader(replay.inputs);
 
   // 用 session 的实时 frame() 按不同帧率推进同一份输入
   function runAt(hz) {
@@ -555,7 +554,6 @@ console.log('\n== 固定步驱动：不同渲染帧率结果一致');
     eq(r.final, base.final, hz + 'Hz 终态一致');
   });
   eq(base.checksum, reference.checksum, '在线会话与纯重放校验和一致');
-  void reader0;
 }
 
 console.log('\n== 暂停恢复：暂停时长不进入逻辑');
@@ -623,7 +621,6 @@ console.log('\n== 从头重放：会话重开后轨迹与成绩一致');
   const norm = E.normalizeTrack(T.toExport(T.TRACKS[0])).track;
   const drive = A.driveRace(norm, {});
   const scripted = densify(drive.inputs);
-  let idx = 0;
   const prepared = E.normalizeTrack({
     name: 'r',
     params: norm.params,
@@ -649,24 +646,20 @@ console.log('\n== 从头重放：会话重开后轨迹与成绩一致');
   const replayResult = E.simulateReplay(replay, { ticks: before.ticks });
   eq(replayResult.checksum, before.checksum, '现场驱动与重放一致');
 
-  // 重开：脚本输入源重置
-  idx = 0;
+  // 重开：脚本输入源从 tick 0 重新取样
   session.restart({ nowMs: now });
   session.stepTicks(1200);
   const after = session.getResult();
   eq(after.checksum, before.checksum, '重开后同位置校验和一致');
   eq(after.final, before.final, '重开后同位置终态一致');
-  void idx;
 }
 
 console.log('\n== 记录器：只记录变化，可再次回放');
 {
   const norm = E.normalizeTrack(T.toExport(T.TRACKS[2])).track;
   const rec = R.createRecorder(norm);
-  let tick = 0;
   for (let i = 0; i < 300; i++) {
     rec.pushInput(i, { throttle: 1, steer: 0, brake: false });
-    tick = i;
   }
   eq(rec.inputCount(), 1, '连续相同输入只落一条');
   rec.pushInput(300, { throttle: 0, steer: 0, brake: true });
@@ -674,7 +667,6 @@ console.log('\n== 记录器：只记录变化，可再次回放');
   const replay = rec.toReplay(301, norm.laps);
   eq(replay.inputs[0].tick, 0, '首项 tick 0');
   eq(E.validateReplay(replay), [], '导出的回放通过校验');
-  void tick;
 }
 
 console.log('\n== 三条内置赛道都可跑完且无违规');

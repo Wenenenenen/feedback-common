@@ -725,63 +725,6 @@
     return result;
   }
 
-  function simulateTicks(track, inputAt, ticks, options) {
-    options = options || {};
-    var race = createRace(track, options);
-    var total = clamp(ticks, 0, MAX_TICKS);
-    var trace = options.includeTrace ? [{ tick: 0, state: race.getState() }] : null;
-    while (race.tick < total && !race.done) {
-      race.step(inputAt(race.tick));
-      if (trace) trace.push({ tick: race.tick, state: race.getState() });
-    }
-    var res = race.getResult();
-    res.ok = true;
-    if (trace) res.trace = trace;
-    return res;
-  }
-
-  // ---------------------------------------------------------------- 固定步长驱动
-
-  // 以“已流逝的总秒数”为准推进固定 120Hz 逻辑步：
-  //   target = floor(totalSeconds * 120 + 1e-6)
-  // 这样无论渲染帧如何切分时间，同一时刻的 tick 数一致；
-  // 1e-6 只吸收秒数累加的浮点误差（约 8 纳秒）。
-  function createDriver(race, opts) {
-    opts = opts || {};
-    var total = 0;
-    var maxChunk = opts.maxChunkSeconds != null ? opts.maxChunkSeconds : 0.5;
-    var maxSteps = opts.maxStepsPerAdvance != null ? opts.maxStepsPerAdvance : 600;
-    var driver = {
-      race: race,
-      advance: function (seconds) {
-        if (!(seconds > 0)) return 0;
-        if (seconds > maxChunk) seconds = maxChunk;
-        if (race.done) return 0;
-        total += seconds;
-        var target = Math.floor(total * TICK_RATE + 1e-6);
-        var n = 0;
-        while (race.tick < target && n < maxSteps && !race.done) {
-          race.step(opts.inputAt ? opts.inputAt(race.tick) : opts.input);
-          n += 1;
-        }
-        return n;
-      },
-      reset: function () {
-        total = 0;
-      },
-      get elapsed() {
-        return total;
-      },
-      get alpha() {
-        return clamp(total * TICK_RATE - race.tick, 0, 1);
-      },
-      targetTick: function () {
-        return Math.floor(total * TICK_RATE + 1e-6);
-      },
-    };
-    return driver;
-  }
-
   // ---------------------------------------------------------------- 样例核对
 
   // segment-cases：只验证判门内核。
@@ -912,8 +855,6 @@
     createRace: createRace,
     createInputReader: createInputReader,
     simulateReplay: simulateReplay,
-    simulateTicks: simulateTicks,
-    createDriver: createDriver,
     runSegmentCases: runSegmentCases,
     runStraightReference: runStraightReference,
     fnv1a: fnv1a,

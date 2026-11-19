@@ -383,12 +383,7 @@
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
 
-        // 端点短桩
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(a.x, a.y);
-        ctx.stroke();
+        // 端点桩
         drawGatePost(a, color);
         drawGatePost(b, color);
 
