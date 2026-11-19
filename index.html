@@ -1,0 +1,423 @@
+<title>扫掠接触调试台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* 布局：左画布右三栏面板，窄屏堆叠为单列 */
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --canvas-bg: #0f1419;
+    --fg: #1c2430;
+    --muted: #66717f;
+    --line: #d9dee5;
+    --accent: #2563d6;
+    --accent-soft: #e3ecfb;
+    --body-fill: #2f7de1;
+    --body-stroke: #cfe0fa;
+    --grid: #1d2733;
+    --swept: #5b6b7e;
+    --trail: #7d8da1;
+    --contact: #e8a13a;
+    --sensor: #9b59d0;
+    --warn: #d9822b;
+    --good: #1f9d63;
+    --bad: #d64545;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c;
+      --panel: #1a2029;
+      --canvas-bg: #0b0f14;
+      --fg: #e4e9f0;
+      --muted: #93a0b0;
+      --line: #2c3542;
+      --accent: #6ea2ff;
+      --accent-soft: #1e2c44;
+      --body-fill: #2f7de1;
+      --body-stroke: #8ab4f0;
+      --grid: #1b2430;
+      --swept: #6b7c90;
+      --trail: #8494a8;
+      --contact: #f0b454;
+      --sensor: #c08ae8;
+      --warn: #e8a24f;
+      --good: #4cc58b;
+      --bad: #f07171;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161c; --panel: #1a2029; --canvas-bg: #0b0f14;
+    --fg: #e4e9f0; --muted: #93a0b0; --line: #2c3542;
+    --accent: #6ea2ff; --accent-soft: #1e2c44; --body-fill: #2f7de1;
+    --body-stroke: #8ab4f0; --grid: #1b2430; --swept: #6b7c90;
+    --trail: #8494a8; --contact: #f0b454; --sensor: #c08ae8;
+    --warn: #e8a24f; --good: #4cc58b; --bad: #f07171;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 14px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { color: var(--bad); }
+  input, select, textarea {
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 8px; min-width: 0;
+  }
+  textarea { font-family: var(--mono); font-size: 12px; }
+  label { color: var(--muted); font-size: 12px; }
+  h3 { margin: 0 0 8px; font-size: 14px; }
+  h4 { margin: 12px 0 6px; font-size: 12px; color: var(--muted);
+       text-transform: uppercase; letter-spacing: .06em; }
+
+  .app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 12px;
+    padding-block: 12px;
+    height: 100%;
+  }
+  header.topbar {
+    grid-column: 1 / -1;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  .brand { font-weight: 700; font-size: 16px; margin-right: 8px; }
+  .topbar .spacer { flex: 1; }
+  .topbar select { max-width: 200px; }
+
+  .timeline {
+    grid-column: 1 / 2;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 14px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  .timeline input[type="range"] { flex: 1; min-width: 140px; }
+  .timeline input[type="number"] { width: 110px; font-family: var(--mono); }
+  .timeline .dt { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+
+  .canvas-wrap {
+    grid-column: 1 / 2;
+    position: relative;
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+    min-height: 380px; background: var(--canvas-bg);
+  }
+  #sceneCanvas { width: 100%; height: 100%; display: block; cursor: grab; }
+  #sceneCanvas:active { cursor: grabbing; }
+  .canvas-hint {
+    position: absolute; left: 10px; bottom: 10px;
+    background: rgba(10,14,20,.72); color: #cfd8e3;
+    font-size: 11px; padding: 5px 9px; border-radius: 6px;
+    font-family: var(--mono); pointer-events: none;
+  }
+  .canvas-toggles {
+    position: absolute; right: 10px; top: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+    background: rgba(10,14,20,.72); padding: 8px; border-radius: 8px;
+  }
+  .canvas-toggles label { color: #cfd8e3; display: flex; gap: 6px; align-items: center; }
+
+  .side {
+    grid-column: 2 / 3;
+    grid-row: 2 / 4;
+    display: flex; flex-direction: column; gap: 12px;
+    min-height: 0; overflow-y: auto;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px;
+  }
+  .card.scroll { overflow-y: auto; }
+  .status { border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; }
+  .status.ok { background: var(--accent-soft); }
+  .status.error { background: rgba(214,69,69,.12); color: var(--bad); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+  b.good, b.bad { font-family: var(--mono); }
+
+  .pill {
+    font-size: 11px; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid var(--line); white-space: nowrap;
+  }
+  .sensor-pill { color: var(--sensor); border-color: var(--sensor); }
+  .overlap-pill { color: var(--warn); border-color: var(--warn); }
+  .now-pill { color: #fff; background: var(--contact); border-color: var(--contact); }
+  .enter-pill { color: var(--accent); border-color: var(--accent); }
+  .exit-pill { color: var(--warn); border-color: var(--warn); }
+
+  .contact-row {
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 8px; cursor: pointer;
+  }
+  .contact-row:hover { border-color: var(--accent); }
+  .contact-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .contact-row.active { box-shadow: inset 3px 0 0 var(--contact); }
+  .pair-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .pair-name { font-family: var(--mono); font-weight: 600; }
+  .pair-times { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .empty { color: var(--muted); font-size: 12px; padding: 8px 2px; }
+
+  .axes-head .kv {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-family: var(--mono); font-size: 12px; padding: 2px 0;
+  }
+  .kv span { color: var(--muted); }
+  .axis-row {
+    border-top: 1px solid var(--line); padding: 8px 0;
+  }
+  .axis-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 5px; }
+  .axis-name { font-family: var(--mono); font-weight: 600; font-size: 12px; }
+  .axis-u { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .axis-nums { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .proj-bar.enter .track { outline: 1px solid var(--accent); }
+  .proj-bar.exit .track { outline: 1px solid var(--warn); }
+  .track {
+    position: relative; height: 26px; background: var(--bg);
+    border-radius: 6px; margin-bottom: 3px;
+  }
+  .seg {
+    position: absolute; top: 4px; height: 18px; border-radius: 4px;
+    opacity: .85;
+  }
+  .seg-a { background: var(--accent); }
+  .seg-b { background: var(--contact); top: 4px; height: 9px !important; }
+  .proj-labels {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+  }
+
+  .compare-summary {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  .cmp-item {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 9px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .cmp-item span { font-size: 11px; color: var(--muted); }
+  .cmp-item b { font-family: var(--mono); font-size: 16px; }
+  .cmp-row {
+    font-family: var(--mono); font-size: 12px; padding: 6px 8px;
+    border: 1px solid var(--line); border-radius: 7px; margin-bottom: 5px;
+    cursor: pointer; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .cmp-row:hover { border-color: var(--accent); }
+  .cmp-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .cmp-row.warn-row { border-color: var(--warn); }
+  .cmp-row.bad-row { border-color: var(--bad); }
+  .cmp-row.good-row { border-color: var(--good); color: var(--good); cursor: default; }
+  .tag { margin-left: auto; font-size: 10px; color: var(--muted); }
+  .tag.good { color: var(--good); } .tag.bad { color: var(--bad); }
+  details.all-pairs summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 6px 0; }
+
+  .body-row {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; margin-bottom: 6px;
+  }
+  .body-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .body-id { font-family: var(--mono); font-weight: 600; }
+  .body-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .body-actions { margin-left: auto; display: flex; gap: 6px; }
+  .body-actions button { padding: 3px 9px; font-size: 12px; }
+
+  #editorPanel {
+    border: 1px solid var(--accent);
+  }
+  #editorForm .grid2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  #editorForm .grid2 > .field { min-width: 0; }
+  #editorForm .field { display: flex; flex-direction: column; gap: 3px; }
+  #editorForm textarea { width: 100%; min-height: 110px; resize: vertical; }
+  #editorForm .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  #exportBuffer {
+    width: 100%; min-height: 90px; margin-top: 8px;
+    font-family: var(--mono); font-size: 11px;
+  }
+  .flash {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    padding: 9px 18px; border-radius: 8px; z-index: 50;
+    font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  }
+  .flash.ok { background: var(--good); color: #fff; }
+  .flash.error { background: var(--bad); color: #fff; }
+  .file-label {
+    border: 1px dashed var(--line); border-radius: 7px; padding: 6px 10px;
+    cursor: pointer; font-size: 12px; display: inline-flex; align-items: center;
+  }
+  .file-label:hover { border-color: var(--accent); color: var(--accent); }
+  .file-label input { display: none; }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+    .timeline, .canvas-wrap { grid-column: 1 / -1; }
+    .side { grid-column: 1 / -1; grid-row: auto; overflow: visible; }
+    .canvas-wrap { min-height: 300px; }
+    #editorForm .grid2 { grid-template-columns: 1fr; }
+    .compare-summary { grid-template-columns: 1fr; }
+    .topbar { gap: 8px; }
+    .topbar select { max-width: 100%; }
+  }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <span class="brand">扫掠接触调试台</span>
+    <select id="sceneSelect" aria-label="选择示例场景"></select>
+    <span class="spacer"></span>
+    <label class="file-label">导入场景<input type="file" id="fileScene" accept=".json,application/json"></label>
+    <label class="file-label">导入结果<input type="file" id="fileResult" accept=".json,application/json"></label>
+    <button id="btnExportScene">导出场景</button>
+    <button id="btnExportResult">导出结果</button>
+    <button id="btnTheme" title="切换明暗主题">◐</button>
+  </header>
+
+  <div class="timeline">
+    <button id="btnPrev" title="逐帧后退">⏮</button>
+    <button id="btnPlay" class="primary">播放</button>
+    <button id="btnNext" title="逐帧前进">⏭</button>
+    <input type="range" id="timeSlider" min="0" max="1" step="0.001" value="0" aria-label="帧内时间">
+    <label>帧内 t
+      <input type="number" id="timeInput" min="0" max="1" step="0.001" value="0">
+    </label>
+    <span class="dt" id="dtLabel">dt = 1 s</span>
+    <label>速度
+      <select id="speedSelect">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <button id="btnFit" title="适配视图">适配</button>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="sceneCanvas"></canvas>
+    <div class="canvas-toggles">
+      <label><input type="checkbox" id="chkSwept" checked>扫掠 AABB</label>
+      <label><input type="checkbox" id="chkTrails" checked>运动轨迹</label>
+    </div>
+    <div class="canvas-hint">拖拽平移 · 滚轮缩放 · 点选物体</div>
+  </div>
+
+  <aside class="side">
+    <div class="card">
+      <div class="status" id="statusBar"></div>
+    </div>
+
+    <div class="card scroll" style="max-height: 220px;">
+      <h3>接触对（连续 SAT）</h3>
+      <div id="contactList"></div>
+    </div>
+
+    <div class="card" id="axesCard">
+      <div id="axesPanel"></div>
+    </div>
+
+    <div class="card">
+      <h3>全量两两检测对照</h3>
+      <div id="comparePanel"></div>
+    </div>
+
+    <div class="card">
+      <h3>物体</h3>
+      <button id="btnAddBody" style="margin-bottom:8px;">+ 新建物体</button>
+      <div id="bodyList"></div>
+    </div>
+
+    <div class="card" id="editorPanel" hidden>
+      <h3>编辑物体 <button data-action="closeEditor" style="float:right;padding:2px 8px;">×</button></h3>
+      <form id="editorForm">
+        <input type="hidden" id="editorBodyId">
+        <div class="grid2">
+          <div class="field"><label>id</label><input id="edId" required></div>
+          <div class="field"><label>layer (0-7)</label><input id="edLayer" type="number" min="0" max="7" required></div>
+          <div class="field"><label>position x</label><input id="edPosX" type="number" step="any" required></div>
+          <div class="field"><label>position y</label><input id="edPosY" type="number" step="any" required></div>
+          <div class="field"><label>velocity x</label><input id="edVelX" type="number" step="any" required></div>
+          <div class="field"><label>velocity y</label><input id="edVelY" type="number" step="any" required></div>
+          <div class="field"><label>mask (0-255)</label><input id="edMask" type="number" min="0" max="255" required></div>
+          <div class="field"><label>sensor</label><input id="edSensor" type="checkbox" style="width:auto;align-self:center;"></div>
+        </div>
+        <div class="field" style="margin-top:8px;">
+          <label>顶点（每行 x,y，3-8 个，严格凸、逆时针、无重复）</label>
+          <textarea id="edVerts" rows="5" required></textarea>
+        </div>
+        <div class="row">
+          <button type="submit" class="primary">应用修改</button>
+          <button type="button" id="btnCopyExport">复制导出文本</button>
+        </div>
+      </form>
+    </div>
+
+    <textarea id="exportBuffer" hidden></textarea>
+  </aside>
+</div>
+
+<div class="flash" id="flash" hidden></div>
+
+<script src="js/engine.js"></script>
+<script src="js/broadphase.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/app.js"></script>
+<script src="js/sceneview.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  // 场景下拉
+  var sel = document.getElementById('sceneSelect');
+  SCL.BUILTIN_SCENES.forEach(function (s, i) {
+    var o = document.createElement('option');
+    o.value = i; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+
+  var app = new SCL.App();
+  var canvas = document.getElementById('sceneCanvas');
+  var view = new SCL.SceneView(canvas, app);
+  var ui = new SCL.UI(app, view);
+
+  // 主题切换
+  document.getElementById('btnTheme').addEventListener('click', function () {
+    var root = document.documentElement;
+    var cur = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  });
+
+  // 复制导出文本兜底
+  document.getElementById('btnCopyExport').addEventListener('click', function () {
+    var ta = document.getElementById('exportBuffer');
+    if (ta.hidden) { ta.value = app.exportScene(); ta.hidden = false; }
+    ta.select();
+    try { navigator.clipboard.writeText(ta.value); ui.flash('已复制到剪贴板', false); }
+    catch (e) { document.execCommand('copy'); ui.flash('已选中文本，可手动复制', false); }
+  });
+
+  // 播放循环
+  function loop(now) {
+    var wasPlaying = app.playing;
+    app.tick(now);
+    if (wasPlaying) ui.render();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // 尺寸变化重绘
+  new ResizeObserver(function () { view.draw(); }).observe(canvas);
+  window.addEventListener('resize', function () { view.draw(); });
+</script>

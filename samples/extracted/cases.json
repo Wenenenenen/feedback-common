@@ -1,0 +1,470 @@
+[
+  {
+    "name": "穿过薄墙",
+    "dt": 1,
+    "bodies": [
+      {
+        "id": "a",
+        "position": [
+          -5,
+          0
+        ],
+        "velocity": [
+          10,
+          0
+        ],
+        "vertices": [
+          [
+            -0.5,
+            -0.5
+          ],
+          [
+            0.5,
+            -0.5
+          ],
+          [
+            0.5,
+            0.5
+          ],
+          [
+            -0.5,
+            0.5
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      },
+      {
+        "id": "b",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -0.5,
+            -2
+          ],
+          [
+            0.5,
+            -2
+          ],
+          [
+            0.5,
+            2
+          ],
+          [
+            -0.5,
+            2
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      }
+    ],
+    "expected": [
+      {
+        "a": "a",
+        "b": "b",
+        "tEnter": 0.4,
+        "tExit": 0.6,
+        "startOverlap": false,
+        "normal": [
+          -1,
+          0
+        ],
+        "sensor": false
+      }
+    ]
+  },
+  {
+    "name": "静止初始重叠",
+    "dt": 1,
+    "bodies": [
+      {
+        "id": "a",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      },
+      {
+        "id": "b",
+        "position": [
+          1,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      }
+    ],
+    "expected": [
+      {
+        "a": "a",
+        "b": "b",
+        "tEnter": 0,
+        "tExit": 1,
+        "startOverlap": true,
+        "normal": [
+          -1,
+          0
+        ],
+        "sensor": false
+      }
+    ]
+  },
+  {
+    "name": "末端相切",
+    "dt": 1,
+    "bodies": [
+      {
+        "id": "a",
+        "position": [
+          -4,
+          0
+        ],
+        "velocity": [
+          2,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      },
+      {
+        "id": "b",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      }
+    ],
+    "expected": [
+      {
+        "a": "a",
+        "b": "b",
+        "tEnter": 1,
+        "tExit": 1,
+        "startOverlap": false,
+        "normal": [
+          -1,
+          0
+        ],
+        "sensor": false
+      }
+    ]
+  },
+  {
+    "name": "等速分离",
+    "dt": 1,
+    "bodies": [
+      {
+        "id": "a",
+        "position": [
+          -4,
+          0
+        ],
+        "velocity": [
+          2,
+          1
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      },
+      {
+        "id": "b",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          2,
+          1
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      }
+    ],
+    "expected": []
+  },
+  {
+    "name": "单向掩码不碰撞",
+    "dt": 1,
+    "bodies": [
+      {
+        "id": "a",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 1,
+        "mask": 1,
+        "sensor": false
+      },
+      {
+        "id": "b",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 1,
+        "sensor": false
+      }
+    ],
+    "expected": []
+  },
+  {
+    "name": "传感器擦边",
+    "dt": 1,
+    "bodies": [
+      {
+        "id": "a",
+        "position": [
+          -4,
+          2
+        ],
+        "velocity": [
+          8,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": true
+      },
+      {
+        "id": "b",
+        "position": [
+          0,
+          0
+        ],
+        "velocity": [
+          0,
+          0
+        ],
+        "vertices": [
+          [
+            -1,
+            -1
+          ],
+          [
+            1,
+            -1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            -1,
+            1
+          ]
+        ],
+        "layer": 0,
+        "mask": 255,
+        "sensor": false
+      }
+    ],
+    "expected_times": [
+      0.25,
+      0.75
+    ]
+  }
+]
