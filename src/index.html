@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>战斗状态演算台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* ---- 设计令牌：工程演算台，深色为底，语义色独立于强调色 ---- */
+:root{
+  --bg:#0e141c; --bg2:#141c27; --panel:#18222f; --panel2:#1e2a39; --line:#2a3849;
+  --fg:#e3eaf2; --fg2:#9fb0c2; --fg3:#65778c;
+  --accent:#4cc4e8; --accent-dim:#1d3d4a;
+  --dmg:#ff6b6b; --heal:#54d18a; --shield:#5aa0ff; --dot:#e8a34c;
+  --clean:#c792ea; --dead:#8a94a3; --warn:#ffd166;
+  --radius:10px; --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Inter',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eef2f6; --bg2:#e4eaf1; --panel:#ffffff; --panel2:#f4f7fa; --line:#d2dce6;
+    --fg:#16222e; --fg2:#4a5b6d; --fg3:#7c8ca0;
+    --accent:#0e7fa3; --accent-dim:#d4eef6;
+    --dmg:#d63b3b; --heal:#1f9d57; --shield:#2f6fd0; --dot:#c0741f;
+    --clean:#8a4fc0; --dead:#7c8ca0; --warn:#9a6b00;
+    color-scheme:light;
+  }
+}
+:root[data-theme="dark"]{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans);
+  font-size:14px; line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+[hidden]{display:none!important}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
+button,input,select,textarea{font-family:inherit;font-size:13px;color:var(--fg)}
+button{
+  background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+  padding:7px 12px; cursor:pointer; transition:border-color .15s,background .15s;
+}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#06121a;font-weight:600}
+button.ghost{background:transparent}
+button:disabled{opacity:.4;cursor:not-allowed}
+input,select,textarea{
+  background:var(--bg2); border:1px solid var(--line); border-radius:8px;
+  padding:7px 9px; width:100%; min-width:0;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+label{font-size:12px;color:var(--fg2);display:block;margin-bottom:3px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1480px;margin:0 auto;padding-block:14px 40px;display:flex;flex-direction:column;gap:14px}
+
+/* ---- 顶栏 ---- */
+header.top{
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:var(--radius);
+  padding:10px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+header.top h1{font-size:16px;letter-spacing:.2px;white-space:nowrap}
+header.top .sub{color:var(--fg3);font-size:12px}
+.spacer{flex:1}
+.pill{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--fg2);white-space:nowrap}
+.pill b{color:var(--accent);font-weight:600}
+
+/* ---- 面板 ---- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;min-width:0}
+.panel>h2{font-size:13px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel2);display:flex;align-items:center;gap:8px}
+.panel>h2 .hint{font-weight:400;color:var(--fg3);font-size:11px}
+.panel .body{padding:12px 14px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+
+/* ---- 传输条 ---- */
+.transport{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.transport .clock{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--accent);min-width:120px}
+.transport .clock small{font-size:12px;color:var(--fg3);font-weight:400}
+.tbtn{width:38px;height:38px;padding:0;display:grid;place-items:center;font-size:15px}
+.tbtn.play{background:var(--accent);border-color:var(--accent);color:#06121a}
+.jumprow{display:flex;align:center;gap:6px;flex-wrap:wrap}
+.jumprow input{width:110px;font-family:var(--mono)}
+.speedsel{width:auto}
+.stats{display:flex;gap:14px;flex-wrap:wrap;margin-left:auto}
+.stat{text-align:right}
+.stat .v{font-family:var(--mono);font-size:16px;font-weight:600}
+.stat .k{font-size:11px;color:var(--fg3)}
+
+/* ---- 时间轴 ---- */
+.timeline{position:relative;height:54px;margin-top:12px;user-select:none}
+.track{position:absolute;left:0;right:0;top:18px;height:20px;background:var(--bg2);border:1px solid var(--line);border-radius:6px;overflow:hidden;cursor:pointer}
+.tickmark{position:absolute;top:0;width:2px;height:100%;opacity:.85}
+.playhead{position:absolute;top:8px;width:2px;height:40px;background:var(--accent);z-index:3;box-shadow:0 0 8px var(--accent)}
+.playhead::before{content:"";position:absolute;left:-5px;top:-5px;width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.tlabels{position:absolute;left:0;right:0;top:42px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--fg3)}
+
+/* ---- 角色 ---- */
+.actor{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;background:var(--panel2)}
+.actor.dead{opacity:.55}
+.actor .row1{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.actor .name{font-weight:600;font-family:var(--mono)}
+.tag{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--fg2)}
+.tag.dead{color:var(--dead);border-color:var(--dead)}
+.hpbar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;display:flex}
+.hpbar .hp{background:var(--heal);height:100%}
+.hpbar .sh{background:var(--shield);height:100%}
+.hptxt{font-family:var(--mono);font-size:11px;color:var(--fg2);margin-top:3px}
+.eff-chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;
+  border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin:4px 4px 0 0;background:var(--bg2)}
+.eff-chip.dot{border-color:var(--dot)} .eff-chip.shield{border-color:var(--shield)}
+.eff-chip b{color:var(--accent)}
+
+/* ---- 日志表 ---- */
+.logfilters{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0}
+.chipf{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;color:var(--fg2)}
+.chipf.on{color:var(--fg);border-color:var(--accent);background:var(--accent-dim)}
+.tablewrap{overflow:auto;max-height:520px;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+thead th{position:sticky;top:0;background:var(--panel2);text-align:left;padding:7px 10px;color:var(--fg2);
+  font-weight:500;border-bottom:1px solid var(--line);white-space:nowrap;z-index:2}
+tbody td{padding:6px 10px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel2)}
+tbody tr.sel{background:var(--accent-dim)}
+td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.badge{font-size:10.5px;padding:1px 7px;border-radius:999px;font-weight:600;white-space:nowrap}
+.b-damage{background:color-mix(in srgb,var(--dmg) 18%,transparent);color:var(--dmg)}
+.b-heal{background:color-mix(in srgb,var(--heal) 18%,transparent);color:var(--heal)}
+.b-apply{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.b-cleanup{background:color-mix(in srgb,var(--clean) 18%,transparent);color:var(--clean)}
+.b-cleanseself{background:color-mix(in srgb,var(--clean) 18%,transparent);color:var(--clean)}
+.b-death{background:color-mix(in srgb,var(--dead) 25%,transparent);color:var(--dead)}
+.b-ignored{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.b-rejected{background:color-mix(in srgb,var(--dmg) 22%,transparent);color:var(--dmg)}
+.abs{font-family:var(--mono);font-size:11.5px;color:var(--shield)}
+.detail{background:var(--bg2);font-family:var(--mono);font-size:11.5px;color:var(--fg2);
+  padding:8px 12px;white-space:pre-wrap;word-break:break-word}
+.virtual-note{padding:8px 14px;color:var(--fg3);font-size:11.5px;font-family:var(--mono)}
+
+/* ---- 编辑器 ---- */
+.edgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media (max-width:980px){.edgrid{grid-template-columns:1fr}}
+.minitable{width:100%;font-size:12px}
+.minitable input,.minitable select{padding:4px 6px;font-size:12px}
+.minitable td{padding:4px 6px}
+.minitable th{font-size:11px;color:var(--fg3);text-align:left;font-weight:500;white-space:nowrap}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.errbox{background:color-mix(in srgb,var(--dmg) 12%,transparent);border:1px solid var(--dmg);
+  border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--dmg);white-space:pre-wrap;max-height:200px;overflow:auto}
+.okbox{border:1px solid var(--heal);color:var(--heal);border-radius:8px;padding:8px 12px;font-size:12px;font-family:var(--mono)}
+
+/* ---- 弹窗 ---- */
+.modal-back{position:fixed;inset:0;background:rgba(4,9,14,.72);z-index:50;display:grid;place-items:center;padding:16px}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(820px,100%);max-height:88vh;display:flex;flex-direction:column}
+.modal h2{padding:14px 18px;border-bottom:1px solid var(--line);font-size:14px}
+.modal .mbody{padding:14px 18px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.modal textarea{min-height:340px;font-family:var(--mono);font-size:12px;resize:vertical}
+.modal .mfoot{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel2);
+  border:1px solid var(--accent);color:var(--fg);padding:10px 18px;border-radius:8px;z-index:60;font-size:13px;
+  box-shadow:0 8px 30px rgba(0,0,0,.4);max-width:90vw}
+.toast.err{border-color:var(--dmg)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--fg2);padding:0 14px 10px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+.del{color:var(--dmg);padding:2px 7px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>战斗状态演算台</h1>
+      <div class="sub">整数毫秒事件调度 · 独立叠层/刷新替换 · 护盾分摊 · 净化与死亡撤任务</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill" id="pill-active">活动效果 <b>0</b>/256</span>
+    <span class="pill" id="pill-frames">帧 <b>0</b></span>
+    <button id="btn-samples">载入样例</button>
+    <button id="btn-import">导入 JSON</button>
+    <button id="btn-export" class="primary">导出结算包</button>
+    <button id="btn-theme" class="ghost" title="切换深浅色">◐</button>
+  </header>
+
+  <!-- 传输与时间轴 -->
+  <section class="panel">
+    <h2>回放控制 <span class="hint">时钟只由事件驱动，无每帧轮询；同刻顺序：外部事件(seq) → 跳伤 → 到期</span></h2>
+    <div class="body">
+      <div class="transport">
+        <button class="tbtn" id="btn-first" title="回到起点">⏮</button>
+        <button class="tbtn" id="btn-prev" title="上一帧">◀</button>
+        <button class="tbtn play" id="btn-play" title="播放/暂停">▶</button>
+        <button class="tbtn" id="btn-next" title="下一帧">▶</button>
+        <button class="tbtn" id="btn-last" title="跳到结尾">⏭</button>
+        <div class="clock"><span id="clock">0</span><small> ms</small></div>
+        <div class="jumprow">
+          <label style="margin:0">跳到毫秒</label>
+          <input id="jump-ms" type="number" min="0" step="1" class="mono" placeholder="ms">
+          <button id="btn-jump">跳转</button>
+          <select id="speed" class="speedsel" title="播放速度">
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+            <option value="8">8×</option>
+          </select>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="v" id="st-logs">0</div><div class="k">日志条目</div></div>
+          <div class="stat"><div class="v" id="st-dmg">0</div><div class="k">伤害笔数</div></div>
+          <div class="stat"><div class="v" id="st-reject">0</div><div class="k">拒绝/忽略</div></div>
+        </div>
+      </div>
+      <div class="timeline" id="timeline">
+        <div class="track" id="track"></div>
+        <div class="playhead" id="playhead" style="left:0"></div>
+        <div class="tlabels"><span>0</span><span id="tl-max">0 ms</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <!-- 左：结算日志 -->
+    <section class="panel">
+      <h2>结算日志 <span class="hint">点击行查看护盾分摊、生命变化与实例来源</span></h2>
+      <div class="logfilters" id="logfilters"></div>
+      <div class="legend">
+        <span><i style="background:var(--dmg)"></i>伤害</span>
+        <span><i style="background:var(--heal)"></i>治疗</span>
+        <span><i style="background:var(--shield)"></i>护盾</span>
+        <span><i style="background:var(--dot)"></i>跳伤</span>
+        <span><i style="background:var(--clean)"></i>净化/清理</span>
+        <span><i style="background:var(--warn)"></i>忽略/拒绝</span>
+      </div>
+      <div class="tablewrap" id="logwrap">
+        <table>
+          <thead><tr>
+            <th class="num">时间</th><th>类型</th><th>目标</th><th>来源</th>
+            <th class="num">金额</th><th>护盾分摊</th><th class="num">生命变化</th><th>清理原因</th>
+          </tr></thead>
+          <tbody id="logbody"></tbody>
+        </table>
+      </div>
+      <div class="virtual-note" id="log-note"></div>
+    </section>
+
+    <!-- 右：角色与活动效果 -->
+    <section class="panel">
+      <h2>角色状态 <span class="hint" id="actor-hint">当前时刻快照</span></h2>
+      <div class="body" id="actors"></div>
+    </section>
+  </div>
+
+  <!-- 编辑器 -->
+  <div class="edgrid">
+    <section class="panel">
+      <h2>规则与角色 <span class="hint">改动后自动重新演算</span></h2>
+      <div class="body" style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label>效果定义（dot / shield）</label>
+          <div class="tablewrap" style="max-height:260px">
+            <table class="minitable" id="def-table"><thead><tr>
+              <th>id</th><th>kind</th><th>stack</th><th>cap</th><th>duration</th><th>period</th><th>amount</th><th></th>
+            </tr></thead><tbody></tbody></table>
+          </div>
+          <button id="btn-add-def" style="margin-top:6px">+ 新增定义</button>
+        </div>
+        <div>
+          <label>角色（≤64）</label>
+          <div class="tablewrap" style="max-height:220px">
+            <table class="minitable" id="actor-table"><thead><tr>
+              <th>id</th><th>maxHp</th><th>hp</th><th></th>
+            </tr></thead><tbody></tbody></table>
+          </div>
+          <button id="btn-add-actor" style="margin-top:6px">+ 新增角色</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>外部事件 <span class="hint">time 0–60000，seq 唯一；演算前自动按 (time, seq) 排序</span></h2>
+      <div class="body">
+        <div class="formgrid" id="event-form">
+          <div><label>op</label><select id="ev-op">
+            <option>apply</option><option>damage</option><option>heal</option><option>cleanse</option>
+          </select></div>
+          <div><label>time</label><input id="ev-time" type="number" min="0" value="0"></div>
+          <div><label>target</label><select id="ev-target"></select></div>
+          <div><label>effect (apply/cleanse)</label><select id="ev-effect"></select></div>
+          <div><label>amount (damage/heal)</label><input id="ev-amount" type="number" min="1" placeholder="正整数"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button id="btn-add-event" class="primary">追加事件</button>
+          <span class="pill" id="ev-count">0 / 5000</span>
+        </div>
+        <div class="tablewrap" style="max-height:280px;margin-top:10px">
+          <table class="minitable" id="event-table"><thead><tr>
+            <th>id</th><th>seq</th><th>time</th><th>op</th><th>target</th><th>effect</th><th>amount</th><th></th>
+          </tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" id="validation-panel" hidden>
+    <h2>校验结果</h2>
+    <div class="body"><div class="errbox" id="validation-errors"></div></div>
+  </section>
+</div>
+
+<!-- 通用弹窗 -->
+<div class="modal-back" id="modal-back" hidden>
+  <div class="modal">
+    <h2 id="modal-title">标题</h2>
+    <div class="mbody">
+      <div id="modal-msg" class="okbox" hidden></div>
+      <textarea id="modal-text" class="mono" spellcheck="false"></textarea>
+    </div>
+    <div class="mfoot">
+      <button id="modal-copy">复制全文</button>
+      <button id="modal-action" class="primary">确定</button>
+      <button id="modal-cancel" class="ghost">取消</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

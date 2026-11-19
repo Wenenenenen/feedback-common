@@ -1,0 +1,21 @@
+{
+  "actors": [
+    {
+      "id": "a",
+      "maxHp": 100,
+      "hp": 100
+    }
+  ],
+  "definitions": [
+    {
+      "id": "bad",
+      "kind": "dot",
+      "stack": "refresh",
+      "cap": 1,
+      "duration": 20,
+      "period": 0,
+      "amount": 1
+    }
+  ],
+  "events": []
+}

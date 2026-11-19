@@ -1,0 +1,205 @@
+[
+  {
+    "name": "刷新撤销旧任务",
+    "actors": [
+      {
+        "id": "a",
+        "maxHp": 100,
+        "hp": 100
+      }
+    ],
+    "definitions": [
+      {
+        "id": "poison",
+        "kind": "dot",
+        "stack": "refresh",
+        "cap": 1,
+        "duration": 20,
+        "period": 10,
+        "amount": 3
+      },
+      {
+        "id": "ward",
+        "kind": "shield",
+        "stack": "independent",
+        "cap": 2,
+        "duration": 20,
+        "amount": 5
+      }
+    ],
+    "events": [
+      {
+        "id": "e1",
+        "seq": 1,
+        "time": 0,
+        "op": "apply",
+        "target": "a",
+        "effect": "poison"
+      },
+      {
+        "id": "e2",
+        "seq": 2,
+        "time": 10,
+        "op": "apply",
+        "target": "a",
+        "effect": "poison"
+      }
+    ],
+    "expected": {
+      "hpAt": {
+        "10": 100,
+        "20": 97,
+        "30": 97
+      },
+      "damageTimes": [
+        20
+      ]
+    }
+  },
+  {
+    "name": "到期同刻先吸收",
+    "actors": [
+      {
+        "id": "a",
+        "maxHp": 100,
+        "hp": 100
+      }
+    ],
+    "definitions": [
+      {
+        "id": "poison",
+        "kind": "dot",
+        "stack": "refresh",
+        "cap": 1,
+        "duration": 20,
+        "period": 10,
+        "amount": 3
+      },
+      {
+        "id": "ward",
+        "kind": "shield",
+        "stack": "independent",
+        "cap": 2,
+        "duration": 20,
+        "amount": 5
+      }
+    ],
+    "events": [
+      {
+        "id": "e1",
+        "seq": 1,
+        "time": 0,
+        "op": "apply",
+        "target": "a",
+        "effect": "ward"
+      },
+      {
+        "id": "e2",
+        "seq": 2,
+        "time": 1,
+        "op": "apply",
+        "target": "a",
+        "effect": "ward"
+      },
+      {
+        "id": "e3",
+        "seq": 3,
+        "time": 2,
+        "op": "apply",
+        "target": "a",
+        "effect": "ward"
+      },
+      {
+        "id": "e4",
+        "seq": 4,
+        "time": 21,
+        "op": "damage",
+        "target": "a",
+        "amount": 8
+      }
+    ],
+    "expected": {
+      "hpAt": {
+        "21": 100,
+        "22": 100
+      },
+      "removedAt2": 1,
+      "absorptionAt21": [
+        {
+          "instance": 2,
+          "amount": 5
+        },
+        {
+          "instance": 3,
+          "amount": 3
+        }
+      ]
+    }
+  },
+  {
+    "name": "死亡清理",
+    "actors": [
+      {
+        "id": "a",
+        "maxHp": 6,
+        "hp": 6
+      }
+    ],
+    "definitions": [
+      {
+        "id": "poison",
+        "kind": "dot",
+        "stack": "refresh",
+        "cap": 1,
+        "duration": 20,
+        "period": 10,
+        "amount": 3
+      },
+      {
+        "id": "ward",
+        "kind": "shield",
+        "stack": "independent",
+        "cap": 2,
+        "duration": 20,
+        "amount": 5
+      }
+    ],
+    "events": [
+      {
+        "id": "e1",
+        "seq": 1,
+        "time": 0,
+        "op": "apply",
+        "target": "a",
+        "effect": "poison"
+      },
+      {
+        "id": "e2",
+        "seq": 2,
+        "time": 5,
+        "op": "damage",
+        "target": "a",
+        "amount": 6
+      },
+      {
+        "id": "e3",
+        "seq": 3,
+        "time": 10,
+        "op": "heal",
+        "target": "a",
+        "amount": 9
+      }
+    ],
+    "expected": {
+      "hpAt": {
+        "5": 0,
+        "10": 0,
+        "20": 0
+      },
+      "damageTimes": [
+        5
+      ],
+      "activeAt10": []
+    }
+  }
+]
