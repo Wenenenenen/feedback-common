@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="claude:viewport-fit-sides" content="cover">
+  <title>频域陷波工作台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="1.8" stroke-linecap="round">
+          <path d="M2 12h3l2-6 3 12 3-9 2 3h7"/>
+        </svg>
+      </span>
+      <div>
+        <h1>频域陷波工作台</h1>
+        <div class="sub">手写二维 FFT · 高斯陷波成对压制扫描网纹</div>
+      </div>
+    </div>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="theme-btn" type="button" title="切换深浅色">◐ 主题</button>
+  </header>
+
+  <main class="layout">
+    <!-- ============ 左列：控制 ============ -->
+    <section>
+      <div class="panel">
+        <h2>输入图像</h2>
+        <div class="stack">
+          <label class="btn primary block" for="file-input">导入 PNG（单边 ≤ 512，8 位 RGB）</label>
+          <input type="file" id="file-input" accept="image/png">
+          <div class="muted" id="file-info">未导入图像。样例：stripe（水平 ±16）、nyquist（自共轭 64,0）、odd（97×61 非二次幂）。</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>填充模式</h2>
+        <div class="seg" id="pad-seg" role="group" aria-label="填充模式">
+          <button type="button" data-mode="reflect101" class="on">镜像 reflect101</button>
+          <button type="button" data-mode="zero">零填充</button>
+        </div>
+        <div class="muted" style="margin-top:8px" id="pad-info">右侧与底部填充至各轴最小 2 次幂；长度 1 恒取自身。</div>
+      </div>
+
+      <div class="panel">
+        <h2>陷波组 <span class="muted mono" id="notch-count"></span></h2>
+        <div class="stack">
+          <div class="notch-list" id="notch-list"></div>
+          <div class="row">
+            <button class="btn block" id="add-btn" type="button" disabled>在频谱上点选位置后添加</button>
+          </div>
+          <div class="muted">点击频谱放置陷波；拖动圆点调整；共轭点（空心）自动联动。直流 (0,0) 保留，奈奎斯特自共轭点不重复抑制，最多 16 组。</div>
+
+          <div id="editor" hidden>
+            <h2 style="margin-top:6px">选中组参数</h2>
+            <div class="stack">
+              <div class="row">
+                <div class="field" style="flex:1">
+                  <label>u（未 shift）</label>
+                  <input type="number" id="edit-u" step="1">
+                </div>
+                <div class="field" style="flex:1">
+                  <label>v（未 shift）</label>
+                  <input type="number" id="edit-v" step="1">
+                </div>
+              </div>
+              <div class="field">
+                <label>带宽 σ（频率格点） <span class="val" id="sigma-val"></span></label>
+                <input type="range" id="edit-sigma" min="0.1" max="8" step="0.05">
+              </div>
+              <div class="field">
+                <label>抑制强度 strength <span class="val" id="strength-val"></span></label>
+                <input type="range" id="edit-strength" min="0" max="1" step="0.01">
+              </div>
+              <div class="row">
+                <button class="btn danger block" id="delete-btn" type="button">删除该组</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>导出</h2>
+        <div class="stack">
+          <button class="btn primary block" id="export-png-btn" type="button" disabled>导出滤波 PNG</button>
+          <button class="btn block" id="export-json-btn" type="button" disabled>导出报告 JSON</button>
+          <div class="muted">JSON 含填充尺寸、全部陷波参数、数值误差与陷波中心前后幅值；三通道共用同一滤波器。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 右列：频谱 + 预览 + 报告 ============ -->
+    <section>
+      <div class="panel">
+        <h2>二维频谱（居中显示，对数幅值）</h2>
+        <div class="spectrum-wrap">
+          <canvas id="spectrum" width="512" height="512"></canvas>
+          <div class="spectrum-overlay" id="probe">导入图像后在此点查频率与复数值</div>
+          <div class="spectrum-overlay" id="hover-tip"></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="badge"><span class="sw" style="background:#ff8a5c"></span>陷波中心（可拖动）</span>
+          <span class="badge"><span class="sw" style="background:transparent;border:1.5px solid #ff8a5c"></span>共轭点（联动）</span>
+          <span class="badge"><span class="sw" style="background:#58a6ff"></span>直流（保留）</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>预览</h2>
+        <div class="tabs" id="preview-tabs">
+          <button class="tab on" type="button" data-view="filtered">滤波图</button>
+          <button class="tab" type="button" data-view="original">原图</button>
+          <button class="tab" type="button" data-view="diff">差值 ×<span id="diff-gain-label">4</span></button>
+        </div>
+        <div class="field" style="max-width:320px" id="diff-gain-wrap" hidden>
+          <label>差值增益 <span class="val" id="diff-gain-val"></span></label>
+          <input type="range" id="diff-gain" min="1" max="32" step="1" value="4">
+        </div>
+        <div class="preview-frame" style="margin-top:10px">
+          <canvas id="preview"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>数值报告</h2>
+        <div class="report" id="metric-grid"></div>
+        <div class="table-scroll" style="margin-top:10px">
+          <table class="report-table" id="notch-table">
+            <thead>
+              <tr><th>中心 (u,v)</th><th>σ</th><th>strength</th><th>滤波前幅值</th><th>滤波后幅值</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span class="spinner" id="spinner"></span>
+        <span id="status-text">就绪</span>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="dsp.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

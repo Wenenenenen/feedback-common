@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试产物与解压的不可信样例
+tests/e2e-out/
+samples/extracted/
+node_modules/

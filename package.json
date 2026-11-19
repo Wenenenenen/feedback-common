@@ -1,0 +1,11 @@
+{
+  "name": "frequency-notch-cleaner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "手写二维 FFT 的频域高斯陷波去网纹工作台",
+  "scripts": {
+    "test:dsp": "node tests/dsp.test.js",
+    "test:e2e": "NODE_PATH=$(npm root -g) node tests/e2e.spec.js",
+    "test:ref": "python3 -I tests/reference_crosscheck.py samples/extracted"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "padding": "reflect101",
+  "notches": [
+    {
+      "u": 16,
+      "v": 0,
+      "sigma": 0.6,
+      "strength": 1
+    }
+  ]
+}

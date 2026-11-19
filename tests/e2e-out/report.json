@@ -1,0 +1,64 @@
+{
+  "source": "odd.png",
+  "padding": {
+    "mode": "reflect101",
+    "originalSize": {
+      "width": 97,
+      "height": 61
+    },
+    "paddedSize": {
+      "width": 128,
+      "height": 64
+    }
+  },
+  "notches": [
+    {
+      "u": 7,
+      "v": 5,
+      "sigma": 0.6,
+      "strength": 1
+    }
+  ],
+  "uniqueCenters": [
+    {
+      "u": 7,
+      "v": 5
+    },
+    {
+      "u": 121,
+      "v": 59
+    }
+  ],
+  "numericErrors": {
+    "maxImaginaryBeforeClip": 1.124372046260994e-15,
+    "meanBefore_linearRGB": [
+      0.2286852209439853,
+      0.23654266150858017,
+      0.31690638188561593
+    ],
+    "meanAfter_linearRGB": [
+      0.2286852209439852,
+      0.23654266150858017,
+      0.31694386918097756
+    ]
+  },
+  "notchMagnitudes": [
+    {
+      "u": 7,
+      "v": 5,
+      "magnitudeBefore": 0,
+      "magnitudeAfter": 0
+    },
+    {
+      "u": 121,
+      "v": 59,
+      "magnitudeBefore": 0,
+      "magnitudeAfter": 0
+    }
+  ],
+  "convention": {
+    "forwardDFT": "exp(-2*pi*i*k*n/N), 不归一化；逆向除 N",
+    "filter": "Gq=1-strength*exp(-d_torus^2/(2*sigma^2))，组间连乘，H(0,0)=1",
+    "color": "sRGB 解码为线性 RGB，三通道共用 H，输出取实部限幅编码 sRGB"
+  }
+}
