@@ -1,0 +1,11 @@
+{
+  "name": "ecs-barrier-inspector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prototype-based ECS with generational handles and a deferred structural-command barrier, plus a single-page inspector.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tests/engine.test.js samples/cases",
+    "test:page": "node tests/page.test.js"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "commands": [
+    {
+      "seq": 1,
+      "op": "create",
+      "components": {
+        "Position": {
+          "x": 0,
+          "y": 0
+        },
+        "Velocity": {
+          "x": 1,
+          "y": 0
+        },
+        "Health": {
+          "value": 1
+        },
+        "Poison": {
+          "amount": 1
+        },
+        "Spawner": {
+          "period": 1,
+          "vx": 2,
+          "vy": 0
+        }
+      }
+    }
+  ],
+  "expectedAfterTick0": [
+    {
+      "handle": {
+        "slot": 0,
+        "generation": 2
+      },
+      "components": {
+        "Position": {
+          "x": 1,
+          "y": 0
+        },
+        "Velocity": {
+          "x": 2,
+          "y": 0
+        },
+        "Health": {
+          "value": 1
+        }
+      }
+    }
+  ],
+  "expectedAfterTick1": [
+    {
+      "handle": {
+        "slot": 0,
+        "generation": 2
+      },
+      "components": {
+        "Position": {
+          "x": 3,
+          "y": 0
+        },
+        "Velocity": {
+          "x": 2,
+          "y": 0
+        },
+        "Health": {
+          "value": 1
+        }
+      }
+    }
+  ]
+}

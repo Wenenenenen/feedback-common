@@ -1,0 +1,65 @@
+{
+  "commands": [
+    {
+      "seq": 1,
+      "op": "create",
+      "components": {
+        "Position": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "op": "create",
+      "components": {
+        "Health": {
+          "value": 10
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "op": "destroy",
+      "handle": {
+        "slot": 0,
+        "generation": 1
+      }
+    },
+    {
+      "seq": 4,
+      "op": "create",
+      "components": {
+        "Position": {
+          "x": 7,
+          "y": 8
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "op": "set",
+      "handle": {
+        "slot": 0,
+        "generation": 1
+      },
+      "component": "Position",
+      "value": {
+        "x": 99,
+        "y": 99
+      }
+    }
+  ],
+  "expected": {
+    "lastCreate": {
+      "slot": 0,
+      "generation": 2
+    },
+    "lastError": "过期句柄",
+    "position": {
+      "x": 7,
+      "y": 8
+    }
+  }
+}
