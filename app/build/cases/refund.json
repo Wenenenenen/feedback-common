@@ -1,0 +1,48 @@
+{
+  "resources": {
+    "ore": 0
+  },
+  "resourceCaps": {
+    "ore": 100
+  },
+  "usedPopulation": 0,
+  "populationCap": 10,
+  "speedMultiplier": [
+    1,
+    1
+  ],
+  "buildings": [
+    {
+      "id": "b",
+      "speed": [
+        1,
+        1
+      ],
+      "paused": false,
+      "queue": [
+        "long"
+      ]
+    }
+  ],
+  "catalog": {
+    "long": {
+      "work": 3,
+      "cost": {
+        "ore": 10
+      },
+      "kind": "unit",
+      "population": 1
+    }
+  },
+  "commands": [
+    {
+      "tick": 1,
+      "seq": 1,
+      "op": "cancel",
+      "instance": 1
+    }
+  ],
+  "expected": {
+    "oreAfterTick1": 6
+  }
+}

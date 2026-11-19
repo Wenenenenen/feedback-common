@@ -1,0 +1,63 @@
+{
+  "resources": {
+    "ore": 100
+  },
+  "resourceCaps": {
+    "ore": 100
+  },
+  "usedPopulation": 0,
+  "populationCap": 10,
+  "speedMultiplier": [
+    1,
+    1
+  ],
+  "buildings": [
+    {
+      "id": "b",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u"
+      ]
+    }
+  ],
+  "catalog": {
+    "u": {
+      "work": 1,
+      "cost": {
+        "ore": 10
+      },
+      "kind": "unit",
+      "population": 1
+    },
+    "r": {
+      "work": 1,
+      "cost": {
+        "ore": 10
+      },
+      "kind": "research",
+      "multiplier": [
+        2,
+        1
+      ]
+    }
+  },
+  "commands": [],
+  "expected": {
+    "completions": [
+      {
+        "tick": 1,
+        "item": "u"
+      },
+      {
+        "tick": 2,
+        "item": "u"
+      }
+    ],
+    "usedPopulationAfterTick2": 2
+  }
+}

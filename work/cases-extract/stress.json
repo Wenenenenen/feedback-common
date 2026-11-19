@@ -1,0 +1,614 @@
+{
+  "resources": {
+    "ore": 10000
+  },
+  "resourceCaps": {
+    "ore": 10000
+  },
+  "usedPopulation": 0,
+  "populationCap": 1000,
+  "speedMultiplier": [
+    1,
+    1
+  ],
+  "buildings": [
+    {
+      "id": "b00",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b01",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b02",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b03",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b04",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b05",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b06",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b07",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b08",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b09",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b10",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b11",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b12",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b13",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b14",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b15",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b16",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b17",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b18",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b19",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b20",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b21",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b22",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b23",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b24",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b25",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b26",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b27",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b28",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b29",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b30",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    },
+    {
+      "id": "b31",
+      "speed": [
+        2,
+        3
+      ],
+      "paused": false,
+      "queue": [
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u",
+        "u"
+      ]
+    }
+  ],
+  "catalog": {
+    "u": {
+      "work": 1,
+      "cost": {
+        "ore": 10
+      },
+      "kind": "unit",
+      "population": 1
+    },
+    "r": {
+      "work": 1,
+      "cost": {
+        "ore": 10
+      },
+      "kind": "research",
+      "multiplier": [
+        2,
+        1
+      ]
+    }
+  },
+  "commands": []
+}

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>RTS 生产时钟验证器</title>
+<style>
+/* ---- 设计令牌：指挥台风格，冷灰中性 + 琥珀强调，双主题 ---- */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f4;
+  --border: #d6dce2;
+  --fg: #1a2330;
+  --fg-soft: #55606e;
+  --muted: #85909c;
+  --accent: #b4631a;          /* 琥珀：主操作/当前进度 */
+  --accent-soft: #f3e2cf;
+  --teal: #176b6b;            /* 资源/完成 */
+  --teal-soft: #d6ecec;
+  --danger: #a32d2d;
+  --danger-soft: #f3d9d9;
+  --warn: #8a6a12;
+  --warn-soft: #f4ead0;
+  --shadow: 0 1px 2px rgba(20,30,45,.06), 0 4px 14px rgba(20,30,45,.05);
+  --mono: "SFMono-Regular", ui-monospace, "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171d; --surface: #1a212a; --surface-2: #222b35; --border: #2e3945;
+    --fg: #e6ebf1; --fg-soft: #aeb8c3; --muted: #76818d;
+    --accent: #e0954f; --accent-soft: #3a2c1c;
+    --teal: #5fc0be; --teal-soft: #16302f;
+    --danger: #e08585; --danger-soft: #3a1f1f;
+    --warn: #d8b75c; --warn-soft: #332c17;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171d; --surface: #1a212a; --surface-2: #222b35; --border: #2e3945;
+  --fg: #e6ebf1; --fg-soft: #aeb8c3; --muted: #76818d;
+  --accent: #e0954f; --teal: #5fc0be; --teal-soft: #16302f;
+  --accent-soft: #3a2c1c; --danger: #e08585; --danger-soft: #3a1f1f;
+  --warn: #d8b75c; --warn-soft: #332c17;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[data-num], .mono { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+button, select, input { font: inherit; color: inherit; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.warn-text { color: var(--warn); font-weight: 600; }
+
+/* ---- 顶部控制条 ---- */
+header.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-shadow: var(--shadow);
+}
+.topbar-inner { max-width: 1440px; margin: 0 auto; padding-block: 12px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
+.brand h1 { font-size: 17px; letter-spacing: .2px; }
+.brand .case { font-size: 12px; color: var(--fg-soft); font-family: var(--mono); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tick-readout { display: flex; gap: 14px; align-items: baseline; padding: 6px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.tick-readout b { font-family: var(--mono); font-size: 18px; color: var(--accent); }
+.tick-readout span { font-size: 12px; color: var(--fg-soft); }
+
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+  border-radius: 7px; padding: 7px 12px; cursor: pointer; transition: background .12s, border-color .12s; }
+.btn:hover { background: var(--surface-2); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.teal { background: var(--teal); border-color: var(--teal); color: #fff; }
+.btn.mini { padding: 4px 9px; font-size: 12.5px; border-radius: 6px; }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn.danger:hover { background: var(--danger-soft); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sel, input[type="text"], input[type="number"] {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 6px 9px; min-width: 0;
+}
+
+/* ---- 主体网格 ---- */
+main { max-width: 1440px; margin: 0 auto; padding-block: 18px; display: grid; gap: 16px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+@media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.panel > .panel-h { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.panel > .panel-h h2 { font-size: 14px; letter-spacing: .3px; text-transform: uppercase; color: var(--fg-soft); }
+.panel-b { padding: 14px 16px; }
+
+/* ---- 状态条 ---- */
+.stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.stat .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.stat .v { font-family: var(--mono); font-size: 17px; margin-top: 2px; }
+.pop-track { height: 6px; background: var(--surface-2); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+.pop-fill { height: 100%; background: var(--teal); transition: width .15s; }
+.pop-fill.warn { background: var(--danger); }
+#pendingMult { background: var(--warn-soft); color: var(--warn); border-radius: 7px; padding: 6px 10px; font-size: 12.5px; margin-bottom: 10px; }
+
+#resourceGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.res-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; }
+.res-label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.res-val { font-family: var(--mono); font-size: 18px; margin-top: 1px; }
+.res-cap { color: var(--muted); font-size: 12.5px; }
+.res-track { height: 5px; background: var(--surface); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.res-fill { height: 100%; background: var(--teal); }
+
+/* ---- 建筑卡片 ---- */
+#buildingList { display: grid; gap: 12px; }
+.building { border: 1px solid var(--border); border-radius: 11px; background: var(--surface); overflow: hidden; }
+.building.paused { border-style: dashed; opacity: .92; }
+.building.destroyed { background: var(--surface-2); }
+.building > header { display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.b-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.b-id { font-family: var(--mono); font-weight: 700; font-size: 14.5px; }
+.b-speed { font-size: 12px; color: var(--fg-soft); font-family: var(--mono); }
+.b-actions { display: flex; gap: 6px; }
+.queue { list-style: none; margin: 0; padding: 10px 14px; display: grid; gap: 8px; }
+.q-item { border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; background: var(--surface); min-width: 0; }
+.q-item.ready { border-color: var(--warn); background: var(--warn-soft); }
+.q-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.q-name { font-weight: 600; font-size: 13.5px; }
+.q-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--fg-soft); margin-top: 3px; flex-wrap: wrap; }
+.q-track { height: 7px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 7px; }
+.q-fill { height: 100%; background: var(--accent); transition: width .15s; }
+.q-item.ready .q-fill { background: var(--warn); }
+.q-cost { margin-top: 6px; }
+.q-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; white-space: nowrap; }
+.chip.muted { background: var(--surface-2); color: var(--muted); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.danger { background: var(--danger-soft); color: var(--danger); }
+.enq-row { display: flex; gap: 8px; padding: 0 14px 12px; flex-wrap: wrap; }
+.enq-row .sel { flex: 1; min-width: 120px; }
+
+/* ---- 侧栏 ---- */
+.side { display: grid; gap: 16px; align-content: start; }
+#logBody { max-height: 460px; overflow: auto; font-family: var(--mono); font-size: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.log-row { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; padding: 5px 9px; border-bottom: 1px solid var(--border); align-items: baseline; }
+.log-row:last-child { border-bottom: 0; }
+.log-tick { color: var(--accent); font-weight: 700; }
+.log-src { color: var(--muted); }
+.log-body { min-width: 0; overflow-wrap: anywhere; }
+.k-rej .log-body, .k-block .log-body { color: var(--warn); }
+.k-done .log-body b { color: var(--teal); }
+.log-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#catBox { display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.cat-line { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; font-size: 12.5px; padding: 5px 8px; background: var(--surface-2); border-radius: 7px; }
+.pend-row { font-size: 12.5px; padding: 5px 8px; background: var(--accent-soft); border-radius: 7px; margin-bottom: 5px; }
+.world-form { display: grid; gap: 8px; }
+.world-form .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.world-form input, .world-form select { flex: 1; min-width: 80px; }
+
+/* ---- toast ---- */
+#toast { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 12px);
+  background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 9px; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; max-width: 88vw; z-index: 50; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.danger { background: var(--danger); color: #fff; }
+
+@media (max-width: 640px) {
+  .topbar-inner { flex-direction: column; align-items: stretch; }
+  .controls { justify-content: space-between; }
+  .log-row { grid-template-columns: auto 1fr; }
+  .log-src { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1>RTS 生产时钟验证器</h1>
+      <span class="case" id="caseName">—</span>
+    </div>
+    <div class="tick-readout">
+      <div><span>tick</span> <b id="tickVal">0</b></div>
+      <div><span>逻辑时间</span> <b id="msVal">0 ms</b></div>
+      <div><span>全局倍率</span> <b id="multVal">1</b></div>
+      <div><span>人口</span> <b id="popVal">0/0</b>
+        <div class="pop-track" style="min-width:90px"><div class="pop-fill" id="popBar" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="stepBtn" title="推进一个 100ms 逻辑步（空格）">单步 →</button>
+      <button class="btn" id="ffBtn">快进 ▶</button>
+      <button class="btn" id="run10Btn">+10</button>
+      <button class="btn" id="run100Btn">+100</button>
+      <button class="btn danger" id="resetBtn">重置</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="col-main">
+    <div id="pendingMult" hidden></div>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h2>资源账本（当前持有 / 仓上限）</h2></div>
+      <div class="panel-b"><div id="resourceGrid"></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>建筑与生产队列（按 ID 升序处理）</h2></div>
+      <div class="panel-b">
+        <div id="buildingList"></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <div class="panel-h"><h2>场景与存档</h2></div>
+      <div class="panel-b world-form">
+        <select class="sel" id="caseSelect"></select>
+        <label class="small muted">载入用例 JSON
+          <input type="file" id="fileInput" accept=".json,application/json" style="margin-top:4px">
+        </label>
+        <div class="row">
+          <button class="btn mini" id="saveBtn">保存进度</button>
+          <button class="btn mini" id="restoreBtn">恢复进度</button>
+        </div>
+        <div class="row">
+          <button class="btn mini teal" id="exportSnapBtn">导出快照 JSON</button>
+          <button class="btn mini teal" id="exportLogBtn">导出结算日志</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><h2>世界编辑</h2></div>
+      <div class="panel-b world-form">
+        <div class="row">
+          <input type="text" id="newBid" placeholder="新建筑 ID" style="flex:2">
+          <input type="number" id="newSpeedP" placeholder="p" value="1" style="flex:1">
+          <span class="mono">/</span>
+          <input type="number" id="newSpeedQ" placeholder="q" value="1" style="flex:1">
+          <button class="btn mini primary" id="addBuildingBtn">新增建筑</button>
+        </div>
+        <div class="row">
+          <input type="text" id="grantRes" placeholder="资源名" style="flex:1">
+          <input type="number" id="grantAmt" placeholder="数量" min="0" style="flex:1">
+          <button class="btn mini" id="grantBtn">发放资源</button>
+        </div>
+        <div class="row">
+          <input type="number" id="releaseAmt" placeholder="释放人口" min="0" style="flex:1">
+          <button class="btn mini" id="releaseBtn">释放人口</button>
+        </div>
+        <p class="muted small" id="pendingBox"></p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">
+        <h2>逐步账本</h2>
+        <div class="log-tools">
+          <select class="sel mini" id="logFilter" style="padding:4px 8px">
+            <option value="all">全部</option>
+            <option value="work">工作量</option>
+            <option value="resource">资源/人口</option>
+            <option value="flow">完成/阻塞/指令</option>
+          </select>
+          <span class="muted small" id="logCount"></span>
+        </div>
+      </div>
+      <div class="panel-b">
+        <div id="logBody"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><h2>项目目录 catalog</h2></div>
+      <div class="panel-b"><div id="catalogBox" style="display:grid;gap:6px"></div></div>
+    </div>
+  </aside>
+</main>
+
+<div id="toast"></div>
+<!--APP_JS-->
+</body>
+</html>
