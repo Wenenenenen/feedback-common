@@ -1,0 +1,1 @@
+{"width":64,"height":48,"camera":{"view":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],"fx":40,"fy":40,"cx":32.5,"cy":24.5,"near":0.1,"far":30},"instances":[{"id":"bad","matrix":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],"points":[{"id":"front","mean":[0,0,4],"covariance":[-1,0,0,0,1,0,0,0,1],"color":[1,0,0],"opacity":0.2}]}],"background":[0,0,0]}

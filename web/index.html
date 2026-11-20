@@ -1,0 +1,1517 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Surfel Projector Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ---- design tokens: engineering-instrument dark, light counterpart ----
+   layout: header band + 3-column grid (controls / viewport / trace) */
+:root {
+  --bg: #eef0f4;
+  --bg-elev: #ffffff;
+  --bg-sunken: #e4e7ee;
+  --fg: #171b24;
+  --fg-dim: #565e6d;
+  --fg-faint: #8a93a3;
+  --line: #cdd3de;
+  --line-strong: #aeb6c4;
+  --accent: #2456e6;
+  --accent-soft: #dde6fd;
+  --teal: #0d8a7d;
+  --teal-soft: #d4efeb;
+  --amber: #b06a00;
+  --amber-soft: #fbeccf;
+  --red: #c2362b;
+  --red-soft: #f9dcd9;
+  --green: #1d7a3f;
+  --green-soft: #d8f0e0;
+  --canvas-bg: #10131a;
+  --canvas-grid: rgba(255,255,255,.07);
+  --shadow: 0 1px 2px rgba(20,25,40,.08), 0 8px 24px rgba(20,25,40,.07);
+  --radius: 10px;
+  --radius-sm: 7px;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d1017;
+    --bg-elev: #161b26;
+    --bg-sunken: #0a0d13;
+    --fg: #e8ebf2;
+    --fg-dim: #a3acc0;
+    --fg-faint: #6b7488;
+    --line: #272f3f;
+    --line-strong: #3a4559;
+    --accent: #7aa0ff;
+    --accent-soft: #1d2c4d;
+    --teal: #4fd1c2;
+    --teal-soft: #12322e;
+    --amber: #f0b45a;
+    --amber-soft: #3a2c12;
+    --red: #f0857b;
+    --red-soft: #3d1d19;
+    --green: #74cf95;
+    --green-soft: #15301f;
+    --canvas-bg: #10131a;
+    --canvas-grid: rgba(255,255,255,.07);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1017;
+  --bg-elev: #161b26;
+  --bg-sunken: #0a0d13;
+  --fg: #e8ebf2;
+  --fg-dim: #a3acc0;
+  --fg-faint: #6b7488;
+  --line: #272f3f;
+  --line-strong: #3a4559;
+  --accent: #7aa0ff;
+  --accent-soft: #1d2c4d;
+  --teal: #4fd1c2;
+  --teal-soft: #12322e;
+  --amber: #f0b45a;
+  --amber-soft: #3a2c12;
+  --red: #f0857b;
+  --red-soft: #3d1d19;
+  --green: #74cf95;
+  --green-soft: #15301f;
+  --canvas-bg: #10131a;
+  --canvas-grid: rgba(255,255,255,.07);
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+button, select, input { font: inherit; color: inherit; }
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* ---------- header ---------- */
+header.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 17px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+.brand .sub { color: var(--fg-faint); font-size: 12px; font-family: var(--font-mono); }
+.topbar .spacer { flex: 1; }
+select, .btn, input[type="file"]::file-selector-button {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+select:hover, .btn:hover { border-color: var(--accent); }
+.btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #0b1020; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.toggled { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+input[type="file"] { font-size: 12px; max-width: 210px; color: var(--fg-dim); }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11.5px;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-strong);
+  background: var(--bg-elev); white-space: nowrap;
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-faint); }
+.pill.ok .dot { background: var(--green); }
+.pill.warn .dot { background: var(--amber); }
+.pill.err .dot { background: var(--red); }
+
+/* ---------- layout grid ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 344px;
+  gap: 14px;
+  padding-block: 14px;
+  align-items: start;
+}
+.panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.panel > .sec { padding: 13px 14px; border-bottom: 1px solid var(--line); }
+.panel > .sec:last-child { border-bottom: none; }
+.sec-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-family: var(--font-display); font-size: 12px; font-weight: 600;
+  letter-spacing: .9px; text-transform: uppercase; color: var(--fg-dim);
+  margin-bottom: 10px;
+}
+.sec-title .hint { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--fg-faint); }
+
+/* ---------- controls ---------- */
+.row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.row:last-child { margin-bottom: 0; }
+.row label { flex: 0 0 78px; color: var(--fg-dim); font-size: 12px; }
+.row .val { flex: 0 0 62px; text-align: right; font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
+input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.seg { display: flex; gap: 4px; background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 3px; }
+.seg button {
+  flex: 1; border: 0; background: transparent; border-radius: 5px;
+  padding: 5px 4px; font-size: 11.5px; cursor: pointer; color: var(--fg-dim);
+}
+.seg button.active { background: var(--bg-elev); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; margin-bottom: 7px; }
+.check input { accent-color: var(--accent); }
+.inst-list { display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto; }
+.inst-item {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 7px 9px; background: var(--bg-sunken);
+}
+.inst-item.off { opacity: .5; }
+.inst-item .name { font-family: var(--font-mono); font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inst-item .cnt { color: var(--fg-faint); font-family: var(--font-mono); font-size: 11px; }
+.inst-item .swatch { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.warnbox {
+  border: 1px solid var(--amber); background: var(--amber-soft); color: var(--amber);
+  border-radius: var(--radius-sm); padding: 8px 10px; font-size: 12px; margin-bottom: 8px;
+}
+.warnbox:last-child { margin-bottom: 0; }
+.warnbox.err { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+
+/* ---------- viewport ---------- */
+.viewport { padding: 0; overflow: hidden; position: relative; }
+.vp-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border-bottom: 1px solid var(--line);
+}
+.vp-head .mode-tag { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-dim); }
+.canvas-wrap {
+  position: relative; background: var(--canvas-bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 18px;
+}
+.canvas-stack {
+  position: relative; line-height: 0;
+  width: min(100%, 640px);
+}
+.canvas-stack canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; border-radius: 4px; }
+#overlayCanvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: auto; }
+.vp-foot {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 12px; border-top: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim);
+}
+.legend { display: inline-flex; align-items: center; gap: 7px; }
+.legend .bar { width: 110px; height: 9px; border-radius: 3px; border: 1px solid var(--line-strong); flex: 0 0 auto; }
+.legend .ends { display: flex; justify-content: space-between; width: 110px; font-size: 10px; }
+.legend.ramp { flex-direction: column; align-items: flex-start; gap: 2px; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 10;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter: blur(3px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow);
+  padding: 7px 9px; font-family: var(--font-mono); font-size: 11px;
+  line-height: 1.45; max-width: 250px; display: none; white-space: nowrap;
+}
+.tooltip .t1 { font-weight: 600; margin-bottom: 2px; }
+.tooltip .t2 { color: var(--fg-dim); }
+
+/* ---------- trace panel ---------- */
+.trace-empty { padding: 22px 16px; color: var(--fg-faint); font-size: 12.5px; text-align: center; }
+.trace-head { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.trace-head .px { font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+.swatch-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.color-chip { width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--line-strong); }
+.contrib-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
+.contrib-table th {
+  text-align: right; color: var(--fg-faint); font-weight: 500;
+  padding: 5px 6px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg-elev);
+}
+.contrib-table th:first-child, .contrib-table td:first-child { text-align: left; }
+.contrib-table td { padding: 4px 6px; border-bottom: 1px solid var(--bg-sunken); text-align: right; white-space: nowrap; }
+.contrib-table tr.picked { background: var(--accent-soft); }
+.contrib-table tr.picked td:first-child { color: var(--accent); font-weight: 600; }
+.contrib-table tr.off-row { opacity: .45; }
+.table-scroll { max-height: 260px; overflow: auto; }
+.bar-cell { position: relative; }
+.wbar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft); border-radius: 3px; z-index: 0; }
+.bar-cell span { position: relative; z-index: 1; }
+details.steps { border-top: 1px solid var(--line); }
+details.steps summary {
+  cursor: pointer; padding: 10px 14px; font-family: var(--font-display);
+  font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--fg-dim);
+}
+details.steps .body { padding: 0 14px 14px; }
+.step-line { font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); margin-bottom: 4px; word-break: break-word; }
+.step-line b { color: var(--fg); font-weight: 600; }
+.matrix2 { display: grid; grid-template-columns: repeat(2, max-content); gap: 2px 14px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-dim); margin: 6px 0 10px; }
+.matrix3 { display: grid; grid-template-columns: repeat(3, max-content); gap: 2px 14px; font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-dim); margin: 6px 0 10px; }
+.matrix3 b, .matrix2 b { color: var(--fg); font-weight: 500; }
+.export-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.export-row .btn { flex: 1; justify-content: center; }
+
+/* ---------- formula footer ---------- */
+.formula {
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 18px; margin-bottom: 18px;
+}
+.formula h2 { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--fg-dim); margin-bottom: 10px; }
+.formula-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 6px 26px; }
+.formula p { margin: 0 0 7px; font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-dim); }
+.formula b { color: var(--fg); font-weight: 600; }
+
+/* ---------- modal ---------- */
+.modal-back {
+  position: fixed; inset: 0; background: rgba(8,10,16,.55);
+  display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+}
+.modal-back.open { display: flex; }
+.modal {
+  background: var(--bg-elev); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  width: min(760px, 100%); max-height: 86vh; display: flex; flex-direction: column; box-shadow: var(--shadow);
+}
+.modal-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.modal-head h2 { font-size: 14px; }
+.modal-tabs { display: flex; gap: 4px; }
+.modal-tabs button { border: 1px solid var(--line); background: var(--bg-sunken); border-radius: 6px; padding: 4px 10px; font-size: 11.5px; cursor: pointer; color: var(--fg-dim); }
+.modal-tabs button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.modal textarea {
+  flex: 1; margin: 14px; width: calc(100% - 28px); resize: none;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: 11px; padding: 10px; color: var(--fg);
+}
+.modal-foot { display: flex; gap: 8px; padding: 0 16px 14px; align-items: center; flex-wrap: wrap; }
+.modal-foot .note { font-size: 11px; color: var(--fg-faint); flex: 1; min-width: 160px; }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--fg); color: var(--bg); border-radius: 8px; padding: 9px 16px;
+  font-size: 12.5px; opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 60;
+  box-shadow: var(--shadow); max-width: 80vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .layout { grid-template-columns: 240px minmax(0, 1fr); }
+  .trace-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .trace-panel { grid-column: auto; }
+  .brand .sub { display: none; }
+  input[type="file"] { max-width: 150px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1>Surfel Projector Lab</h1>
+    <span class="sub">高斯点元投影 · 屏幕协方差 · α 合成校验</span>
+  </div>
+  <span class="spacer"></span>
+  <span id="selftestPill" class="pill"><span class="dot"></span><span id="selftestText">自检未运行</span></span>
+  <select id="sampleSelect" title="加载内置样例">
+    <option value="affine.json">affine — 非均匀缩放/镜像/剪切</option>
+    <option value="overlap.json">overlap — 双层叠加（含标准答案）</option>
+    <option value="capacity.json">capacity — 2000 点压力用例</option>
+    <option value="invalid.json">invalid — 非正定协方差</option>
+  </select>
+  <input type="file" id="fileInput" accept=".json,application/json">
+  <button class="btn" id="themeBtn" title="切换深浅色">◐ 主题</button>
+</header>
+
+<main class="layout">
+  <!-- ============ LEFT: controls ============ -->
+  <section class="panel controls-panel">
+    <div class="sec">
+      <div class="sec-title">相机轨道 <span class="hint">拖拽画面旋转</span></div>
+      <div class="row"><label>偏航 yaw</label><input type="range" id="yaw" min="-180" max="180" step="0.5"><span class="val" id="yawVal"></span></div>
+      <div class="row"><label>俯仰 pitch</label><input type="range" id="pitch" min="-89" max="89" step="0.5"><span class="val" id="pitchVal"></span></div>
+      <div class="row"><label>滚转 roll</label><input type="range" id="roll" min="-180" max="180" step="0.5"><span class="val" id="rollVal"></span></div>
+      <div class="row"><label>距离 d</label><input type="range" id="dist" min="0" max="60" step="0.1"><span class="val" id="distVal"></span></div>
+      <div class="row"><label>目标 tx</label><input type="range" id="tx" min="-20" max="20" step="0.1"><span class="val" id="txVal"></span></div>
+      <div class="row"><label>ty</label><input type="range" id="ty" min="-20" max="20" step="0.1"><span class="val" id="tyVal"></span></div>
+      <div class="row"><label>tz</label><input type="range" id="tz" min="-20" max="40" step="0.1"><span class="val" id="tzVal"></span></div>
+      <div class="row"><button class="btn" id="resetCam" style="flex:1">重置为文件内 view</button></div>
+      <dl class="kv" style="margin-top:10px">
+        <dt>fx / fy</dt><dd id="kfFocal">—</dd>
+        <dt>cx / cy</dt><dd id="kfCenter">—</dd>
+        <dt>near / far</dt><dd id="kfClip">—</dd>
+      </dl>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">显示通道</div>
+      <div class="seg" id="modeSeg">
+        <button data-mode="color" class="active">颜色 RGB</button>
+        <button data-mode="trans">透射率 T</button>
+        <button data-mode="depth">期望深度</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">椭圆叠加 <span class="hint">屏幕协方差主轴</span></div>
+      <label class="check"><input type="checkbox" id="ellipseOn" checked>显示椭圆主轴</label>
+      <div class="seg" id="sigmaSeg" style="margin-bottom:8px">
+        <button data-sigma="1">1σ</button>
+        <button data-sigma="2">2σ</button>
+        <button data-sigma="3" class="active">3σ</button>
+      </div>
+      <label class="check"><input type="checkbox" id="axisOn" checked>主轴方向线段</label>
+      <label class="check"><input type="checkbox" id="centerOn" checked>投影中心标记</label>
+      <label class="check"><input type="checkbox" id="bboxOn">屏幕包围盒</label>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">实例开关 <span class="hint" id="instHint"></span></div>
+      <div class="inst-list" id="instList"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">渲染统计</div>
+      <dl class="kv" id="statsList">
+        <dt>点元总数</dt><dd id="stTotal">—</dd>
+        <dt>非正定剔除</dt><dd id="stInvalid">—</dd>
+        <dt>深度范围外</dt><dd id="stCulled">—</dd>
+        <dt>参与合成</dt><dd id="stActive">—</dd>
+        <dt>光栅命中/像素</dt><dd id="stHits">—</dd>
+        <dt>渲染耗时</dt><dd id="stTime">—</dd>
+      </dl>
+      <div id="warnBoxes" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- ============ CENTER: viewport ============ -->
+  <section class="panel viewport">
+    <div class="vp-head">
+      <span class="mode-tag" id="modeTag">COLOR · 线性 RGB → sRGB（夹取 0–1）</span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="mode-tag" id="sizeTag">—</span>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="canvas-stack" id="canvasStack">
+        <canvas id="mainCanvas" width="256" height="192"></canvas>
+        <canvas id="overlayCanvas" width="256" height="192"></canvas>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+    <div class="vp-foot">
+      <span class="legend" id="legendColor"><span class="bar" style="background:linear-gradient(90deg,#000,#fff)"></span>sRGB 显示（浮点缓冲不夹取）</span>
+      <span class="legend ramp" id="legendTrans" hidden>
+        <span class="bar" id="transBar"></span>
+        <span class="ends"><span>0 全遮挡</span><span>1 全透射</span></span>
+      </span>
+      <span class="legend ramp" id="legendDepth" hidden>
+        <span class="bar" id="depthBar"></span>
+        <span class="ends"><span id="depthNear">near</span><span id="depthFar">far</span></span>
+      </span>
+      <span style="flex:1"></span>
+      <span id="cursorInfo">点击像素查看完整贡献追踪</span>
+    </div>
+  </section>
+
+  <!-- ============ RIGHT: trace ============ -->
+  <section class="panel trace-panel">
+    <div id="traceRoot">
+      <div class="trace-empty">
+        点击画布任意像素<br>按实际颜色贡献 w = T·α 选择点元<br>（非最近、非最不透明）
+      </div>
+    </div>
+  </section>
+</main>
+
+<section class="formula">
+  <h2>实现公式（与样例包说明一致，无现成渲染器）</h2>
+  <div class="formula-grid">
+    <p><b>变换</b>：均值 <b>μ꜀ = V·M·μ</b>；协方差 <b>Σ꜀ = A·Σ·Aᵀ</b>，A = (VM) 的线性 3×3</p>
+    <p><b>投影</b>：u = fx·x/z + cx，v = cy − fy·y/z（像素中心 +0.5）</p>
+    <p><b>雅可比</b>：J = [[fx/z, 0, −fx·x/z²],[0, −fy/z, fy·y/z²]]</p>
+    <p><b>屏幕协方差</b>：C = J·Σ꜀·Jᵀ + 0.25·I（2×2 对称，含剪切交叉项）</p>
+    <p><b>门控</b>：q = dᵀ·C⁻¹·d，q &gt; 9 不参与；中心 z ∉ [near, far] 整点剔除</p>
+    <p><b>α</b> = min(0.99, opacity·exp(−q/2))</p>
+    <p><b>合成</b>：按 z 升序（等深按字符串 ID），w = T·α，RGB += w·c，T ← T·(1−α)，末加 T·bg；不提前终止</p>
+    <p><b>期望深度</b> = Σ(w·z) / Σw；Σw = 0 → null</p>
+  </div>
+</section>
+
+<!-- export modal -->
+<div class="modal-back" id="modalBack">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modalTitle">导出</h2>
+      <span style="flex:1"></span>
+      <div class="modal-tabs">
+        <button data-tab="png" class="active">PNG</button>
+        <button data-tab="float">浮点缓冲</button>
+        <button data-tab="trace">像素追踪 JSON</button>
+      </div>
+      <button class="btn" id="modalClose">✕</button>
+    </div>
+    <div id="modalPng" style="padding:16px; overflow:auto; text-align:center">
+      <canvas id="exportCanvas" style="max-width:100%; image-rendering:pixelated; border:1px solid var(--line); border-radius:6px"></canvas>
+    </div>
+    <textarea id="modalText" hidden spellcheck="false"></textarea>
+    <div class="modal-foot">
+      <span class="note" id="modalNote"></span>
+      <button class="btn" id="copyBtn">复制内容</button>
+      <button class="btn primary" id="downloadBtn">下载文件</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ===================== math primitives ===================== */
+const M = {
+  mul4(a, b) {
+    const o = new Array(16).fill(0);
+    for (let r = 0; r < 4; r++)
+      for (let c = 0; c < 4; c++)
+        for (let k = 0; k < 4; k++) o[r*4+c] += a[r*4+k] * b[k*4+c];
+    return o;
+  },
+  lin3(m) { return [m[0],m[1],m[2], m[4],m[5],m[6], m[8],m[9],m[10]]; },
+  trans3(a) { return [a[0],a[3],a[6], a[1],a[4],a[7], a[2],a[5],a[8]]; },
+  mul3(a, b) {
+    const o = new Array(9).fill(0);
+    for (let r = 0; r < 3; r++)
+      for (let c = 0; c < 3; c++)
+        for (let k = 0; k < 3; k++) o[r*3+c] += a[r*3+k] * b[k*3+c];
+    return o;
+  },
+  mv3(a, v) {
+    return [
+      a[0]*v[0]+a[1]*v[1]+a[2]*v[2],
+      a[3]*v[0]+a[4]*v[1]+a[5]*v[2],
+      a[6]*v[0]+a[7]*v[1]+a[8]*v[2],
+    ];
+  },
+  isSPD(c, eps = 1e-10) {
+    // Sylvester: leading principal minors > 0
+    const d2 = c[0]*c[4] - c[1]*c[3];
+    const d3 = c[0]*(c[4]*c[8]-c[5]*c[7])
+             - c[1]*(c[3]*c[8]-c[5]*c[6])
+             + c[2]*(c[3]*c[7]-c[4]*c[6]);
+    return c[0] > eps && d2 > eps && d3 > eps;
+  },
+  /* eigen-decomposition of symmetric 2x2 [[a,b],[b,d]]: returns {lambda1,lambda2,theta} */
+  eig2(a, b, d) {
+    const tr = a + d, disc = Math.sqrt(Math.max(0, (a-d)*(a-d)/4 + b*b));
+    const l1 = tr/2 + disc, l2 = tr/2 - disc;
+    const theta = Math.abs(b) < 1e-15 ? 0 : Math.atan2(l1 - a, b);
+    return { l1: Math.max(0, l1), l2: Math.max(0, l2), theta };
+  },
+};
+
+function linearToSRGB(c) {
+  c = Math.max(0, Math.min(1, c)); // display clamp only; float buffer stays unclamped
+  return c <= 0.0031308 ? 12.92*c : 1.055*Math.pow(c, 1/2.4) - 0.055;
+}
+function fmt(x, n = 5) {
+  if (x === null || x === undefined || Number.isNaN(x)) return "null";
+  if (!Number.isFinite(x)) return String(x);
+  const a = Math.abs(x);
+  if (a !== 0 && (a < 1e-4 || a >= 1e5)) return x.toExponential(4);
+  return Number(x.toFixed(n)).toString();
+}
+
+/* ===================== global state ===================== */
+const state = {
+  caseData: null,
+  caseName: "",
+  enabled: new Map(),          // instance id -> bool
+  viewOverride: null,          // 4x4 when user orbits; null = file view
+  defaultPose: null,           // extracted orbit params of file view
+  mode: "color",
+  sigma: 3,
+  showEllipse: true,
+  showAxis: true,
+  showCenter: true,
+  showBbox: false,
+  splats: [],                  // projected splats (rebuilt on camera change)
+  warnings: [],
+  invalidCount: 0,
+  cullCount: 0,
+  buffers: null,               // {rgb:Float32Array(n*3), T:Float32Array(n), depth:Float32Array(n) w/ NaN}
+  buckets: null,               // Array(H*W) of hit arrays (rebuilt on render)
+  selectedPixel: null,         // [px,py]
+  renderMs: 0,
+  totalPoints: 0,
+};
+
+const $ = (id) => document.getElementById(id);
+const mainCanvas = $("mainCanvas"), overlayCanvas = $("overlayCanvas");
+const mctx = mainCanvas.getContext("2d"), octx = overlayCanvas.getContext("2d");
+
+/* ===================== camera / orbit ===================== */
+function rigidViewFromPose(p) {
+  // world-to-camera: translate target to origin, Rz(roll) Rx(pitch) Ry(yaw), then back off by d
+  const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
+  const cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
+  const cr = Math.cos(p.roll), sr = Math.sin(p.roll);
+  const Ry = [cy,0,sy, 0,1,0, -sy,0,cy];
+  const Rx = [1,0,0, 0,cp,-sp, 0,sp,cp];
+  const Rz = [cr,-sr,0, sr,cr,0, 0,0,1];
+  const R = M.mul3(M.mul3(Rz, Rx), Ry);
+  // camera position in world: target + d * R^T * (0,0,1)  (camera looks +z, so camera sits at target - d*forward...)
+  // view maps world->cam; camera origin in cam = (0,0,-d): t = -R * eye
+  // eye = target + d * (third column of R^T as mapped -z axis) => simpler: t = -R*target + (0,0,-d)
+  const t0 = -(R[0]*p.tx + R[1]*p.ty + R[2]*p.tz);
+  const t1 = -(R[3]*p.tx + R[4]*p.ty + R[5]*p.tz);
+  const t2 = -(R[6]*p.tx + R[7]*p.ty + R[8]*p.tz) - p.d;
+  return [R[0],R[1],R[2],t0, R[3],R[4],R[5],t1, R[6],R[7],R[8],t2, 0,0,0,1];
+}
+
+function poseFromView(view) {
+  // invert rigidViewFromPose: R = Rz(roll) Rx(pitch) Ry(yaw); t = -R*target + (0,0,-d)
+  const R = M.lin3(view);
+  const pitch = Math.asin(Math.max(-1, Math.min(1, R[7]))); // R[2,1] = sin(pitch)
+  const cp = Math.cos(pitch);
+  let yaw, roll;
+  if (Math.abs(cp) > 1e-9) {
+    yaw = Math.atan2(-R[6], R[8]);   // -R[2,0]/R[2,2]
+    roll = Math.atan2(-R[1], R[4]);  // -R[0,1]/R[1,1]
+  } else {
+    yaw = Math.atan2(R[2], R[0]);
+    roll = 0;
+  }
+  // camera-space world origin = t = (t0,t1,t2). Choose target as the point on the camera
+  // view ray through the origin plane: R*target = (-t0,-t1,s) with s=0, then d = -t2 - s.
+  const t = [view[3], view[7], view[11]];
+  const Rt = M.trans3(R);
+  const target = M.mv3(Rt, [-t[0], -t[1], 0]);
+  const d = -t[2];
+  return { yaw, pitch, roll, d, tx: target[0], ty: target[1], tz: target[2] };
+}
+
+function currentView() {
+  return state.viewOverride || state.caseData.camera.view;
+}
+
+/* ===================== splat construction & projection ===================== */
+function rebuildSplats() {
+  const data = state.caseData;
+  const view = currentView();
+  const splats = [];
+  const warnings = [];
+  let invalid = 0, culled = 0, total = 0;
+
+  for (const inst of data.instances) {
+    if (!state.enabled.get(inst.id)) continue;
+    const VM = M.mul4(view, inst.matrix);
+    const A = M.lin3(VM);
+    const At = M.trans3(A);
+    const tv = [VM[3], VM[7], VM[11]];
+    for (const pt of inst.points) {
+      total++;
+      const covLocal = pt.covariance.slice();
+      if (!M.isSPD(covLocal)) {
+        invalid++;
+        warnings.push({ level: "err", text: `${inst.id}/${pt.id}：局部协方差非正定（顺序主子式 ≤ 0），点元剔除` });
+        continue;
+      }
+      const meanCam = [
+        A[0]*pt.mean[0]+A[1]*pt.mean[1]+A[2]*pt.mean[2]+tv[0],
+        A[3]*pt.mean[0]+A[4]*pt.mean[1]+A[5]*pt.mean[2]+tv[1],
+        A[6]*pt.mean[0]+A[7]*pt.mean[1]+A[8]*pt.mean[2]+tv[2],
+      ];
+      const covCam = M.mul3(M.mul3(A, covLocal), At);
+      const s = {
+        instId: inst.id, pointId: pt.id,
+        label: `${inst.id}/${pt.id}`,
+        meanLocal: pt.mean.slice(), covLocal,
+        meanCam, covCam,
+        color: pt.color.slice(), opacity: pt.opacity,
+        A,
+      };
+      const z = meanCam[2];
+      if (!(data.camera.near <= z && z <= data.camera.far)) {
+        s.culled = `中心 z=${fmt(z,4)} 不在 [${data.camera.near}, ${data.camera.far}]`;
+        culled++;
+        warnings.push({ level: "warn", text: `${s.label}：${s.culled}，整点剔除` });
+      } else {
+        projectSplat(s, data.camera);
+      }
+      splats.push(s);
+    }
+  }
+  state.splats = splats;
+  state.warnings = warnings;
+  state.invalidCount = invalid;
+  state.cullCount = culled;
+  state.totalPoints = total;
+}
+
+function projectSplat(s, cam) {
+  const [x, y, z] = s.meanCam;
+  const { fx, fy, cx, cy } = cam;
+  s.z = z;
+  s.u = fx*x/z + cx;
+  s.v = cy - fy*y/z;
+  const j00 = fx/z, j02 = -fx*x/(z*z);
+  const j11 = -fy/z, j12 = fy*y/(z*z);
+  s.J = [j00, 0, j02, 0, j11, j12];
+  const S = s.covCam;
+  // J*S
+  const jc00 = j00*S[0] + j02*S[6];
+  const jc01 = j00*S[1] + j02*S[7];
+  const jc02 = j00*S[2] + j02*S[8];
+  const jc10 = j11*S[3] + j12*S[6];
+  const jc11 = j11*S[4] + j12*S[7];
+  const jc12 = j11*S[5] + j12*S[8];
+  // C = (J S) J^T + 0.25 I
+  const c00 = jc00*j00 + jc02*j02 + 0.25;
+  const c01 = jc01*j11 + jc02*j12;
+  const c11 = jc11*j11 + jc12*j12 + 0.25;
+  s.C = [c00, c01, c11];
+  s.detC = c00*c11 - c01*c01;
+  s.invC = [c11/s.detC, -c01/s.detC, c00/s.detC];
+  // 3-sigma axis-aligned half extents for raster bbox (conservative for the q<=9 ellipse)
+  s.rx = 3*Math.sqrt(c00);
+  s.ry = 3*Math.sqrt(c11);
+  // true ellipse geometry for overlay (eigen of C)
+  const eig = M.eig2(c00, c01, c11);
+  s.eig = eig;
+  s.axisA = 3*Math.sqrt(Math.max(0, eig.l1));
+  s.axisB = 3*Math.sqrt(Math.max(0, eig.l2));
+}
+
+/* ===================== rasterization & compositing ===================== */
+function renderFrame() {
+  const t0 = performance.now();
+  const data = state.caseData;
+  const W = data.width, H = data.height;
+  const bg = data.background;
+  if (mainCanvas.width !== W || mainCanvas.height !== H) {
+    mainCanvas.width = overlayCanvas.width = W;
+    mainCanvas.height = overlayCanvas.height = H;
+    $("canvasStack").style.aspectRatio = `${W} / ${H}`;
+  }
+  rebuildSplats();
+
+  const n = W * H;
+  const rgb = new Float32Array(n * 3);
+  const Tbuf = new Float32Array(n);
+  const depth = new Float32Array(n).fill(NaN);
+  const buckets = new Array(n);
+  let hitTotal = 0, hitPixels = 0;
+
+  // ---- bucket splats by conservative bbox, gate q<=9 ----
+  for (const s of state.splats) {
+    if (!s.C) continue;
+    const x0 = Math.max(0, Math.floor(s.u - 0.5 - s.rx));
+    const x1 = Math.min(W - 1, Math.ceil(s.u - 0.5 + s.rx));
+    const y0 = Math.max(0, Math.floor(s.v - 0.5 - s.ry));
+    const y1 = Math.min(H - 1, Math.ceil(s.v - 0.5 + s.ry));
+    const [i00, i01, i11] = s.invC;
+    for (let py = y0; py <= y1; py++) {
+      const dv = py + 0.5 - s.v;
+      for (let px = x0; px <= x1; px++) {
+        const du = px + 0.5 - s.u;
+        const q = i00*du*du + 2*i01*du*dv + i11*dv*dv;
+        if (q <= 9) {
+          const idx = py * W + px;
+          if (!buckets[idx]) buckets[idx] = [];
+          buckets[idx].push({ s, q });
+          hitTotal++;
+        }
+      }
+    }
+  }
+
+  // ---- per-pixel front-to-back composite; no early termination ----
+  for (let idx = 0; idx < n; idx++) {
+    const hits = buckets[idx];
+    let T = 1, r = 0, g = 0, b = 0, wsum = 0, dsum = 0;
+    if (hits) {
+      hitPixels++;
+      hits.sort((a, b) => (a.s.z - b.s.z) || ((a.s.pointId < b.s.pointId) ? -1 : a.s.pointId > b.s.pointId ? 1 : 0));
+      for (const h of hits) {
+        const s = h.s;
+        const alpha = Math.min(0.99, s.opacity * Math.exp(-h.q / 2));
+        const w = T * alpha;
+        h.alpha = alpha; h.Tbefore = T; h.w = w;
+        r += w * s.color[0]; g += w * s.color[1]; b += w * s.color[2];
+        wsum += w; dsum += w * s.z;
+        T *= 1 - alpha;
+        h.Tafter = T;
+      }
+      if (wsum > 0) depth[idx] = dsum / wsum;
+    }
+    Tbuf[idx] = T;
+    rgb[idx*3]   = r + T * bg[0];
+    rgb[idx*3+1] = g + T * bg[1];
+    rgb[idx*3+2] = b + T * bg[2];
+  }
+
+  state.buffers = { rgb, T: Tbuf, depth };
+  state.buckets = buckets;
+  state.renderMs = performance.now() - t0;
+  state.hitStats = { hitTotal, hitPixels, avg: hitTotal / n };
+  drawCanvas();
+  drawOverlay();
+  updateStats();
+  if (state.selectedPixel) updateTrace(state.selectedPixel[0], state.selectedPixel[1]);
+}
+
+/* ===================== visualization ===================== */
+function drawCanvas() {
+  const { rgb, T, depth } = state.buffers;
+  const data = state.caseData, W = data.width, H = data.height;
+  const img = mctx.createImageData(W, H);
+  let dmin = Infinity, dmax = -Infinity;
+  for (let i = 0; i < W*H; i++) {
+    if (!Number.isNaN(depth[i])) { dmin = Math.min(dmin, depth[i]); dmax = Math.max(dmax, depth[i]); }
+  }
+  if (!Number.isFinite(dmin)) { dmin = data.camera.near; dmax = data.camera.far; }
+  if (dmax - dmin < 1e-9) dmax = dmin + 1;
+  state.depthRange = [dmin, dmax];
+
+  for (let i = 0; i < W*H; i++) {
+    let rr, gg, bb;
+    if (state.mode === "color") {
+      rr = Math.round(linearToSRGB(rgb[i*3]) * 255);
+      gg = Math.round(linearToSRGB(rgb[i*3+1]) * 255);
+      bb = Math.round(linearToSRGB(rgb[i*3+2]) * 255);
+    } else if (state.mode === "trans") {
+      // transmittance ramp: 0 -> deep ink, 1 -> pale; null-ish never occurs (T always defined)
+      const t = T[i];
+      [rr, gg, bb] = transRamp(t);
+    } else {
+      if (Number.isNaN(depth[i])) {
+        // null depth: hatched marker color
+        [rr, gg, bb] = [46, 49, 58];
+      } else {
+        const t = (depth[i] - dmin) / (dmax - dmin);
+        [rr, gg, bb] = depthRamp(t);
+      }
+    }
+    img.data[i*4] = rr; img.data[i*4+1] = gg; img.data[i*4+2] = bb; img.data[i*4+3] = 255;
+  }
+  mctx.putImageData(img, 0, 0);
+}
+
+function transRamp(t) {
+  // 0 -> #16203b (blocked), 1 -> #e9edf6 (open)
+  const lo = [22, 32, 59], hi = [233, 237, 246];
+  return [0,1,2].map(k => Math.round(lo[k] + (hi[k]-lo[k]) * t));
+}
+function depthRamp(t) {
+  // near -> warm amber, far -> cool indigo (viridis-like perceptual sequence, hand-tuned stops)
+  const stops = [
+    [247, 183, 51],   // near
+    [110, 191, 114],
+    [34, 150, 140],
+    [45, 105, 176],
+    [62, 51, 142],    // far
+  ];
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(x));
+  const f = x - i;
+  return [0,1,2].map(k => Math.round(stops[i][k] + (stops[i+1][k]-stops[i][k]) * f));
+}
+
+function drawOverlay() {
+  const data = state.caseData, W = data.width, H = data.height;
+  octx.clearRect(0, 0, W, H);
+  const palette = instancePalette();
+  for (const s of state.splats) {
+    if (!s.C) continue;
+    const col = palette(s.instId);
+    const k = state.sigma / 3; // eig radii stored at 3 sigma
+    const cx = s.u - 0.5, cy = s.v - 0.5; // canvas pixel coords (pixel (0,0) spans [0,1])
+    octx.save();
+    octx.translate(cx, cy);
+    octx.rotate(-s.eig.theta); // screen y is flipped vs math y
+    if (state.showBbox) {
+      octx.rotate(s.eig.theta);
+      octx.strokeStyle = "rgba(255,255,255,0.28)";
+      octx.setLineDash([2, 2]);
+      octx.lineWidth = 0.6;
+      octx.strokeRect(-s.rx, -s.ry, 2*s.rx, 2*s.ry);
+      octx.setLineDash([]);
+      octx.rotate(-s.eig.theta);
+    }
+    if (state.showEllipse) {
+      octx.beginPath();
+      octx.ellipse(0, 0, Math.max(0.4, s.axisA * k), Math.max(0.4, s.axisB * k), 0, 0, Math.PI*2);
+      octx.strokeStyle = col.stroke;
+      octx.lineWidth = 0.8;
+      octx.stroke();
+    }
+    if (state.showAxis) {
+      octx.strokeStyle = col.axis;
+      octx.lineWidth = 0.9;
+      octx.beginPath();
+      octx.moveTo(-s.axisA * k, 0); octx.lineTo(s.axisA * k, 0);
+      octx.moveTo(0, -s.axisB * k); octx.lineTo(0, s.axisB * k);
+      octx.stroke();
+    }
+    octx.restore();
+    if (state.showCenter) {
+      octx.fillStyle = col.axis;
+      octx.fillRect(cx - 1, cy - 1, 2, 2);
+    }
+  }
+  // selected pixel marker
+  if (state.selectedPixel) {
+    const [px, py] = state.selectedPixel;
+    octx.strokeStyle = "#ff5d5d";
+    octx.lineWidth = 1;
+    octx.strokeRect(px + 0.5, py + 0.5, 1, 1);
+    octx.strokeStyle = "rgba(255,93,93,0.55)";
+    octx.strokeRect(px - 1.5, py - 1.5, 4, 4);
+  }
+}
+
+function instancePalette() {
+  const hues = [[122,162,255],[94,214,196],[244,180,82],[240,133,123],[170,140,255],[120,220,130],[235,140,200],[130,200,250]];
+  const map = new Map();
+  return (instId) => {
+    if (!map.has(instId)) {
+      const h = hues[map.size % hues.length];
+      map.set(instId, {
+        stroke: `rgba(${h[0]},${h[1]},${h[2]},0.9)`,
+        axis: `rgba(${h[0]},${h[1]},${h[2]},0.95)`,
+        rgb: h,
+      });
+    }
+    return map.get(instId);
+  };
+}
+
+/* ===================== stats & warnings ===================== */
+function updateStats() {
+  $("stTotal").textContent = state.totalPoints;
+  $("stInvalid").textContent = state.invalidCount;
+  $("stCulled").textContent = state.cullCount;
+  $("stActive").textContent = state.splats.filter(s => s.C).length;
+  $("stHits").textContent = `${fmt(state.hitStats.avg, 2)}（峰值命中 ${maxBucket()}）`;
+  $("stTime").textContent = `${fmt(state.renderMs, 1)} ms`;
+  const box = $("warnBoxes");
+  box.innerHTML = "";
+  const shown = state.warnings.slice(0, 6);
+  for (const w of shown) {
+    const div = document.createElement("div");
+    div.className = "warnbox" + (w.level === "err" ? " err" : "");
+    div.textContent = w.text;
+    box.appendChild(div);
+  }
+  if (state.warnings.length > 6) {
+    const div = document.createElement("div");
+    div.className = "warnbox";
+    div.textContent = `另有 ${state.warnings.length - 6} 条提示…`;
+    box.appendChild(div);
+  }
+}
+function maxBucket() {
+  let m = 0;
+  for (const b of state.buckets) if (b && b.length > m) m = b.length;
+  return m;
+}
+
+/* ===================== pixel trace ===================== */
+function fullPixelTrace(px, py) {
+  const data = state.caseData, W = data.width;
+  const idx = py * W + px;
+  const hits = (state.buckets[idx] || []).slice();
+  hits.sort((a, b) => (a.s.z - b.s.z) || (a.s.pointId < b.s.pointId ? -1 : a.s.pointId > b.s.pointId ? 1 : 0));
+  // skipped: projected splats outside q<=9 gate at this pixel, plus culled/invalid info
+  const skipped = [];
+  for (const s of state.splats) {
+    if (!s.C) { skipped.push({ s, reason: s.culled || "非正定剔除" }); continue; }
+    if (!hits.some(h => h.s === s)) {
+      const du = px + 0.5 - s.u, dv = py + 0.5 - s.v;
+      const [i00, i01, i11] = s.invC;
+      const q = i00*du*du + 2*i01*du*dv + i11*dv*dv;
+      skipped.push({ s, reason: `q=${fmt(q, 3)} > 9` });
+    }
+  }
+  return { hits, skipped };
+}
+
+function updateTrace(px, py) {
+  const data = state.caseData, W = data.width, H = data.height;
+  if (px < 0 || py < 0 || px >= W || py >= H) return;
+  state.selectedPixel = [px, py];
+  const { hits, skipped } = fullPixelTrace(px, py);
+  const idx = py * W + px;
+  const rgb = state.buffers.rgb;
+  const lin = [rgb[idx*3], rgb[idx*3+1], rgb[idx*3+2]];
+  const T = state.buffers.T[idx];
+  const d = state.buffers.depth[idx];
+  const pick = hits.length ? hits.reduce((a, b) =>
+    (b.w > a.w || (b.w === a.w && b.s.pointId < a.s.pointId)) ? b : a) : null;
+  const maxW = hits.length ? Math.max(...hits.map(h => h.w)) : 1;
+  const srgb = lin.map(linearToSRGB);
+  const chip = `rgb(${srgb.map(v => Math.round(v*255)).join(",")})`;
+
+  const rows = hits.map(h => {
+    const s = h.s;
+    const picked = pick && s === pick.s;
+    const wPct = maxW > 0 ? (h.w / maxW * 100) : 0;
+    return `<tr class="${picked ? "picked" : ""}">
+      <td title="${s.label}">${picked ? "▶ " : ""}${s.pointId}<div style="color:var(--fg-faint);font-size:10px">${s.instId}</div></td>
+      <td>${fmt(s.z, 4)}</td>
+      <td>${fmt(h.q, 3)}</td>
+      <td>${fmt(h.alpha, 4)}</td>
+      <td class="bar-cell"><div class="wbar" style="width:${wPct.toFixed(1)}%"></div><span>${fmt(h.w, 4)}</span></td>
+      <td>${fmt(h.Tbefore, 4)}</td>
+    </tr>`;
+  }).join("");
+
+  const steps = pick ? buildStepDetails(pick.s, px, py, hits, skipped, lin, T, d) : "";
+  const SKIP_CAP = 100;
+  const skippedSorted = skipped.slice().sort((a, b) => {
+    const qa = a.reason.startsWith("q=") ? parseFloat(a.reason.slice(2)) : Infinity;
+    const qb = b.reason.startsWith("q=") ? parseFloat(b.reason.slice(2)) : Infinity;
+    return qa - qb;
+  });
+  const skippedShown = skippedSorted.slice(0, SKIP_CAP);
+  const skippedHtml = skipped.length ? `
+    <details class="steps" ${hits.length ? "" : "open"}>
+      <summary>未参与点元（${skipped.length}${skipped.length > SKIP_CAP ? `，界面列前 ${SKIP_CAP}，导出含全部` : ""}）</summary>
+      <div class="body">
+        ${skippedShown.map(k => `<div class="step-line">${k.s.label} — <b>${k.reason}</b></div>`).join("")}
+      </div>
+    </details>` : "";
+
+  $("traceRoot").innerHTML = `
+    <div class="trace-head">
+      <div class="px">像素 (${px}, ${py}) <span style="color:var(--fg-faint);font-weight:400">中心 (${px + 0.5}, ${py + 0.5})</span></div>
+      <div class="swatch-row">
+        <div class="color-chip" style="background:${chip}" title="sRGB 显示色"></div>
+        <div style="font-family:var(--font-mono);font-size:11px">
+          <div>线性 RGB: (${lin.map(v => fmt(v, 5)).join(", ")})</div>
+          <div>透射率 T = <b>${fmt(T, 6)}</b> · 期望深度 = <b>${fmt(d, 5)}</b></div>
+          <div>点选: <b style="color:var(--accent)">${pick ? pick.s.label : "无（Σw=0）"}</b></div>
+        </div>
+      </div>
+    </div>
+    ${hits.length ? `<div class="table-scroll">
+      <table class="contrib-table">
+        <thead><tr><th>点元 ID</th><th>z</th><th>q</th><th>α</th><th>w=T·α</th><th>T 前</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>` : `<div class="trace-empty">该像素无 q≤9 的点元命中，颜色 = T·background</div>`}
+    ${steps}
+    ${skippedHtml}`;
+  drawOverlay();
+  $("cursorInfo").textContent = `已选 (${px}, ${py}) · 命中 ${hits.length} · 点选 ${pick ? pick.s.pointId : "无"}`;
+}
+
+function buildStepDetails(s, px, py, hits, skipped, lin, Tfinal, depth) {
+  const cam = state.caseData.camera;
+  const [i00, i01, i11] = s.invC;
+  const du = px + 0.5 - s.u, dv = py + 0.5 - s.v;
+  const qCheck = i00*du*du + 2*i01*du*dv + i11*dv*dv;
+  const matrixHtml = (m) => {
+    let cells, cols;
+    if (m.length === 3) { cells = [[m[0], m[1]], [m[1], m[2]]]; cols = 2; }
+    else if (m.length === 6) { cells = [[m[0],m[1],m[2]],[m[3],m[4],m[5]]]; cols = 3; }
+    else { cells = [[m[0],m[1],m[2]],[m[3],m[4],m[5]],[m[6],m[7],m[8]]]; cols = 3; }
+    return `<div class="matrix${cols}">${cells.flat().map(v => `<b>${fmt(v, 5)}</b>`).join("")}</div>`;
+  };
+  // composite walkthrough for the picked splat
+  const walk = hits.map((h, k) => {
+    const tag = h.s === s ? " ◀ 选中" : "";
+    return `<div class="step-line">${k+1}. ${h.s.pointId}${tag}: α=${fmt(h.alpha,5)}, w = ${fmt(h.Tbefore,5)}×${fmt(h.alpha,5)} = <b>${fmt(h.w,5)}</b>, T → ${fmt(h.Tafter,5)}</div>`;
+  }).join("");
+  return `
+  <details class="steps" open>
+    <summary>选中点元计算过程 · ${s.label}</summary>
+    <div class="body">
+      <div class="step-line">① 局部均值 μ = (${s.meanLocal.map(v => fmt(v,4)).join(", ")})，实例矩阵 M、视图 V（行主序）：μ꜀ = V·M·μ = <b>(${s.meanCam.map(v => fmt(v,5)).join(", ")})</b></div>
+      <div class="step-line">② 局部协方差 Σ（对称 3×3）：</div>
+      ${matrixHtml(s.covLocal)}
+      <div class="step-line">③ 组合线性部分 A = lin(VM)：</div>
+      ${matrixHtml(s.A)}
+      <div class="step-line">④ 相机协方差 Σ꜀ = A·Σ·Aᵀ（剪切/镜像在此产生交叉项）：</div>
+      ${matrixHtml(s.covCam)}
+      <div class="step-line">⑤ z = <b>${fmt(s.z,6)}</b> ∈ [${cam.near}, ${cam.far}]；u = fx·x/z+cx = <b>${fmt(s.u,5)}</b>，v = cy−fy·y/z = <b>${fmt(s.v,5)}</b></div>
+      <div class="step-line">⑥ 雅可比 J（2×3，由针孔投影对相机坐标求导）：</div>
+      ${matrixHtml(s.J)}
+      <div class="step-line">屏幕协方差 C = J·Σ꜀·Jᵀ + 0.25·I（2×2 对称，剪切体现为非零 c₀₁）：</div>
+      ${matrixHtml(s.C)}
+      <div class="step-line">⑦ 像素差 d = (${fmt(du,5)}, ${fmt(dv,5)})；q = dᵀC⁻¹d = <b>${fmt(qCheck,6)}</b> ≤ 9 ✓</div>
+      <div class="step-line">⑧ α = min(0.99, ${fmt(s.opacity,4)}·exp(−${fmt(qCheck,4)}/2)) = <b>${fmt(Math.min(0.99, s.opacity*Math.exp(-qCheck/2)),6)}</b></div>
+      <div class="step-line" style="margin-top:8px">⑨ 按 z 升序完整合成（不提前终止）：</div>
+      ${walk}
+      <div class="step-line" style="margin-top:6px">最终 T=<b>${fmt(Tfinal,6)}</b>，线性RGB=(${lin.map(v => fmt(v,5)).join(", ")})，期望深度=<b>${fmt(depth,5)}</b>${Number.isNaN(depth) ? "（Σw=0 → null）" : ""}</div>
+    </div>
+  </details>`;
+}
+
+/* ===================== interaction ===================== */
+function canvasToPixel(e) {
+  const rect = mainCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width * mainCanvas.width;
+  const y = (e.clientY - rect.top) / rect.height * mainCanvas.height;
+  return [Math.floor(x), Math.floor(y)];
+}
+
+let drag = null;
+overlayCanvas.addEventListener("pointerdown", (e) => {
+  overlayCanvas.setPointerCapture(e.pointerId);
+  drag = { x: e.clientX, y: e.clientY, yaw: camSliders().yaw, pitch: camSliders().pitch, moved: false };
+});
+overlayCanvas.addEventListener("pointermove", (e) => {
+  if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    $("yaw").value = normDeg(drag.yaw + dx * 0.4);
+    $("pitch").value = Math.max(-89, Math.min(89, drag.pitch - dy * 0.4));
+    syncCameraFromSliders();
+  } else {
+    showHover(e);
+  }
+});
+overlayCanvas.addEventListener("pointerup", (e) => {
+  if (drag && !drag.moved) {
+    const [px, py] = canvasToPixel(e);
+    updateTrace(px, py);
+  }
+  drag = null;
+});
+overlayCanvas.addEventListener("pointerleave", () => { $("tooltip").style.display = "none"; });
+overlayCanvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const el = $("dist");
+  el.value = Math.max(+el.min, Math.min(+el.max, +el.value + Math.sign(e.deltaY) * 0.5));
+  syncCameraFromSliders();
+}, { passive: false });
+
+function showHover(e) {
+  const [px, py] = canvasToPixel(e);
+  const W = state.caseData.width;
+  const hits = state.buckets[py * W + px];
+  const tip = $("tooltip");
+  if (!hits || !hits.length) { tip.style.display = "none"; return; }
+  const top = hits.slice().sort((a,b) => b.w - a.w)[0];
+  const rect = $("canvasStack").getBoundingClientRect();
+  tip.style.display = "block";
+  tip.style.left = (e.clientX - rect.left + 14) + "px";
+  tip.style.top = (e.clientY - rect.top + 14) + "px";
+  tip.innerHTML = `<div class="t1">${top.s.label}</div>
+    <div class="t2">z=${fmt(top.s.z,3)} α=${fmt(top.alpha,4)} w=${fmt(top.w,4)} q=${fmt(top.q,3)}</div>
+    <div class="t2">点击查看完整贡献与计算过程</div>`;
+}
+
+function camSliders() {
+  return { yaw: +$("yaw").value, pitch: +$("pitch").value };
+}
+function normDeg(d) {
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+}
+let camTimer = null;
+function syncCameraFromSliders() {
+  const p = {
+    yaw: (+$("yaw").value) * Math.PI / 180,
+    pitch: (+$("pitch").value) * Math.PI / 180,
+    roll: (+$("roll").value) * Math.PI / 180,
+    d: +$("dist").value,
+    tx: +$("tx").value, ty: +$("ty").value, tz: +$("tz").value,
+  };
+  $("yawVal").textContent = $("yaw").value + "°";
+  $("pitchVal").textContent = $("pitch").value + "°";
+  $("rollVal").textContent = $("roll").value + "°";
+  $("distVal").textContent = fmt(p.d, 2);
+  $("txVal").textContent = $("tx").value;
+  $("tyVal").textContent = $("ty").value;
+  $("tzVal").textContent = $("tz").value;
+  state.viewOverride = rigidViewFromPose(p);
+  clearTimeout(camTimer);
+  camTimer = setTimeout(renderFrame, 40);
+}
+["yaw","pitch","roll","dist","tx","ty","tz"].forEach(id =>
+  $(id).addEventListener("input", syncCameraFromSliders));
+
+$("resetCam").addEventListener("click", () => {
+  state.viewOverride = null;
+  applyPoseToSliders(state.defaultPose);
+  renderFrame();
+});
+
+function applyPoseToSliders(p) {
+  $("yaw").value = (p.yaw * 180 / Math.PI).toFixed(1);
+  $("pitch").value = (p.pitch * 180 / Math.PI).toFixed(1);
+  $("roll").value = (p.roll * 180 / Math.PI).toFixed(1);
+  $("dist").value = p.d;
+  $("tx").value = p.tx; $("ty").value = p.ty; $("tz").value = p.tz;
+  syncCameraFromSliders();
+}
+
+/* ===================== data loading ===================== */
+function validateCase(d) {
+  const errs = [];
+  const need = ["width","height","camera","instances","background"];
+  for (const k of need) if (!(k in d)) errs.push(`缺少顶层字段 ${k}`);
+  if (!d.camera) return errs;
+  for (const k of ["view","fx","fy","cx","cy","near","far"]) if (!(k in d.camera)) errs.push(`camera 缺少 ${k}`);
+  if (d.camera && d.camera.view && d.camera.view.length !== 16) errs.push("view 必须为 16 元素行主序矩阵");
+  if (Array.isArray(d.instances)) {
+    const nPts = d.instances.reduce((a, i) => a + (i.points ? i.points.length : 0), 0);
+    if (nPts > 2000) errs.push(`点元数 ${nPts} 超过 2000 上限`);
+    if (d.width > 256 || d.height > 192) errs.push("输出超过 256×192");
+  }
+  return errs;
+}
+
+async function loadCase(obj, name) {
+  const errs = validateCase(obj);
+  if (errs.length) {
+    toast("文件校验失败：" + errs[0]);
+    setSelfTest("err", "文件错误");
+    return;
+  }
+  state.caseData = obj;
+  state.caseName = name;
+  state.enabled = new Map(obj.instances.map(i => [i.id, true]));
+  state.viewOverride = null;
+  state.selectedPixel = null;
+  state.defaultPose = poseFromView(obj.camera.view);
+  applyPoseToSliders(state.defaultPose);
+  $("kfFocal").textContent = `${fmt(obj.camera.fx,3)} / ${fmt(obj.camera.fy,3)}`;
+  $("kfCenter").textContent = `${fmt(obj.camera.cx,3)} / ${fmt(obj.camera.cy,3)}`;
+  $("kfClip").textContent = `${obj.camera.near} / ${obj.camera.far}`;
+  $("sizeTag").textContent = `${obj.width} × ${obj.height}`;
+  buildInstanceList();
+  renderFrame();
+  $("traceRoot").innerHTML = `<div class="trace-empty">已加载 <b>${name}</b><br>点击画布任意像素查看完整贡献追踪</div>`;
+}
+
+function buildInstanceList() {
+  const pal = instancePalette();
+  const list = $("instList");
+  list.innerHTML = "";
+  $("instHint").textContent = `${state.caseData.instances.length} 个`;
+  for (const inst of state.caseData.instances) {
+    const c = pal(inst.id);
+    const item = document.createElement("div");
+    item.className = "inst-item";
+    item.innerHTML = `
+      <input type="checkbox" checked data-id="${inst.id}">
+      <span class="swatch" style="background:rgb(${c.rgb.join(",")})"></span>
+      <span class="name" title="${inst.id}">${inst.id}</span>
+      <span class="cnt">${inst.points.length} 点</span>`;
+    item.querySelector("input").addEventListener("change", (e) => {
+      state.enabled.set(inst.id, e.target.checked);
+      item.classList.toggle("off", !e.target.checked);
+      renderFrame();
+    });
+    list.appendChild(item);
+  }
+}
+
+$("sampleSelect").addEventListener("change", async (e) => {
+  const r = await fetch(e.target.value);
+  await loadCase(await r.json(), e.target.value);
+});
+$("fileInput").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const obj = JSON.parse(await f.text());
+    await loadCase(obj, f.name);
+  } catch (err) {
+    toast("JSON 解析失败：" + err.message);
+  }
+});
+
+/* mode / overlay controls */
+$("modeSeg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  state.mode = btn.dataset.mode;
+  [...$("modeSeg").children].forEach(b => b.classList.toggle("active", b === btn));
+  $("legendColor").hidden = state.mode !== "color";
+  $("legendTrans").hidden = state.mode !== "trans";
+  $("legendDepth").hidden = state.mode !== "depth";
+  $("modeTag").textContent = {
+    color: "COLOR · 线性 RGB → sRGB（夹取 0–1）",
+    trans: "TRANSMITTANCE · 最终 T（1=全透射）",
+    depth: "EXPECTED DEPTH · Σ(w·z)/Σw，null 为暗色格",
+  }[state.mode];
+  const [dmin, dmax] = state.depthRange || [0, 1];
+  $("depthNear").textContent = fmt(dmin, 2);
+  $("depthFar").textContent = fmt(dmax, 2);
+  drawCanvas();
+});
+$("sigmaSeg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  state.sigma = +btn.dataset.sigma;
+  [...$("sigmaSeg").children].forEach(b => b.classList.toggle("active", b === btn));
+  drawOverlay();
+});
+$("ellipseOn").addEventListener("change", e => { state.showEllipse = e.target.checked; drawOverlay(); });
+$("axisOn").addEventListener("change", e => { state.showAxis = e.target.checked; drawOverlay(); });
+$("centerOn").addEventListener("change", e => { state.showCenter = e.target.checked; drawOverlay(); });
+$("bboxOn").addEventListener("change", e => { state.showBbox = e.target.checked; drawOverlay(); });
+
+/* ===================== self-test against reference.json ===================== */
+async function runSelfTest() {
+  setSelfTest("warn", "自检中…");
+  try {
+    const [ov, ref] = await Promise.all([
+      fetch("overlap.json").then(r => r.json()),
+      fetch("reference.json").then(r => r.json()),
+    ]);
+    state.caseData = ov;
+    state.enabled = new Map(ov.instances.map(i => [i.id, true]));
+    state.viewOverride = null;
+    state.defaultPose = poseFromView(ov.camera.view);
+    rebuildSplats();
+    const W = ov.width;
+    const fails = [];
+    const approx = (a, b, tol = 1e-9) => Math.abs(a - b) <= tol * (1 + Math.abs(b));
+    for (const s of state.splats) {
+      const C = [s.C[0], s.C[1], s.C[1], s.C[2]]; // compact [c00,c01,c11] -> symmetric 2x2
+      const refC = ref.screenCovariance;
+      for (let k = 0; k < 4; k++) if (!approx(C[k], refC[k], 1e-9)) fails.push(`屏幕协方差 ${s.pointId}[${k}] ${C[k]} ≠ ${refC[k]}`);
+    }
+    const buckets = new Array(W * ov.height);
+    for (const s of state.splats) {
+      if (!s.C) continue;
+      const x0 = Math.max(0, Math.floor(s.u - 0.5 - s.rx)), x1 = Math.min(W-1, Math.ceil(s.u - 0.5 + s.rx));
+      const y0 = Math.max(0, Math.floor(s.v - 0.5 - s.ry)), y1 = Math.min(ov.height-1, Math.ceil(s.v - 0.5 + s.ry));
+      const [i00, i01, i11] = s.invC;
+      for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
+        const du = xx+0.5-s.u, dv = yy+0.5-s.v;
+        const q = i00*du*du + 2*i01*du*dv + i11*dv*dv;
+        if (q <= 9) (buckets[yy*W+xx] ||= []).push({ s, q });
+      }
+    }
+    const [px, py] = ref.pixel;
+    const hits = buckets[py*W+px].slice().sort((a,b) => (a.s.z-b.s.z) || (a.s.pointId < b.s.pointId ? -1 : 1));
+    let T = 1, rgb = [0,0,0], wsum = 0, dsum = 0;
+    const weights = {};
+    for (const h of hits) {
+      const alpha = Math.min(0.99, h.s.opacity * Math.exp(-h.q/2));
+      const w = T * alpha;
+      weights[h.s.pointId] = w;
+      for (let k = 0; k < 3; k++) rgb[k] += w * h.s.color[k];
+      wsum += w; dsum += w * h.s.z; T *= 1 - alpha;
+    }
+    for (let k = 0; k < 3; k++) rgb[k] += T * ov.background[k];
+    const depth = dsum / wsum;
+    for (const [id, w] of Object.entries(ref.weights))
+      if (!approx(weights[id] ?? -1, w, 1e-9)) fails.push(`权重 ${id}: ${weights[id]} ≠ ${w}`);
+    for (let k = 0; k < 3; k++) if (!approx(rgb[k], ref.linearRGB[k], 1e-9)) fails.push(`RGB[${k}]: ${rgb[k]} ≠ ${ref.linearRGB[k]}`);
+    if (!approx(T, ref.T, 1e-9)) fails.push(`T: ${T} ≠ ${ref.T}`);
+    if (!approx(depth, ref.expectedDepth, 1e-9)) fails.push(`深度: ${depth} ≠ ${ref.expectedDepth}`);
+    const pick = hits.reduce((a,b) => (b.w > a.w || (b.w === a.w && b.s.pointId < a.s.pointId)) ? b : a);
+    if (pick.s.pointId !== ref.pick) fails.push(`点选: ${pick.s.pointId} ≠ ${ref.pick}`);
+    if (fails.length) {
+      setSelfTest("err", `自检 ${fails.length} 项不符`);
+      console.error("self-test failures:", fails);
+    } else {
+      setSelfTest("ok", "自检通过 · 与 reference.json 一致");
+    }
+  } catch (err) {
+    setSelfTest("err", "自检失败（数据缺失）");
+    console.error(err);
+  }
+}
+function setSelfTest(level, text) {
+  const pill = $("selftestPill");
+  pill.className = "pill " + (level === "ok" ? "ok" : level === "err" ? "err" : "warn");
+  $("selftestText").textContent = text;
+}
+
+/* ===================== export ===================== */
+const modalBack = $("modalBack"), modalText = $("modalText"), modalPng = $("modalPng");
+let modalTab = "png";
+function openModal(tab) {
+  modalTab = tab;
+  [...document.querySelectorAll(".modal-tabs button")].forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  modalPng.hidden = tab !== "png";
+  modalText.hidden = tab === "png";
+  if (tab === "png") buildExportPng();
+  if (tab === "float") modalText.value = buildFloatExport();
+  if (tab === "trace") modalText.value = buildTraceExport();
+  $("modalTitle").textContent = { png: "导出 PNG（sRGB 显示，夹取 0–1）", float: "浮点缓冲导出（未夹取）", trace: "像素追踪 JSON" }[tab];
+  $("modalNote").textContent = tab === "png"
+    ? "画布像素按显示尺寸放大；右键图片可另存。沙盒内自动下载可能被拦截。"
+    : "JSON 文本可全选复制；沙盒内自动下载可能被拦截，复制按钮始终可用。";
+  modalBack.classList.add("open");
+}
+$("modalClose").addEventListener("click", () => modalBack.classList.remove("open"));
+modalBack.addEventListener("click", e => { if (e.target === modalBack) modalBack.classList.remove("open"); });
+document.querySelectorAll(".modal-tabs button").forEach(b =>
+  b.addEventListener("click", () => openModal(b.dataset.tab)));
+
+function buildExportPng() {
+  const c = $("exportCanvas");
+  c.width = mainCanvas.width; c.height = mainCanvas.height;
+  c.getContext("2d").drawImage(mainCanvas, 0, 0);
+}
+function buildFloatExport() {
+  const d = state.caseData, { rgb, T, depth } = state.buffers;
+  const pixels = [];
+  for (let py = 0; py < d.height; py++) {
+    for (let px = 0; px < d.width; px++) {
+      const i = py * d.width + px;
+      pixels.push({
+        px, py,
+        linearRGB: [rgb[i*3], rgb[i*3+1], rgb[i*3+2]],
+        transmittance: T[i],
+        expectedDepth: Number.isNaN(depth[i]) ? null : depth[i],
+      });
+    }
+  }
+  return JSON.stringify({
+    generator: "Surfel Projector Lab",
+    case: state.caseName,
+    width: d.width, height: d.height,
+    camera: d.camera,
+    note: "linearRGB 未夹取；expectedDepth 为 null 表示 Σw=0；T 为合成后剩余透射率",
+    pixels,
+  }, null, 1);
+}
+function buildTraceExport() {
+  const sel = state.selectedPixel || [Math.floor(state.caseData.width/2), Math.floor(state.caseData.height/2)];
+  const [px, py] = sel;
+  const { hits, skipped } = fullPixelTrace(px, py);
+  const d = state.caseData, idx = py * d.width + px;
+  return JSON.stringify({
+    case: state.caseName,
+    pixel: [px, py],
+    pixelCenter: [px + 0.5, py + 0.5],
+    camera: d.camera,
+    result: {
+      linearRGB: [0,1,2].map(k => state.buffers.rgb[idx*3+k]),
+      transmittance: state.buffers.T[idx],
+      expectedDepth: Number.isNaN(state.buffers.depth[idx]) ? null : state.buffers.depth[idx],
+      pick: hits.length ? hits.reduce((a,b) => (b.w > a.w || (b.w === a.w && b.s.pointId < a.s.pointId)) ? b : a).s.label : null,
+    },
+    contributions: hits.map(h => ({
+      instance: h.s.instId, id: h.s.pointId,
+      meanCamera: h.s.meanCam,
+      screenCovariance: [h.s.C[0], h.s.C[1], h.s.C[1], h.s.C[2]],
+      projected: [h.s.u, h.s.v], z: h.s.z, q: h.q,
+      opacity: h.s.opacity, alpha: h.alpha,
+      transmittanceBefore: h.Tbefore, weight: h.w, transmittanceAfter: h.Tafter,
+      color: h.s.color,
+    })),
+    skipped: skipped.map(k => ({
+      instance: k.s.instId, id: k.s.pointId, reason: k.reason,
+    })),
+  }, null, 1);
+}
+$("copyBtn").addEventListener("click", async () => {
+  if (modalTab === "png") {
+    const c = $("exportCanvas");
+    try {
+      const blob = await new Promise(res => c.toBlob(res, "image/png"));
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      toast("PNG 已复制到剪贴板");
+    } catch { toast("图片复制被浏览器拒绝，请右键另存"); }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(modalText.value);
+    toast("已复制 " + fmtBytes(modalText.value.length));
+  } catch {
+    modalText.select();
+    document.execCommand("copy");
+    toast("已复制（降级方式）");
+  }
+});
+$("downloadBtn").addEventListener("click", () => {
+  const base = state.caseName.replace(/\.json$/i, "") || "export";
+  if (modalTab === "png") {
+    const c = $("exportCanvas");
+    c.toBlob(blob => downloadBlob(blob, `${base}-${state.mode}.png`), "image/png");
+  } else if (modalTab === "float") {
+    downloadBlob(new Blob([modalText.value], { type: "application/json" }), `${base}-float-buffer.json`);
+  } else {
+    downloadBlob(new Blob([modalText.value], { type: "application/json" }), `${base}-pixel-${state.selectedPixel ? state.selectedPixel.join("-") : "center"}-trace.json`);
+  }
+});
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast("已触发下载：" + filename + "（若沙盒拦截请用复制按钮）");
+}
+function fmtBytes(n) {
+  return n > 1e6 ? (n/1e6).toFixed(2) + " MB" : n > 1e3 ? (n/1e3).toFixed(1) + " KB" : n + " B";
+}
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* ===================== theme ===================== */
+$("themeBtn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const darkNow = root.dataset.theme === "dark" ||
+    (!root.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  root.dataset.theme = darkNow ? "light" : "dark";
+});
+
+/* ===================== boot ===================== */
+(async function boot() {
+  $("transBar").style.background = `linear-gradient(90deg, rgb(${transRamp(0).join(",")}), rgb(${transRamp(1).join(",")}))`;
+  $("depthBar").style.background = `linear-gradient(90deg, ${[0,.25,.5,.75,1].map(t => `rgb(${depthRamp(t).join(",")})`).join(",")})`;
+  const foot = document.querySelector(".vp-foot");
+  const bar = document.createElement("span");
+  bar.style.cssText = "display:flex;gap:6px";
+  bar.innerHTML = `
+    <button class="btn" id="expPng">导出 PNG</button>
+    <button class="btn" id="expFloat">浮点缓冲</button>
+    <button class="btn" id="expTrace">追踪 JSON</button>`;
+  foot.appendChild(bar);
+  $("expPng").addEventListener("click", () => openModal("png"));
+  $("expFloat").addEventListener("click", () => openModal("float"));
+  $("expTrace").addEventListener("click", () => openModal("trace"));
+
+  await runSelfTest();
+  const r = await fetch($("sampleSelect").value);
+  await loadCase(await r.json(), $("sampleSelect").value);
+})();
+</script>
+</body>
+</html>

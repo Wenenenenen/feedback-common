@@ -1,0 +1,1 @@
+{"pixel":[32,24],"screenCovariance":[1.25,0,0,1.25],"weights":{"front":0.2,"back":0.64},"linearRGB":[0.2,0,0.64],"T":0.16,"expectedDepth":5.523809523809524,"pick":"back"}
