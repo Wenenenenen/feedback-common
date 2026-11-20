@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>平行束 Ram-Lak 断层重建台</title>
+<style>
+  :root {
+    --bg: #0f141b;
+    --panel: #171e29;
+    --panel-2: #1d2634;
+    --line: #2b384c;
+    --text: #e6ebf2;
+    --muted: #93a1b5;
+    --accent: #5db0ff;
+    --accent-2: #ffb454;
+    --bad: #ff6b6b;
+    --good: #4ec9a4;
+    --canvas-bg: #000;
+    --radius: 10px;
+    font-size: 14px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3f5f8;
+      --panel: #ffffff;
+      --panel-2: #f6f8fb;
+      --line: #d7dee8;
+      --text: #17222f;
+      --muted: #5b6b7f;
+      --accent: #1769c2;
+      --accent-2: #c2671a;
+      --canvas-bg: #000;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    line-height: 1.45;
+  }
+  header {
+    padding: 14px 20px 10px;
+    border-bottom: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px;
+  }
+  header h1 { font-size: 1.15rem; margin: 0; }
+  header .sub { color: var(--muted); font-size: .85rem; }
+  main { padding: 16px 20px 40px; max-width: 1500px; margin: 0 auto; }
+  .grid {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .panel h2 {
+    font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 10px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  label.field { display: block; margin-bottom: 9px; }
+  label.field span.lbl {
+    display: flex; justify-content: space-between;
+    font-size: .82rem; color: var(--muted); margin-bottom: 3px;
+  }
+  label.field span.lbl b { color: var(--text); font-weight: 600; }
+  input[type="number"], input[type="text"], select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 7px 9px;
+    font-size: .9rem;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  input[type="file"] { width: 100%; font-size: .82rem; color: var(--muted); }
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 12px;
+    font-size: .88rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; flex: 1; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .views { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+  @media (max-width: 1100px) { .views { grid-template-columns: 1fr; } }
+  .viewhead {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; gap: 8px; flex-wrap: wrap;
+  }
+  .viewhead h3 { margin: 0; font-size: .95rem; }
+  .viewhead .meta { color: var(--muted); font-size: .78rem; }
+  canvas.viz {
+    width: 100%; display: block;
+    background: var(--canvas-bg);
+    border: 1px solid var(--line); border-radius: 8px;
+    image-rendering: pixelated;
+    cursor: crosshair;
+  }
+  canvas.colorbar { height: 18px; width: 100%; border-radius: 6px; margin-top: 6px; }
+  .cb-labels { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
+  .status {
+    margin-top: 10px; padding: 9px 11px; border-radius: 8px;
+    font-size: .83rem; background: var(--panel-2); border: 1px solid var(--line);
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .status.err { border-color: var(--bad); color: var(--bad); }
+  .status.ok { border-color: var(--good); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: .8rem; }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-variant-numeric: tabular-nums; text-align: right; }
+  .hint { color: var(--muted); font-size: .76rem; margin-top: 6px; }
+  .drop {
+    border: 1px dashed var(--line); border-radius: 8px;
+    padding: 14px; text-align: center; color: var(--muted);
+    font-size: .82rem;
+  }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  .tag {
+    display: inline-block; font-size: .72rem; padding: 1px 7px;
+    border-radius: 99px; border: 1px solid var(--line); color: var(--muted);
+  }
+  .tag.live { color: var(--good); border-color: var(--good); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>平行束扫描 · Ram-Lak 滤波反投影重建台</h1>
+  <span class="sub">离散核 + 非均匀角权 + 逐行探测器中心偏移 · 无断层重建库调用 · 原始尺度与负值完整保留</span>
+</header>
+
+<main>
+<div class="grid">
+  <!-- ===================== 控制列 ===================== -->
+  <div class="stack">
+    <section class="panel">
+      <h2>1 · 数据导入</h2>
+      <div class="drop" id="drop">
+        拖入测试台导出的 <b>.zip</b> 包，或点击选择<br>
+        （也可同时选择 .json 与 .raw 多文件）
+      </div>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnZip">选择 ZIP 包</button>
+        <button id="btnFiles">选择 raw + json</button>
+      </div>
+      <input type="file" id="fileZip" accept=".zip" hidden multiple>
+      <input type="file" id="fileMulti" accept=".raw,.json" hidden multiple>
+      <div class="hint" id="caseName">未载入数据</div>
+      <div class="status" id="status" style="display:none"></div>
+    </section>
+
+    <section class="panel">
+      <h2>2 · 重建参数</h2>
+      <div class="seg" id="modeSeg" role="group" aria-label="滤波模式">
+        <button data-mode="ramlak" class="on">Ram-Lak 滤波</button>
+        <button data-mode="unfilt">未滤波对照</button>
+      </div>
+      <hr>
+      <div class="twocol">
+        <label class="field"><span class="lbl">输出宽 W(px)</span>
+          <input type="number" id="outW" min="1" max="256" step="1"></label>
+        <label class="field"><span class="lbl">输出高 H(px)</span>
+          <input type="number" id="outH" min="1" max="256" step="1"></label>
+      </div>
+      <label class="field"><span class="lbl">像素间距 pixel_size <b id="psVal"></b></span>
+        <input type="range" id="psRange" min="0.25" max="3" step="0.05"></label>
+      <label class="field"><span class="lbl">统一附加中心偏移（探测器单元）<b id="offVal"></b></span>
+        <input type="range" id="offRange" min="-10" max="10" step="0.05"></label>
+      <div class="btnrow">
+        <button id="btnResetGeom">恢复 JSON 几何</button>
+      </div>
+      <div class="hint">附加偏移对所有角度同一常数，叠加在逐行 offset 之上；角权与排序不受影响。</div>
+    </section>
+
+    <section class="panel">
+      <h2>3 · 重建图色窗（只影响显示，不改重建值）</h2>
+      <label class="field"><span class="lbl">窗位 center <b id="wcVal"></b></span>
+        <input type="range" id="wc" min="-200" max="200" step="0.01"></label>
+      <label class="field"><span class="lbl">窗宽 width <b id="wwVal"></b></span>
+        <input type="range" id="ww" min="0.02" max="400" step="0.01"></label>
+      <div class="btnrow">
+        <button id="btnAutoWin">按数据范围（含负值）</button>
+        <button id="btnFullWin">对称窗 ±max|v|</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>4 · 导出与重载</h2>
+      <div class="btnrow">
+        <button class="primary" id="btnPfm" disabled>导出 PFM（float32 LE）</button>
+        <button id="btnSaveParams" disabled>保存参数 JSON</button>
+      </div>
+      <div class="btnrow" style="margin-top:8px">
+        <button id="btnLoadParams">载入参数 JSON 重载</button>
+        <input type="file" id="fileParams" accept=".json" hidden>
+      </div>
+      <div class="hint">PFM：Pf、负尺度 −1、小端、底行优先；保留负数与原始尺度，不做归一化。</div>
+    </section>
+
+    <section class="panel">
+      <h2>当前重建统计</h2>
+      <div class="kv" id="stats">
+        <span class="k">状态</span><span class="v">待导入</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== 视图列 ===================== -->
+  <div class="stack">
+    <div class="views">
+      <section class="panel">
+        <div class="viewhead">
+          <h3>正弦图（行=角度，排序后）</h3>
+          <span class="meta" id="sinoMeta"></span>
+        </div>
+        <canvas class="viz" id="cvSino"></canvas>
+        <div style="margin-top:8px">
+          <label class="field" style="margin-bottom:5px">
+            <span class="lbl">正弦图窗顶 <b id="sinoWinVal"></b></span>
+            <input type="range" id="sinoWin" min="0.01" max="40" step="0.05">
+          </label>
+        </div>
+        <canvas class="colorbar" id="cbSino"></canvas>
+        <div class="cb-labels"><span id="cbSinoLo"></span><span id="cbSinoHi"></span></div>
+        <div class="hint">虚线＝所选像素在各角度命中的探测器位置；圆点＝当前选定角度的命中点。</div>
+      </section>
+
+      <section class="panel">
+        <div class="viewhead">
+          <h3 id="reconTitle">重建图</h3>
+          <span class="meta" id="reconMeta"></span>
+        </div>
+        <canvas class="viz" id="cvRecon"></canvas>
+        <canvas class="colorbar" id="cbRecon"></canvas>
+        <div class="cb-labels"><span id="cbReconLo"></span><span id="cbReconHi"></span></div>
+        <div class="hint">点选像素 → 左侧正弦图标出对应探测器位置；再次点击同一像素取消。</div>
+      </section>
+
+      <section class="panel">
+        <div class="viewhead">
+          <h3>单角度贡献</h3>
+          <span class="meta" id="contribMeta"></span>
+        </div>
+        <label class="field"><span class="lbl">排序后角度索引 <b id="angIdxVal"></b></span>
+          <input type="range" id="angSlider" min="0" max="0" step="1" value="0"></label>
+        <canvas class="viz" id="cvContrib"></canvas>
+        <canvas class="colorbar" id="cbContrib"></canvas>
+        <div class="cb-labels"><span id="cbContribLo"></span><span id="cbContribHi"></span></div>
+        <div class="hint">该角度的 weight·q 反投影项；所有角度贡献之和等于重建图。</div>
+      </section>
+
+      <section class="panel">
+        <div class="viewhead">
+          <h3>像素探测器定位</h3>
+          <span class="meta" id="pickMeta"></span>
+        </div>
+        <div class="kv" id="pickInfo">
+          <span class="k">提示</span><span class="v">在重建图上点选像素</span>
+        </div>
+        <hr>
+        <div class="kv" id="caseInfo"></div>
+      </section>
+    </div>
+  </div>
+</div>
+</main>
+
+<script src="fbp-core.js"></script>
+<script src="unzip.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解包的不可信样例数据与本地测试产物
+_case_data/
+tools/_shots/
+*.f64

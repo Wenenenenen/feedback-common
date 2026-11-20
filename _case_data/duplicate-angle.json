@@ -1,0 +1,16 @@
+{
+  "detectors": 5,
+  "angles": [
+    0,
+    0
+  ],
+  "offset": [
+    0,
+    0
+  ],
+  "ds": 1,
+  "width": 5,
+  "height": 1,
+  "pixel_size": 1,
+  "data": "duplicate-angle.raw"
+}
