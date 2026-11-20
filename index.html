@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>光泽环境探针预过滤</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>光泽环境探针 · 预过滤立方体贴图烘焙器</h1>
+    <div class="topbar-actions">
+      <label class="btn">
+        导入环境 JSON
+        <input id="fileInput" type="file" accept=".json,application/json" hidden>
+      </label>
+      <button id="loadSampleBtn" class="btn ghost" type="button">载入内置样例</button>
+      <button id="exportBtn" class="btn primary" type="button" disabled>导出 PFM / 配置 / 追踪 (ZIP)</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <h2>烘焙参数</h2>
+      <div class="control">
+        <label for="roughnessSelect">粗糙度档</label>
+        <select id="roughnessSelect"></select>
+      </div>
+      <div class="control">
+        <label for="sampleCount">每纹素采样数 <span id="sampleCountVal" class="mono"></span></label>
+        <input id="sampleCount" type="range" min="64" max="1024" step="64" value="256">
+        <div class="hint">范围 64–1024；r=0 时直接重采样，不使用采样数。</div>
+      </div>
+      <div class="control">
+        <label for="outSize">输出面边长 <span id="outSizeVal" class="mono"></span></label>
+        <input id="outSize" type="range" min="8" max="32" step="1" value="32">
+        <div class="hint">每面 ≤ 32×32。</div>
+      </div>
+      <button id="bakeBtn" class="btn primary wide" type="button" disabled>开始烘焙</button>
+      <div class="progress-wrap" hidden>
+        <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+        <div id="progressText" class="hint"></div>
+      </div>
+
+      <h2>预览（不影响浮点导出）</h2>
+      <div class="control">
+        <label for="exposure">曝光系数 exposure <span id="exposureVal" class="mono"></span></label>
+        <input id="exposure" type="range" min="0.1" max="8" step="0.1" value="1">
+        <div class="hint">显示映射 1−exp(−exposure·value) 后 sRGB；导出始终为原始线性浮点。</div>
+      </div>
+
+      <div id="envMeta" class="env-meta hint"></div>
+    </section>
+
+    <section class="panel viewer">
+      <div class="viewer-head">
+        <h2>立方体面展开图</h2>
+        <div class="toggle">
+          <label><input type="radio" name="cubeSrc" value="output" checked> 输出（当前粗糙度）</label>
+          <label><input type="radio" name="cubeSrc" value="input"> 输入环境</label>
+        </div>
+      </div>
+      <div id="cubeGrid" class="cube-grid">
+        <div class="empty-hint">导入环境后显示六面展开图</div>
+      </div>
+      <div class="legend hint">
+        面顺序 px, nx, py, ny, pz, nz。点击任意输出纹素查看采样方向与贡献。
+      </div>
+    </section>
+
+    <section class="panel sphere-panel">
+      <h2>可转动反射球</h2>
+      <canvas id="sphereCanvas" width="300" height="300"></canvas>
+      <div class="hint">拖动旋转视角；球面反射方向实时映射到当前粗糙度立方体贴图。</div>
+      <div id="sphereInfo" class="sphere-info mono"></div>
+    </section>
+
+    <section class="panel inspector">
+      <h2>纹素检查器</h2>
+      <div id="inspectorEmpty" class="hint">点击展开图中的输出纹素。</div>
+      <div id="inspectorBody" hidden>
+        <div class="inspector-grid">
+          <div><span class="dim">面</span><b id="inspFace"></b></div>
+          <div><span class="dim">行列</span><b id="inspCoord" class="mono"></b></div>
+          <div><span class="dim">中心方向 d</span><b id="inspDir" class="mono"></b></div>
+          <div><span class="dim">输出线性 RGB</span><b id="inspRGB" class="mono"></b></div>
+          <div><span class="dim">粗糙度 / 采样数</span><b id="inspParams" class="mono"></b></div>
+        </div>
+        <h3>采样追踪（前 <span id="traceLimitLabel"></span> 条）</h3>
+        <div class="trace-controls">
+          <label class="hint">追踪条数
+            <select id="traceLimit">
+              <option>16</option><option selected>64</option><option>256</option>
+              <option value="all">全部（导出用）</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table id="traceTable">
+            <thead>
+              <tr><th>i</th><th>采样方向 ω</th><th>命中面</th><th>环境值 (线性)</th><th>权重</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="trace-viz-wrap">
+          <h3>采样方向分布图（d 居中）</h3>
+          <canvas id="traceCanvas" width="260" height="260"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
