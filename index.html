@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>虚拟纹理页驻留实验室</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1d222b; --panel2: #232936; --line: #333c4d;
+    --fg: #dbe2ec; --dim: #8b96a8; --accent: #4da3ff;
+    --req: #58a6ff; --cancel: #f0a24b; --done: #4fca7d;
+    --fail: #ff5f5f; --evict: #c586ff; --late: #9aa4b2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 13px/1.5 "SF Mono", Consolas, "Courier New", monospace; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+           padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; }
+  label { color: var(--dim); }
+  input, select, button { background: var(--panel2); color: var(--fg);
+           border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px;
+           font: inherit; }
+  input[type=number] { width: 64px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  main { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 12px 14px; align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+  .card h2 { font-size: 12px; margin: 0 0 8px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  #stage { position: relative; display: inline-block; line-height: 0; }
+  #stage canvas { image-rendering: pixelated; }
+  #overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  #frameSlider { flex: 1 1 160px; }
+  #frameInfo { margin-top: 6px; color: var(--dim); white-space: pre-wrap; }
+  .side { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 2px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--dim); font-weight: normal; }
+  .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin: 4px 0 8px; }
+  .bar > div { height: 100%; background: var(--accent); }
+  .badge { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 11px; }
+  .b-fallback { background: #5a2b2b; color: #ffb3b3; }
+  .b-root { background: #2b4a5a; color: #a3d8ff; }
+  .b-fail { background: #5a2b2b; color: #ff9a9a; }
+  #idealGrid { display: grid; gap: 2px; margin-bottom: 8px; }
+  #idealGrid div { aspect-ratio: 1; border-radius: 2px; background: var(--panel2); }
+  #idealGrid div.resident { background: var(--done); }
+  #idealGrid div.inflight { background: var(--cancel); }
+  #idealGrid div.missing { background: var(--fail); }
+  #idealGrid div.idle { background: var(--panel2); opacity: .35; }
+  #log { max-height: 260px; overflow-y: auto; }
+  #log .row { padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
+  #log .row.cur { background: #2a3550; }
+  #log .f { color: var(--dim); display: inline-block; width: 34px; }
+  .t-请求 { color: var(--req); } .t-取消 { color: var(--cancel); }
+  .t-完成 { color: var(--done); } .t-失败 { color: var(--fail); }
+  .t-淘汰 { color: var(--evict); } .t-忽略晚到 { color: var(--late); }
+  #editor td input { width: 70px; }
+  .hint { color: var(--dim); font-size: 12px; }
+  footer { padding: 0 14px 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>虚拟纹理页驻留实验室</h1>
+  <span>样例 <select id="caseSel"><option value="tiles">tiles（4 级 · 20 帧）</option><option value="mini">mini（2 级 · 8 帧）</option></select></span>
+  <span>容量 <input id="capIn" type="number" min="2" max="32" step="1"> <span class="hint">(2–32，含根)</span></span>
+  <span>并发 <input id="infIn" type="number" min="1" max="8" step="1"> <span class="hint">(1–8)</span></span>
+  <button id="exportBtn">导出记录</button>
+  <span class="hint">根页 0/0/0 始终驻留；跳转/改配置均从第 0 帧确定性重放</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>纹理画面（实际采样）</h2>
+    <div id="stage"><canvas id="view"></canvas><canvas id="overlay"></canvas></div>
+    <div id="transport">
+      <button id="firstBtn" title="第 0 帧">⏮</button>
+      <button id="prevBtn" title="上一帧">◀</button>
+      <button id="playBtn" title="播放/暂停">▶</button>
+      <button id="nextBtn" title="下一帧">⏭</button>
+      <input id="frameSlider" type="range" min="0" value="0">
+      <label>跳转 <input id="jumpIn" type="number" min="0" step="1"></label>
+      <button id="jumpBtn">跳转</button>
+      <label>速度 <select id="speedSel"><option>1</option><option>2</option><option selected>5</option><option>10</option></select> 帧/秒</label>
+    </div>
+    <div>
+      <label><input id="gridChk" type="checkbox" checked> 理想页网格</label>
+      <label><input id="fbChk" type="checkbox" checked> 标注回退区域</label>
+    </div>
+    <div id="frameInfo"></div>
+  </section>
+
+  <div class="side">
+    <section class="card">
+      <h2>理想页（当前窗口 · 按输出像素中心）</h2>
+      <div id="idealGrid"></div>
+      <div id="idealList" class="hint"></div>
+    </section>
+    <section class="card">
+      <h2>实际采样页（理想 → 采样）</h2>
+      <table id="sampleTbl"><thead><tr><th>理想页</th><th>采样页</th><th>状态</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="card">
+      <h2>缓存（驻留槽）</h2>
+      <div class="bar"><div id="capBar"></div></div>
+      <table id="cacheTbl"><thead><tr><th>页</th><th>lastUsed</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="card">
+      <h2>待完成请求（在途）</h2>
+      <div class="bar"><div id="infBar"></div></div>
+      <table id="infTbl"><thead><tr><th>页</th><th>代号</th><th>到期帧</th><th>剩余</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="card">
+      <h2>事件日志 <span class="hint">（本帧高亮）</span></h2>
+      <div id="log"></div>
+    </section>
+    <section class="card">
+      <h2>帧窗口编辑器 <span class="hint">[u0, v0, du, dv]，单位正方形内</span></h2>
+      <table id="editor"><thead><tr><th>帧</th><th>u0</th><th>v0</th><th>du</th><th>dv</th><th></th></tr></thead><tbody></tbody></table>
+      <div style="margin-top:8px">
+        <button id="addFrameBtn">添加帧</button>
+        <button id="applyBtn">应用（从第 0 帧重放）</button>
+        <button id="resetFramesBtn">恢复默认轨迹</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="hint">
+  每帧顺序：① 取消不在需求中的在途请求 → ② 按 (l,y,x) 处理到期结果（晚到忽略 / 失败 / 完成入槽，满则 LRU 淘汰，并列取 (l,y,x) 最小）→ ③ 绘制并标记实际采样页 lastUsed → ④ 按 (l,y,x) 补发请求至并发上限。失败页最早下帧重试。
+</footer>
+
+<script src="cases.js"></script>
+<script src="sim.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const S = {
+  caseName: "tiles", def: null, pixels: null,
+  frames: [], capacity: 8, maxInflight: 4,
+  run: null, cur: 0, playing: false, timer: null,
+};
+
+/* ---------- 页像素解码 ---------- */
+function loadPixels(def) {
+  return Promise.all(def.pages.map((p) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = def.tileSize;
+      const cx = c.getContext("2d");
+      cx.drawImage(img, 0, 0);
+      S.pixels[p.id] = cx.getImageData(0, 0, def.tileSize, def.tileSize).data;
+      resolve();
+    };
+    img.onerror = () => reject(new Error("页解码失败: " + p.id));
+    img.src = p.data;
+  })));
+}
+
+/* ---------- 帧渲染 ---------- */
+function renderFrame() {
+  const snap = S.run.frames[S.cur];
+  const def = S.def, W = def.width, H = def.height, T = def.tileSize;
+  const view = $("view");
+  view.width = W; view.height = H;
+  const scale = Math.max(2, Math.floor(480 / W));
+  view.style.width = W * scale + "px";
+  view.style.height = H * scale + "px";
+  const ctx = view.getContext("2d");
+  const out = ctx.createImageData(W, H);
+  const [u0, v0, du, dv] = snap.window;
+  const l = snap.idealLevel, n = 1 << l;
+  for (let py = 0; py < H; py++) {
+    const v = v0 + ((py + 0.5) / H) * dv;
+    const y = Math.min(n - 1, Math.floor(v * n));
+    for (let px = 0; px < W; px++) {
+      const u = u0 + ((px + 0.5) / W) * du;
+      const x = Math.min(n - 1, Math.floor(u * n));
+      const actual = snap.samples[`${l}/${x}/${y}`];
+      const [al, ax, ay] = actual.split("/").map(Number);
+      const an = 1 << al;
+      const tx = Math.min(T - 1, Math.floor((u * an - ax) * T));
+      const ty = Math.min(T - 1, Math.floor((v * an - ay) * T));
+      const src = S.pixels[actual], si = (ty * T + tx) * 4, di = (py * W + px) * 4;
+      out.data[di] = src[si]; out.data[di + 1] = src[si + 1];
+      out.data[di + 2] = src[si + 2]; out.data[di + 3] = src[si + 3];
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+
+  // 覆盖层：理想页网格 + 回退区域标注（按显示分辨率绘制）
+  const ov = $("overlay");
+  ov.width = W * scale; ov.height = H * scale;
+  ov.style.width = ov.width + "px"; ov.style.height = ov.height + "px";
+  const octx = ov.getContext("2d");
+  for (const id of snap.ideal) {
+    const [, x, y] = id.split("/").map(Number);
+    const rx = ((x / n - u0) / du) * W * scale;
+    const ry = ((y / n - v0) / dv) * H * scale;
+    const rw = (1 / n / du) * W * scale;
+    const rh = (1 / n / dv) * H * scale;
+    if ($("fbChk").checked && snap.samples[id] !== id) {
+      octx.fillStyle = "rgba(255,70,70,.30)";
+      octx.fillRect(rx, ry, rw, rh);
+    }
+    if ($("gridChk").checked) {
+      octx.strokeStyle = "rgba(255,255,255,.55)";
+      octx.lineWidth = 1;
+      octx.strokeRect(rx + .5, ry + .5, rw - 1, rh - 1);
+    }
+  }
+}
+
+/* ---------- 面板 ---------- */
+function renderPanels() {
+  const snap = S.run.frames[S.cur];
+  const inflightSet = new Set(snap.inflight.map((r) => r.id));
+  const residentSet = new Set(snap.resident);
+
+  // 理想页网格
+  const n = 1 << snap.idealLevel;
+  const grid = $("idealGrid");
+  grid.style.gridTemplateColumns = `repeat(${n}, 22px)`;
+  grid.innerHTML = "";
+  const needSet = new Set(snap.ideal);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const id = `${snap.idealLevel}/${x}/${y}`;
+    const d = document.createElement("div");
+    d.title = id;
+    d.className = !needSet.has(id) ? "idle"
+      : residentSet.has(id) ? "resident"
+      : inflightSet.has(id) ? "inflight" : "missing";
+    grid.appendChild(d);
+  }
+  $("idealList").textContent =
+    `理想层 ${snap.idealLevel} · 理想页 ${snap.ideal.length} 个：` + snap.ideal.join("、") +
+    "　（绿=驻留 橙=在途 红=缺失回退 灰=不需要）";
+
+  // 实际采样
+  const st = $("sampleTbl").querySelector("tbody");
+  st.innerHTML = "";
+  for (const id of snap.ideal) {
+    const a = snap.samples[id];
+    const tr = document.createElement("tr");
+    const fb = a !== id;
+    tr.innerHTML = `<td>${id}</td><td>${a}</td><td>` +
+      (fb ? `<span class="badge b-fallback">回退 L${a.split("/")[0]}</span>` : "直接") + `</td>`;
+    st.appendChild(tr);
+  }
+
+  // 缓存
+  $("capBar").style.width = (snap.resident.length / S.capacity * 100) + "%";
+  const ct = $("cacheTbl").querySelector("tbody");
+  ct.innerHTML = "";
+  for (const id of snap.resident) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${id}</td><td>${snap.lastUsed[id]}</td><td>` +
+      (id === VPRLSim.ROOT_ID ? `<span class="badge b-root">根·不可淘汰</span>` : "") +
+      (snap.failedOnce.includes(id) ? ` <span class="badge b-fail">曾失败</span>` : "") + `</td>`;
+    ct.appendChild(tr);
+  }
+  $("cacheTbl").querySelector("th").textContent = `页（${snap.resident.length}/${S.capacity}）`;
+
+  // 在途请求
+  $("infBar").style.width = (snap.inflight.length / S.maxInflight * 100) + "%";
+  const it = $("infTbl").querySelector("tbody");
+  it.innerHTML = "";
+  for (const r of snap.inflight) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.id}</td><td>#${r.token}</td><td>${r.due}</td><td>${r.due - S.cur}</td>`;
+    it.appendChild(tr);
+  }
+  if (!snap.inflight.length) it.innerHTML = `<tr><td colspan="4" class="hint">（空）</td></tr>`;
+
+  // 帧信息
+  const fbCount = snap.ideal.filter((id) => snap.samples[id] !== id).length;
+  $("frameInfo").textContent =
+    `帧 ${S.cur} / ${S.run.frames.length - 1} · 窗口 [${snap.window.join(", ")}]` +
+    ` · 理想层 ${snap.idealLevel} · 回退 ${fbCount}/${snap.ideal.length}` +
+    (snap.events.length ? `\n本帧事件：` + snap.events.map(eventText).join("；") : "\n本帧无事件");
+
+  // 日志高亮 + 滚动
+  let firstCur = null;
+  $("log").querySelectorAll(".row").forEach((row) => {
+    const isCur = +row.dataset.frame === S.cur;
+    row.classList.toggle("cur", isCur);
+    if (isCur && !firstCur) firstCur = row;
+  });
+  if (firstCur) firstCur.scrollIntoView({ block: "nearest" });
+}
+
+function eventText(e) {
+  return `${e[1]} ${e[2]}${e[3] != null ? " #" + e[3] : ""}`;
+}
+
+function renderLog() {
+  const log = $("log");
+  log.innerHTML = "";
+  for (const e of S.run.log) {
+    const d = document.createElement("div");
+    d.className = "row";
+    d.dataset.frame = e[0];
+    d.innerHTML = `<span class="f">帧${e[0]}</span><span class="t-${e[1]}">${eventText(e)}</span>`;
+    log.appendChild(d);
+  }
+  if (!S.run.log.length) log.innerHTML = `<div class="hint">（无事件）</div>`;
+}
+
+function renderAll() {
+  renderFrame();
+  renderPanels();
+  $("frameSlider").value = S.cur;
+  $("jumpIn").value = S.cur;
+}
+
+/* ---------- 重放 ---------- */
+function recompute() {
+  S.run = VPRLSim.simulate(S.def, S.frames, S.capacity, S.maxInflight);
+  S.cur = Math.max(0, Math.min(S.cur, S.run.frames.length - 1));
+  $("frameSlider").max = S.run.frames.length - 1;
+  $("jumpIn").max = S.run.frames.length - 1;
+  renderLog();
+  renderAll();
+}
+
+function gotoFrame(i) {
+  S.cur = Math.max(0, Math.min(i, S.run.frames.length - 1));
+  renderAll();
+}
+
+function setPlaying(on) {
+  S.playing = on;
+  $("playBtn").textContent = on ? "⏸" : "▶";
+  clearInterval(S.timer);
+  if (on) {
+    S.timer = setInterval(() => {
+      if (S.cur >= S.run.frames.length - 1) { setPlaying(false); return; }
+      gotoFrame(S.cur + 1);
+    }, 1000 / +$("speedSel").value);
+  }
+}
+
+/* ---------- 帧窗口编辑器 ---------- */
+function buildEditor() {
+  const tb = $("editor").querySelector("tbody");
+  tb.innerHTML = "";
+  S.frames.forEach((w, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i}</td>` + w.map((v, j) =>
+      `<td><input type="number" step="0.05" min="0" max="1" data-i="${i}" data-j="${j}" value="${v}"></td>`
+    ).join("") + `<td><button data-del="${i}" ${S.frames.length <= 1 ? "disabled" : ""}>删</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", () => { S.frames.splice(+b.dataset.del, 1); buildEditor(); recompute(); }));
+}
+
+function applyEditor() {
+  const rows = [];
+  for (let i = 0; i < S.frames.length; i++) {
+    const w = [];
+    for (let j = 0; j < 4; j++) {
+      const el = document.querySelector(`#editor input[data-i="${i}"][data-j="${j}"]`);
+      const v = parseFloat(el.value);
+      if (!Number.isFinite(v)) { alert(`帧 ${i} 第 ${j + 1} 项不是数字`); return; }
+      w.push(v);
+    }
+    const [u0, v0, du, dv] = w;
+    if (u0 < 0 || v0 < 0 || du <= 0 || dv <= 0 || u0 + du > 1.000001 || v0 + dv > 1.000001) {
+      alert(`帧 ${i} 窗口越界：需 0≤u0,v0、0<du,dv、u0+du≤1、v0+dv≤1`); return;
+    }
+    rows.push(w);
+  }
+  S.frames = rows;
+  recompute();
+}
+
+/* ---------- 导出 ---------- */
+function exportLog() {
+  const payload = {
+    case: S.caseName,
+    config: { capacity: S.capacity, maxInflight: S.maxInflight },
+    trajectory: S.frames,
+    log: S.run.log,
+    frames: S.run.frames.map((f) => ({
+      frame: f.frame, window: f.window, idealLevel: f.idealLevel,
+      ideal: f.ideal, events: f.events, samples: f.samples,
+      resident: f.resident, inflight: f.inflight,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `vprl-${S.caseName}-log.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- 初始化 ---------- */
+async function initCase(name) {
+  S.caseName = name;
+  S.def = CASES[name];
+  S.pixels = {};
+  await loadPixels(S.def);
+  S.frames = S.def.frames.map((w) => w.slice());
+  S.capacity = S.def.capacity;
+  S.maxInflight = S.def.maxInflight;
+  S.cur = 0;
+  $("capIn").value = S.capacity;
+  $("infIn").value = S.maxInflight;
+  buildEditor();
+  recompute();
+  const m = location.hash.match(/frame=(\d+)/);
+  if (m) gotoFrame(+m[1]);
+}
+
+$("caseSel").addEventListener("change", (e) => { setPlaying(false); initCase(e.target.value); });
+$("capIn").addEventListener("change", (e) => {
+  S.capacity = Math.max(2, Math.min(32, Math.round(+e.target.value) || 2));
+  e.target.value = S.capacity; recompute();
+});
+$("infIn").addEventListener("change", (e) => {
+  S.maxInflight = Math.max(1, Math.min(8, Math.round(+e.target.value) || 1));
+  e.target.value = S.maxInflight; recompute();
+});
+$("firstBtn").addEventListener("click", () => gotoFrame(0));
+$("prevBtn").addEventListener("click", () => gotoFrame(S.cur - 1));
+$("nextBtn").addEventListener("click", () => gotoFrame(S.cur + 1));
+$("playBtn").addEventListener("click", () => setPlaying(!S.playing));
+$("speedSel").addEventListener("change", () => { if (S.playing) setPlaying(true); });
+$("frameSlider").addEventListener("input", (e) => gotoFrame(+e.target.value));
+$("jumpBtn").addEventListener("click", () => gotoFrame(Math.round(+$("jumpIn").value) || 0));
+$("gridChk").addEventListener("change", renderFrame);
+$("fbChk").addEventListener("change", renderFrame);
+$("addFrameBtn").addEventListener("click", () => {
+  S.frames.push(S.frames[S.frames.length - 1].slice()); buildEditor(); recompute();
+});
+$("applyBtn").addEventListener("click", applyEditor);
+$("resetFramesBtn").addEventListener("click", () => {
+  S.frames = S.def.frames.map((w) => w.slice()); buildEditor(); recompute();
+});
+$("exportBtn").addEventListener("click", exportLog);
+
+initCase("tiles");
+</script>
+</body>
+</html>
