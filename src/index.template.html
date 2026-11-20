@@ -1,0 +1,207 @@
+<title>Boxed Hermite 提取器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+
+<style>
+/*__STYLES__*/
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M2.5 6.2 10 2l7.5 4.2v7.6L10 18l-7.5-4.2z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
+        <path d="M10 2v7.6M10 9.6 2.5 13.8M10 9.6l7.5 4.2" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" opacity=".55"/>
+        <circle cx="10" cy="9.6" r="1.9" fill="currentColor"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">Boxed Hermite</div>
+      <div class="brand-sub">等值面提取 · 盒约束单顶点</div>
+    </div>
+  </div>
+
+  <div class="case-picker">
+    <label for="caseSelect">样例</label>
+    <select id="caseSelect" aria-label="选择样例"></select>
+  </div>
+
+  <div class="counts" id="counts" aria-label="拓扑统计"></div>
+
+  <div class="top-actions">
+    <button type="button" id="importBtn" class="ghost">导入 JSON</button>
+    <button type="button" id="exportBtn" class="primary">导出</button>
+  </div>
+</header>
+
+<div id="statusRow" class="status-row">
+  <span class="status-pill" id="statusPill"><span class="dot"></span>载入中</span>
+</div>
+
+<main>
+  <!-- ======================================================= left rail -->
+  <aside class="rail">
+    <section class="panel" aria-labelledby="lambdaTitle">
+      <div class="panel-head">
+        <h2 id="lambdaTitle">正则强度 λ</h2>
+        <span class="mono" id="lambdaValue" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <input type="range" id="lambdaSlider" min="0" max="1000" step="1" value="500" aria-label="正则强度 λ（对数刻度）">
+          <div class="field-row" style="justify-content:space-between">
+            <span class="hint mono">1e-6</span>
+            <input type="number" id="lambdaInput" step="0.000001" min="0.000001" max="1" aria-label="λ 数值" style="width:92px;flex:none">
+            <span class="hint mono">1</span>
+          </div>
+        </div>
+        <div class="field-row">
+          <button type="button" id="lambdaReset" class="small">恢复默认 1e-3</button>
+          <button type="button" id="resetView" class="small ghost">重置视角</button>
+        </div>
+        <p class="panel-note">λ 收紧顶点向交点均值 c 的偏移。改动立即重算全部单元。</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="layerTitle">
+      <div class="panel-head"><h2 id="layerTitle">显示图层</h2></div>
+      <div class="panel-body">
+        <div class="toggle-grid">
+          <label class="check"><input type="checkbox" id="layer-wire" checked> 网格线</label>
+          <label class="check"><input type="checkbox" id="layer-iso" checked> 等值面</label>
+          <label class="check"><input type="checkbox" id="layer-cells" checked> 单元盒</label>
+          <label class="check"><input type="checkbox" id="layer-hits" checked> 交点</label>
+          <label class="check"><input type="checkbox" id="layer-normals" checked> 法线</label>
+          <label class="check"><input type="checkbox" id="layer-unconstrained" checked> 无约束解</label>
+          <label class="check"><input type="checkbox" id="layer-guides" checked> 辅助线</label>
+          <label class="check"><input type="checkbox" id="layer-topology" checked> 拓扑问题</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="editTitle">
+      <div class="panel-head">
+        <h2 id="editTitle">共享边编辑</h2>
+        <button type="button" id="restoreAllBtn" class="small ghost">全部恢复</button>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <span class="field-label">当前单元异号边</span>
+          <div class="edge-list" id="edgeList"></div>
+        </div>
+        <div id="edgeEditor"></div>
+        <div class="field-row">
+          <button type="button" id="restoreEdgeBtn" class="small">恢复该边</button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ========================================================== stage -->
+  <section class="stage">
+    <div class="viewport" id="viewportWrap">
+      <canvas id="scene" aria-label="三维线框与等值面视图，可拖拽旋转，滚轮缩放"></canvas>
+      <span class="viewport-tag">3D · 线框 + 面</span>
+      <span class="viewport-hint">拖拽旋转 · Shift 平移 · 滚轮缩放</span>
+      <div class="viewport-overlay" id="viewportOverlay" hidden></div>
+      <div class="viewport-hud" id="viewportHud"></div>
+    </div>
+
+    <section class="panel slice-panel" aria-labelledby="sliceTitle">
+      <div class="slice-head">
+        <span class="panel-title" id="sliceTitle">单元切层</span>
+        <div class="seg" id="sliceAxis" role="group" aria-label="切层轴">
+          <button type="button" data-axis="0" aria-pressed="false">x</button>
+          <button type="button" data-axis="1" aria-pressed="false">y</button>
+          <button type="button" data-axis="2" aria-pressed="true">z</button>
+        </div>
+        <button type="button" id="layerPrev" class="small ghost" aria-label="上一层">◀</button>
+        <input type="range" id="layerSlider" min="0" max="0" step="1" value="0" aria-label="切层号" style="width:120px">
+        <button type="button" id="layerNext" class="small ghost" aria-label="下一层">▶</button>
+        <span class="layer-readout" id="layerReadout"></span>
+        <label class="check" style="margin-left:6px"><input type="checkbox" id="sliceFocus" checked> 聚焦选中</label>
+      </div>
+      <div class="slice-summary-row"><span id="sliceSummary"></span></div>
+      <div class="slice-body">
+        <div class="slice-canvas-wrap">
+          <canvas id="sliceCanvas" aria-label="单元切层视图，点选单元联动三维视图"></canvas>
+          <span class="canvas-tip" id="sliceTooltip" hidden></span>
+        </div>
+      </div>
+      <div class="detail-head">
+        <span class="panel-title">选中单元详图</span>
+        <span class="layer-readout" id="detailCell"></span>
+      </div>
+      <div class="detail-body">
+        <div class="detail-canvas-wrap">
+          <canvas id="cellCanvas" aria-label="选中单元的正交详图：单元盒、交点、法线、无约束解与最终解"></canvas>
+        </div>
+        <div class="detail-side" id="detailSide"></div>
+      </div>
+      <div class="legend">
+        <span><i class="dot-in"></i>实体内节点</span>
+        <span><i class="dot-out"></i>实体外节点</span>
+        <span><i class="sq"></i>混合单元</span>
+        <span><i class="dia"></i>选中单元</span>
+        <span><i class="line-edit"></i>已编辑边</span>
+      </div>
+    </section>
+  </section>
+
+  <!-- ====================================================== inspector -->
+  <aside class="inspector">
+    <section class="panel" aria-labelledby="queryTitle">
+      <div class="panel-head">
+        <h2 id="queryTitle">单元查询</h2>
+        <span class="mono" id="cellStatus" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="panel-body">
+        <div class="coord-entry">
+          <div><label for="cell-x">i · x</label><input type="number" id="cell-x" step="1"></div>
+          <div><label for="cell-y">j · y</label><input type="number" id="cell-y" step="1"></div>
+          <div><label for="cell-z">k · z</label><input type="number" id="cell-z" step="1"></div>
+          <button type="button" id="cellGo" class="small">定位</button>
+        </div>
+        <div class="cellnav">
+          <button type="button" id="cellPrev" class="small ghost">◀ 前一混合单元</button>
+          <button type="button" id="cellNext" class="small ghost">后一混合单元 ▶</button>
+          <button type="button" id="cellFocus" class="small ghost" title="把切层跳到该单元的 z 层">切层对准</button>
+        </div>
+        <div id="cellDetail" class="nicedata"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="diagPanel" aria-labelledby="diagTitle" hidden>
+      <div class="panel-head">
+        <h2 id="diagTitle">诊断 · 字段定位</h2>
+        <span class="mono" id="diagCount" style="font-size:11px;color:var(--danger)"></span>
+      </div>
+      <div class="panel-body">
+        <div class="error-list" id="diagList"></div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<div class="overlay" id="dialog" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <div class="dialog-head">
+      <h2 id="dialogTitle">导出</h2>
+      <div class="spacer"></div>
+      <button type="button" id="dialogClose" class="small ghost" aria-label="关闭">关闭</button>
+    </div>
+    <div class="dialog-body" id="dialogBody"></div>
+    <div class="dialog-foot" id="dialogFoot"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+
+<script src="src/core.js"></script>
+<script src="src/samples-inline.js"></script>
+<script src="src/viewer.js"></script>
+<script src="src/app.js"></script>
+
+<!--__APP_SCRIPTS__-->

@@ -1,0 +1,116 @@
+{
+ "cases": [
+  {
+   "id": "sharp-box",
+   "name": "尖锐立方",
+   "nameEn": "Sharp box",
+   "file": "data/samples/sharp-box.json",
+   "bytes": 34378,
+   "inline": true
+  },
+  {
+   "id": "sphere",
+   "name": "球面",
+   "nameEn": "Sphere",
+   "file": "data/samples/sphere.json",
+   "bytes": 135583,
+   "inline": false
+  },
+  {
+   "id": "open-plane",
+   "name": "开放平面",
+   "nameEn": "Open plane",
+   "file": "data/samples/open-plane.json",
+   "bytes": 1676,
+   "inline": true
+  },
+  {
+   "id": "checkerboard",
+   "name": "棋盘",
+   "nameEn": "Checkerboard",
+   "file": "data/samples/checkerboard.json",
+   "bytes": 7935,
+   "inline": true
+  },
+  {
+   "id": "skew-cell",
+   "name": "斜切单元",
+   "nameEn": "Skew cell",
+   "file": "data/samples/skew-cell.json",
+   "bytes": 247,
+   "inline": true
+  },
+  {
+   "id": "anisotropic",
+   "name": "各向异性",
+   "nameEn": "Anisotropic",
+   "file": "data/samples/anisotropic.json",
+   "bytes": 70990,
+   "inline": false
+  },
+  {
+   "id": "limit-sphere",
+   "name": "高密度球",
+   "nameEn": "Limit sphere",
+   "file": "data/samples/limit-sphere.json",
+   "bytes": 253696,
+   "inline": false
+  },
+  {
+   "id": "inverted-sphere",
+   "name": "反相球",
+   "nameEn": "Inverted sphere",
+   "file": "data/samples/inverted-sphere.json",
+   "bytes": 148512,
+   "inline": false
+  },
+  {
+   "id": "rank-one",
+   "name": "秩一平面",
+   "nameEn": "Rank one",
+   "file": "data/samples/rank-one.json",
+   "bytes": 307,
+   "inline": true
+  },
+  {
+   "id": "empty",
+   "name": "全同号空结果",
+   "nameEn": "All same sign",
+   "file": "data/samples/empty.json",
+   "bytes": 88,
+   "inline": true
+  },
+  {
+   "id": "invalid-missing-edge",
+   "name": "缺边（错误样例）",
+   "nameEn": "Missing edge",
+   "file": "data/samples/invalid-missing-edge.json",
+   "bytes": 194,
+   "inline": true
+  },
+  {
+   "id": "invalid-duplicate-edge",
+   "name": "重复边（错误样例）",
+   "nameEn": "Duplicate edge",
+   "file": "data/samples/invalid-duplicate-edge.json",
+   "bytes": 300,
+   "inline": true
+  },
+  {
+   "id": "invalid-zero-normal",
+   "name": "零法线（错误样例）",
+   "nameEn": "Zero normal",
+   "file": "data/samples/invalid-zero-normal.json",
+   "bytes": 247,
+   "inline": true
+  },
+  {
+   "id": "invalid-zero-sign",
+   "name": "非法符号（错误样例）",
+   "nameEn": "Zero sign",
+   "file": "data/samples/invalid-zero-sign.json",
+   "bytes": 246,
+   "inline": true
+  }
+ ]
+}
