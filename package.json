@@ -1,0 +1,24 @@
+{
+  "name": "cut-chart-parameterizer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Seam-aware chart parameterizer for triangle meshes",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "0.187.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}

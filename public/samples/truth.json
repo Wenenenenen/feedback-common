@@ -1,0 +1,12 @@
+{
+  "cylinder-cut": {
+    "charts": 1,
+    "boundary_loops": 1,
+    "cut_vertices": 27,
+    "faces": 32
+  },
+  "cylinder-uncut": {
+    "boundary_loops": 2,
+    "valid": false
+  }
+}
