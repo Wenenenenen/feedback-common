@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 运行时数据（SQLite 索引、库副本、最近查询音频）
+/data/
+# 解包的未信任样例
+/samples/extracted/
+# 日志与临时文件
+*.log
+node_modules/

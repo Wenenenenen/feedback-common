@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星座图音频来源检索</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>星座图短音频来源检索</h1>
+  <div class="topbar-meta">
+    <span>16kHz · 16bit · 单声道 PCM</span>
+    <span>N=512 / hop=128</span>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左栏：素材库 -->
+  <section class="panel library-panel">
+    <div class="panel-head">
+      <h2>素材库 <span id="lib-count" class="badge">0/8</span></h2>
+      <div class="btn-row">
+        <button id="btn-rebuild" class="btn btn-ghost" title="按库目录内现存文件重建倒排索引">重建索引</button>
+      </div>
+    </div>
+    <form id="upload-form" class="upload-box">
+      <label class="file-label">
+        <input type="file" id="lib-file" accept=".wav,audio/wav" hidden>
+        <span class="btn">＋ 添加 WAV（≤20s，最多8条）</span>
+      </label>
+    </form>
+    <div id="library-list" class="library-list"></div>
+    <div class="hint">替换文件：先移除同名条目，再添加新文件，最后点“重建索引”。</div>
+  </section>
+
+  <!-- 中栏：查询与星座图 -->
+  <section class="panel main-panel">
+    <div class="panel-head">
+      <h2>查询与指纹可视化</h2>
+    </div>
+    <form id="query-form" class="upload-box query-upload">
+      <label class="file-label">
+        <input type="file" id="query-file" accept=".wav,audio/wav" hidden>
+        <span class="btn btn-primary">选择查询 WAV（0.25–8s）并检索</span>
+      </label>
+      <span id="query-name" class="file-name"></span>
+    </form>
+
+    <div id="query-summary" class="query-summary hidden"></div>
+
+    <div class="canvas-wrap">
+      <canvas id="constellation" height="420"></canvas>
+      <div id="canvas-empty" class="canvas-empty">上传查询后在此显示频谱峰与配对连线</div>
+      <div class="legend">
+        <span><i class="dot dot-peak"></i>频谱峰</span>
+        <span><i class="line-sample"></i>成对指纹连线</span>
+        <label class="toggle"><input type="checkbox" id="toggle-lines" checked> 显示连线</label>
+      </div>
+    </div>
+
+    <div id="pair-info" class="pair-info hidden"></div>
+  </section>
+
+  <!-- 右栏：结果 -->
+  <section class="panel results-panel">
+    <div class="panel-head">
+      <h2>检索结果</h2>
+      <div class="btn-row">
+        <a id="report-json" class="btn btn-ghost disabled" href="#" onclick="return false">导出 JSON</a>
+        <a id="report-md" class="btn btn-ghost disabled" href="#" onclick="return false">导出报告</a>
+      </div>
+    </div>
+    <div id="verdict" class="verdict hidden"></div>
+    <div id="results" class="results"></div>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

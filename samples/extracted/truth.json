@@ -1,0 +1,9 @@
+{
+  "sources": [
+    "library/a.wav",
+    "library/duplicate.wav"
+  ],
+  "offset_samples": 32512,
+  "hop": 128,
+  "query_leading_silence": 256
+}
