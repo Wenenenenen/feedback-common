@@ -1,0 +1,39 @@
+{
+  "initial": {
+    "facts": {
+      "access": true,
+      "tool": false,
+      "done": false
+    },
+    "resources": {
+      "ore": 0
+    }
+  },
+  "caps": {
+    "ore": 3
+  },
+  "goal": {
+    "facts": {
+      "done": true
+    },
+    "min": {},
+    "max": {}
+  },
+  "actions": [
+    {
+      "id": "gather",
+      "cost": 1,
+      "duration_ms": 100,
+      "pre": {},
+      "min": {},
+      "max": {},
+      "add": [],
+      "remove": [],
+      "delta": {
+        "ore": 1
+      }
+    }
+  ],
+  "budget": 10000,
+  "events": []
+}

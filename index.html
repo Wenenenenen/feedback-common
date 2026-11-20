@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>资源 GOAP 演算台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>资源 GOAP 演算台</h1>
+        <p class="brand-sub">一致代价最优搜索 · 整数毫秒离散事件演算</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="sample-loader">
+        <label for="sample-select">内置样例</label>
+        <select id="sample-select">
+          <option value="">选择样例…</option>
+          <option value="demo">demo（事件打断 + 重规划）</option>
+          <option value="tie">tie（同成本字典序决胜）</option>
+          <option value="unreachable">unreachable（无解）</option>
+        </select>
+      </div>
+      <button class="btn" id="btn-import" type="button">导入规则</button>
+      <button class="btn" id="btn-export" type="button">导出</button>
+      <button class="btn btn-icon" id="btn-theme" type="button" title="切换主题" aria-label="切换主题">◐</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- 左：规则编辑 -->
+  <section class="panel panel-rules" aria-label="规则编辑">
+    <div class="panel-head">
+      <h2>规则与状态</h2>
+      <div class="tabs" role="tablist">
+        <button class="tab is-active" data-tab="state" role="tab" type="button">状态与目标</button>
+        <button class="tab" data-tab="actions" role="tab" type="button">动作 <span class="tab-count" id="action-count">0</span></button>
+        <button class="tab" data-tab="events" role="tab" type="button">事件 <span class="tab-count" id="event-count">0</span></button>
+        <button class="tab" data-tab="json" role="tab" type="button">JSON</button>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <!-- 状态与目标 -->
+      <div class="tabpane is-active" data-pane="state">
+        <div class="field">
+          <div class="field-row">
+            <label>搜索预算（最多扩展状态数）</label>
+            <input type="number" id="in-budget" min="0" step="1" class="input input-narrow">
+          </div>
+        </div>
+
+        <h3 class="group-title">布尔量 <span class="hint">最多 12 个</span></h3>
+        <div id="fact-editor" class="card-list"></div>
+        <button class="btn btn-small" id="btn-add-fact" type="button">+ 新增布尔量</button>
+
+        <h3 class="group-title">整数资源 <span class="hint">最多 2 种，0 ≤ 值 ≤ 上限</span></h3>
+        <div id="res-editor" class="card-list"></div>
+        <button class="btn btn-small" id="btn-add-res" type="button">+ 新增资源</button>
+
+        <h3 class="group-title">目标条件</h3>
+        <div class="goal-box">
+          <div class="goal-col">
+            <span class="goal-label">布尔目标</span>
+            <div id="goal-fact-editor" class="chip-grid"></div>
+          </div>
+          <div class="goal-col">
+            <span class="goal-label">资源 min / max</span>
+            <div id="goal-res-editor"></div>
+          </div>
+        </div>
+
+        <div class="apply-bar">
+          <button class="btn btn-primary" id="btn-apply-rules" type="button">应用规则并复位演算</button>
+          <span class="apply-status" id="rules-status" role="status"></span>
+        </div>
+      </div>
+
+      <!-- 动作 -->
+      <div class="tabpane" data-pane="actions">
+        <div id="action-editor" class="card-list"></div>
+        <button class="btn btn-small" id="btn-add-action" type="button">+ 新增动作</button>
+        <div class="apply-bar">
+          <button class="btn btn-primary" id="btn-apply-rules-2" type="button">应用规则并复位演算</button>
+          <span class="apply-status" id="rules-status-2" role="status"></span>
+        </div>
+      </div>
+
+      <!-- 事件 -->
+      <div class="tabpane" data-pane="events">
+        <p class="pane-note">规则事件在演算开始时排入时间线；运行中还可在右侧随时插入外部事件。同一时刻多个事件按列表顺序处理。</p>
+        <div id="event-editor" class="card-list"></div>
+        <button class="btn btn-small" id="btn-add-event" type="button">+ 新增规则事件</button>
+        <div class="apply-bar">
+          <button class="btn btn-primary" id="btn-apply-rules-3" type="button">应用规则并复位演算</button>
+          <span class="apply-status" id="rules-status-3" role="status"></span>
+        </div>
+      </div>
+
+      <!-- JSON -->
+      <div class="tabpane" data-pane="json">
+        <p class="pane-note">直接编辑完整规则 JSON，结构与样例包一致。应用时会做完整校验。</p>
+        <textarea id="json-editor" class="json-area" spellcheck="false"></textarea>
+        <div class="apply-bar">
+          <button class="btn btn-primary" id="btn-apply-json" type="button">校验并应用 JSON</button>
+          <button class="btn" id="btn-refresh-json" type="button">从表单刷新</button>
+          <span class="apply-status" id="json-status" role="status"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右上：规划结果 -->
+  <section class="panel panel-plan" aria-label="规划结果">
+    <div class="panel-head">
+      <h2>最优计划</h2>
+      <div class="seg" role="group" aria-label="计划视角">
+        <button class="seg-btn is-active" id="seg-static" type="button">初始状态静态规划</button>
+        <button class="seg-btn" id="seg-runtime" type="button">当前演算状态规划</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="plan-banner" class="banner"></div>
+      <div class="plan-meta" id="plan-meta"></div>
+      <div class="table-wrap">
+        <table class="plan-table" id="plan-table">
+          <thead>
+            <tr>
+              <th>#</th><th>动作</th><th>累计成本</th><th>累计时长 ms</th><th>执行后状态</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="plan-empty" class="empty-note" hidden></div>
+    </div>
+  </section>
+
+  <!-- 右下：演算控制台 -->
+  <section class="panel panel-sim" aria-label="演算控制台">
+    <div class="panel-head">
+      <h2>演算控制台</h2>
+      <div class="sim-stat" id="sim-stat"></div>
+    </div>
+    <div class="panel-body">
+
+      <div class="sim-controls">
+        <button class="btn btn-primary" id="btn-play" type="button">▶ 运行</button>
+        <button class="btn" id="btn-pause" type="button">⏸ 暂停</button>
+        <button class="btn" id="btn-step" type="button">⏭ 下一时间边界</button>
+        <button class="btn" id="btn-reset" type="button">↺ 复位</button>
+        <label class="speed">速度
+          <select id="in-speed">
+            <option value="2000">0.5×</option>
+            <option value="1000" selected>1×</option>
+            <option value="400">2.5×</option>
+            <option value="100">10×</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="sim-grid">
+        <div class="sim-card">
+          <span class="sim-card-label">当前时刻</span>
+          <span class="sim-card-value mono" id="sim-time">0 ms</span>
+        </div>
+        <div class="sim-card">
+          <span class="sim-card-label">累计动作成本</span>
+          <span class="sim-card-value mono" id="sim-cost">0</span>
+        </div>
+        <div class="sim-card">
+          <span class="sim-card-label">重规划次数</span>
+          <span class="sim-card-value mono" id="sim-replans">0</span>
+        </div>
+        <div class="sim-card">
+          <span class="sim-card-label">下一边界</span>
+          <span class="sim-card-value mono" id="sim-boundary">—</span>
+        </div>
+      </div>
+
+      <div id="inflight-box" class="inflight" hidden>
+        <div class="inflight-head">
+          <span>在途动作 <strong class="mono" id="inflight-name"></strong></span>
+          <span class="mono" id="inflight-window"></span>
+        </div>
+        <div class="progress"><div class="progress-bar" id="inflight-bar"></div></div>
+        <p class="inflight-note">完成前不扣成本、不产生任何效果；被事件打断时无残留。</p>
+      </div>
+
+      <h3 class="group-title">当前状态（可直接编辑，应用后立即重规划）</h3>
+      <div id="state-editor" class="state-grid"></div>
+
+      <h3 class="group-title">插入外部事件</h3>
+      <div class="inject-box">
+        <div class="inject-row">
+          <label>触发时刻 t (ms)</label>
+          <input type="number" id="in-ev-t" min="0" step="1" class="input input-narrow">
+          <span class="hint" id="in-ev-t-hint"></span>
+        </div>
+        <div id="inject-fields" class="inject-fields"></div>
+        <div class="inject-actions">
+          <button class="btn btn-small btn-primary" id="btn-inject" type="button">插入事件</button>
+          <span class="apply-status" id="inject-status" role="status"></span>
+        </div>
+      </div>
+
+      <h3 class="group-title">待触发事件 <span class="hint" id="pending-hint"></span></h3>
+      <div id="pending-list" class="pending-list"></div>
+
+      <h3 class="group-title">执行日志
+        <select id="log-filter" class="input input-narrow input-inline">
+          <option value="all">全部</option>
+          <option value="plan">规划相关</option>
+          <option value="exec">执行相关</option>
+          <option value="event">事件相关</option>
+        </select>
+      </h3>
+      <div id="log-box" class="log-box" aria-live="polite"></div>
+    </div>
+  </section>
+</main>
+
+<!-- 导入弹层 -->
+<div class="modal" id="modal-import" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>导入规则 JSON</h3>
+      <button class="btn btn-icon" data-close="modal-import" type="button" aria-label="关闭">✕</button>
+    </div>
+    <textarea id="import-text" class="json-area" placeholder='{ "initial": ..., "caps": ..., "goal": ..., "actions": ... }'></textarea>
+    <div class="modal-actions">
+      <label class="btn btn-small file-btn">
+        选择文件
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </label>
+      <button class="btn btn-small btn-primary" id="btn-do-import" type="button">校验并导入</button>
+      <span class="apply-status" id="import-status" role="status"></span>
+    </div>
+  </div>
+</div>
+
+<!-- 导出弹层 -->
+<div class="modal" id="modal-export" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>导出</h3>
+      <button class="btn btn-icon" data-close="modal-export" type="button" aria-label="关闭">✕</button>
+    </div>
+    <div class="export-opts">
+      <button class="btn" data-export="rules" type="button">规则定义（rules.json）</button>
+      <button class="btn" data-export="plan" type="button">当前计划（plan.json）</button>
+      <button class="btn" data-export="log" type="button">执行日志（execution-log.json）</button>
+      <button class="btn btn-primary" data-export="bundle" type="button">完整演算包（bundle.json）</button>
+    </div>
+    <textarea id="export-text" class="json-area json-area-modal" readonly spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-small" id="btn-copy-export" type="button">复制到剪贴板</button>
+      <button class="btn btn-small btn-primary" id="btn-download-export" type="button">下载文件</button>
+      <span class="apply-status" id="export-status" role="status"></span>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="js/planner.js"></script>
+<script src="js/validator.js"></script>
+<script src="js/simulator.js"></script>
+<script src="js/samples.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

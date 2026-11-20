@@ -1,0 +1,31 @@
+{
+  "static_plan": [
+    "gather",
+    "gather",
+    "craft",
+    "deliver"
+  ],
+  "static_cost": 5,
+  "runtime_completed": [
+    [
+      "gather",
+      100
+    ],
+    [
+      "buy",
+      250
+    ],
+    [
+      "deliver",
+      300
+    ]
+  ],
+  "runtime_canceled": [
+    [
+      "gather",
+      150
+    ]
+  ],
+  "runtime_cost": 8,
+  "runtime_final_ore": 1
+}

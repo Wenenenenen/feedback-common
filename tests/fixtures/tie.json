@@ -1,0 +1,44 @@
+{
+  "initial": {
+    "facts": {
+      "done": false
+    },
+    "resources": {}
+  },
+  "caps": {},
+  "goal": {
+    "facts": {
+      "done": true
+    }
+  },
+  "actions": [
+    {
+      "id": "z",
+      "cost": 2,
+      "duration_ms": 10,
+      "pre": {},
+      "min": {},
+      "max": {},
+      "add": [
+        "done"
+      ],
+      "remove": [],
+      "delta": {}
+    },
+    {
+      "id": "a",
+      "cost": 2,
+      "duration_ms": 10,
+      "pre": {},
+      "min": {},
+      "max": {},
+      "add": [
+        "done"
+      ],
+      "remove": [],
+      "delta": {}
+    }
+  ],
+  "budget": 20,
+  "events": []
+}

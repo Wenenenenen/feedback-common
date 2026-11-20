@@ -1,0 +1,12 @@
+{
+  "name": "resource-goap-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "资源 GOAP 网页演算台：一致代价最优搜索 + 整数毫秒离散事件演算",
+  "scripts": {
+    "test": "node tests/planner.test.js && node tests/differential.test.js",
+    "test:e2e": "node tests/e2e.ui.js",
+    "serve": "python3 -m http.server 8000"
+  },
+  "license": "MIT"
+}
