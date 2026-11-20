@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>贴花体积裁剪器</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1d2129; --panel2: #232833; --line: #333a47;
+    --fg: #d8dee9; --dim: #8b94a3; --acc: #4fa3ff; --ok: #4cc38a; --bad: #e5636a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; font-weight: 600; }
+  button, .btn { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  button:hover { border-color: var(--acc); }
+  button.primary { background: #274263; border-color: #3a5f8a; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #view { flex: 1; position: relative; min-width: 0; }
+  #view canvas { display: block; }
+  #pickinfo { position: absolute; left: 10px; bottom: 10px; background: rgba(20,23,28,.92); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; max-width: 46%; font-size: 12px; display: none; white-space: pre-wrap; }
+  #side { width: 380px; background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 10px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; padding: 8px 10px; }
+  legend { color: var(--dim); font-size: 12px; padding: 0 4px; }
+  label.row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+  label.row > span:first-child { width: 76px; color: var(--dim); flex: none; }
+  input[type=number] { width: 62px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; font-size: 12px; }
+  input[type=range] { flex: 1; }
+  textarea { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; font: 11px/1.4 monospace; resize: vertical; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .chk { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; cursor: pointer; }
+  #status { padding: 6px 12px; background: var(--panel); border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; white-space: pre-wrap; max-height: 90px; overflow-y: auto; }
+  #status .err { color: var(--bad); } #status .ok { color: var(--ok); }
+  .projhead { display: flex; align-items: center; justify-content: space-between; }
+  .projhead b { color: var(--acc); }
+  .muted { color: var(--dim); font-size: 11px; }
+  details { margin-top: 6px; }
+  summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+  .val { color: var(--acc); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<header>
+  <h1>贴花体积裁剪器</h1>
+  <button id="btnFile">导入场景JSON…</button>
+  <input type="file" id="fileScene" accept=".json" hidden>
+  <button id="btnTex">替换贴图…</button>
+  <input type="file" id="fileTex" accept="image/png,image/*" hidden>
+  <span class="muted">样例:</span>
+  <button data-sample="basic">basic</button>
+  <button data-sample="affine">affine(镜像+剪切)</button>
+  <button data-sample="capacity">capacity(9800面×4盒)</button>
+  <span style="flex:1"></span>
+  <button id="btnSelfTest">自检</button>
+  <button id="btnObj" class="primary">导出OBJ</button>
+  <button id="btnUv" class="primary">导出逐角UV</button>
+  <button id="btnSrc" class="primary">导出来源JSON</button>
+</header>
+<main>
+  <div id="view">
+    <div id="pickinfo"></div>
+  </div>
+  <div id="side">
+    <fieldset>
+      <legend>视图</legend>
+      <label class="chk"><input type="checkbox" id="ckModel" checked>原模型</label>
+      <label class="chk"><input type="checkbox" id="ckModelWire">原模型线框</label>
+      <label class="chk"><input type="checkbox" id="ckDecal" checked>生成网格</label>
+      <label class="chk"><input type="checkbox" id="ckDecalWire">生成网格线框</label>
+      <label class="chk"><input type="checkbox" id="ckBox" checked>投射盒</label>
+      <label class="chk"><input type="checkbox" id="ckFlipV">OBJ导出v向上(vt.v=1−v)</label>
+    </fieldset>
+    <div id="projectors"></div>
+    <fieldset>
+      <legend>统计</legend>
+      <div id="stats" class="muted">未加载场景</div>
+    </fieldset>
+  </div>
+</main>
+<div id="status">就绪。限制：≤10000 三角形、≤4 投射盒。直接拖入场景 JSON 也可加载。</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EPS, MIN_AREA, MAX_TRIS, MAX_PROJECTORS, buildDecals,
+         m3det, m3inv, m3t, m3v, m4p, m4invAffine, sub, cross, dot, norm } from './decal-core.js';
+
+/* ================= 常量 ================= */
+const FALLBACK_TEX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAQElEQVR4nGP4cEeDAQW7oWEC8gQVkGLAfzB2Q8N30DBCjloGIJxDSAO6PNjiYWHAwMfCwBsw8LFAYuZBl6fYAACwlTiPI9K0lQAAAABJRU5ErkJggg==';
+
+/* ================= 场景状态 ================= */
+let scene = null;            // 原始场景 JSON
+let projState = [];          // 每投射盒 {center,size,rot,maxAngle,worldOffset,worldToBox}
+let result = null;           // {records, stats}
+let texURL = FALLBACK_TEX;
+
+/* ================= Three.js 预览 ================= */
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+view.appendChild(renderer.domElement);
+const scene3 = new THREE.Scene();
+scene3.background = new THREE.Color(0x14171c);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
+const controls = new OrbitControls(camera, renderer.domElement);
+scene3.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(3,5,4); scene3.add(dl);
+scene3.add(new THREE.GridHelper(10, 20, 0x2a3140, 0x222834));
+
+const modelGroup = new THREE.Group(), decalGroup = new THREE.Group(), boxGroup = new THREE.Group();
+scene3.add(modelGroup, decalGroup, boxGroup);
+const srcHi = new THREE.Mesh(new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({ color: 0xffc14d, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthTest: false }));
+srcHi.renderOrder = 999; srcHi.visible = false; scene3.add(srcHi);
+
+const decalMat = new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, alphaTest: 0.02 });
+const modelMat = new THREE.MeshStandardMaterial({ color: 0x7f8ea3, flatShading: true, side: THREE.DoubleSide,
+  polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+
+function loadTexture(url) {
+  new THREE.TextureLoader().load(url, t => {
+    t.flipY = false;                    // 贴花 v 轴向下
+    t.colorSpace = THREE.SRGBColorSpace;
+    decalMat.map = t; decalMat.needsUpdate = true;
+  });
+}
+loadTexture(texURL);
+
+function rebuildPreview() {
+  modelGroup.clear(); decalGroup.clear(); boxGroup.clear();
+  if (!scene) return;
+  const meshById = Object.fromEntries(scene.meshes.map(m=>[m.id,m]));
+
+  // 原模型（世界空间；负行列式实例反转绕序保持外向）
+  for (const inst of scene.instances) {
+    const mesh = meshById[inst.mesh]; if (!mesh) continue;
+    const M = inst.matrix;
+    const det = m3det([M[0],M[1],M[2],M[4],M[5],M[6],M[8],M[9],M[10]]);
+    const pos = new Float32Array(mesh.triangles.length*9);
+    mesh.triangles.forEach((t,k)=>{
+      const idx = det<0 ? [t[0],t[2],t[1]] : t;
+      idx.forEach((vi,j)=>{ const w = m4p(M, mesh.vertices[vi]); pos.set(w, k*9+j*3); });
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    g.computeVertexNormals();
+    modelGroup.add(new THREE.Mesh(g, modelMat));
+  }
+
+  // 生成网格（按投射盒分组，记录面→来源映射）
+  decalMeshes = [];
+  if (result) {
+    scene.projectors.forEach((p, pi) => {
+      const recs = result.records.filter(r=>r.projectorId===p.id);
+      if (!recs.length) return;
+      const pos = new Float32Array(recs.length*9), uv = new Float32Array(recs.length*6);
+      recs.forEach((r,k)=>{
+        r.positions.forEach((v,j)=>pos.set(v, k*9+j*3));
+        r.uv.forEach((u,j)=>uv.set(u, k*6+j*2));
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv,2));
+      const m = new THREE.Mesh(g, decalMat);
+      m.userData.recs = recs;
+      decalGroup.add(m); decalMeshes.push(m);
+    });
+  }
+
+  // 投射盒线框 + 投射方向箭头
+  projState.forEach((ps, pi) => {
+    if (!ps) return;
+    const b2w = m4invAffine(ps.worldToBox);
+    const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(2,2,2));
+    const box = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: [0x4fa3ff,0x4cc38a,0xe5c07b,0xc678dd][pi%4] }));
+    const tm = new THREE.Matrix4().set(...b2w);   // Matrix4.set 按行主序传入
+    box.applyMatrix4(tm);
+    boxGroup.add(box);
+    const o = [b2w[3],b2w[7],b2w[11]];
+    const dir = norm(m3v([b2w[0],b2w[1],b2w[2],b2w[4],b2w[5],b2w[6],b2w[8],b2w[9],b2w[10]],[0,0,1]));
+    boxGroup.add(new THREE.ArrowHelper(new THREE.Vector3(...dir), new THREE.Vector3(...o), 0.6, 0xff6b6b, 0.15, 0.08));
+  });
+  applyViewToggles();
+}
+let decalMeshes = [];
+
+function applyViewToggles() {
+  modelGroup.visible = document.getElementById('ckModel').checked;
+  modelMat.wireframe = document.getElementById('ckModelWire').checked;
+  decalGroup.visible = document.getElementById('ckDecal').checked;
+  decalMat.wireframe = document.getElementById('ckDecalWire').checked;
+  boxGroup.visible = document.getElementById('ckBox').checked;
+}
+for (const id of ['ckModel','ckModelWire','ckDecal','ckDecalWire','ckBox'])
+  document.getElementById(id).addEventListener('change', applyViewToggles);
+
+function frameCamera() {
+  const box = new THREE.Box3().setFromObject(modelGroup);
+  if (box.isEmpty()) box.setFromObject(boxGroup);
+  if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3()).length() || 2;
+  camera.position.copy(c).add(new THREE.Vector3(s*0.6, s*0.5, s*0.8));
+  camera.near = s/100; camera.far = s*20; camera.updateProjectionMatrix();
+  controls.target.copy(c); controls.update();
+}
+
+/* ================= 投射盒参数 <-> 矩阵 ================= */
+function decompose(w2b) {
+  const b2w = m4invAffine(w2b);
+  const L = [b2w[0],b2w[1],b2w[2], b2w[4],b2w[5],b2w[6], b2w[8],b2w[9],b2w[10]];
+  const col = j => [L[j],L[3+j],L[6+j]];
+  const size = [0,1,2].map(j => Math.hypot(...col(j)));
+  const rm = new THREE.Matrix4().set(
+    L[0]/size[0], L[1]/size[1], L[2]/size[2], 0,
+    L[3]/size[0], L[4]/size[1], L[5]/size[2], 0,
+    L[6]/size[0], L[7]/size[1], L[8]/size[2], 0, 0,0,0,1);
+  const e = new THREE.Euler().setFromRotationMatrix(rm, 'XYZ');
+  return { center:[b2w[3],b2w[7],b2w[11]], size,
+           rot:[e.x,e.y,e.z].map(r=>r*180/Math.PI) };
+}
+function composeW2B(center, size, rotDeg) {
+  const e = new THREE.Euler(rotDeg[0]*Math.PI/180, rotDeg[1]*Math.PI/180, rotDeg[2]*Math.PI/180, 'XYZ');
+  const rm = new THREE.Matrix4().makeRotationFromEuler(e).elements; // 列主序
+  const R = [rm[0],rm[4],rm[8], rm[1],rm[5],rm[9], rm[2],rm[6],rm[10]]; // 行主序
+  const b2w = [ R[0]*size[0], R[1]*size[1], R[2]*size[2], center[0],
+                R[3]*size[0], R[4]*size[1], R[5]*size[2], center[1],
+                R[6]*size[0], R[7]*size[1], R[8]*size[2], center[2], 0,0,0,1 ];
+  return m4invAffine(b2w);
+}
+
+/* ================= 重算 + UI ================= */
+function recompute() {
+  if (!scene) return;
+  try {
+    const ov = projState.map(ps => ps ? { worldToBox: ps.worldToBox, maxAngle: ps.maxAngle, worldOffset: ps.worldOffset } : null);
+    result = buildDecals(scene, ov);
+    updateStats(); rebuildPreview(); refreshProjPanels();
+    setStatus(`裁剪完成：输出 ${result.records.length} 三角形。`, 'ok');
+  } catch (err) { setStatus(err.message, 'err'); }
+}
+
+function updateStats() {
+  const el = document.getElementById('stats');
+  if (!result) { el.textContent = '未加载场景'; return; }
+  el.innerHTML = result.stats.map(s =>
+    `<div><b style="color:var(--acc)">${s.id}</b>：角度剔除 ${s.angleCut}，盒外 ${s.clipCut}，退化丢弃 ${s.degen}，输出 <span class="val">${s.out}</span></div>`
+  ).join('') + `<div class="muted">合计输出 ${result.records.length} 三角形 / 输入 ${scene.meshes.reduce((a,m)=>a+m.triangles.length,0)} 面</div>`;
+}
+
+function buildProjPanels() {
+  const host = document.getElementById('projectors');
+  host.innerHTML = '';
+  projState.forEach((ps, pi) => {
+    const fs = document.createElement('fieldset');
+    fs.innerHTML = `<legend>投射盒 ${pi}</legend>
+      <div class="projhead"><b>${scene.projectors[pi].id}</b><span class="muted" id="pj-dir-${pi}"></span></div>
+      <label class="row"><span>中心</span><span class="grid3" id="pj-c-${pi}"></span></label>
+      <label class="row"><span>尺寸</span><span class="grid3" id="pj-s-${pi}"></span></label>
+      <label class="row"><span>旋转°</span><span class="grid3" id="pj-r-${pi}"></span></label>
+      <label class="row"><span>角度阈值</span><input type="range" min="0" max="90" step="0.5" id="pj-a-${pi}"><span class="val" id="pj-av-${pi}"></span></label>
+      <label class="row"><span>法线偏移</span><input type="number" step="0.001" id="pj-o-${pi}" style="width:90px"></label>
+      <label class="row"><span></span><button id="pj-apply-${pi}">应用范围/方向</button>
+      <button id="pj-reset-${pi}">重置为文件值</button></label>
+      <details><summary>worldToBox 矩阵（行主序16数，可直接编辑含剪切）</summary>
+        <textarea rows="3" id="pj-m-${pi}"></textarea>
+        <button id="pj-mapply-${pi}" style="margin-top:4px">应用矩阵</button>
+        <div class="muted">注意：用“应用范围/方向”重建矩阵会丢失剪切分量。</div>
+      </details>`;
+    host.appendChild(fs);
+    const nums = (id, vals, step=0.1) => {
+      const el = document.getElementById(id);
+      vals.forEach((v,j)=>{
+        const inp = document.createElement('input');
+        inp.type='number'; inp.step=step; inp.value=+v.toFixed(6); inp.dataset.j=j;
+        el.appendChild(inp);
+      });
+    };
+    nums(`pj-c-${pi}`, ps.center); nums(`pj-s-${pi}`, ps.size); nums(`pj-r-${pi}`, ps.rot, 1);
+    document.getElementById(`pj-a-${pi}`).value = ps.maxAngle;
+    document.getElementById(`pj-o-${pi}`).value = ps.worldOffset;
+    document.getElementById(`pj-m-${pi}`).value = JSON.stringify(ps.worldToBox);
+    const read3 = id => [...document.getElementById(id).querySelectorAll('input')].map(x=>+x.value);
+    document.getElementById(`pj-apply-${pi}`).onclick = () => {
+      ps.center = read3(`pj-c-${pi}`); ps.size = read3(`pj-s-${pi}`); ps.rot = read3(`pj-r-${pi}`);
+      ps.maxAngle = +document.getElementById(`pj-a-${pi}`).value;
+      ps.worldOffset = +document.getElementById(`pj-o-${pi}`).value;
+      ps.worldToBox = composeW2B(ps.center, ps.size, ps.rot);
+      recompute();
+    };
+    document.getElementById(`pj-reset-${pi}`).onclick = () => { initProjState(pi); recompute(); };
+    document.getElementById(`pj-mapply-${pi}`).onclick = () => {
+      try {
+        const m = JSON.parse(document.getElementById(`pj-m-${pi}`).value);
+        if (!Array.isArray(m) || m.length!==16) throw new Error('需16个数');
+        ps.worldToBox = m.map(Number);
+        Object.assign(ps, decompose(ps.worldToBox));
+        ps.maxAngle = +document.getElementById(`pj-a-${pi}`).value;
+        ps.worldOffset = +document.getElementById(`pj-o-${pi}`).value;
+        recompute();
+      } catch(e){ setStatus('矩阵解析失败：'+e.message, 'err'); }
+    };
+    document.getElementById(`pj-a-${pi}`).oninput = ev => {
+      ps.maxAngle = +ev.target.value; recompute();
+    };
+    document.getElementById(`pj-o-${pi}`).onchange = ev => {
+      ps.worldOffset = +ev.target.value; recompute();
+    };
+  });
+}
+function refreshProjPanels() {
+  projState.forEach((ps, pi) => {
+    const dirEl = document.getElementById(`pj-dir-${pi}`);
+    if (!dirEl) return;
+    const b2w = m4invAffine(ps.worldToBox);
+    const d = norm(m3v([b2w[0],b2w[1],b2w[2],b2w[4],b2w[5],b2w[6],b2w[8],b2w[9],b2w[10]],[0,0,1]));
+    dirEl.textContent = `方向 (${d.map(x=>x.toFixed(3)).join(', ')})`;
+    const av = document.getElementById(`pj-av-${pi}`); if (av) av.textContent = ps.maxAngle + '°';
+    const m = document.getElementById(`pj-m-${pi}`); if (m && document.activeElement!==m) m.value = JSON.stringify(ps.worldToBox);
+  });
+}
+function initProjState(pi) {
+  const p = scene.projectors[pi];
+  const dec = decompose(p.worldToBox);
+  projState[pi] = { ...dec, maxAngle: p.maxAngle, worldOffset: p.worldOffset, worldToBox: p.worldToBox.slice() };
+}
+
+/* ================= 拾取：点贴花查看来源面与重心坐标 ================= */
+const ray = new THREE.Raycaster();
+renderer.domElement.addEventListener('pointerdown', ev => {
+  if (!result || ev.button!==0) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1), camera);
+  const hits = ray.intersectObjects(decalMeshes, false);
+  const info = document.getElementById('pickinfo');
+  if (!hits.length) { info.style.display='none'; srcHi.visible=false; return; }
+  const h = hits[0], rec = h.object.userData.recs[h.faceIndex];
+  // 点击点在贴花三角形内的重心 → 换算到源三角形重心坐标
+  const [a,b,c] = rec.positions.map(p=>new THREE.Vector3(...p));
+  const bc = new THREE.Triangle(a,b,c).getBarycoord(h.point, new THREE.Vector3());
+  const srcBary = [0,1,2].map(j => bc.x*rec.bary[0][j] + bc.y*rec.bary[1][j] + bc.z*rec.bary[2][j]);
+  info.style.display = 'block';
+  info.textContent =
+    `投射盒 ${rec.projectorId} / 实例 ${rec.instanceId} / 网格 ${rec.meshId}\n` +
+    `来源三角形 #${rec.sourceTriangle}\n` +
+    `世界外法线 (${rec.normal.map(x=>x.toFixed(4)).join(', ')})\n` +
+    `逐角重心坐标:\n` + rec.bary.map((bb,i)=>`  角${i}: (${bb.map(x=>x.toFixed(4)).join(', ')})  uv=(${rec.uv[i].map(x=>x.toFixed(4)).join(', ')})`).join('\n') +
+    `\n点击点源重心坐标: (${srcBary.map(x=>x.toFixed(4)).join(', ')})`;
+  // 高亮来源三角形（世界空间，偏移前）
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(rec.positionsRaw.flat()), 3));
+  srcHi.geometry.dispose(); srcHi.geometry = g; srcHi.visible = true;
+});
+
+/* ================= 导出 ================= */
+function download(name, text, type='text/plain') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+document.getElementById('btnObj').onclick = () => {
+  if (!result) return setStatus('请先加载场景', 'err');
+  const flipV = document.getElementById('ckFlipV').checked;
+  let s = `# 贴花体积裁剪导出\n# UV约定: 贴图v轴向下${flipV ? '；本文件已转换为v向上 (vt.v = 1 - v)' : '；如需v向上请勾选转换选项'}\n`;
+  scene.projectors.forEach(p => { s += `# projector ${p.id}: texture=${p.texture||'decal.png'}\n`; });
+  let vo = 1;
+  for (const p of scene.projectors) {
+    const recs = result.records.filter(r=>r.projectorId===p.id);
+    if (!recs.length) continue;
+    s += `o decal_${p.id}\nusemtl decal_${p.id}\n`;
+    for (const r of recs) {
+      for (const v of r.positions) s += `v ${v.map(x=>+x.toFixed(9)).join(' ')}\n`;
+      for (const u of r.uv) s += `vt ${+u[0].toFixed(9)} ${+(flipV?1-u[1]:u[1]).toFixed(9)}\n`;
+      s += `f ${vo}/${vo} ${vo+1}/${vo+1} ${vo+2}/${vo+2}\n`; vo += 3;
+    }
+  }
+  download('decal.obj', s);
+};
+document.getElementById('btnUv').onclick = () => {
+  if (!result) return setStatus('请先加载场景', 'err');
+  const out = { convention: 'v-down', triangles: result.records.map(r => ({
+    projectorId: r.projectorId, sourceTriangle: r.sourceTriangle, uv: r.uv })) };
+  download('decal-uv.json', JSON.stringify(out, null, 1), 'application/json');
+};
+document.getElementById('btnSrc').onclick = () => {
+  if (!result) return setStatus('请先加载场景', 'err');
+  const out = result.records.map(r => ({
+    projectorId: r.projectorId, instanceId: r.instanceId, meshId: r.meshId,
+    sourceTriangle: r.sourceTriangle, barycentric: r.bary, uv: r.uv,
+    normal: r.normal, positions: r.positions }));
+  download('decal-source.json', JSON.stringify(out, null, 1), 'application/json');
+};
+
+/* ================= 自检（对照 expected.json） ================= */
+document.getElementById('btnSelfTest').onclick = async () => {
+  try {
+    const sc = await (await fetch('samples/extracted/basic.json')).json();
+    const exp = await (await fetch('samples/extracted/expected.json')).json();
+    const { records } = buildDecals(sc);
+    const valid = [...new Set(records.map(r=>r.sourceTriangle))].sort();
+    const allTris = sc.meshes[0].triangles.map((_,i)=>i);
+    const invalid = allTris.filter(i=>!valid.includes(i));
+    const checks = [
+      ['有效来源面=' + JSON.stringify(exp['basic有效来源面']), JSON.stringify(valid)===JSON.stringify(exp['basic有效来源面'])],
+      ['无效来源面=' + JSON.stringify(exp['basic无效来源面']), JSON.stringify(invalid)===JSON.stringify(exp['basic无效来源面'])],
+      ['世界外法线≈(0,0,-1)', records.every(r=>Math.hypot(r.normal[0],r.normal[1],r.normal[2]+1)<1e-9)],
+      ['偏移后z≈' + exp['basic偏移后z'], records.every(r=>r.positions.every(p=>Math.abs(p[2]-exp['basic偏移后z'])<1e-9))],
+      ['重心坐标和≈1', records.every(r=>r.bary.every(b=>Math.abs(b[0]+b[1]+b[2]-exp['重心坐标和'])<1e-9))],
+    ];
+    setStatus('自检结果：\n' + checks.map(([n,ok])=>`  ${ok?'✓':'✗'} ${n}`).join('\n'), checks.every(c=>c[1])?'ok':'err');
+  } catch (e) { setStatus('自检失败（需通过 http 服务访问样例）：' + e.message, 'err'); }
+};
+
+/* ================= 加载 ================= */
+async function loadScene(sc, textureURL) {
+  scene = sc;
+  projState = sc.projectors.map(() => null);
+  sc.projectors.forEach((_, i) => initProjState(i));
+  if (textureURL) { texURL = textureURL; loadTexture(texURL); }
+  buildProjPanels(); recompute(); frameCamera();
+  document.getElementById('pickinfo').style.display='none'; srcHi.visible=false;
+}
+async function loadSample(name) {
+  try {
+    const sc = await (await fetch(`samples/extracted/${name}.json`)).json();
+    await loadScene(sc, 'samples/extracted/decal.png');
+  } catch (e) { setStatus('样例加载失败（请用 http 服务打开，如 python3 -m http.server）：' + e.message, 'err'); }
+}
+document.querySelectorAll('[data-sample]').forEach(b => b.onclick = () => loadSample(b.dataset.sample));
+document.getElementById('btnFile').onclick = () => document.getElementById('fileScene').click();
+document.getElementById('fileScene').onchange = async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  try { await loadScene(JSON.parse(await f.text())); } catch (e) { setStatus('JSON 解析失败：' + e.message, 'err'); }
+};
+document.getElementById('btnTex').onclick = () => document.getElementById('fileTex').click();
+document.getElementById('fileTex').onchange = ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  texURL = URL.createObjectURL(f); loadTexture(texURL);
+};
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  if (f.name.endsWith('.json')) { try { await loadScene(JSON.parse(await f.text())); } catch(err){ setStatus('JSON 解析失败：'+err.message,'err'); } }
+  else if (f.type.startsWith('image/')) { texURL = URL.createObjectURL(f); loadTexture(texURL); }
+});
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.innerHTML = cls ? `<span class="${cls}">${msg}</span>` : msg;
+}
+
+/* ================= 渲染循环 ================= */
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(view);
+resize();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene3, camera); });
+
+// 默认加载 basic 样例
+loadSample('basic');
+</script>
+</body>
+</html>
