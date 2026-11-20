@@ -1,0 +1,20 @@
+{
+  "image": "radial.png",
+  "mask": "full-valid.png",
+  "levels": [
+    100.5,
+    400.5
+  ],
+  "origin": [
+    10,
+    -5
+  ],
+  "spacing": [
+    0.5,
+    2
+  ],
+  "expected_closed_counts": [
+    1,
+    1
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "image": "annulus.png",
+  "mask": "full-valid.png",
+  "levels": [
+    80.5
+  ],
+  "origin": [
+    10,
+    -5
+  ],
+  "spacing": [
+    0.5,
+    2
+  ],
+  "expected_closed_count": 2,
+  "expected_inner_parent_is_outer": true
+}

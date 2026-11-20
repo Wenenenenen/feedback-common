@@ -1,0 +1,11 @@
+{
+  "name": "saddle-contour-atlas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "灰度标量图等值线提取与导出（marching squares，含鞍点 Q 判定与掩膜开放线）",
+  "scripts": {
+    "test": "node --test tools/tests.mjs tools/property_tests.mjs tools/parent_tests.mjs tools/exporter_tests.mjs",
+    "fixtures": "python3 -I tools/emit_fixtures.py"
+  }
+}

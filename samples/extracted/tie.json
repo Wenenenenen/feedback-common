@@ -1,0 +1,17 @@
+{
+  "image": "tie.png",
+  "levels": [
+    1.5
+  ],
+  "Q": 0.0,
+  "expected_edge_pairs": [
+    [
+      "top",
+      "left"
+    ],
+    [
+      "right",
+      "bottom"
+    ]
+  ]
+}

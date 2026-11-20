@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>鞍点等值线图集</title>
+<style>
+/* 工程制图工作台：深炭网格底 + 克制的测绘配色，等宽数字对齐测量值 */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --fg: #1a1f27;
+  --fg-muted: #5b6470;
+  --fg-faint: #8a93a0;
+  --border: #d6dae0;
+  --border-strong: #b6bcc6;
+  --accent: #1d4ed8;
+  --accent-soft: #dbe7ff;
+  --good: #047857;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --grid-line: #e2e6eb;
+  --shadow: 0 1px 2px rgba(20, 26, 36, .06), 0 4px 14px rgba(20, 26, 36, .06);
+  --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+  --sans: "Inter", -apple-system, BlinkMacSystem, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151a; --surface: #1a1f27; --surface-2: #222934;
+    --fg: #e7ebf0; --fg-muted: #a3acb9; --fg-faint: #6d7682;
+    --border: #2c343f; --border-strong: #3d4652;
+    --accent: #6ea0ff; --accent-soft: #1e2c4a;
+    --good: #34d399; --warn: #fbbf24; --danger: #f87171;
+    --grid-line: #232a34;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151a; --surface: #1a1f27; --surface-2: #222934;
+  --fg: #e7ebf0; --fg-muted: #a3acb9; --fg-faint: #6d7682;
+  --border: #2c343f; --border-strong: #3d4652;
+  --accent: #6ea0ff; --accent-soft: #1e2c4a;
+  --good: #34d399; --warn: #fbbf24; --danger: #f87171;
+  --grid-line: #232a34;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.app {
+  display: grid; gap: 14px;
+  grid-template-columns: 290px minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%; padding-block: 14px;
+  max-width: 1680px; margin: 0 auto;
+}
+header.topbar {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: 17px; margin: 0; font-weight: 680; letter-spacing: .2px; white-space: nowrap; }
+.brand .sub { color: var(--fg-muted); font-size: 12.5px; }
+.spacer { flex: 1; }
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.panel-head {
+  padding: 11px 14px; border-bottom: 1px solid var(--border);
+  font-weight: 640; font-size: 13px; letter-spacing: .3px;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-body { padding: 14px; overflow-y: auto; min-height: 0; flex: 1; }
+.field { margin-bottom: 14px; min-width: 0; }
+.field label {
+  display: block; font-size: 12px; color: var(--fg-muted);
+  margin-bottom: 5px; font-weight: 560; letter-spacing: .3px;
+}
+.field .hint { font-size: 11.5px; color: var(--fg-faint); margin-top: 4px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+input[type="text"], input[type="number"], textarea {
+  width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 7px; padding: 7px 9px; outline: none;
+}
+input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea { resize: vertical; font-family: var(--mono); font-size: 12.5px; min-height: 64px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--accent); color: #fff; border: none; border-radius: 7px;
+  padding: 8px 12px; font-weight: 600; font-size: 13px;
+}
+.btn.secondary { background: var(--surface-2); color: var(--fg); border: 1px solid var(--border-strong); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-row { display: flex; gap: 8px; }
+.file-drop {
+  border: 1.5px dashed var(--border-strong); border-radius: 9px;
+  padding: 14px; text-align: center; color: var(--fg-muted);
+  font-size: 12.5px; transition: border-color .15s, background .15s;
+}
+.file-drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+.file-drop strong { color: var(--fg); display: block; margin-bottom: 3px; font-size: 13px; }
+.file-meta {
+  font-family: var(--mono); font-size: 11.5px; color: var(--fg-muted);
+  background: var(--surface-2); border-radius: 7px; padding: 8px 10px; margin-top: 8px;
+  white-space: pre-wrap; word-break: break-all;
+}
+.canvas-wrap { position: relative; min-height: 0; display: flex; flex-direction: column; }
+.canvas-scroll { flex: 1; overflow: auto; min-height: 0; padding: 14px; }
+svg.stage { display: block; margin: 0 auto; background: var(--surface); border-radius: 6px; }
+svg.stage .grid-cell { fill: transparent; }
+svg.stage .cell-layer { pointer-events: none; }
+svg.stage.pick-cell .cell-layer { pointer-events: auto; }
+svg.stage.pick-cell .contour { pointer-events: none; }
+svg.stage .grid-cell:hover { fill: var(--accent-soft); }
+svg.stage .cell-sel { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+svg.stage .masked { fill: rgba(120, 120, 120, .18); }
+svg.stage .intersection { fill: var(--warn); stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+svg.stage .corner-dot { fill: var(--fg-muted); }
+svg.stage .contour { fill: none; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; }
+svg.stage .contour.sel { filter: drop-shadow(0 0 2px currentColor); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  font-family: var(--mono); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 10px;
+}
+.chip .swatch { width: 11px; height: 11px; border-radius: 3px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; }
+.kv dt { color: var(--fg-muted); }
+.kv dd { margin: 0; font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.section-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--fg-faint); font-weight: 650; margin: 16px 0 8px;
+}
+.section-title:first-child { margin-top: 0; }
+.badge {
+  display: inline-block; font-size: 11px; font-weight: 650; padding: 2px 8px;
+  border-radius: 999px; letter-spacing: .3px;
+}
+.badge.closed { background: rgba(4,120,87,.13); color: var(--good); }
+.badge.open { background: rgba(180,83,9,.15); color: var(--warn); }
+.badge.invalid { background: rgba(185,28,28,.13); color: var(--danger); }
+.corner-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.corner-card {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  background: var(--surface-2); font-size: 12px;
+}
+.corner-card .pos { font-family: var(--mono); color: var(--fg-faint); font-size: 11px; }
+.corner-card .val { font-family: var(--mono); font-weight: 650; margin: 2px 0; }
+.corner-card.above { border-color: var(--accent); }
+.pill-list { display: flex; flex-direction: column; gap: 6px; }
+.pill {
+  font-family: var(--mono); font-size: 11.5px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px;
+}
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 8px;
+  font-size: 13px; box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s; z-index: 50; max-width: 80vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+.toast.error { background: var(--danger); color: #fff; }
+.empty-hint {
+  color: var(--fg-faint); font-size: 12.5px; text-align: center;
+  padding: 26px 12px; line-height: 1.7;
+}
+.theme-toggle {
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 7px; padding: 6px 10px; font-size: 12px;
+}
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding: 3px 0; font-size: 12.5px; color: var(--fg-muted); }
+ul.plain li code { font-family: var(--mono); color: var(--fg); }
+@media (max-width: 1080px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; height: auto; }
+  html, body { height: auto; }
+  .panel { max-height: none; }
+  .canvas-wrap { min-height: 420px; }
+  .brand .sub { flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>鞍点等值线图集</h1>
+      <span class="sub">Marching Squares · Q 判据 · 掩膜开放线</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="theme-toggle" id="themeToggle" type="button">切换主题</button>
+  </header>
+
+  <!-- 左：导入与参数 -->
+  <section class="panel" id="controlPanel">
+    <div class="panel-head">输入与参数</div>
+    <div class="panel-body">
+      <div class="field">
+        <label>16 位灰度 PNG（像素＝网格节点）</label>
+        <div class="file-drop" id="imageDrop">
+          <strong>点击选择或拖入灰度 PNG</strong>
+          每边 2–1024 节点 · 灰度 color type 0
+          <input type="file" id="imageInput" accept="image/png,application/png" hidden>
+        </div>
+        <div class="file-meta" id="imageMeta" hidden></div>
+      </div>
+      <div class="field">
+        <label>有效掩膜（可选，同尺寸 0/255 PNG）</label>
+        <div class="file-drop" id="maskDrop">
+          <strong>点击选择或拖入掩膜</strong>
+          仅四角均有效的单元参与提线
+          <input type="file" id="maskInput" accept="image/png,application/png" hidden>
+        </div>
+        <div class="file-meta" id="maskMeta" hidden></div>
+      </div>
+
+      <div class="field">
+        <label>阈值（半整数 n+0.5，逗号/空格分隔，最多 32 个）</label>
+        <textarea id="levelsInput" spellcheck="false">100.5, 400.5</textarea>
+        <div class="hint">节点为整数，半整数阈值不会落在节点上</div>
+      </div>
+
+      <div class="field">
+        <label>物理原点 (origin_x, origin_y)</label>
+        <div class="row2">
+          <input type="number" step="any" id="originX" value="10">
+          <input type="number" step="any" id="originY" value="-5">
+        </div>
+      </div>
+      <div class="field">
+        <label>横纵间距 spacing（须 &gt; 0）</label>
+        <div class="row2">
+          <input type="number" step="any" id="spacingX" value="0.5">
+          <input type="number" step="any" id="spacingY" value="2">
+        </div>
+        <div class="hint">修改后画布与导出的物理坐标、长度、面积同步重算</div>
+      </div>
+
+      <div class="btn-row" style="margin-bottom:10px">
+        <button class="btn block" id="extractBtn" type="button" disabled>提取等值线</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary block" id="exportSvgBtn" type="button" disabled>导出 SVG</button>
+        <button class="btn secondary block" id="exportJsonBtn" type="button" disabled>导出 JSON</button>
+      </div>
+
+      <div class="section-title">约定</div>
+      <ul class="plain">
+        <li>鞍点四交点：<code>Q=(a−t)(c−t)−(b−t)(d−t)</code></li>
+        <li><code>Q&gt;0</code> 连上-右 / 下-左；<code>Q≤0</code> 连上-左 / 右-下</li>
+        <li>共享网格边按边身份复用同一交点，不做坐标去重</li>
+        <li>触图边或掩膜的线保持开放，不自动封口</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 中：画布 -->
+  <section class="panel canvas-wrap">
+    <div class="panel-head">
+      画布
+      <span style="flex:1"></span>
+      <button class="theme-toggle" id="pickModeBtn" type="button" aria-pressed="false">拾取：折线</button>
+      <span class="sub" id="canvasStats" style="color:var(--fg-muted);font-weight:400;font-family:var(--mono)"></span>
+    </div>
+    <div class="canvas-scroll" id="canvasScroll">
+      <div class="empty-hint" id="emptyHint">
+        导入一张 16 位灰度 PNG（可再加掩膜），<br>
+        调整阈值与物理参数后点击「提取等值线」。<br><br>
+        点击画布中的<strong>单元</strong>查看角点、交点与连接选择；<br>
+        点击<strong>折线</strong>查看点数、开闭、物理长度与闭环面积。
+      </div>
+      <svg class="stage" id="stage" hidden></svg>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <!-- 右：检查器 -->
+  <section class="panel">
+    <div class="panel-head">检查器</div>
+    <div class="panel-body" id="inspector">
+      <div class="empty-hint">尚未选择对象</div>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module" src="./app/ui.js"></script>
+</body>
+</html>

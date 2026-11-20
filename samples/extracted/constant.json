@@ -1,0 +1,8 @@
+{
+  "image": "constant.png",
+  "levels": [
+    31999.5,
+    32000.5
+  ],
+  "expected_lines": 0
+}

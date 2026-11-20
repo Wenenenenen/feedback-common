@@ -1,0 +1,17 @@
+{
+  "image": "positive.png",
+  "levels": [
+    1.5
+  ],
+  "Q": 2.0,
+  "expected_edge_pairs": [
+    [
+      "top",
+      "right"
+    ],
+    [
+      "bottom",
+      "left"
+    ]
+  ]
+}

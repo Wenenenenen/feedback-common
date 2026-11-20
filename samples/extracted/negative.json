@@ -1,0 +1,17 @@
+{
+  "image": "negative.png",
+  "levels": [
+    1.5
+  ],
+  "Q": -1.5,
+  "expected_edge_pairs": [
+    [
+      "top",
+      "left"
+    ],
+    [
+      "right",
+      "bottom"
+    ]
+  ]
+}
