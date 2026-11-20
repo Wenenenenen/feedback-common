@@ -1,0 +1,3744 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>剪点字幕台</title>
+<meta name="description" content="按剪辑单裁切字幕、以精确分数重排时间轴，联动追溯源词，导出 WebVTT 与含来源关系的 JSON。">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* 剪点字幕台 — design tokens and layout
+   Layout concept: a broadcast conform desk. Ledger strip of counts on top,
+   three adjacent panes (source / edit / conform) sharing one time language,
+   and a persistent trace rail at the bottom that ties a result back to a word. */
+
+:root {
+  /* Color — cool paper with a signal-red accent; panel hues borrow from
+     broadcast slate: source = ink blue, edit = amber, conform = green. */
+  --bg: #eef1ec;
+  --surface: #f9faf6;
+  --surface-2: #e8ece5;
+  --surface-3: #dde2da;
+  --ink: #141917;
+  --ink-2: #414a46;
+  --ink-3: #6c7771;
+  --line: #d3d9d0;
+  --line-2: #b9c3b8;
+  --accent: #b4331e;
+  --accent-ink: #fff8f5;
+  --accent-soft: #f4dcd5;
+  --src: #2b5d8c;
+  --src-soft: #e0e9f2;
+  --clipc: #8a6410;
+  --clip-ink: #fffaf0;
+  --clip-soft: #f1e7cd;
+  --outc: #1c6a4e;
+  --out-soft: #dbeae2;
+  --danger: #a7241d;
+  --danger-soft: #f5ddd9;
+  --warn: #7d5300;
+  --warn-soft: #f3e9d1;
+  --ok: #1c6a4e;
+  --shadow: 0 16px 44px rgba(18, 24, 21, 0.15), 0 3px 9px rgba(18, 24, 21, 0.07);
+  --shadow-sm: 0 1px 2px rgba(18, 24, 21, 0.06);
+  --radius: 8px;
+  --radius-sm: 5px;
+
+  /* Type — Plex Sans for UI, Plex Mono carries every timecode and fraction so
+     the exact numbers line up as a ledger. Noto Sans SC for CJK body text. */
+  --sans: "IBM Plex Sans", "Noto Sans SC", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Noto Sans Mono CJK SC", monospace;
+  --size-xs: 10.5px;
+  --size-sm: 12px;
+  --size-md: 13.5px;
+  --size-lg: 16px;
+  --size-xl: 21px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1110;
+    --surface: #141917;
+    --surface-2: #1a201d;
+    --surface-3: #222a26;
+    --ink: #e8ece5;
+    --ink-2: #b1bbb4;
+    --ink-3: #849087;
+    --line: #28312c;
+    --line-2: #38453e;
+    --accent: #ef7358;
+    --accent-ink: #1c0c07;
+    --accent-soft: #2f1a13;
+    --src: #7caddb;
+    --src-soft: #16252f;
+    --clipc: #d0a145;
+    --clip-ink: #1b1404;
+    --clip-soft: #2a2314;
+    --outc: #6bc5a0;
+    --out-soft: #142620;
+    --danger: #ef8a80;
+    --danger-soft: #2f1714;
+    --warn: #dfb05a;
+    --warn-soft: #2a2213;
+    --ok: #6bc5a0;
+    --shadow: 0 16px 44px rgba(0, 0, 0, 0.5), 0 3px 9px rgba(0, 0, 0, 0.35);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1110;
+  --surface: #141917;
+  --surface-2: #1a201d;
+  --surface-3: #222a26;
+  --ink: #e8ece5;
+  --ink-2: #b1bbb4;
+  --ink-3: #849087;
+  --line: #28312c;
+  --line-2: #38453e;
+  --accent: #ef7358;
+  --accent-ink: #1c0c07;
+  --accent-soft: #2f1a13;
+  --src: #7caddb;
+  --src-soft: #16252f;
+  --clipc: #d0a145;
+  --clip-ink: #1b1404;
+  --clip-soft: #2a2314;
+  --outc: #6bc5a0;
+  --out-soft: #142620;
+  --danger: #ef8a80;
+  --danger-soft: #2f1714;
+  --warn: #dfb05a;
+  --warn-soft: #2a2213;
+  --ok: #6bc5a0;
+  --shadow: 0 16px 44px rgba(0, 0, 0, 0.5), 0 3px 9px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { height: 100%; }
+body {
+  margin: 0;
+  min-height: 100%;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--size-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+::selection { background: var(--accent-soft); color: var(--ink); }
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding-block: 18px 22px;
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand-mark {
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--bg);
+  flex: none;
+}
+.brand-text { min-width: 0; }
+.brand-text h1 {
+  margin: 0;
+  font-size: var(--size-xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+.brand-text p {
+  margin: 1px 0 0;
+  font-size: var(--size-xs);
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.doc-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: var(--size-xs);
+  color: var(--ink-2);
+  max-width: 260px;
+}
+.doc-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+.doc-chip span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-chip.is-custom .dot { background: var(--accent); }
+.top-actions { margin-left: auto; display: flex; gap: 7px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 32px;
+  padding: 6px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--ink-3); }
+.btn:active { transform: translateY(0.5px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); border-color: var(--line); }
+.btn.tiny { min-height: 26px; padding: 3px 9px; font-size: var(--size-xs); }
+.btn.icon { padding: 3px 8px; font-size: 15px; line-height: 1; }
+.btn:disabled { opacity: .38; cursor: not-allowed; }
+.btn.danger { color: var(--danger); }
+.btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+/* ---------- Ledger ---------- */
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.stat {
+  background: var(--surface);
+  padding: 9px 13px 10px;
+  min-width: 0;
+}
+.stat-label {
+  font-size: var(--size-xs);
+  color: var(--ink-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.stat-value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-value small { font-size: var(--size-xs); font-weight: 500; color: var(--ink-3); margin-left: 3px; }
+.stat.is-bad .stat-value { color: var(--danger); }
+.stat.is-warn .stat-value { color: var(--warn); }
+.stat.is-ok .stat-value { color: var(--ok); }
+.stat.is-click { cursor: pointer; }
+.stat.is-click:hover { background: var(--surface-2); }
+
+/* The live problem summary sits in the ledger as a full-width row */
+.ledger-summary {
+  grid-column: 1 / -1;
+  background: var(--surface);
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 13px;
+  font-size: var(--size-xs);
+  color: var(--ink-2);
+  flex-wrap: wrap;
+}
+.ledger-summary .pill { font-size: var(--size-xs); }
+.ledger-summary code { font-family: var(--mono); font-size: 9.5px; }
+
+/* ---------- Pane switching for narrow ---------- */
+.pane-switch {
+  display: none;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.pane-switch button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 7px 4px;
+  font-size: var(--size-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+  min-height: 34px;
+}
+.pane-switch button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); font-weight: 600; }
+
+/* ---------- Bench ---------- */
+.bench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px 9px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.ph-title { min-width: 0; }
+.eyebrow {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.panel[data-pane="source"] .eyebrow { color: var(--src); }
+.panel[data-pane="clip"] .eyebrow { color: var(--clipc); }
+.panel[data-pane="out"] .eyebrow { color: var(--outc); }
+.panel-head h2 {
+  margin: 0;
+  font-size: var(--size-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.panel-tools { margin-left: auto; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.panel-foot {
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+  font-size: var(--size-xs);
+  color: var(--ink-3);
+  min-height: 29px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-family: var(--mono);
+}
+.panel-foot .sep { color: var(--line-2); }
+
+/* Source tabs */
+.tabs { display: flex; gap: 0; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.tabs:empty { display: none; }
+.tab {
+  border: 0; background: transparent;
+  padding: 6px 13px;
+  font-size: var(--size-sm);
+  font-family: var(--mono);
+  color: var(--ink-2);
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+  min-height: 30px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab[aria-selected="true"] { background: var(--surface); color: var(--src); font-weight: 600; box-shadow: inset 0 -2px 0 var(--src); }
+.tab .n { font-size: 10px; color: var(--ink-3); }
+.tab[aria-selected="true"] .n { color: var(--src); }
+
+/* ---------- Ruler (source + output time axes) ---------- */
+.ruler {
+  position: relative;
+  height: 23px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  overflow: hidden;
+  flex: none;
+}
+.ruler:empty { display: none; }
+.ruler .tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px solid var(--line-2);
+  padding-left: 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  line-height: 23px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ruler .tick.minor { border-left-color: var(--line); }
+.ruler .tick.minor span { display: none; }
+.ruler .range-band {
+  position: absolute; top: 13px; bottom: 0;
+  background: color-mix(in srgb, var(--clipc) 42%, transparent);
+  border-top: 1.5px solid var(--clipc);
+  pointer-events: none;
+}
+.ruler .ovl-band {
+  position: absolute; top: 0; bottom: 0;
+  background: color-mix(in srgb, var(--warn) 26%, transparent);
+  border-left: 1px solid var(--warn);
+  border-right: 1px solid var(--warn);
+  pointer-events: none;
+}
+
+/* ---------- Virtual list host ---------- */
+.vhost {
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: min(54vh, 560px);
+  min-height: 190px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.vhost .vspacer { position: relative; }
+.vrow { position: absolute; left: 0; right: 0; }
+.src-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 63px minmax(0, 1fr);
+  gap: 0 9px;
+  padding: 6px 10px 6px 10px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  align-items: start;
+}
+.src-row:hover { background: var(--surface-2); }
+.src-row.is-active { background: var(--src-soft); }
+.src-row.is-active::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--src);
+}
+.src-row .tc {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  line-height: 1.35;
+  padding-top: 2px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.src-row .tc b { display: block; color: var(--ink-2); font-weight: 500; font-size: 10.5px; }
+.src-row .body { min-width: 0; }
+.src-row .text { font-size: var(--size-md); line-height: 1.42; word-break: break-word; }
+.src-row .text .w { border-radius: 3px; padding: 0 1px; margin: 0 -1px; }
+.src-row .text .w.used { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--src) 45%, transparent); }
+.src-row .text .w.sel { background: var(--src); color: var(--surface); box-shadow: none; }
+.src-row .text .w.sel.used { box-shadow: none; }
+.src-row .meta {
+  display: flex; gap: 5px; align-items: center; flex-wrap: wrap;
+  margin-top: 2px;
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 16px;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.chip.src { border-color: color-mix(in srgb, var(--src) 35%, var(--line)); color: var(--src); }
+.chip.clip { border-color: color-mix(in srgb, var(--clipc) 40%, var(--line)); color: var(--clipc); }
+.chip.out { border-color: color-mix(in srgb, var(--outc) 38%, var(--line)); color: var(--outc); }
+.chip.bad { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+.chip.warn { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.chip.plain { border-color: transparent; background: var(--surface-2); }
+
+/* Inline word timing strip */
+.wstrip {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 3px;
+  margin-top: 5px;
+  align-content: flex-start;
+}
+.wchip {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  line-height: 16px;
+}
+.wchip:hover { border-color: var(--src); color: var(--src); }
+.wchip .wt { font-size: 9px; color: var(--ink-3); }
+.wchip.is-sel { background: var(--src); border-color: var(--src); color: var(--surface); }
+.wchip.is-sel .wt { color: color-mix(in srgb, var(--surface) 75%, transparent); }
+.wchip.is-hit { border-color: color-mix(in srgb, var(--outc) 40%, var(--line)); }
+.wchip.is-cut { opacity: .55; text-decoration: line-through; }
+.word-picks { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; max-height: 110px; overflow-y: auto; }
+
+/* ---------- Clip rows ---------- */
+.clip-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  gap: 0 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.clip-row:hover { background: var(--surface-2); }
+.clip-row.is-active { background: var(--clip-soft); border-left-color: var(--clipc); }
+.clip-row.is-selected { background: var(--clip-soft); border-left-color: var(--clipc); }
+.clip-row.is-gap { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--ink-3) 8%, transparent) 6px 12px); }
+.clip-row.is-bad { border-left-color: var(--danger); background: var(--danger-soft); }
+.clip-row.is-hover-src { background: var(--src-soft); }
+.clip-row .lead { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.clip-row .mini-select {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 1px 4px;
+  max-width: 92px;
+  color: var(--ink);
+  min-height: 20px;
+}
+.clip-row .mini-num {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 1px 4px;
+  width: 62px;
+  min-height: 20px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.clip-row .mini-num:focus, .clip-row .mini-select:focus { border-color: var(--clipc); outline: 1px solid var(--clipc); }
+.clip-row .mini-num.is-invalid { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.clip-row .num-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.clip-row .num-wrap .suffix { font-family: var(--mono); font-size: 9px; color: var(--ink-3); }
+.clip-row .speed-fields { display: inline-flex; align-items: center; gap: 3px; }
+.clip-row .mini-num.speed { width: 47px; text-align: center; }
+.clip-row .ratio {
+  font-family: var(--mono); font-size: 9px; color: var(--ink-3);
+  border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; line-height: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.clip-row .ratio.fast { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.clip-row .ratio.slow { color: var(--src); border-color: color-mix(in srgb, var(--src) 40%, var(--line)); }
+.clip-row.is-flash, .src-row.is-flash { animation: flash-bg 1.3s ease-out; }
+@keyframes flash-bg { 0% { background: var(--warn-soft); } 100% { background: transparent; } }
+.wchip.is-flash { animation: flash-chip 1.3s ease-out; }
+@keyframes flash-chip { 0% { background: var(--warn-soft); border-color: var(--warn); } 100% { } }
+.clip-row .ord {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+  letter-spacing: 0.05em;
+}
+.clip-row .cid {
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.clip-row .dur { font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.clip-row .body { min-width: 0; }
+.clip-row .line { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-family: var(--mono); font-size: 10px; color: var(--ink-2); }
+.clip-row .line + .line { margin-top: 2px; }
+.clip-row .arr { color: var(--ink-3); }
+.clip-row .bar {
+  position: relative;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-3);
+  margin-top: 5px;
+  overflow: hidden;
+}
+.clip-row .bar > i {
+  position: absolute; top: 0; bottom: 0;
+  background: var(--clipc);
+  opacity: .55;
+  border-radius: 2px;
+}
+.clip-row .bar > i.cut { opacity: 1; }
+.clip-row .actions { display: flex; gap: 3px; margin-top: 4px; opacity: .55; transition: opacity .1s; }
+.clip-row:hover .actions, .clip-row:focus-within .actions { opacity: 1; }
+.clip-row .act {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 3px;
+  width: 22px; height: 21px;
+  display: grid; place-items: center;
+  font-size: 11px; color: var(--ink-2);
+  line-height: 1;
+}
+.clip-row .act:hover { border-color: var(--ink-3); color: var(--ink); }
+.clip-row .act.del:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+.clip-row .act:disabled { opacity: .3; cursor: not-allowed; }
+.gap-swatch {
+  display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  border: 1px dashed var(--ink-3);
+}
+
+/* ---------- Output rows ---------- */
+.out-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 0 9px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  align-items: start;
+  border-left: 3px solid transparent;
+}
+.out-row:hover { background: var(--out-soft); }
+.out-row.is-active { background: var(--out-soft); border-left-color: var(--outc); }
+.out-row.is-overlap { box-shadow: inset 0 -2px 0 var(--warn); }
+.out-row .tc {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+  line-height: 1.4; font-variant-numeric: tabular-nums;
+}
+.out-row .tc b { display: block; color: var(--outc); font-weight: 500; font-size: 10px; }
+.out-row .body { min-width: 0; }
+.out-row .text { font-size: var(--size-md); line-height: 1.42; word-break: break-word; }
+.out-row .text .w { border-radius: 3px; padding: 0 1px; }
+.out-row .text .w.sel { background: var(--outc); color: var(--surface); }
+.out-row .sub {
+  margin-top: 2px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+}
+.out-row .ovflag {
+  font-family: var(--mono); font-size: 9px; color: var(--warn);
+  border: 1px solid var(--warn); border-radius: 3px; padding: 0 4px; line-height: 15px;
+  background: var(--warn-soft);
+  white-space: nowrap;
+}
+.empty-row { padding: 10px 12px; color: var(--ink-3); font-size: var(--size-sm); }
+.empty-state { padding: 22px 16px; text-align: center; color: var(--ink-3); font-size: var(--size-sm); line-height: 1.65; }
+.empty-state strong { display:block; color: var(--ink-2); font-size: var(--size-md); margin-bottom: 3px; }
+
+/* ---------- Output timeline overview ---------- */
+.otimeline {
+  position: relative;
+  padding: 7px 10px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.otrack {
+  position: relative;
+  height: 26px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+  cursor: crosshair;
+}
+.otrack .seg {
+  position: absolute; top: 0; bottom: 0;
+  border-right: 1px solid color-mix(in srgb, var(--bg) 65%, transparent);
+  min-width: 1px;
+}
+.otrack .seg.gap {
+  background: repeating-linear-gradient(135deg, var(--surface-3) 0 5px, color-mix(in srgb, var(--ink-3) 18%, transparent) 5px 10px);
+}
+.otrack .seg.used { background: color-mix(in srgb, var(--clipc) 55%, var(--surface)); }
+.otrack .seg.used[data-src="0"] { filter: hue-rotate(0deg); }
+.otrack .seg.is-active { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 2; }
+.otrack .seg.is-bad { background: repeating-linear-gradient(45deg, var(--danger-soft) 0 4px, var(--danger) 4px 5px); }
+.otrack .playhead { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); pointer-events: none; z-index: 3; }
+.otimeline .scale {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 9px; color: var(--ink-3);
+  margin-top: 3px; font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Trace rail ---------- */
+.trace {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  min-height: 118px;
+  overflow: hidden;
+}
+.trace-head {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 8px 13px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.trace-head .eyebrow { font-size: 9.5px; }
+.trace-head h3 { margin: 0; font-size: var(--size-sm); font-weight: 600; }
+.trace-head .hint { font-size: var(--size-xs); color: var(--ink-3); margin-left: auto; }
+.trace-head .spacer { margin-left: auto; }
+.trace-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 3px 9px;
+  font-size: var(--size-sm);
+  font-family: var(--mono);
+  color: var(--ink-2);
+  min-height: 25px;
+}
+.trace-tab:hover { background: var(--surface-3); }
+.trace-tab.is-on { background: var(--surface); border-color: var(--line); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-sm); }
+.modal-note {
+  margin: 0 0 10px;
+  font-size: var(--size-xs);
+  color: var(--ink-3);
+  line-height: 1.55;
+}
+.rules { display: flex; flex-direction: column; gap: 0; }
+.rule {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--size-sm);
+}
+.rule:last-child { border-bottom: 0; }
+.rule-k { font-family: var(--mono); font-size: 10.5px; color: var(--accent); padding-top: 2px; }
+.rule-v { line-height: 1.55; }
+.trace-body { padding: 11px 13px 13px; }
+.chain {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.chain-node {
+  flex: none;
+  width: 196px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 7px 9px;
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 0;
+  position: relative;
+}
+.chain-node + .chain-node { margin-left: 26px; }
+.chain-node + .chain-node::before {
+  content: "→";
+  position: absolute; left: -20px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.chain-node .cn-k {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  color: var(--ink-3); text-transform: uppercase;
+}
+.chain-node.src { border-top: 2px solid var(--src); }
+.chain-node.word { border-top: 2px solid var(--src); }
+.chain-node.clip { border-top: 2px solid var(--clipc); }
+.chain-node.out { border-top: 2px solid var(--outc); }
+.chain-node .cn-t {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chain-node .cn-d {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  word-break: break-all;
+}
+.chain-node .cn-txt { font-size: var(--size-sm); line-height: 1.35; word-break: break-word; }
+.chain-node .cn-frac { font-family: var(--mono); font-size: 9px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.chain-node .cn-frac code { background: var(--surface-2); padding: 0 3px; border-radius: 2px; }
+.notice {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 13px;
+  color: var(--ink-3);
+  font-size: var(--size-sm);
+}
+.notice .nk { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--ink-3); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+
+/* ---------- Issues ---------- */
+.issues { display: flex; flex-direction: column; gap: 0; }
+.issue {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 7px 13px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--size-sm);
+  cursor: pointer;
+  text-align: left;
+  background: transparent;
+  border-left: 0; border-right: 0; border-top: 0;
+  width: 100%;
+}
+.issue:hover { background: var(--surface-2); }
+.issue:last-child { border-bottom: 0; }
+.issue .mk {
+  font-family: var(--mono); font-size: 11px; line-height: 1.4;
+  width: 17px; height: 17px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--danger); background: var(--danger-soft);
+  font-weight: 600;
+}
+.issue.warn .mk { color: var(--warn); background: var(--warn-soft); }
+.issue .msg { min-width: 0; }
+.issue .msg .where { font-family: var(--mono); font-size: 10px; color: var(--ink-3); display: block; }
+.issue .msg .what { line-height: 1.4; }
+.issue .path {
+  font-family: var(--mono); font-size: 9px; color: var(--ink-3);
+  white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  align-self: center;
+}
+.issues-empty {
+  padding: 14px 13px; color: var(--ok); font-size: var(--size-sm);
+  display: flex; align-items: center; gap: 8px;
+}
+.issues-empty .tick { width: 17px; height: 17px; border-radius: 50%; background: var(--out-soft); color: var(--ok); display: grid; place-items: center; font-size: 11px; }
+
+/* ---------- Modal / export ---------- */
+.scrim {
+  position: fixed; inset: 0; z-index: 40;
+  background: color-mix(in srgb, #060908 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+.modal {
+  position: fixed; z-index: 41;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(86vh, 900px);
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-head h2 { margin: 0; font-size: var(--size-lg); font-weight: 600; }
+.modal-head .sub { font-size: var(--size-xs); color: var(--ink-3); font-family: var(--mono); }
+.modal-head .x {
+  margin-left: auto; border: 1px solid var(--line); background: var(--surface);
+  width: 28px; height: 28px; border-radius: var(--radius-sm); font-size: 15px; line-height: 1;
+  display: grid; place-items: center;
+}
+.modal-head .x:hover { background: var(--surface-2); }
+.modal-tabs { display: flex; gap: 2px; padding: 8px 14px 0; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.modal-tab {
+  border: 1px solid transparent; border-bottom: 0;
+  background: transparent; color: var(--ink-2);
+  padding: 6px 13px; font-size: var(--size-sm); font-family: var(--mono);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  margin-bottom: -1px;
+}
+.modal-tab[aria-selected="true"] { background: var(--surface); border-color: var(--line); color: var(--ink); font-weight: 600; }
+.modal-warn {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 10px 14px 0;
+  padding: 8px 11px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  font-size: var(--size-xs);
+  line-height: 1.5;
+}
+.modal-warn strong { font-size: var(--size-sm); }
+.modal-body { padding: 12px 14px; overflow: auto; min-height: 0; }
+.modal-body textarea {
+  width: 100%; min-height: 340px; resize: vertical;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--ink);
+  padding: 10px; white-space: pre; overflow-wrap: normal; overflow-x: auto;
+  tab-size: 2;
+}
+.modal-body pre.text {
+  margin: 0; padding: 10px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  max-height: 52vh; overflow: auto; white-space: pre; tab-size: 2;
+}
+.modal-foot {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 10px 14px; border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.modal-foot .note { font-size: var(--size-xs); color: var(--ink-3); font-family: var(--mono); }
+.modal-foot .spacer { margin-left: auto; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field label { font-size: var(--size-xs); color: var(--ink-3); letter-spacing: .03em; }
+.field input, .field select {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg); padding: 6px 8px; font-size: var(--size-sm);
+  font-family: var(--mono); min-height: 32px; min-width: 0;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); outline: 1px solid var(--accent); }
+.seg-ctl { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-ctl button { border: 0; background: var(--surface); padding: 4px 9px; font-size: var(--size-xs); font-family: var(--mono); color: var(--ink-2); }
+.seg-ctl button + button { border-left: 1px solid var(--line); }
+.seg-ctl button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+/* ---------- Drop + toast ---------- */
+.drop-overlay {
+  position: fixed; inset: 12px; z-index: 60;
+  border: 2px dashed var(--accent); border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(3px);
+  display: grid; place-items: center;
+  pointer-events: none;
+  text-align: center;
+}
+.drop-overlay strong { display: block; font-size: var(--size-lg); }
+.drop-overlay span { font-family: var(--mono); font-size: var(--size-xs); color: var(--ink-3); }
+.toast {
+  position: fixed; z-index: 70;
+  left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  background: var(--ink); color: var(--bg);
+  border-radius: 999px;
+  padding: 8px 17px;
+  font-size: var(--size-sm);
+  box-shadow: var(--shadow);
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+.toast.bad { background: var(--danger); color: #fff; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1180px) {
+  .bench { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .panel[data-pane="out"] { grid-column: 1 / -1; }
+  .panel[data-pane="out"] .vhost { max-height: min(40vh, 420px); }
+}
+@media (max-width: 860px) {
+  .ledger { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pane-switch { display: flex; }
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .app:not([data-pane="source"]) .panel[data-pane="source"],
+  .app:not([data-pane="clip"]) .panel[data-pane="clip"],
+  .app:not([data-pane="out"]) .panel[data-pane="out"] { display: none; }
+  .app[data-pane="out"] .panel[data-pane="out"] { grid-column: auto; }
+  .vhost { max-height: none; }
+  .top-actions { width: 100%; margin-left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .top-actions .btn { min-height: 36px; padding-inline: 6px; }
+  .top-actions #btnExport { grid-column: 3; }
+  .brand-text p { display: none; }
+  .doc-chip { order: 4; max-width: none; }
+  .chain { flex-direction: column; gap: 0; }
+  .chain-node { width: auto; }
+  .chain-node + .chain-node { margin-left: 0; margin-top: 22px; }
+  .chain-node + .chain-node::before { left: 50%; top: -18px; transform: translateX(-50%) rotate(90deg); }
+}
+@media (max-width: 480px) {
+  .ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-value { font-size: 16px; }
+  .src-row { grid-template-columns: minmax(0, 1fr); }
+  .src-row .tc { text-align: left; display: flex; gap: 8px; padding-top: 0; }
+  .src-row .tc b { display: inline; }
+  .form-grid { grid-template-columns: 1fr; }
+  .modal { width: calc(100vw - 16px); max-height: 92vh; }
+  .topbar { gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+</style>
+<div class="app" id="app" data-pane="source">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 28 28" width="26" height="26" fill="none">
+          <rect x="2.5" y="7" width="9" height="14" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="16.5" y="7" width="9" height="14" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M11.5 10.5h5M11.5 14h5M11.5 17.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="1 2.4"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>剪点字幕台</h1>
+        <p>按剪辑单裁切字幕 · 精确分数重排</p>
+      </div>
+    </div>
+    <div class="doc-chip" id="docChip" title="当前载入的文档"><span class="dot" aria-hidden="true"></span><span id="docName">demo.json</span></div>
+    <div class="top-actions">
+      <button class="btn ghost" id="btnImport" type="button">导入 JSON</button>
+      <button class="btn ghost" id="btnPaste" type="button">粘贴</button>
+      <button class="btn ghost" id="btnSample" type="button">重载示例</button>
+      <button class="btn ghost" id="btnRules" type="button">规则</button>
+      <button class="btn primary" id="btnExport" type="button">导出</button>
+      <input type="file" id="fileInput" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <section class="ledger" id="ledger" aria-label="项目总览"></section>
+
+  <div class="pane-switch" role="tablist" aria-label="面板切换">
+    <button type="button" role="tab" data-goto="source" aria-selected="true">源字幕</button>
+    <button type="button" role="tab" data-goto="clip" aria-selected="false">剪辑单</button>
+    <button type="button" role="tab" data-goto="out" aria-selected="false">成片字幕</button>
+  </div>
+
+  <main class="bench">
+    <section class="panel pane" data-pane="source" aria-label="源字幕">
+      <header class="panel-head">
+        <div class="ph-title"><span class="eyebrow">01 / SOURCE</span><h2>源字幕</h2></div>
+        <div class="panel-tools" id="sourceTools"></div>
+      </header>
+      <div class="tabs" id="sourceTabs" role="tablist" aria-label="源素材"></div>
+      <div class="ruler" id="sourceRuler"></div>
+      <div class="vhost" id="sourceList" role="listbox" aria-label="源字幕列表"></div>
+      <footer class="panel-foot" id="sourceFoot"></footer>
+    </section>
+
+    <section class="panel pane" data-pane="clip" aria-label="剪辑单">
+      <header class="panel-head">
+        <div class="ph-title"><span class="eyebrow">02 / EDIT</span><h2>剪辑单</h2></div>
+        <div class="panel-tools">
+          <button class="btn tiny" id="btnAddClip" type="button">+ 片段</button>
+          <button class="btn tiny" id="btnAddGap" type="button">+ 空白</button>
+          <button class="btn tiny icon" id="btnUndo" type="button" title="撤销 (Ctrl+Z)" aria-label="撤销">↶</button>
+          <button class="btn tiny icon" id="btnRedo" type="button" title="重做 (Ctrl+Shift+Z)" aria-label="重做">↷</button>
+        </div>
+      </header>
+      <div class="otimeline" id="clipTimeline"></div>
+      <div class="vhost" id="clipList" aria-label="片段列表"></div>
+      <footer class="panel-foot" id="clipFoot"></footer>
+    </section>
+
+    <section class="panel pane" data-pane="out" aria-label="成片字幕">
+      <header class="panel-head">
+        <div class="ph-title"><span class="eyebrow">03 / CONFORM</span><h2>成片字幕</h2></div>
+        <div class="panel-tools" id="outTools"></div>
+      </header>
+      <div class="ruler oruler" id="outRuler"></div>
+      <div class="vhost" id="outList" role="listbox" aria-label="成片字幕列表"></div>
+      <footer class="panel-foot" id="outFoot"></footer>
+    </section>
+  </main>
+
+  <section class="trace" id="trace" aria-live="polite" aria-label="追溯"></section>
+</div>
+
+<div class="drop-overlay" id="dropOverlay" hidden><div><strong>松开以载入 JSON</strong><span>sources + clips</span></div></div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+/* 剪点字幕台 · exact rational conform engine
+ * ------------------------------------------------------------------------
+ * Runs in the browser (window.CaptionEngine) and in Node (module.exports).
+ * Every internal time is an exact reduced fraction of milliseconds; the
+ * only float-ish math is the integer screening pass used to find candidate
+ * intersections quickly.
+ *
+ * Package rules implemented:
+ *  - source-relative cue × same-source clip positive-length intersection
+ *  - word cues keep only words with positive intersection, joined by " "
+ *  - clip-cut result cues keep the mapped cue∩clip bounds, not the first/last word
+ *  - output length = (out - in) * q / p, gaps add duration_ms
+ *  - sort by exact start, clip order, then source cue id (code-unit order)
+ *  - id = clip id + ":" + cue id; reused clips each produce their own cues
+ *  - WebVTT: start floor ms, end ceil ms, HH:MM:SS.mmm
+ *  - JSON: fractions as reduced [numerator, denominator] decimal strings
+ */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.CaptionEngine = factory();
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  var ZERO = 0n, ONE = 1n;
+
+  function abs(n) { return n < ZERO ? -n : n; }
+  function gcd(a, b) {
+    a = abs(a); b = abs(b);
+    while (b) { var t = a % b; a = b; b = t; }
+    return a || ONE;
+  }
+  function floorDiv(n, d) {
+    if (n >= ZERO) return n / d;
+    return -((-n + d - ONE) / d);
+  }
+
+  function Frac(n, d) {
+    if (d === undefined) d = ONE;
+    if (typeof n !== "bigint") n = BigInt(n);
+    if (typeof d !== "bigint") d = BigInt(d);
+    if (d === ZERO) throw new RangeError("zero denominator");
+    if (d < ZERO) { n = -n; d = -d; }
+    var g = gcd(n, d);
+    this.n = n / g;
+    this.d = d / g;
+  }
+  Frac.prototype.add = function (o) { return new Frac(this.n * o.d + o.n * this.d, this.d * o.d); };
+  Frac.prototype.sub = function (o) { return new Frac(this.n * o.d - o.n * this.d, this.d * o.d); };
+  Frac.prototype.mul = function (o) { return new Frac(this.n * o.n, this.d * o.d); };
+  Frac.prototype.div = function (o) { return new Frac(this.n * o.d, this.d * o.n); };
+  Frac.prototype.cmp = function (o) {
+    var x = this.n * o.d, y = o.n * this.d;
+    return x < y ? -1 : x > y ? 1 : 0;
+  };
+  Frac.prototype.eq = function (o) { return this.n === o.n && this.d === o.d; };
+  Frac.prototype.isZero = function () { return this.n === ZERO; };
+  Frac.prototype.neg = function () { return new Frac(-this.n, this.d); };
+  Frac.prototype.floor = function () { return floorDiv(this.n, this.d); };
+  Frac.prototype.ceil = function () { return -floorDiv(-this.n, this.d); };
+  Frac.prototype.toNumber = function () { return Number(this.n) / Number(this.d); };
+  Frac.prototype.pair = function () { return [this.n.toString(), this.d.toString()]; };
+  Frac.prototype.toString = function () { return this.n + "/" + this.d; };
+
+  function frac(n, d) { return new Frac(n, d === undefined ? ONE : d); }
+  var FRAC_ZERO = frac(0);
+
+  // Dictionary order over UTF-16 code units, as Array.prototype.sort compares
+  // strings. Explicit so the rule does not depend on locale settings.
+  function compareCodeUnits(a, b) {
+    a = String(a); b = String(b);
+    var n = Math.min(a.length, b.length);
+    for (var i = 0; i < n; i++) {
+      var x = a.charCodeAt(i), y = b.charCodeAt(i);
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+  }
+
+  function isInt(v) { return typeof v === "number" && Number.isSafeInteger(v); }
+  function isNonEmptyString(v) { return typeof v === "string" && v.length > 0; }
+  function isObject(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+
+  /* ------------------------------------------------------------------ *
+   * Validation. Every issue carries enough identity for the UI to jump to
+   * the exact input cell: sourceIndex / cueIndex / wordIndex / clipIndex.
+   * ------------------------------------------------------------------ */
+
+  function issue(p) {
+    p.level = p.level || "error";
+    return p;
+  }
+
+  function validateDoc(doc) {
+    var errors = [];
+    var notes = [];
+    if (!isObject(doc)) {
+      errors.push(issue({ scope: "doc", path: "$", where: "文档", message: "JSON 根节点必须是对象。" }));
+      return { errors: errors, notes: notes };
+    }
+    var sources = doc.sources, clips = doc.clips;
+    if (!Array.isArray(sources)) {
+      errors.push(issue({ scope: "doc", path: "sources", where: "源素材", message: "sources 必须是数组。" }));
+      sources = [];
+    }
+    if (!Array.isArray(clips)) {
+      errors.push(issue({ scope: "doc", path: "clips", where: "剪辑单", message: "clips 必须是数组。" }));
+      clips = [];
+    }
+
+    var sourceById = Object.create(null);
+    var totalCues = 0, totalWords = 0;
+
+    sources.forEach(function (src, si) {
+      var sp = "sources[" + si + "]";
+      if (!isObject(src)) {
+        errors.push(issue({ scope: "source", sourceIndex: si, path: sp, where: "源 #" + (si + 1), message: "源必须是对象。" }));
+        return;
+      }
+      var sid = src.id;
+      var where = "源 " + (isNonEmptyString(sid) ? sid : "#" + (si + 1));
+      if (!isNonEmptyString(sid)) {
+        errors.push(issue({ scope: "source", sourceIndex: si, path: sp + ".id", where: where, message: "源 id 必须是非空字符串。" }));
+      } else if (sourceById[sid]) {
+        errors.push(issue({ scope: "source", sourceIndex: si, path: sp + ".id", where: where, message: "源 id“" + sid + "”重复，引用会产生歧义。" }));
+      } else {
+        sourceById[sid] = src;
+      }
+      var dur = src.duration_ms;
+      if (!isInt(dur) || dur <= 0) {
+        errors.push(issue({ scope: "source", sourceIndex: si, path: sp + ".duration_ms", where: where, message: "素材时长必须是大于 0 的整数毫秒。" }));
+        dur = null;
+      }
+      if (!Array.isArray(src.cues)) {
+        errors.push(issue({ scope: "source", sourceIndex: si, path: sp + ".cues", where: where, message: "cues 必须是数组。" }));
+        return;
+      }
+      var cueIds = Object.create(null);      src.cues.forEach(function (cue, ci) {
+        var cp = sp + ".cues[" + ci + "]";
+        var cw = where + " · 字幕 #" + (ci + 1);
+        if (!isObject(cue)) {
+          errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp, where: cw, message: "字幕必须是对象。" }));
+          return;
+        }
+        totalCues++;
+        var cid = cue.id;
+        if (!isNonEmptyString(cid)) {
+          errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".id", where: cw, message: "字幕 id 必须是非空字符串。" }));
+        } else {
+          cw = where + " · 字幕 " + cid;
+          if (cueIds[cid]) {
+            errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".id", where: cw, message: "同一源内字幕 id“" + cid + "”重复。" }));
+          }
+          cueIds[cid] = true;
+        }
+        var cs = cue.start, ce = cue.end;
+        var timesOk = true;
+        if (!isInt(cs)) {
+          errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".start", where: cw, message: "字幕起点必须是整数毫秒。" }));
+          timesOk = false;
+        }
+        if (!isInt(ce)) {
+          errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".end", where: cw, message: "字幕终点必须是整数毫秒。" }));
+          timesOk = false;
+        }
+        if (timesOk) {
+          if (cs < 0) {
+            errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".start", where: cw, message: "字幕起点 " + cs + "ms 为负数，区间非法。" }));
+          }
+          if (ce <= cs) {
+            errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".end", where: cw, message: "字幕区间 [" + cs + ", " + ce + ") 长度不为正，区间非法。" }));
+          }
+          if (dur !== null && ce > dur) {
+            notes.push(issue({ level: "warn", scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".end", where: cw, message: "字幕终点 " + ce + "ms 越过素材时长 " + dur + "ms。" }));
+          }
+        }
+        if (typeof cue.text !== "string") {
+          errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".text", where: cw, message: "字幕 text 必须是字符串。" }));
+        }
+        if (cue.words !== undefined) {
+          if (!Array.isArray(cue.words)) {
+            errors.push(issue({ scope: "cue", sourceIndex: si, cueIndex: ci, path: cp + ".words", where: cw, message: "words 必须是数组。" }));
+            return;
+          }
+          var prev = null;
+          cue.words.forEach(function (w, wi) {
+            var wp = cp + ".words[" + wi + "]";
+            var ww = cw + " · 词 #" + (wi + 1);
+            if (!isObject(w)) {
+              errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp, where: ww, message: "词必须是对象。" }));
+              prev = null;
+              return;
+            }
+            totalWords++;
+            if (typeof w.text !== "string") {
+              errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp + ".text", where: ww, message: "词 text 必须是字符串。" }));
+            }
+            var ws = w.start, we = w.end, ok = true;
+            if (!isInt(ws)) {
+              errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp + ".start", where: ww, message: "词起点必须是整数毫秒。" }));
+              ok = false;
+            }
+            if (!isInt(we)) {
+              errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp + ".end", where: ww, message: "词终点必须是整数毫秒。" }));
+              ok = false;
+            }
+            if (!ok) { prev = null; return; }
+            if (we <= ws) {
+              errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp + ".end", where: ww, message: "词区间 [" + ws + ", " + we + ") 长度不为正，区间非法。" }));
+            }
+            if (timesOk && (ws < cs || we > ce)) {
+              errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp, where: ww, message: "词区间 [" + ws + ", " + we + ") 不在所属字幕 [" + cs + ", " + ce + ") 内。" }));
+            }
+            if (prev) {
+              if (ws < prev.start) {
+                errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp + ".start", where: ww, kind: "order", message: "错序词：起点 " + ws + "ms 早于前一词 #" + prev.index + " 的起点 " + prev.start + "ms。" }));
+              } else if (ws < prev.end) {
+                errors.push(issue({ scope: "word", sourceIndex: si, cueIndex: ci, wordIndex: wi, path: wp + ".start", where: ww, kind: "overlap", message: "词与前一词 #" + prev.index + " 时间重叠：前词止于 " + prev.end + "ms，本词起于 " + ws + "ms。" }));
+              }
+            }
+            prev = { start: ws, end: we, index: wi + 1 };
+          });
+        }
+      });
+    });
+
+    var clipIds = Object.create(null);
+    clips.forEach(function (clip, ci) {
+      var cp = "clips[" + ci + "]";
+      var cw = "片段 #" + (ci + 1);
+      if (!isObject(clip)) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp, where: cw, message: "片段必须是对象。" }));
+        return;
+      }
+      var id = clip.id;
+      if (!isNonEmptyString(id)) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".id", where: cw, message: "片段 id 必须是非空字符串。" }));
+      } else {
+        cw = "片段 " + id;
+        if (clipIds[id]) errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".id", where: cw, message: "片段 id“" + id + "”重复。" }));
+        clipIds[id] = true;
+      }
+      if (clip.source === null) {
+        var gd = clip.duration_ms;
+        if (!isInt(gd) || gd < 0) {
+          errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".duration_ms", where: cw, message: "空白段时长必须是大于或等于 0 的整数毫秒。" }));
+        }
+        return;
+      }
+      if (!isNonEmptyString(clip.source)) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".source", where: cw, message: "普通片段必须指定 source；空白段请用 source: null。" }));
+        return;
+      }
+      var src = sourceById[clip.source];
+      if (!src) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".source", where: cw, message: "引用了不存在的源“" + clip.source + "”。" }));
+        return;
+      }
+      var din = clip.in, dout = clip.out;
+      var inOk = isInt(din), outOk = isInt(dout);
+      if (!inOk) errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".in", where: cw, message: "入点必须是整数毫秒。" }));
+      if (!outOk) errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".out", where: cw, message: "出点必须是整数毫秒。" }));
+      if (inOk && outOk) {
+        if (din < 0) {
+          errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".in", where: cw, message: "入点 " + din + "ms 为负数，区间非法。" }));
+        }
+        if (dout <= din) {
+          errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".out", where: cw, message: "片段区间 [" + din + ", " + dout + ") 长度不为正，区间非法。" }));
+        }
+        if (isInt(src.duration_ms) && dout > src.duration_ms) {
+          errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".out", where: cw, message: "出点 " + dout + "ms 越过源“" + clip.source + "”时长 " + src.duration_ms + "ms。" }));
+        }
+        if (isInt(src.duration_ms) && din > src.duration_ms) {
+          errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".in", where: cw, message: "入点 " + din + "ms 越过源“" + clip.source + "”时长 " + src.duration_ms + "ms。" }));
+        }
+      }
+      var sp = clip.speed;
+      if (!Array.isArray(sp) || sp.length !== 2 || !isInt(sp[0]) || !isInt(sp[1])) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".speed", where: cw, message: "速度必须是 [p, q] 两个整数。" }));
+        return;
+      }
+      var p = sp[0], q = sp[1];
+      if (p === 0 || q === 0) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".speed", where: cw, kind: "zero-speed", message: "速度不能为零（p/q = " + p + "/" + q + "）。" }));
+        return;
+      }
+      if (p < 0 || q < 0) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".speed", where: cw, message: "速度分量必须为正整数。" }));
+        return;
+      }
+      if (p > 1000 || q > 1000) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".speed", where: cw, message: "速度分量 p、q 必须在 1–1000 之间，当前为 " + p + "/" + q + "。" }));
+        return;
+      }
+      var ratio = frac(p, q);
+      if (ratio.cmp(frac(1, 4)) < 0 || ratio.cmp(frac(4, 1)) > 0) {
+        errors.push(issue({ scope: "clip", clipIndex: ci, path: cp + ".speed", where: cw, message: "速度 " + p + "/" + q + " 超出 1/4–4 倍范围。" }));
+      }
+    });
+
+    if (totalCues > 1500) notes.push(issue({ level: "warn", scope: "doc", path: "sources", where: "源素材", message: "源字幕共 " + totalCues + " 条，超过建议上限 1500 条。" }));
+    if (totalWords > 10000) notes.push(issue({ level: "warn", scope: "doc", path: "sources", where: "源素材", message: "逐词时间共 " + totalWords + " 个，超过建议上限 10000 个。" }));
+    if (clips.length > 500) notes.push(issue({ level: "warn", scope: "doc", path: "clips", where: "剪辑单", message: "片段共 " + clips.length + " 个，超过建议上限 500 个。" }));
+
+    return { errors: errors, notes: notes };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Conform. tolerant=true skips clips/cues/words that cannot be used so
+   * the editor keeps previewing while the issue list points at each one.
+   * ------------------------------------------------------------------ */
+
+  function buildClipContext(doc) {
+    var byId = Object.create(null);
+    doc.sources.forEach(function (s, i) { if (isObject(s) && isNonEmptyString(s.id) && !byId[s.id]) byId[s.id] = s; });
+    var index = Object.create(null);
+    doc.sources.forEach(function (src, si) {
+      if (!isObject(src) || !Array.isArray(src.cues)) return;
+      var rows = [];
+      src.cues.forEach(function (cue, ci) {
+        if (!isObject(cue) || !isInt(cue.start) || !isInt(cue.end)) return;
+        rows.push({ cue: cue, ci: ci, start: cue.start, end: cue.end });
+      });
+      rows.sort(function (a, b) { return a.start - b.start || a.end - b.end || a.ci - b.ci; });
+      var suffixMax = new Array(rows.length + 1);
+      var max = -Infinity;
+      suffixMax[rows.length] = -Infinity;
+      for (var k = rows.length - 1; k >= 0; k--) {
+        if (rows[k].end > max) max = rows[k].end;
+        suffixMax[k] = max;
+      }
+      index[si] = { rows: rows, starts: rows.map(function (r) { return r.start; }), suffixMax: suffixMax };
+    });
+    return { byId: byId, index: index };
+  }
+
+  function candidatesFor(index, inMs, outMs) {
+    if (!index) return [];
+    var starts = index.starts;
+    var lo = 0, hi = starts.length;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (starts[mid] < outMs) lo = mid + 1; else hi = mid;
+    }
+    var out = [];
+    for (var j = lo - 1; j >= 0; j--) {
+      if (index.suffixMax[j] <= inMs) break;
+      if (index.rows[j].end > inMs) out.push(index.rows[j]);
+    }
+    out.reverse();
+    return out;
+  }
+
+  function clipOutputLength(clip) {
+    if (clip.source === null) {
+      return isInt(clip.duration_ms) && clip.duration_ms >= 0 ? frac(clip.duration_ms) : null;
+    }
+    if (!isInt(clip.in) || !isInt(clip.out) || !Array.isArray(clip.speed)) return null;
+    var p = clip.speed[0], q = clip.speed[1];
+    if (!isInt(p) || !isInt(q) || p === 0 || q === 0) return null;
+    return frac(clip.out - clip.in).mul(frac(q, p));
+  }
+
+  function computeDuration(clips) {
+    var t = FRAC_ZERO;
+    for (var i = 0; i < clips.length; i++) {
+      var l = clipOutputLength(clips[i]);
+      if (l) t = t.add(l);
+    }
+    return t;
+  }
+
+  function conform(doc, options) {
+    options = options || {};
+    var tolerant = !!options.tolerant;
+    var v = validateDoc(doc);
+    var errors = v.errors, notes = v.notes;
+    var blocking = errors.length > 0;
+    if (blocking && !tolerant) {
+      return { duration: FRAC_ZERO, cues: [], errors: errors, notes: notes, blocking: true, skippedClips: 0, usedClips: 0, sourceById: Object.create(null), cueCount: 0, overlapCount: 0, spans: [] };
+    }
+
+    var ctx = buildClipContext(doc);
+    // Issues are tolerated one at a time: while the editor is open its own
+    // fixable problems must not blank the whole timeline. In strict mode
+    // (the default) any problem blocks, matching the package contract.
+    var badClips = Object.create(null), badCues = Object.create(null), badWords = Object.create(null), badSources = Object.create(null);
+    if (tolerant) {
+      errors.forEach(function (e) {
+        if (e.scope === "clip") badClips[e.clipIndex] = true;
+        else if (e.scope === "cue") badCues[e.sourceIndex + ":" + e.cueIndex] = true;
+        else if (e.scope === "word") badWords[e.sourceIndex + ":" + e.cueIndex + ":" + e.wordIndex] = true;
+        else if (e.scope === "source") badSources[e.sourceIndex] = true;
+      });
+    }
+
+    var clips = Array.isArray(doc.clips) ? doc.clips : [];
+    var sources = Array.isArray(doc.sources) ? doc.sources : [];
+    var out = [];
+    var timeline = FRAC_ZERO;
+    var usedClips = 0, skippedClips = 0;
+    var spans = [];
+
+    clips.forEach(function (clip, order) {
+      var span = { index: order, valid: false, start: timeline, length: null, end: timeline };
+      spans.push(span);
+      if (!isObject(clip)) { skippedClips++; return; }
+      if (badClips[order]) { skippedClips++; return; }
+      if (clip.source === null) {
+        var gd = isInt(clip.duration_ms) && clip.duration_ms >= 0 ? clip.duration_ms : 0;
+        span.length = frac(gd);
+        span.end = timeline.add(span.length);
+        span.valid = true;
+        timeline = span.end;
+        usedClips++;
+        return;
+      }
+      var src = ctx.byId[clip.source];
+      if (!src) { skippedClips++; return; }
+      var si = sources.indexOf(src);
+      if (si >= 0 && badSources[si]) { skippedClips++; return; }
+      span.sourceIndex = si;
+      var p = clip.speed[0], q = clip.speed[1];
+      var scale = frac(q, p);
+      var inMs = clip.in, outMs = clip.out;
+      var t0 = timeline;
+      var clipEndOut = t0.add(frac(outMs - inMs).mul(scale));
+      span.length = clipEndOut.sub(t0);
+      span.end = clipEndOut;
+      span.valid = true;
+      usedClips++;
+
+      var cands = candidatesFor(ctx.index[si], inMs, outMs);
+      for (var k = 0; k < cands.length; k++) {
+        var row = cands[k];
+        var cue = row.cue, ci = row.ci;
+        if (badCues[si + ":" + ci]) continue;
+        var cutStart = Math.max(cue.start, inMs);
+        var cutEnd = Math.min(cue.end, outMs);
+        if (cutEnd <= cutStart) continue;
+
+        var hasWords = Array.isArray(cue.words);
+        var words = [];
+        if (hasWords) {
+          for (var wi = 0; wi < cue.words.length; wi++) {
+            var w = cue.words[wi];
+            if (!isObject(w)) continue;
+            if (badWords[si + ":" + ci + ":" + wi]) continue;
+            if (!isInt(w.start) || !isInt(w.end) || w.end <= w.start) continue;
+            var ws = Math.max(w.start, inMs);
+            var we = Math.min(w.end, outMs);
+            if (we <= ws) continue;
+            words.push({
+              text: w.text,
+              start: t0.add(frac(ws - inMs).mul(scale)),
+              end: t0.add(frac(we - inMs).mul(scale)),
+              srcStart: w.start,
+              srcEnd: w.end,
+              cutStart: ws,
+              cutEnd: we,
+              index: wi
+            });
+          }
+          if (!words.length) continue;
+        }
+
+        out.push({
+          id: clip.id + ":" + cue.id,
+          key: order + ":" + ci,
+          clipOrder: order,
+          clipId: clip.id,
+          sourceId: clip.source,
+          sourceIndex: si,
+          cueIndex: ci,
+          cueId: cue.id,
+          cueStart: cue.start,
+          cueEnd: cue.end,
+          clipIn: inMs,
+          clipOut: outMs,
+          speedP: p,
+          speedQ: q,
+          clipOutStart: t0,
+          clipOutEnd: clipEndOut,
+          cutStart: cutStart,
+          cutEnd: cutEnd,
+          start: t0.add(frac(cutStart - inMs).mul(scale)),
+          end: t0.add(frac(cutEnd - inMs).mul(scale)),
+          text: hasWords ? words.map(function (x) { return x.text; }).join(" ") : cue.text,
+          words: words,
+          hasWords: hasWords
+        });
+      }
+      timeline = clipEndOut;
+    });
+
+    out.sort(function (a, b) {
+      var c = a.start.cmp(b.start);
+      if (c !== 0) return c;
+      if (a.clipOrder !== b.clipOrder) return a.clipOrder - b.clipOrder;
+      return compareCodeUnits(a.cueId, b.cueId);
+    });
+
+    var runningMax = null;
+    var overlapCount = 0;
+    out.forEach(function (r) {
+      r.overlapsEarlier = runningMax !== null && r.start.cmp(runningMax) < 0;
+      if (r.overlapsEarlier) overlapCount++;
+      if (runningMax === null || r.end.cmp(runningMax) > 0) runningMax = r.end;
+    });
+
+    return {
+      duration: timeline,
+      cues: out,
+      errors: errors,
+      notes: notes,
+      blocking: blocking,
+      skippedClips: skippedClips,
+      usedClips: usedClips,
+      sourceById: ctx.byId,
+      cueCount: out.length,
+      overlapCount: overlapCount,
+      spans: spans
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Export
+   * ------------------------------------------------------------------ */
+
+  function pad(n, width) {
+    var s = n.toString();
+    while (s.length < width) s = "0" + s;
+    return s;
+  }
+
+  function vttTime(ms) {
+    var h = floorDiv(ms, 3600000n);
+    var rest = ms - h * 3600000n;
+    var m = rest / 60000n;
+    rest -= m * 60000n;
+    var s = rest / 1000n;
+    var milli = rest - s * 1000n;
+    return pad(h, 2) + ":" + pad(m, 2) + ":" + pad(s, 2) + "." + pad(milli, 3);
+  }
+
+  function sanitizeLine(s) {
+    return String(s).replace(/\r\n|\r|\n/g, " ");
+  }
+
+  // A cue identifier may not contain "-->" or span lines. Ids are otherwise
+  // passed through unchanged, since they are how a result is traced back.
+  function sanitizeId(id, index) {
+    var s = sanitizeLine(id).replace(/-->/g, "--").trim();
+    return s || "cue-" + (index + 1);
+  }
+
+  function toWebVTT(result) {
+    var lines = ["WEBVTT", ""];
+    result.cues.forEach(function (cue, i) {
+      lines.push(sanitizeId(cue.id, i));
+      lines.push(vttTime(cue.start.floor()) + " --> " + vttTime(cue.end.ceil()));
+      lines.push(sanitizeLine(cue.text));
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  function toJSON(result) {
+    return {
+      duration: result.duration.pair(),
+      cues: result.cues.map(function (c) {
+        return {
+          id: c.id,
+          clip_order: c.clipOrder,
+          start: c.start.pair(),
+          end: c.end.pair(),
+          text: c.text,
+          words: c.words.map(function (w) {
+            return { text: w.text, start: w.start.pair(), end: w.end.pair() };
+          })
+        };
+      })
+    };
+  }
+
+  return {
+    Frac: Frac,
+    frac: frac,
+    validateDoc: validateDoc,
+    conform: conform,
+    computeDuration: computeDuration,
+    clipOutputLength: clipOutputLength,
+    toWebVTT: toWebVTT,
+    toJSON: toJSON,
+    vttTime: vttTime
+  };
+});
+
+</script>
+<script>
+/* 剪点字幕台 · workspace
+ * Loads a {sources, clips} document, previews the exact-fraction conformed
+ * timeline, links every result back to its source word, edits the edit list,
+ * and exports WebVTT plus the exact JSON.
+ */
+(function () {
+  "use strict";
+
+  var E = window.CaptionEngine;
+  var LIMITS = { cues: 1500, words: 10000, clips: 500 };
+  var NATURAL_LIMIT = 320;
+
+  /* ================================================================== *
+   * Built-in documents
+   * ================================================================== */
+
+  var DEMO = {
+    sources: [{
+      id: "a",
+      duration_ms: 10000,
+      cues: [
+        { id: "c1", start: 0, end: 3000, text: "甲 乙 丙", words: [
+          { text: "甲", start: 0, end: 1000 },
+          { text: "乙", start: 1000, end: 2000 },
+          { text: "丙", start: 2000, end: 3000 }
+        ] },
+        { id: "c2", start: 2500, end: 5000, text: "无逐词字幕" }
+      ]
+    }],
+    clips: [
+      { id: "p1", source: "a", in: 500, out: 2000, speed: [3, 2] },
+      { id: "gap", source: null, duration_ms: 333 },
+      { id: "p2", source: "a", in: 2000, out: 5000, speed: [7, 3] },
+      { id: "p3", source: "a", in: 500, out: 2000, speed: [3, 2] }
+    ]
+  };
+
+  var TOUR = {
+    sources: [
+      {
+        id: "host",
+        duration_ms: 12000,
+        cues: [
+          { id: "h1", start: 0, end: 3200, text: "我们 从头 开始 吧", words: [
+            { text: "我们", start: 0, end: 560 },
+            { text: "从头", start: 560, end: 1180 },
+            { text: "开始", start: 1180, end: 2100 },
+            { text: "吧", start: 2100, end: 3140 }
+          ] },
+          { id: "h2", start: 3000, end: 6200, text: "这其实是一个漫长的过程" },
+          { id: "h3", start: 6000, end: 9000, text: "我 觉得 没有 问题 了", words: [
+            { text: "我", start: 6000, end: 6440 },
+            { text: "觉得", start: 6440, end: 7060 },
+            { text: "没有", start: 7060, end: 7680 },
+            { text: "问题", start: 7680, end: 8520 },
+            { text: "了", start: 8520, end: 8940 }
+          ] },
+          { id: "h4", start: 8900, end: 11000, text: "那就 这样 定 了", words: [
+            { text: "那就", start: 8900, end: 9420 },
+            { text: "这样", start: 9420, end: 9980 },
+            { text: "定", start: 9980, end: 10480 },
+            { text: "了", start: 10480, end: 10960 }
+          ] }
+        ]
+      },
+      {
+        id: "guest",
+        duration_ms: 9000,
+        cues: [
+          { id: "g1", start: 0, end: 2600, text: "其实 我 也 不 确定", words: [
+            { text: "其实", start: 0, end: 480 },
+            { text: "我", start: 480, end: 780 },
+            { text: "也", start: 780, end: 1080 },
+            { text: "不", start: 1080, end: 1560 },
+            { text: "确定", start: 1560, end: 2540 }
+          ] },
+          { id: "g2", start: 2500, end: 5200, text: "但 我们 可以 再 试 一次", words: [
+            { text: "但", start: 2500, end: 2780 },
+            { text: "我们", start: 2780, end: 3340 },
+            { text: "可以", start: 3340, end: 3920 },
+            { text: "再", start: 3920, end: 4320 },
+            { text: "试", start: 4320, end: 4760 },
+            { text: "一次", start: 4760, end: 5140 }
+          ] },
+          { id: "g3", start: 5000, end: 8800, text: "结果 比 想象 中 好" }
+        ]
+      }
+    ],
+    clips: [
+      { id: "c1", source: "host", in: 0, out: 4000, speed: [1, 1] },
+      { id: "pause", source: null, duration_ms: 250 },
+      { id: "c2", source: "guest", in: 200, out: 3000, speed: [3, 2] },
+      { id: "c3", source: "host", in: 3000, out: 6500, speed: [1, 1] },
+      { id: "c4", source: "guest", in: 200, out: 3000, speed: [1, 1] },
+      { id: "beat", source: null, duration_ms: 500 },
+      { id: "c5", source: "host", in: 6000, out: 9000, speed: [4, 3] },
+      { id: "c6", source: "guest", in: 5000, out: 8800, speed: [2, 3] }
+    ]
+  };
+
+  /* ================================================================== *
+   * State
+   * ================================================================== */
+
+  var state = {
+    doc: null,
+    docName: "demo.json",
+    result: null,
+    errors: [],
+    notes: [],
+    byClip: new Map(),
+    byCue: new Map(),
+    activeSource: 0,
+    activeClip: -1,
+    selection: null,
+    traceTab: "trace",
+    undo: [],
+    redo: [],
+    lists: {}
+  };
+
+  /* ================================================================== *
+   * Helpers
+   * ================================================================== */
+
+  function $(id) { return document.getElementById(id); }
+
+  function el(tag, opts) {
+    var n = document.createElement(tag);
+    if (opts) {
+      if (opts.class) n.className = opts.class;
+      if (opts.text !== undefined && opts.text !== null) n.textContent = String(opts.text);
+      if (opts.attrs) for (var a in opts.attrs) if (opts.attrs[a] !== null && opts.attrs[a] !== undefined) n.setAttribute(a, opts.attrs[a]);
+      if (opts.style) n.style.cssText = opts.style;
+      if (opts.data) for (var d in opts.data) n.dataset[d] = opts.data[d];
+      if (opts.on) for (var ev in opts.on) n.addEventListener(ev, opts.on[ev]);
+    }
+    for (var i = 2; i < arguments.length; i++) append(n, arguments[i]);
+    return n;
+  }
+
+  function append(n, c) {
+    if (c === null || c === undefined) return;
+    if (Array.isArray(c)) { c.forEach(function (x) { append(n, x); }); return; }
+    n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+
+  function clear(node) {
+    // replaceChildren detaches in one operation; the old loop can throw when a
+    // blur handler re-renders while the browser is still removing a focused node.
+    if (typeof node.replaceChildren === "function") node.replaceChildren();
+    else node.textContent = "";
+  }
+  function pad2(v) { return String(v).padStart(2, "0"); }
+
+  function uiTime(ms) {
+    if (ms < 0n) ms = 0n;
+    var h = ms / 3600000n;
+    var mm = (ms % 3600000n) / 60000n;
+    var ss = (ms % 60000n) / 1000n;
+    var mmm = ms % 1000n;
+    var base = pad2(mm) + ":" + pad2(ss) + "." + String(mmm).padStart(3, "0");
+    return h > 0n ? String(h).padStart(2, "0") + ":" + base : base;
+  }
+
+  function floorUi(f) { return uiTime(f.floor()); }
+  function ceilUi(f) { return uiTime(f.ceil()); }
+  function msUi(ms) { return uiTime(BigInt(ms)); }
+  function fracText(f) { return f.n + "/" + f.d; }
+
+  function fracDecimal(f, digits) {
+    digits = digits === undefined ? 3 : digits;
+    var scale = 1n;
+    for (var i = 0; i < digits; i++) scale *= 10n;
+    var neg = f.n < 0n;
+    var n = neg ? -f.n : f.n;
+    var q = (n * scale) / f.d;
+    var s = q.toString();
+    while (s.length <= digits) s = "0" + s;
+    return (neg ? "-" : "") + s.slice(0, s.length - digits) + "." + s.slice(s.length - digits);
+  }
+
+  function fracApprox(f) { return "≈" + fracDecimal(f, 3); }
+
+  function sourceAt(si) { return state.doc.sources && state.doc.sources[si]; }
+  function sourceLabel(si) {
+    var s = sourceAt(si);
+    return s && typeof s.id === "string" ? s.id : "源 #" + (si + 1);
+  }
+  function cueAt(si, ci) {
+    var s = sourceAt(si);
+    return s && Array.isArray(s.cues) ? s.cues[ci] : null;
+  }
+  function cueLabel(si, ci) {
+    var c = cueAt(si, ci);
+    return c && typeof c.id === "string" ? c.id : "#" + (ci + 1);
+  }
+  function durOf(src) {
+    return src && typeof src.duration_ms === "number" && src.duration_ms >= 0 ? src.duration_ms : 0;
+  }
+  function isPlainObj(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+  function clone(v) { return JSON.parse(JSON.stringify(v)); }
+  function countWords(doc) {
+    var n = 0;
+    (doc.sources || []).forEach(function (s) {
+      if (!s || !Array.isArray(s.cues)) return;
+      s.cues.forEach(function (c) { if (c && Array.isArray(c.words)) n += c.words.length; });
+    });
+    return n;
+  }
+  function countCues(doc) {
+    var n = 0;
+    (doc.sources || []).forEach(function (s) { if (s && Array.isArray(s.cues)) n += s.cues.length; });
+    return n;
+  }
+
+  /* ================================================================== *
+   * Document lifecycle
+   * ================================================================== */
+
+  function normalizeDoc(raw) {
+    var doc = clone(raw);
+    if (!isPlainObj(doc)) throw new Error("根节点不是对象");
+    if (!Array.isArray(doc.sources)) doc.sources = [];
+    if (!Array.isArray(doc.clips)) doc.clips = [];
+    return doc;
+  }
+
+  function loadDoc(raw, name, opts) {
+    opts = opts || {};
+    var doc;
+    try { doc = normalizeDoc(raw); }
+    catch (e) { toast("JSON 无法使用：" + e.message, true); return false; }
+    state.doc = doc;
+    state.docName = name || "导入.json";
+    state.undo = [];
+    state.redo = [];
+    state.activeSource = 0;
+    state.activeClip = -1;
+    state.selection = null;
+    state.traceTab = "trace";
+    $("docName").textContent = state.docName;
+    $("docChip").classList.toggle("is-custom", state.docName !== "demo.json" && state.docName !== "tour.json");
+    recompute();
+    if (state.result.cues.length) selectOut(0);
+    else if (state.doc.clips.length) selectClip(0);
+    else if (state.doc.sources.length && sourceAt(0) && Array.isArray(sourceAt(0).cues) && sourceAt(0).cues.length) selectSourceCue(0, 0);
+    else renderAll();
+    if (!opts.quiet) {
+      var n = state.errors.length;
+      toast(n ? "已载入 · " + n + " 个问题待处理" : "已载入 " + state.docName, false);
+    }
+    persist();
+    return true;
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem("caption-conformer:doc", JSON.stringify({ name: state.docName, doc: state.doc }));
+    } catch (e) { /* storage unavailable; page still works */ }
+  }
+
+  function restore() {
+    try {
+      var stored = localStorage.getItem("caption-conformer:doc");
+      if (!stored) return false;
+      var parsed = JSON.parse(stored);
+      if (!parsed || !parsed.doc) return false;
+      var doc = normalizeDoc(parsed.doc);
+      loadDoc(doc, parsed.name || "上次的剪辑单.json", { quiet: true });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function undoable(fn) {
+    state.undo.push(JSON.stringify(state.doc));
+    if (state.undo.length > 60) state.undo.shift();
+    state.redo.length = 0;
+    fn();
+    recompute();
+    persist();
+  }
+
+  function undo() {
+    if (!state.undo.length) return;
+    state.redo.push(JSON.stringify(state.doc));
+    state.doc = JSON.parse(state.undo.pop());
+    state.selection = null;
+    recompute();
+    persist();
+    toast("已撤销", false, 1200);
+  }
+
+  function redo() {
+    if (!state.redo.length) return;
+    state.undo.push(JSON.stringify(state.doc));
+    state.doc = JSON.parse(state.redo.pop());
+    state.selection = null;
+    recompute();
+    persist();
+    toast("已重做", false, 1200);
+  }
+
+  function updateUndoButtons() {
+    $("btnUndo").disabled = state.undo.length === 0;
+    $("btnRedo").disabled = state.redo.length === 0;
+  }
+
+  /* ================================================================== *
+   * Conform + indexes
+   * ================================================================== */
+
+  function recompute() {
+    // Remember what the selection pointed at by stable identity, then re-find
+    // it: edits can reorder results without the reader having moved.
+    var anchor = null;
+    var sel = state.selection;
+    if (sel) {
+      if (sel.type === "out" || sel.type === "word") {
+        var prev = state.result && state.result.cues[sel.index];
+        if (prev) anchor = { kind: "out", id: prev.id, wordIndex: sel.type === "word" ? sel.wordIndex : undefined };
+      } else if (sel.type === "clip") {
+        var pc = state.doc.clips[sel.index];
+        if (pc && typeof pc.id === "string") anchor = { kind: "clip", id: pc.id };
+      }
+    }
+
+    state.result = E.conform(state.doc, { tolerant: true });
+    state.errors = state.result.errors || [];
+    state.notes = state.result.notes || [];
+    buildIndexes();
+
+    if (anchor) {
+      if (anchor.kind === "out") {
+        var found = -1;
+        for (var i = 0; i < state.result.cues.length; i++) {
+          if (state.result.cues[i].id === anchor.id) { found = i; break; }
+        }
+        if (found >= 0) {
+          state.selection = anchor.wordIndex === undefined
+            ? { type: "out", index: found }
+            : { type: "word", index: found, wordIndex: anchor.wordIndex };
+        } else {
+          state.selection = null;
+        }
+      } else {
+        var ci = -1;
+        for (var j = 0; j < state.doc.clips.length; j++) {
+          if (state.doc.clips[j] && state.doc.clips[j].id === anchor.id) { ci = j; break; }
+        }
+        state.selection = ci >= 0 ? { type: "clip", index: ci } : null;
+        if (ci >= 0) state.activeClip = ci;
+      }
+    }
+    renderAll();
+  }
+
+  function pushMap(map, key, val) {
+    var arr = map.get(key);
+    if (!arr) { arr = []; map.set(key, arr); }
+    arr.push(val);
+  }
+
+  // Result indices grouped by clip and by source cue. Word-level usage is
+  // derived on demand from these, so a 1500×500 run (750k results) only pays
+  // for what is visible.
+  function buildIndexes() {
+    var cues = state.result.cues;
+    state.byClip = new Map();
+    state.byCue = new Map();
+    for (var i = 0; i < cues.length; i++) {
+      var c = cues[i];
+      pushMap(state.byClip, c.clipOrder, i);
+      pushMap(state.byCue, c.sourceIndex + ":" + c.cueIndex, i);
+    }
+    state.usageCache = new Map();
+  }
+
+  function outputsForClip(clipIndex) {
+    return state.byClip.get(clipIndex) || [];
+  }
+
+  function outputsForSourceCue(si, ci) {
+    return state.byCue.get(si + ":" + ci) || [];
+  }
+
+  // Map of source word index -> list of result cues that kept it.
+  function usedWordsFor(si, ci) {
+    var key = si + ":" + ci;
+    var cached = state.usageCache.get(key);
+    if (cached) return cached;
+    var map = new Map();
+    outputsForSourceCue(si, ci).forEach(function (oi) {
+      var oc = state.result.cues[oi];
+      if (!oc || !oc.hasWords) return;
+      oc.words.forEach(function (w) {
+        var arr = map.get(w.index);
+        if (!arr) { arr = []; map.set(w.index, arr); }
+        arr.push({ clipId: oc.clipId, clipOrder: oc.clipOrder, cutStart: w.cutStart, cutEnd: w.cutEnd });
+      });
+    });
+    state.usageCache.set(key, map);
+    return map;
+  }
+
+  /* ================================================================== *
+   * Selection
+   * ================================================================== */
+
+  function selectOut(index, wordIndex) {
+    var cue = state.result.cues[index];
+    if (!cue) return;
+    state.selection = wordIndex === undefined || wordIndex === null
+      ? { type: "out", index: index }
+      : { type: "word", index: index, wordIndex: wordIndex };
+    state.activeSource = cue.sourceIndex;
+    state.activeClip = cue.clipOrder;
+    state.traceTab = "trace";
+    renderAll();
+    scrollOutIntoView(index);
+    var sc = cueAt(cue.sourceIndex, cue.cueIndex);
+    if (sc) scrollSourceIntoView(cue.cueIndex);
+  }
+
+  function selectClip(index) {
+    if (!state.doc.clips[index]) return;
+    state.selection = { type: "clip", index: index };
+    state.activeClip = index;
+    var c = state.doc.clips[index];
+    if (c && typeof c.source === "string") {
+      for (var i = 0; i < state.doc.sources.length; i++) {
+        if (state.doc.sources[i] && state.doc.sources[i].id === c.source) { state.activeSource = i; break; }
+      }
+    }
+    state.traceTab = "trace";
+    renderAll();
+    scrollClipIntoView(index);
+    // If the clip's first output names a source cue, show it in the source pane.
+    var first = outputsForClip(index)[0];
+    if (first !== undefined) {
+      var oc = state.result.cues[first];
+      if (oc) scrollSourceIntoView(oc.cueIndex);
+    }
+  }
+
+  function selectSourceCue(si, ci, wi) {
+    state.selection = { type: "src", sourceIndex: si, cueIndex: ci, wordIndex: wi };
+    state.activeSource = si;
+    state.traceTab = "trace";
+    renderAll();
+    scrollSourceIntoView(ci);
+  }
+
+  // The source cue and word that the current selection points at, whatever
+  // pane the selection came from.
+  function sourceSelection() {
+    var sel = state.selection;
+    if (!sel) return null;
+    if (sel.type === "src") return { si: sel.sourceIndex, ci: sel.cueIndex, wi: sel.wordIndex };
+    if (sel.type === "out" || sel.type === "word") {
+      var cue = state.result.cues[sel.index];
+      if (!cue) return null;
+      var wi;
+      if (sel.type === "word") {
+        var w = cue.words[sel.wordIndex];
+        if (w) wi = w.index;
+      }
+      return { si: cue.sourceIndex, ci: cue.cueIndex, wi: wi };
+    }
+    return null;
+  }
+
+  function currentSourceIndex() {
+    var list = state.doc.sources || [];
+    if (state.activeSource >= 0 && state.activeSource < list.length) return state.activeSource;
+    return 0;
+  }
+
+  function scrollSourceIntoView(ci) {
+    var list = state.lists.source;
+    if (list) list.scrollToIndex(ci, true);
+  }
+  function scrollOutIntoView(i) {
+    var list = state.lists.out;
+    if (list) list.scrollToIndex(i, true);
+  }
+  function scrollClipIntoView(i) {
+    var row = document.querySelector('.clip-row[data-clip="' + i + '"]');
+    var host = $("clipList");
+    if (!row || !host) return;
+    var rt = row.offsetTop, rh = row.offsetHeight;
+    if (rt < host.scrollTop || rt + rh > host.scrollTop + host.clientHeight) {
+      host.scrollTop = Math.max(0, rt - 8);
+    }
+  }
+
+  /* ================================================================== *
+   * Ledger
+   * ================================================================== */
+
+  function renderLedger() {
+    var host = $("ledger");
+    clear(host);
+    var doc = state.doc;
+    var result = state.result;
+    var srcCount = (doc.sources || []).length;
+    var clipCount = (doc.clips || []).length;
+    var gapCount = (doc.clips || []).filter(function (c) { return c && c.source === null; }).length;
+    var errCount = state.errors.length;
+    var warnCount = state.notes.length;
+    var outCount = result.cues.length;
+    var cueCount = countCues(doc);
+    var wordCount = countWords(doc);
+
+    function stat(label, value, sub, cls, onClick, title) {
+      var node = el("div", {
+        class: "stat" + (cls ? " " + cls : "") + (onClick ? " is-click" : ""),
+        attrs: title ? { title: title } : null,
+        on: onClick ? { click: onClick } : null
+      });
+      node.appendChild(el("div", { class: "stat-label", text: label }));
+      var v = el("div", { class: "stat-value" });
+      v.appendChild(document.createTextNode(value));
+      if (sub) v.appendChild(el("small", { text: sub }));
+      node.appendChild(v);
+      return node;
+    }
+
+    host.appendChild(stat("源素材 / 源字幕", srcCount + " / " + cueCount, wordCount ? wordCount + " 词" : "", "", null, "源文件数量与源字幕条数，逐词时间共 " + wordCount + " 个"));
+    host.appendChild(stat("片段 / 空白", (clipCount - gapCount) + " / " + gapCount, "", "", null, "剪辑单中的普通片段与空白段"));
+    host.appendChild(stat("成片字幕", String(outCount), "", outCount ? "" : "is-warn", function () { switchPane("out"); }, "按规则裁切映射后的字幕条数"));
+    var durationLabel = result.duration.d === 1n ? result.duration.n.toString() : fracDecimal(result.duration, 3);
+    host.appendChild(stat("成片时长", durationLabel, "ms", "", null, "精确时长 " + fracText(result.duration) + " 毫秒"));
+    host.appendChild(stat("问题", errCount ? String(errCount) : "0", errCount ? "个" : "通过", errCount ? "is-bad" : "is-ok", function () { openIssues(); }, "非法区间、零速度、错序词等硬性错误"));
+    host.appendChild(stat("提醒", warnCount ? String(warnCount) : "0", warnCount ? "条" : "无", warnCount ? "is-warn" : "", function () { openIssues(); }, "越界或超出建议容量的提醒"));
+
+    var summary = el("div", { class: "ledger-summary" });
+    if (errCount) {
+      summary.appendChild(el("span", { class: "chip bad", text: "× " + errCount + " 错误" }));
+      var first = state.errors[0];
+      summary.appendChild(el("span", { text: first.where + " — " + first.message }));
+      summary.appendChild(el("button", { class: "btn tiny", attrs: { type: "button" }, text: "逐条定位", on: { click: openIssues } }));
+    } else {
+      summary.appendChild(el("span", { class: "chip out", text: "✓ 规则校验通过" }));
+      summary.appendChild(el("span", { text: "内部以约分分数计算，导出时起点 floor、终点 ceil 到毫秒。" }));
+    }
+    var over = [];
+    if (cueCount > LIMITS.cues) over.push("字幕 " + cueCount + " > 1500");
+    if (wordCount > LIMITS.words) over.push("词 " + wordCount + " > 10000");
+    if (clipCount > LIMITS.clips) over.push("片段 " + clipCount + " > 500");
+    if (over.length) summary.appendChild(el("span", { class: "chip warn", text: over.join(" · ") }));
+    var spacer = el("span", { style: "margin-left:auto" });
+    summary.appendChild(spacer);
+    var exact = el("span", { class: "chip plain", attrs: { title: "成片的精确时长（毫秒，最简分数）" } });
+    exact.appendChild(document.createTextNode("时长 "));
+    exact.appendChild(el("code", { text: fracText(result.duration) }));
+    summary.appendChild(exact);
+    host.appendChild(summary);
+  }
+
+  /* ================================================================== *
+   * Rulers
+   * ================================================================== */
+
+  function chooseStep(durNum) {
+    var steps = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000];
+    for (var i = 0; i < steps.length; i++) if (durNum / steps[i] <= 6) return steps[i];
+    return steps[steps.length - 1];
+  }
+
+  function renderRuler(host, durNum, mode) {
+    clear(host);
+    if (!(durNum > 0)) return;
+    var step = chooseStep(durNum);
+    for (var t = 0; t <= durNum + 0.0001; t += step) {
+      var tick = el("div", { class: "tick", style: "left:" + (t / durNum) * 100 + "%" });
+      tick.appendChild(el("span", { text: uiTime(BigInt(Math.round(t))) }));
+      host.appendChild(tick);
+    }
+  }
+
+  /* ================================================================== *
+   * Source pane
+   * ================================================================== */
+
+  function renderSourcePane() {
+    var tabsHost = $("sourceTabs");
+    clear(tabsHost);
+    var sources = state.doc.sources || [];
+    if (sources.length > 1) {
+      sources.forEach(function (s, si) {
+        var tab = el("button", {
+          class: "tab", attrs: { type: "button", role: "tab", "aria-selected": String(si === currentSourceIndex()) },
+          on: { click: function () { state.activeSource = si; renderAll(); } }
+        });
+        tab.appendChild(document.createTextNode(s && typeof s.id === "string" ? s.id : "源 #" + (si + 1)));
+        tab.appendChild(el("span", { class: "n", text: String(s && Array.isArray(s.cues) ? s.cues.length : 0) }));
+        tabsHost.appendChild(tab);
+      });
+      tabsHost.hidden = false;
+    } else {
+      tabsHost.hidden = true;
+    }
+
+    var si = currentSourceIndex();
+    var src = sources[si];
+    var cues = src && Array.isArray(src.cues) ? src.cues : [];
+    var ruler = $("sourceRuler");
+    var dur = durOf(src);
+    if (dur > 0) {
+      renderRuler(ruler, dur, "src");
+      renderClipBand(ruler, si, dur);
+      ruler.hidden = false;
+    } else {
+      clear(ruler);
+      ruler.hidden = true;
+    }
+
+    var list = getList("source", $("sourceList"));
+    var srcHost = $("sourceList");
+    var srcEmpty = srcHost.querySelector(".empty-state");
+    if (srcEmpty) srcEmpty.remove();
+    if (!cues.length) {
+      list.setItems(0, function () { return 24; }, function () { return el("div"); });
+      srcHost.appendChild(el("div", { class: "empty-state" }, [
+        el("strong", { text: src ? "这个源没有字幕" : "还没有源素材" }),
+        document.createTextNode(src ? "源「" + sourceLabel(si) + "」的 cues 是空的；导入带字幕的 JSON 才会产出成片字幕。" : "导入 JSON（sources + clips）或载入示例开始。也可以把 .json 文件直接拖进页面。")
+      ]));
+    } else {
+      list.setItems(cues.length, function (ci) { return sourceRowHeight(si, ci); }, function (ci) { return sourceRow(si, ci); });
+    }
+
+    var foot = $("sourceFoot");
+    clear(foot);
+    if (!src) {
+      foot.appendChild(el("span", { text: "没有源素材 — 导入 JSON 或选择示例。" }));
+    } else {
+      foot.appendChild(el("span", { text: "源 " + sourceLabel(si) }));
+      foot.appendChild(el("span", { class: "sep", text: "·" }));
+      foot.appendChild(el("span", { text: cues.length + " 条字幕" }));
+      foot.appendChild(el("span", { class: "sep", text: "·" }));
+      foot.appendChild(el("span", { text: "时长 " + msUi(dur) }));
+      foot.appendChild(el("span", { class: "sep", text: "·" }));
+      foot.appendChild(el("span", { text: "区间左闭右开" }));
+      var rel = relatedClip();
+      if (rel && rel.clip && rel.clip.source === (src && src.id)) {
+        foot.appendChild(el("span", { class: "chip clip", text: "高亮 = 片段 " + rel.clip.id + " 的取用范围" }));
+      }
+    }
+  }
+
+  function relatedClip() {
+    var sel = state.selection;
+    if (!sel) return null;
+    if (sel.type === "clip") return { clip: state.doc.clips[sel.index], index: sel.index };
+    var idx = sel.type === "out" || sel.type === "word" ? (state.result.cues[sel.index] && state.result.cues[sel.index].clipOrder) : -1;
+    if (idx !== undefined && idx >= 0) return { clip: state.doc.clips[idx], index: idx };
+    return null;
+  }
+
+  function renderClipBand(ruler, si, dur) {
+    var rel = relatedClip();
+    var src = sourceAt(si);
+    if (!rel || !rel.clip || !src || rel.clip.source !== src.id) return;
+    var clip = rel.clip;
+    if (typeof clip.in !== "number" || typeof clip.out !== "number") return;
+    var band = el("div", { class: "range-band", attrs: { title: "片段 " + clip.id + " 在源中的区间 [" + clip.in + ", " + clip.out + ") ms" } });
+    band.style.left = Math.max(0, (clip.in / dur) * 100) + "%";
+    band.style.width = Math.max(0.4, Math.min(100, ((clip.out - clip.in) / dur) * 100)) + "%";
+    ruler.appendChild(band);
+  }
+
+  function sourceRowHeight(si, ci) {
+    var cue = cueAt(si, ci);
+    if (!cue) return 48;
+    var chars = 0;
+    if (Array.isArray(cue.words) && cue.words.length) {
+      cue.words.forEach(function (w) { chars += w && typeof w.text === "string" ? w.text.length + 1 : 0; });
+    } else if (typeof cue.text === "string") chars = cue.text.length;
+    var lines = Math.max(1, Math.ceil(chars / 26));
+    var h = 22 + lines * 19 + 18;
+    var ss = sourceSelection();
+    var selected = !!ss && ss.si === si && ss.ci === ci;
+    if (selected && Array.isArray(cue.words) && cue.words.length) {
+      var stripRows = Math.max(1, Math.ceil(cue.words.length / 4));
+      h += 6 + stripRows * 21;
+    }
+    return Math.min(h, 240);
+  }
+
+  function wordTitle(w) {
+    return (w && typeof w.text === "string" ? w.text : "") + " · " + (typeof w.start === "number" ? w.start : "?") + "–" + (typeof w.end === "number" ? w.end : "?") + " ms";
+  }
+
+  function sourceRow(si, ci) {
+    var cue = cueAt(si, ci) || {};
+    var ss = sourceSelection();
+    var selected = !!ss && ss.si === si && ss.ci === ci;
+    var selectedWord = selected ? ss.wi : undefined;
+    var issue = cueIssueFor(si, ci);
+    var row = el("div", {
+      class: "src-row" + (selected ? " is-active" : "") + (issue ? " is-bad" : ""),
+      data: { ci: ci, si: si },
+      attrs: { role: "option", tabindex: "0", "aria-selected": String(!!selected) },
+      on: {
+        click: function () { selectSourceCue(si, ci); },
+        keydown: function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectSourceCue(si, ci); } }
+      }
+    });
+
+    var tc = el("div", { class: "tc" });
+    tc.appendChild(el("b", { text: typeof cue.start === "number" ? String(cue.start) : "—" }));
+    tc.appendChild(el("span", { text: typeof cue.end === "number" ? String(cue.end) : "—" }));
+    row.appendChild(tc);
+
+    var body = el("div", { class: "body" });
+    var text = el("div", { class: "text" });
+    var usedWords = Array.isArray(cue.words) ? usedWordsFor(si, ci) : new Map();
+    if (Array.isArray(cue.words) && cue.words.length) {
+      cue.words.forEach(function (w, wi) {
+        var used = usedWords.get(wi);
+        var isSel = selected && selectedWord === wi;
+        text.appendChild(el("span", {
+          class: "w" + (used && used.length ? " used" : "") + (isSel ? " sel" : ""),
+          text: w && w.text !== undefined ? w.text : "",
+          attrs: { title: wordTitle(w) }
+        }));
+        text.appendChild(document.createTextNode(" "));
+      });
+    } else {
+      text.appendChild(document.createTextNode(typeof cue.text === "string" ? cue.text : ""));
+    }
+    body.appendChild(text);
+
+    var meta = el("div", { class: "meta" });
+    meta.appendChild(el("span", { class: "chip plain", text: typeof cue.id === "string" ? cue.id : "#" + (ci + 1) }));
+    if (Array.isArray(cue.words)) meta.appendChild(el("span", { class: "chip", text: cue.words.length + " 词" }));
+    var outs = outputsForSourceCue(si, ci);
+    if (outs.length) {
+      var seen = Object.create(null);
+      var clipIds = [];
+      outs.forEach(function (oi) {
+        var oc = state.result.cues[oi];
+        if (!oc || seen[oc.clipOrder]) return;
+        seen[oc.clipOrder] = 1;
+        clipIds.push(oc.clipId);
+      });
+      clipIds.slice(0, 3).forEach(function (cid) {
+        meta.appendChild(el("span", { class: "chip clip", text: cid }));
+      });
+      if (clipIds.length > 3) meta.appendChild(el("span", { class: "chip", text: "+" + (clipIds.length - 3) }));
+    } else {
+      meta.appendChild(el("span", { class: "chip", text: "未入片" }));
+    }
+    if (issue) meta.appendChild(el("span", { class: "chip bad", text: issue.kind === "order" ? "错序" : issue.level === "warn" ? "提醒" : "非法" }));
+    body.appendChild(meta);
+    row.appendChild(body);
+
+    if (selected && Array.isArray(cue.words) && cue.words.length) {
+      var strip = el("div", { class: "wstrip" });
+      cue.words.forEach(function (w, wi) {
+        var used = usedWords.get(wi);
+        var chip = el("button", {
+          class: "wchip" + (selectedWord === wi ? " is-sel" : "") + (used && used.length ? " is-hit" : ""),
+          attrs: { type: "button", title: wordTitle(w) + (used && used.length ? " · 出现在 " + used.length + " 条成片字幕" : " · 被剪掉") },
+          on: { click: function (e) { e.stopPropagation(); selectSourceCue(si, ci, wi); } }
+        });
+        chip.appendChild(document.createTextNode(w && typeof w.text === "string" ? w.text : ""));
+        chip.appendChild(el("span", { class: "wt", text: typeof w.start === "number" ? String(w.start) : "?" }));
+        strip.appendChild(chip);
+      });
+      row.appendChild(strip);
+    }
+    return row;
+  }
+
+  function cueIssueFor(si, ci) {
+    for (var i = 0; i < state.errors.length; i++) {
+      var e = state.errors[i];
+      if ((e.scope === "cue" || e.scope === "word") && e.sourceIndex === si && e.cueIndex === ci) return e;
+    }
+    for (var j = 0; j < state.notes.length; j++) {
+      var n = state.notes[j];
+      if ((n.scope === "cue" || n.scope === "word") && n.sourceIndex === si && n.cueIndex === ci) return n;
+    }
+    return null;
+  }
+
+  /* ================================================================== *
+   * Clip pane
+   * ================================================================== */
+
+  function renderClipPane() {
+    var clips = state.doc.clips || [];
+    var timeline = $("clipTimeline");
+    clear(timeline);
+    if (clips.length) {
+      var track = el("div", { class: "otrack", attrs: { "aria-label": "按成片顺序排列的片段" } });
+      var duration = state.result.duration;
+      var durNum = duration.toNumber();
+      var spans = state.result.spans || [];
+      spans.forEach(function (sp) {
+        var lenNum = sp.length ? sp.length.toNumber() : 0;
+        if (!(lenNum > 0)) return;
+        var clip = clips[sp.index];
+        var seg = el("div", {
+          class: "seg" + (clip && clip.source === null ? " gap" : " used") + (sp.index === state.activeClip ? " is-active" : "") + (clipIsBad(sp.index) ? " is-bad" : ""),
+          data: { clip: sp.index },
+          attrs: { title: (clip && clip.id ? clip.id : "#" + (sp.index + 1)) + " · " + fracDecimal(sp.length, 3) + " ms · 点击选中" }
+        });
+        seg.style.left = (durNum > 0 ? (sp.start.toNumber() / durNum) * 100 : 0) + "%";
+        seg.style.width = Math.max(0.25, durNum > 0 ? (lenNum / durNum) * 100 : 100) + "%";
+        seg.addEventListener("click", function () { selectClip(sp.index); });
+        track.appendChild(seg);
+      });
+      timeline.appendChild(track);
+      var scale = el("div", { class: "scale" });
+      scale.appendChild(el("span", { text: "00:00.000" }));
+      scale.appendChild(el("span", { text: "成片 " + fracText(duration) + " ms" }));
+      scale.appendChild(el("span", { text: uiTime(duration.ceil()) }));
+      timeline.appendChild(scale);
+    }
+
+    var host = $("clipList");
+    clear(host);
+    if (!clips.length) {
+      host.appendChild(el("div", { class: "empty-state" }, [
+        el("strong", { text: "剪辑单是空的" }),
+        document.createTextNode("用「+ 片段」取一段源素材，「+ 空白」插入停顿。片段可以重复使用同一段素材。")
+      ]));
+    } else {
+      clips.forEach(function (clip, index) { host.appendChild(clipRow(clip, index)); });
+    }
+
+    var foot = $("clipFoot");
+    clear(foot);
+    foot.appendChild(el("span", { text: clips.length + " 段" }));
+    foot.appendChild(el("span", { class: "sep", text: "·" }));
+    foot.appendChild(el("span", { text: state.result.usedClips + " 有效" }));
+    if (state.result.skippedClips) {
+      foot.appendChild(el("span", { class: "sep", text: "·" }));
+      foot.appendChild(el("span", { class: "chip bad", text: state.result.skippedClips + " 跳过" }));
+    }
+    var tail = el("span", { style: "margin-left:auto", text: "T + (s − in) × q/p" });
+    foot.appendChild(tail);
+  }
+
+  function clipIsBad(index) {
+    return state.errors.some(function (e) { return e.scope === "clip" && e.clipIndex === index; });
+  }
+
+  function clipIssue(index) {
+    for (var i = 0; i < state.errors.length; i++) if (state.errors[i].scope === "clip" && state.errors[i].clipIndex === index) return state.errors[i];
+    for (var j = 0; j < state.notes.length; j++) if (state.notes[j].scope === "clip" && state.notes[j].clipIndex === index) return state.notes[j];
+    return null;
+  }
+
+  function clipRow(clip, index) {
+    var isGap = clip && clip.source === null;
+    var row = el("div", {
+      class: "clip-row" + (isGap ? " is-gap" : "") + (index === state.activeClip ? " is-active" : "") + (clipIsBad(index) ? " is-bad" : ""),
+      data: { clip: index },
+      on: { click: function (e) { if (e.target.closest("input,button,select")) return; selectClip(index); } }
+    });
+
+    var lead = el("div", { class: "lead" });
+    lead.appendChild(el("div", { class: "ord", text: "#" + String(index + 1).padStart(2, "0") }));
+    lead.appendChild(el("div", { class: "cid", text: clip && typeof clip.id === "string" ? clip.id : "(无 id)" }));
+    var span = state.result.spans && state.result.spans[index];
+    lead.appendChild(el("div", { class: "dur", text: span && span.length ? fracApprox(span.length) + " ms" : "—" }));
+
+    var actions = el("div", { class: "actions" });
+    [["↑", "上移", -1], ["↓", "下移", 1]].forEach(function (def) {
+      var disabled = def[2] < 0 ? index === 0 : index === state.doc.clips.length - 1;
+      actions.appendChild(el("button", {
+        class: "act", attrs: { type: "button", title: def[1], "aria-label": def[1], disabled: disabled ? "" : null }, text: def[0],
+        on: { click: function (e) { e.stopPropagation(); if (!disabled) moveClip(index, def[2]); } }
+      }));
+    });
+    actions.appendChild(el("button", {
+      class: "act", attrs: { type: "button", title: "复制这一段（重复使用素材）", "aria-label": "复制片段" }, text: "⧉",
+      on: { click: function (e) { e.stopPropagation(); duplicateClip(index); } }
+    }));
+    actions.appendChild(el("button", {
+      class: "act del", attrs: { type: "button", title: "删除", "aria-label": "删除片段" }, text: "✕",
+      on: { click: function (e) { e.stopPropagation(); deleteClip(index); } }
+    }));
+    lead.appendChild(actions);
+    row.appendChild(lead);
+
+    var body = el("div", { class: "body" });
+    if (isGap) {
+      var l1 = el("div", { class: "line" });
+      l1.appendChild(el("span", { class: "gap-swatch" }));
+      l1.appendChild(el("span", { text: "空白段 · 不产出字幕" }));
+      body.appendChild(l1);
+      var l2 = el("div", { class: "line" });
+      l2.appendChild(el("span", { class: "arr", text: "时长" }));
+      l2.appendChild(numberField(clip, "duration_ms", index, "空白时长", "ms"));
+      l2.appendChild(el("span", { class: "chip out", text: "推进时间轴" }));
+      body.appendChild(l2);
+    } else if (!clip || typeof clip.source !== "string") {
+      body.appendChild(el("div", { class: "line", text: "缺少 source" }));
+    } else {
+      var srcSel = el("select", {
+        class: "mini-select", attrs: { "aria-label": "源素材" },
+        on: { change: function (e) { updateClip(index, { source: e.target.value }, "切换源"); } }
+      });
+      var sourceMissing = true;
+      (state.doc.sources || []).forEach(function (s) {
+        if (!s || typeof s.id !== "string") return;
+        if (s.id === clip.source) sourceMissing = false;
+        srcSel.appendChild(el("option", { text: s.id, attrs: { value: s.id } }));
+      });
+      if (sourceMissing) srcSel.appendChild(el("option", { text: clip.source + "（缺失）", attrs: { value: clip.source } }));
+      srcSel.value = clip.source;
+
+      var line1 = el("div", { class: "line" });
+      line1.appendChild(srcSel);
+      line1.appendChild(el("span", { class: "arr", text: "[ " }));
+      line1.appendChild(numberField(clip, "in", index, "入点", ""));
+      line1.appendChild(el("span", { class: "arr", text: " , " }));
+      line1.appendChild(numberField(clip, "out", index, "出点", ""));
+      line1.appendChild(el("span", { class: "arr", text: " )" }));
+      line1.appendChild(el("span", { class: "arr", text: "×" }));
+      line1.appendChild(speedField(clip, index));
+      body.appendChild(line1);
+
+      var line2 = el("div", { class: "line" });
+      var mapped = span && span.valid ? uiTime(span.start.floor()) + " → " + uiTime(span.end.ceil()) : "未生效";
+      line2.appendChild(el("span", { class: "arr", text: "成片 " + mapped }));
+      line2.appendChild(el("span", { class: "chip out", text: outputsForClip(index).length + " 条" }));
+      var iss = clipIssue(index);
+      if (iss) line2.appendChild(el("span", { class: "chip " + (iss.level === "warn" ? "warn" : "bad"), text: iss.message }));
+      body.appendChild(line2);
+
+      var srco = state.doc.sources.find(function (s) { return s && s.id === clip.source; });
+      var sdur = durOf(srco);
+      if (sdur > 0 && typeof clip.in === "number" && typeof clip.out === "number") {
+        var bar = el("div", { class: "bar", attrs: { title: "取用范围在原素材中的位置" } });
+        var fill = el("i", { class: "cut" });
+        var left = Math.max(0, Math.min(100, (clip.in / sdur) * 100));
+        var width = Math.max(0.2, Math.min(100 - left, ((clip.out - clip.in) / sdur) * 100));
+        fill.style.left = left + "%";
+        fill.style.width = width + "%";
+        bar.appendChild(fill);
+        body.appendChild(bar);
+      }
+    }
+    row.appendChild(body);
+    return row;
+  }
+
+  function numberField(obj, key, index, label, suffix) {
+    var val = obj && typeof obj[key] === "number" ? String(obj[key]) : "";
+    var input = el("input", {
+      class: "mini-num", attrs: { type: "text", inputmode: "numeric", value: val, "aria-label": label + "（毫秒）", title: label + "：整数毫秒，左闭右开" },
+      data: { field: key },
+      on: {
+        change: function () { commitNumber(input, index, key); },
+        keydown: function (e) { if (e.key === "Enter") { e.preventDefault(); commitNumber(input, index, key); input.blur(); } }
+      }
+    });
+    if (typeof (obj && obj[key]) !== "number") input.classList.add("is-invalid");
+    if (!suffix) return input;
+    var wrap = el("span", { class: "num-wrap" });
+    wrap.appendChild(input);
+    wrap.appendChild(el("span", { class: "suffix", text: suffix }));
+    return wrap;
+  }
+
+  function commitNumber(input, index, key) {
+    var raw = input.value.trim();
+    if (!/^-?\d+$/.test(raw)) { input.classList.add("is-invalid"); toast("请输入整数毫秒", true); return; }
+    var v = Number(raw);
+    if (!Number.isSafeInteger(v)) { input.classList.add("is-invalid"); toast("数字超出安全范围", true); return; }
+    updateClip(index, makePatch(key, v), key === "duration_ms" ? "改空白时长" : key === "in" ? "改入点" : "改出点");
+    input.classList.remove("is-invalid");
+  }
+
+  function makePatch(key, v) { var p = {}; p[key] = v; return p; }
+
+  function speedField(clip, index) {
+    var wrap = el("span", { class: "speed-fields" });
+    var input = el("input", {
+      class: "mini-num speed",
+      attrs: { type: "text", value: clip && Array.isArray(clip.speed) ? clip.speed[0] + "/" + clip.speed[1] : "1/1", "aria-label": "速度 p/q", title: "倍速 p/q：源时间以 p/q 倍前进，范围 1/4–4" },
+      on: {
+        change: function () { commitSpeed(input, index); },
+        keydown: function (e) { if (e.key === "Enter") { e.preventDefault(); commitSpeed(input, index); input.blur(); } }
+      }
+    });
+    if (!isValidSpeed(clip && clip.speed)) input.classList.add("is-invalid");
+    var ratio = clip && Array.isArray(clip.speed) && clip.speed[1] ? clip.speed[0] / clip.speed[1] : 1;
+    var badge = el("span", { class: "ratio " + (ratio > 1.0001 ? "fast" : ratio < 0.9999 ? "slow" : ""), text: (Math.round(ratio * 100) / 100) + "×" });
+    wrap.appendChild(input);
+    wrap.appendChild(badge);
+    return wrap;
+  }
+
+  function isValidSpeed(sp) {
+    return Array.isArray(sp) && sp.length === 2 &&
+      Number.isInteger(sp[0]) && Number.isInteger(sp[1]) &&
+      sp[0] > 0 && sp[1] > 0 && sp[0] <= 1000 && sp[1] <= 1000 &&
+      sp[0] / sp[1] >= 0.25 && sp[0] / sp[1] <= 4;
+  }
+
+  function commitSpeed(input, index) {
+    var raw = input.value.trim().replace(/\s+/g, "");
+    var m = /^(\d+)\/(\d+)$/.exec(raw);
+    if (!m) { input.classList.add("is-invalid"); toast("速度写成 p/q，例如 3/2", true); return; }
+    updateClip(index, { speed: [Number(m[1]), Number(m[2])] }, "改速度");
+  }
+
+  function updateClip(index, patch, label) {
+    // Pin the selection to the clip being edited before the doc changes, so
+    // recompute's identity remap cannot land on a different result.
+    var clip = state.doc.clips[index];
+    if (clip && typeof clip.id === "string") state.selection = { type: "clip", index: index };
+    undoable(function () {
+      var c = state.doc.clips[index];
+      if (!c) return;
+      for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) c[k] = patch[k];
+    });
+    state.activeClip = index;
+    var own = null;
+    for (var i = 0; i < state.errors.length; i++) {
+      if (state.errors[i].scope === "clip" && state.errors[i].clipIndex === index) { own = state.errors[i]; break; }
+    }
+    if (own) toast(own.message, true, 2800);
+    else toast(label + " · 已重算", false, 1300);
+  }
+
+  function moveClip(index, dir) {
+    var clips = state.doc.clips;
+    var target = index + dir;
+    if (target < 0 || target >= clips.length) return;
+    // Selection follows the identity that was selected, not position, so
+    // reordering a different row does not steal the selection or the scroll.
+    var sel = state.selection;
+    var keepClipId = sel && sel.type === "clip" && clips[sel.index] ? clips[sel.index].id : null;
+    var keepOutId = null, keepWordIndex = null;
+    if (sel && (sel.type === "out" || sel.type === "word")) {
+      var c = state.result.cues[sel.index];
+      if (c) { keepOutId = c.id; keepWordIndex = sel.type === "word" ? sel.wordIndex : null; }
+    }
+    undoable(function () { var tmp = clips[index]; clips[index] = clips[target]; clips[target] = tmp; });
+    if (keepClipId !== null) {
+      var ci = -1;
+      for (var i = 0; i < clips.length; i++) if (clips[i] && clips[i].id === keepClipId) { ci = i; break; }
+      state.selection = ci >= 0 ? { type: "clip", index: ci } : null;
+      if (ci >= 0) state.activeClip = ci;
+      scrollClipIntoView(ci >= 0 ? ci : target);
+    } else if (keepOutId) {
+      var ni = state.result.cues.findIndex(function (x) { return x.id === keepOutId; });
+      if (ni >= 0) state.selection = keepWordIndex === null ? { type: "out", index: ni } : { type: "word", index: ni, wordIndex: keepWordIndex };
+      scrollClipIntoView(target);
+    } else {
+      scrollClipIntoView(target);
+    }
+    renderAll();
+  }
+
+  function uniqueClipId(base) {
+    var used = Object.create(null);
+    state.doc.clips.forEach(function (c) { if (c && typeof c.id === "string") used[c.id] = true; });
+    var n = 1, id = base + "-" + n;
+    while (used[id]) { n++; id = base + "-" + n; }
+    return id;
+  }
+
+  function duplicateClip(index) {
+    var src = state.doc.clips[index];
+    if (!src) return;
+    var copy = clone(src);
+    copy.id = uniqueClipId(String(src.id || "clip"));
+    undoable(function () { state.doc.clips.splice(index + 1, 0, copy); });
+    selectClip(index + 1);
+    toast("已复制为 " + copy.id, false, 1400);
+  }
+
+  function deleteClip(index) {
+    var clip = state.doc.clips[index];
+    if (!clip) return;
+    state.selection = null;
+    state.activeClip = -1;
+    undoable(function () { state.doc.clips.splice(index, 1); });
+    toast("已删除片段 " + (clip.id || "#" + (index + 1)), false, 1400);
+  }
+
+  function insertClipAt() {
+    return state.activeClip >= 0 && state.activeClip < state.doc.clips.length ? state.activeClip + 1 : state.doc.clips.length;
+  }
+
+  function addClip(sourceId, inMs, outMs, speed) {
+    var clip = { id: uniqueClipId("clip"), source: sourceId, in: inMs, out: outMs, speed: speed };
+    var at = insertClipAt();
+    undoable(function () { state.doc.clips.splice(at, 0, clip); });
+    selectClip(at);
+    toast("已添加片段 " + clip.id, false, 1400);
+  }
+
+  function addGap(durationMs) {
+    var clip = { id: uniqueClipId("gap"), source: null, duration_ms: durationMs };
+    var at = insertClipAt();
+    undoable(function () { state.doc.clips.splice(at, 0, clip); });
+    selectClip(at);
+    toast("已添加空白段 " + clip.id, false, 1400);
+  }
+
+  /* ================================================================== *
+   * Output pane
+   * ================================================================== */
+
+  function renderOutPane() {
+    var ruler = $("outRuler");
+    var dur = state.result.duration.ceil();
+    var durNum = Number(dur);
+    if (durNum > 0) {
+      renderRuler(ruler, durNum, "out");
+      var prevEnd = null;
+      state.result.cues.forEach(function (c) {
+        if (prevEnd !== null && c.start.cmp(prevEnd) < 0) {
+          // Mark only the actual overlap: from this cue's start to the
+          // earlier cue's end, not the whole cue.
+          var overlapEnd = c.end.cmp(prevEnd) < 0 ? c.end : prevEnd;
+          var fromMs = Number(c.start.floor());
+          var toMs = Number(overlapEnd.ceil());
+          var band = el("div", {
+            class: "ovl-band",
+            attrs: { title: "重叠 " + fracText(c.start) + " → " + fracText(overlapEnd) + " ms（已保留）" }
+          });
+          band.style.left = (fromMs / durNum) * 100 + "%";
+          band.style.width = Math.max(0.25, ((toMs - fromMs) / durNum) * 100) + "%";
+          ruler.appendChild(band);
+        }
+        if (prevEnd === null || c.end.cmp(prevEnd) > 0) prevEnd = c.end;
+      });
+      ruler.hidden = false;
+    } else {
+      clear(ruler);
+      ruler.hidden = true;
+    }
+
+    var cues = state.result.cues;
+    var list = getList("out", $("outList"));
+    if (!cues.length) {
+      list.setItems(0, function () { return 24; }, function () { return el("div"); });
+      var outHost = $("outList");
+      var prevEmpty = outHost.querySelector(".empty-state");
+      if (prevEmpty) prevEmpty.remove();
+      var why, detail;
+      if (!state.doc.clips.length) {
+        why = "剪辑单是空的";
+        detail = "成片字幕由片段裁切而来：先在「剪辑单」里加入片段或空白段。";
+      } else if (state.errors.length) {
+        why = "暂时没有可用字幕";
+        detail = "当前有 " + state.errors.length + " 个问题导致片段被跳过；在下方「问题」里逐条定位修正。";
+      } else {
+        why = "片段里没有字幕";
+        detail = "现有片段的区间没有与任何源字幕相交，或字幕的词全被剪掉。调整入出点或换一段素材试试。";
+      }
+      outHost.appendChild(el("div", { class: "empty-state" }, [el("strong", { text: why }), document.createTextNode(detail)]));
+    } else {
+      var staleOut = $("outList").querySelector(".empty-state");
+      if (staleOut) staleOut.remove();
+      list.setItems(cues.length, function (i) { return outRowHeight(i); }, function (i) { return outRow(i); });
+    }
+
+    var foot = $("outFoot");
+    clear(foot);
+    foot.appendChild(el("span", { text: cues.length + " 条" }));
+    foot.appendChild(el("span", { class: "sep", text: "·" }));
+    foot.appendChild(el("span", { text: "时长 " + fracApprox(state.result.duration) }));
+    var overlaps = state.result.overlapCount || 0;
+    if (overlaps) {
+      foot.appendChild(el("span", { class: "sep", text: "·" }));
+      foot.appendChild(el("span", { class: "chip warn", text: overlaps + " 条重叠（保留）" }));
+    }
+    foot.appendChild(el("span", { style: "margin-left:auto", text: "VTT: 起点 floor / 终点 ceil" }));
+  }
+
+  function outRowHeight(i) {
+    var cue = state.result.cues[i];
+    if (!cue) return 60;
+    var chars = 0;
+    if (cue.hasWords) cue.words.forEach(function (w) { chars += (w.text || "").length + 1; });
+    else chars = (cue.text || "").length;
+    var lines = Math.max(1, Math.ceil(chars / 27));
+    return 22 + lines * 19 + 20;
+  }
+
+  function outRow(i) {
+    var cue = state.result.cues[i];
+    if (!cue) return el("div");
+    var sel = state.selection;
+    var active = sel && (sel.type === "out" || sel.type === "word") && sel.index === i;
+    var row = el("div", {
+      class: "out-row" + (active ? " is-active" : "") + (cue.overlapsEarlier ? " is-overlap" : ""),
+      data: { i: i }, attrs: { role: "option", tabindex: "0", "aria-selected": String(!!active) },
+      on: {
+        click: function () { selectOut(i); },
+        keydown: function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectOut(i); } }
+      }
+    });
+    var tc = el("div", { class: "tc" });
+    tc.appendChild(el("b", { text: floorUi(cue.start) }));
+    tc.appendChild(el("span", { text: ceilUi(cue.end) }));
+    row.appendChild(tc);
+
+    var body = el("div", { class: "body" });
+    var text = el("div", { class: "text" });
+    if (cue.hasWords) {
+      var focusWord = sel && sel.index === i && (sel.type === "word" ? sel.wordIndex : 0);
+      cue.words.forEach(function (w, wi) {
+        var isSel = focusWord !== undefined && focusWord !== null && focusWord === wi;
+        text.appendChild(el("span", {
+          class: "w" + (isSel ? " sel" : ""),
+          text: w.text,
+          attrs: { title: w.text + " · 成片 " + fracText(w.start) + "–" + fracText(w.end) + " ms" },
+          on: { click: function (e) { e.stopPropagation(); selectOut(i, wi); } }
+        }));
+        text.appendChild(document.createTextNode(" "));
+      });
+    } else {
+      text.appendChild(document.createTextNode(cue.text));
+    }
+    body.appendChild(text);
+
+    var sub = el("div", { class: "sub" });
+    sub.appendChild(el("span", { class: "chip src", text: cue.sourceId }));
+    sub.appendChild(el("span", { class: "chip clip", text: cue.clipId }));
+    sub.appendChild(el("span", { text: cue.hasWords ? "词级" : "整句" }));
+    if (cue.overlapsEarlier) sub.appendChild(el("span", { class: "ovflag", text: "重叠" }));
+    body.appendChild(sub);
+    row.appendChild(body);
+    return row;
+  }
+
+  /* ================================================================== *
+   * Trace rail
+   * ================================================================== */
+
+  function renderTrace() {
+    var host = $("trace");
+    clear(host);
+
+    var head = el("div", { class: "trace-head" });
+    head.appendChild(el("span", { class: "eyebrow", text: "LINK" }));
+    head.appendChild(el("button", {
+      class: "trace-tab" + (state.traceTab === "trace" ? " is-on" : ""),
+      attrs: { type: "button" }, text: "追溯链路",
+      on: { click: function () { state.traceTab = "trace"; renderTrace(); } }
+    }));
+    head.appendChild(el("button", {
+      class: "trace-tab" + (state.traceTab === "issues" ? " is-on" : ""),
+      attrs: { type: "button" },
+      text: "问题 " + state.errors.length + (state.notes.length ? " · 提醒 " + state.notes.length : ""),
+      on: { click: function () { state.traceTab = "issues"; renderTrace(); } }
+    }));
+    if (state.traceTab === "trace") head.appendChild(el("span", { class: "hint", text: selectionHint() }));
+    else head.appendChild(el("span", { class: "hint", text: "点击任意一条定位到输入" }));
+    host.appendChild(head);
+
+    var body = el("div", { class: "trace-body" });
+    if (state.traceTab === "issues") {
+      body.appendChild(issuesBody());
+      host.appendChild(body);
+      return;
+    }
+
+    var sel = state.selection;
+    if (!sel) {
+      body.appendChild(el("div", { class: "notice" }, [
+        el("span", { class: "nk", text: "提示" }),
+        document.createTextNode("点选成片字幕、源字幕或片段，这里显示从源词到成片的完整链路和精确分数。")
+      ]));
+      host.appendChild(body);
+      return;
+    }
+
+    if (sel.type === "out" || sel.type === "word") {
+      var cue = state.result.cues[sel.index];
+      if (cue) body.appendChild(outputChain(cue, sel.type === "word" ? sel.wordIndex : undefined));
+    } else if (sel.type === "clip") {
+      body.appendChild(clipChain(sel.index));
+    } else if (sel.type === "src") {
+      body.appendChild(sourceChain(sel.sourceIndex, sel.cueIndex, sel.wordIndex));
+    }
+    host.appendChild(body);
+  }
+
+  function selectionHint() {
+    var sel = state.selection;
+    if (!sel) return "联动三个面板";
+    if (sel.type === "clip") {
+      var c = state.doc.clips[sel.index];
+      return "片段 " + (c && c.id ? c.id : "#" + (sel.index + 1)) + " 的取用与产出";
+    }
+    if (sel.type === "src") return "源字幕 " + cueLabel(sel.sourceIndex, sel.cueIndex) + " 的去向";
+    return "成片 → 片段 → 源字幕 → 源词";
+  }
+
+  function chainNode(kind, key, title, rows, extra) {
+    var n = el("div", { class: "chain-node " + kind });
+    n.appendChild(el("div", { class: "cn-k", text: key }));
+    n.appendChild(el("div", { class: "cn-t", text: title, attrs: { title: title } }));
+    (rows || []).forEach(function (r) { if (r !== null && r !== undefined) n.appendChild(el("div", { class: "cn-d", text: r })); });
+    if (extra) n.appendChild(extra);
+    return n;
+  }
+
+  function fracLine(label, f) {
+    var d = el("div", { class: "cn-frac" });
+    d.appendChild(document.createTextNode(label + " "));
+    d.appendChild(el("code", { text: fracText(f) }));
+    d.appendChild(document.createTextNode(" ms"));
+    return d;
+  }
+
+  function outputChain(cue, wordIndex) {
+    var chain = el("div", { class: "chain" });
+
+    var outNode = chainNode("out", "成片字幕", cue.id, [
+      floorUi(cue.start) + " → " + ceilUi(cue.end) + "  (VTT)",
+      "精确 " + fracText(cue.start) + " → " + fracText(cue.end) + " ms"
+    ]);
+    outNode.appendChild(el("div", { class: "cn-txt", text: cue.text || "(空)" }));
+    chain.appendChild(outNode);
+
+    var clip = state.doc.clips[cue.clipOrder] || {};
+    var len = E.clipOutputLength(clip);
+    chain.appendChild(chainNode("clip", "片段", String(cue.clipId), [
+      "源 " + cue.sourceId + "  [" + cue.clipIn + ", " + cue.clipOut + ") ms",
+      "速度 " + cue.speedP + "/" + cue.speedQ + " · 片段长 " + (len ? fracText(len) : "?") + " ms",
+      "映射 T + (s − " + cue.clipIn + ") × " + cue.speedQ + "/" + cue.speedP
+    ]));
+
+    var srcCue = cueAt(cue.sourceIndex, cue.cueIndex);
+    var srcNode = chainNode("src", "源字幕", cue.cueId, [
+      sourceLabel(cue.sourceIndex) + "  [" + cue.cueStart + ", " + cue.cueEnd + ") ms",
+      "与片段交集 [" + cue.cutStart + ", " + cue.cutEnd + ") ms",
+      cue.hasWords ? "保留 " + cue.words.length + " 个词" : "整句文本（无逐词时间）"
+    ]);
+    if (srcCue) srcNode.appendChild(el("div", { class: "cn-txt", text: srcCue.text || "" }));
+    chain.appendChild(srcNode);
+
+    if (cue.hasWords) {
+      // Selecting a result already lands on its first kept word, so the chain
+      // is complete without a second click; the chips switch between words.
+      var chosen = wordIndex !== undefined ? wordIndex : 0;
+      var word = cue.words[chosen] || cue.words[0];
+      var wordNode = el("div", { class: "chain-node word" });
+      wordNode.appendChild(el("div", { class: "cn-k", text: "源词" + (cue.words.length > 1 ? " " + (chosen + 1) + "/" + cue.words.length : "") }));
+      if (word) {
+        wordNode.appendChild(el("div", { class: "cn-t", text: word.text, attrs: { title: word.text } }));
+        wordNode.appendChild(el("div", { class: "cn-d", text: "源 " + word.srcStart + "–" + word.srcEnd + " ms" }));
+        wordNode.appendChild(el("div", { class: "cn-d", text: "裁到片段 " + word.cutStart + "–" + word.cutEnd + " ms" }));
+        wordNode.appendChild(fracLine("成片起", word.start));
+        wordNode.appendChild(fracLine("成片止", word.end));
+      }
+      if (cue.words.length > 1) {
+        var picks = el("div", { class: "word-picks" });
+        cue.words.slice(0, 16).forEach(function (w, wi) {
+          picks.appendChild(el("button", {
+            class: "wchip" + (wi === chosen ? " is-sel" : ""),
+            attrs: { type: "button", title: w.srcStart + "–" + w.srcEnd + " ms → " + fracText(w.start) + " ms" },
+            text: w.text,
+            on: { click: function () { selectOut(state.selection.index, wi); } }
+          }));
+        });
+        if (cue.words.length > 16) picks.appendChild(el("span", { class: "cn-d", text: "…另 " + (cue.words.length - 16) + " 个" }));
+        wordNode.appendChild(picks);
+      }
+      chain.appendChild(wordNode);
+    }
+    return chain;
+  }
+
+  function clipChain(index) {
+    var chain = el("div", { class: "chain" });
+    var clip = state.doc.clips[index];
+    if (!clip) return chain;
+    var span = state.result.spans && state.result.spans[index];
+    if (clip.source === null) {
+      chain.appendChild(chainNode("clip", "空白段", String(clip.id), [
+        "时长 " + (typeof clip.duration_ms === "number" ? clip.duration_ms : "?") + " ms",
+        "成片 " + (span && span.valid ? uiTime(span.start.floor()) + " → " + uiTime(span.end.ceil()) : "未生效"),
+        "不产出字幕，只推进时间轴"
+      ]));
+      return chain;
+    }
+    var len = E.clipOutputLength(clip);
+    chain.appendChild(chainNode("clip", "片段", String(clip.id), [
+      "源 " + clip.source + "  [" + clip.in + ", " + clip.out + ") ms",
+      "速度 " + clip.speed[0] + "/" + clip.speed[1] + " · 源长 " + (clip.out - clip.in) + " ms",
+      "成片长 " + (len ? fracText(len) : "?") + " ms"
+    ]));
+    if (span && span.valid) {
+      chain.appendChild(chainNode("out", "成片位置", uiTime(span.start.floor()) + " → " + uiTime(span.end.ceil()),
+        ["精确 " + fracText(span.start) + " → " + fracText(span.end) + " ms"]));
+    }
+    var ids = outputsForClip(index);
+    var listNode = el("div", { class: "chain-node out" });
+    listNode.appendChild(el("div", { class: "cn-k", text: "产出字幕" }));
+    listNode.appendChild(el("div", { class: "cn-t", text: ids.length + " 条" }));
+    if (!ids.length) {
+      listNode.appendChild(el("div", { class: "cn-d", text: "这个区间里没有字幕——可能落在停顿上。" }));
+    } else {
+      var picks = el("div", { class: "word-picks" });
+      ids.slice(0, 12).forEach(function (oi) {
+        var oc = state.result.cues[oi];
+        picks.appendChild(el("button", {
+          class: "wchip", attrs: { type: "button", title: floorUi(oc.start) + " → " + ceilUi(oc.end) },
+          text: oc.id,
+          on: { click: function () { selectOut(oi); } }
+        }));
+      });
+      if (ids.length > 12) picks.appendChild(el("span", { class: "cn-d", text: "…另 " + (ids.length - 12) + " 条" }));
+      listNode.appendChild(picks);
+    }
+    chain.appendChild(listNode);
+    return chain;
+  }
+
+  function sourceChain(si, ci, wi) {
+    var chain = el("div", { class: "chain" });
+    var cue = cueAt(si, ci);
+    if (!cue) return chain;
+    var srcNode = chainNode("src", "源字幕", cue.id || "#" + (ci + 1), [
+      sourceLabel(si) + "  [" + (typeof cue.start === "number" ? cue.start : "?") + ", " + (typeof cue.end === "number" ? cue.end : "?") + ") ms",
+      Array.isArray(cue.words) ? cue.words.length + " 个词" : "无逐词时间"
+    ]);
+    srcNode.appendChild(el("div", { class: "cn-txt", text: cue.text || "" }));
+    chain.appendChild(srcNode);
+
+    if (wi !== undefined && Array.isArray(cue.words) && cue.words[wi]) {
+      var w = cue.words[wi];
+      chain.appendChild(chainNode("word", "源词", w.text, ["源 " + w.start + "–" + w.end + " ms"]));
+    }
+
+    var ids = outputsForSourceCue(si, ci);
+    var listNode = el("div", { class: "chain-node out" });
+    listNode.appendChild(el("div", { class: "cn-k", text: "去向" }));
+    if (!ids.length) {
+      listNode.appendChild(el("div", { class: "cn-d", text: "没有任何片段取用这条字幕。" }));
+    } else {
+      listNode.appendChild(el("div", { class: "cn-t", text: ids.length + " 条成片字幕" }));
+      var picks = el("div", { class: "word-picks" });
+      ids.slice(0, 12).forEach(function (oi) {
+        var oc = state.result.cues[oi];
+        picks.appendChild(el("button", {
+          class: "wchip", attrs: { type: "button", title: oc.clipId + " · " + floorUi(oc.start) },
+          text: oc.id,
+          on: { click: function () { selectOut(oi); } }
+        }));
+      });
+      if (ids.length > 12) picks.appendChild(el("span", { class: "cn-d", text: "…另 " + (ids.length - 12) + " 条" }));
+      listNode.appendChild(picks);
+    }
+    chain.appendChild(listNode);
+    return chain;
+  }
+
+  /* ================================================================== *
+   * Issues
+   * ================================================================== */
+
+  function issuesBody() {
+    var wrap = document.createDocumentFragment();
+    var all = state.errors.concat(state.notes);
+    if (!all.length) {
+      wrap.appendChild(el("div", { class: "issues-empty" }, [
+        el("span", { class: "tick", text: "✓" }),
+        document.createTextNode("没有发现问题：区间合法、速度在范围内、词序正确。")
+      ]));
+      return wrap;
+    }
+    var list = el("div", { class: "issues" });
+    var show = all.slice(0, 200);
+    show.forEach(function (iss) {
+      var btn = el("button", {
+        class: "issue" + (iss.level === "warn" ? " warn" : ""),
+        attrs: { type: "button", title: "定位到 " + iss.path },
+        on: { click: function () { gotoIssue(iss); } }
+      });
+      btn.appendChild(el("span", { class: "mk", text: iss.level === "warn" ? "!" : "×" }));
+      var msg = el("span", { class: "msg" });
+      msg.appendChild(el("span", { class: "where", text: iss.where || "" }));
+      msg.appendChild(el("span", { class: "what", text: iss.message }));
+      btn.appendChild(msg);
+      btn.appendChild(el("span", { class: "path", text: iss.path }));
+      list.appendChild(btn);
+    });
+    wrap.appendChild(list);
+    if (all.length > show.length) {
+      wrap.appendChild(el("div", { class: "notice", text: "还有 " + (all.length - show.length) + " 条未列出；修正前面的条目会继续显示。" }));
+    }
+    return wrap;
+  }
+
+  function openIssues() {
+    state.traceTab = "issues";
+    renderTrace();
+    var trace = $("trace");
+    if (trace.scrollIntoView) trace.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function gotoIssue(iss) {
+    if (iss.scope === "doc") {
+      toast(iss.where + "：" + iss.message, true, 3200);
+      return;
+    }
+    if (iss.scope === "source") {
+      if (iss.sourceIndex !== undefined) { state.activeSource = iss.sourceIndex; }
+      state.traceTab = "issues";
+      renderAll();
+      toast(iss.where + "：" + iss.message, true, 3200);
+      return;
+    }
+    // Jump to the input, then keep the issue list in place so the next entry
+    // is one click away.
+    if (iss.scope === "clip") {
+      selectClip(iss.clipIndex);
+      focusClipField(iss.clipIndex, iss.path);
+      state.traceTab = "issues";
+      renderTrace();
+      return;
+    }
+    if (iss.scope === "cue" || iss.scope === "word") {
+      state.activeSource = iss.sourceIndex;
+      selectSourceCue(iss.sourceIndex, iss.cueIndex, iss.scope === "word" ? iss.wordIndex : undefined);
+      flashSourceRow(iss.cueIndex, iss.scope === "word" ? iss.wordIndex : null);
+      state.traceTab = "issues";
+      renderTrace();
+    }
+  }
+
+  function focusClipField(index, path) {
+    var row = document.querySelector('.clip-row[data-clip="' + index + '"]');
+    if (!row) return;
+    scrollClipIntoView(index);
+    var field = null;
+    if (/\.in$/.test(path)) field = row.querySelector('[data-field="in"]');
+    else if (/\.out$/.test(path)) field = row.querySelector('[data-field="out"]');
+    else if (/\.duration_ms$/.test(path)) field = row.querySelector('[data-field="duration_ms"]');
+    else if (/\.speed$/.test(path)) field = row.querySelector("input.speed");
+    if (field) { field.focus(); if (field.select) field.select(); }
+    row.classList.add("is-flash");
+    setTimeout(function () { row.classList.remove("is-flash"); }, 1400);
+  }
+
+  function flashSourceRow(ci, wi) {
+    setTimeout(function () {
+      var row = document.querySelector('.src-row[data-ci="' + ci + '"]');
+      if (!row) return;
+      var host = $("sourceList");
+      var rt = row.offsetTop, rh = row.offsetHeight;
+      if (rt < host.scrollTop || rt + rh > host.scrollTop + host.clientHeight) host.scrollTop = Math.max(0, rt - 8);
+      row.classList.add("is-flash");
+      var chips = row.querySelectorAll(".wchip");
+      if (wi !== null && wi !== undefined && chips[wi]) chips[wi].classList.add("is-flash");
+      setTimeout(function () { row.classList.remove("is-flash"); }, 1500);
+    }, 80);
+  }
+
+  /* ================================================================== *
+   * Lists
+   * ================================================================== */
+
+  function ListView(host) {
+    var spacer = el("div", { class: "vspacer" });
+    host.appendChild(spacer);
+    var count = 0, heightFn = null, renderFn = null;
+    var offsets = null, heights = null, virtual = false;
+    var lastKey = "";
+    var self = {};
+
+    function rebuild() {
+      offsets = new Float64Array(count + 1);
+      heights = new Float64Array(count);
+      var acc = 0;
+      for (var i = 0; i < count; i++) {
+        var h = Math.max(24, heightFn(i) || 48);
+        heights[i] = h;
+        offsets[i] = acc;
+        acc += h;
+      }
+      offsets[count] = acc;
+      if (virtual) spacer.style.height = acc + "px";
+      else spacer.style.height = "auto";
+      lastKey = "";
+    }
+
+    function indexAt(y) {
+      var lo = 0, hi = count - 1, ans = 0;
+      while (lo <= hi) {
+        var mid = (lo + hi) >> 1;
+        if (offsets[mid] <= y) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+      }
+      return ans;
+    }
+
+    function draw() {
+      if (!count) { clear(spacer); return; }
+      if (!virtual) {
+        var key = "all";
+        if (key === lastKey && spacer.childElementCount === count) return;
+        lastKey = key;
+        clear(spacer);
+        for (var i = 0; i < count; i++) spacer.appendChild(renderFn(i));
+        return;
+      }
+      var top = host.scrollTop;
+      var vh = host.clientHeight || 420;
+      var start = Math.max(0, indexAt(top) - 4);
+      var end = Math.min(count, indexAt(top + vh) + 5);
+      var key = start + ":" + end;
+      if (key === lastKey) return;
+      lastKey = key;
+      clear(spacer);
+      for (var j = start; j < end; j++) {
+        var node = renderFn(j);
+        node.style.position = "absolute";
+        node.style.top = offsets[j] + "px";
+        node.style.left = "0";
+        node.style.right = "0";
+        node.style.height = heights[j] + "px";
+        spacer.appendChild(node);
+      }
+    }
+
+    var scheduled = false;
+    function schedule() {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(function () { scheduled = false; draw(); });
+    }
+    host.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+
+    self.setItems = function (n, hf, rf) {
+      var nextVirtual = n > NATURAL_LIMIT;
+      if (nextVirtual !== virtual) { virtual = nextVirtual; lastKey = ""; }
+      var prevCount = count;
+      count = n; heightFn = hf; renderFn = rf;
+      rebuild();
+      // Keep the reader's place across edits; only clamp when the list shrank
+      // past the current scroll position.
+      var maxTop = Math.max(0, (virtual ? offsets[count] : host.scrollHeight) - host.clientHeight);
+      if (prevCount !== n && host.scrollTop > maxTop) host.scrollTop = maxTop;
+      draw();
+    };
+    // Scroll only this list's own scroll box. scrollIntoView would also
+    // scroll the page, which yanks the workspace away on narrow screens.
+    function revealInHost(top, h, center) {
+      var vh = host.clientHeight || 420;
+      if (top < host.scrollTop || top + h > host.scrollTop + vh) {
+        host.scrollTop = center ? Math.max(0, top - vh / 2 + h / 2) : Math.max(0, top - 8);
+      }
+    }
+
+    self.scrollToIndex = function (idx, center) {
+      if (!count) return;
+      idx = Math.max(0, Math.min(count - 1, idx));
+      if (!virtual) {
+        revealInHost(offsets[idx], heights[idx] || 48, center);
+        return;
+      }
+      var top = offsets[idx];
+      var h = heights[idx] || 48;
+      var vh = host.clientHeight || 420;
+      if (top < host.scrollTop || top + h > host.scrollTop + vh) {
+        host.scrollTop = center ? Math.max(0, top - vh / 2 + h / 2) : Math.max(0, top - 8);
+      }
+      draw();
+    };
+    self.refresh = function () { rebuild(); draw(); };
+    return self;
+  }
+
+  function getList(key, host) {
+    if (!state.lists[key]) state.lists[key] = ListView(host);
+    return state.lists[key];
+  }
+
+  /* ================================================================== *
+   * Render all / pane switch
+   * ================================================================== */
+
+  function renderAll() {
+    renderLedger();
+    renderSourcePane();
+    renderClipPane();
+    renderOutPane();
+    renderTrace();
+    updateUndoButtons();
+  }
+
+  function switchPane(name) {
+    $("app").dataset.pane = name;
+    document.querySelectorAll(".pane-switch button").forEach(function (b) {
+      b.setAttribute("aria-selected", String(b.dataset.goto === name));
+    });
+    var panel = document.querySelector('.panel[data-pane="' + name + '"]');
+    if (panel && window.matchMedia("(max-width: 860px)").matches) {
+      // On narrow screens the swapped-in panel should sit at the top of the
+      // viewport instead of staying below the ledger.
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  /* ================================================================== *
+   * Export
+   * ================================================================== */
+
+  function buildExports() {
+    return {
+      vtt: E.toWebVTT(state.result),
+      json: JSON.stringify(E.toJSON(state.result), null, 2),
+      doc: JSON.stringify(state.doc, null, 2)
+    };
+  }
+
+  function openExport() {
+    var data = buildExports();
+    var modal = $("modal");
+    clear(modal);
+    var head = el("div", { class: "modal-head" });
+    head.appendChild(el("h2", { text: "导出", attrs: { id: "modalTitle" } }));
+    head.appendChild(el("span", { class: "sub", text: state.result.cues.length + " 条 · 时长 " + fracText(state.result.duration) + " ms" }));
+    head.appendChild(el("button", { class: "x", attrs: { type: "button", "aria-label": "关闭" }, text: "✕", on: { click: closeModal } }));
+    modal.appendChild(head);
+
+    if (state.errors.length) {
+      var banner = el("div", { class: "modal-warn" }, [
+        el("strong", { text: "当前文档有 " + state.errors.length + " 个问题" }),
+        document.createTextNode("导出的内容按「容错预览」生成：有问题的片段或字幕已被跳过，可能不满足包内规则。修正后再导出更稳妥。")
+      ]);
+      modal.appendChild(banner);
+    }
+    var tabs = el("div", { class: "modal-tabs", attrs: { role: "tablist" } });
+    modal.appendChild(tabs);
+    var body = el("div", { class: "modal-body" });
+    modal.appendChild(body);
+    var foot = el("div", { class: "modal-foot" });
+    var note = el("span", { class: "note" });
+    var selectBtn = el("button", { class: "btn", attrs: { type: "button" }, text: "全选" });
+    var copyBtn = el("button", { class: "btn primary", attrs: { type: "button" }, text: "复制全文" });
+    foot.appendChild(note);
+    foot.appendChild(el("span", { style: "margin-left:auto" }));
+    foot.appendChild(selectBtn);
+    foot.appendChild(copyBtn);
+    foot.appendChild(el("button", { class: "btn ghost", attrs: { type: "button" }, text: "关闭", on: { click: closeModal } }));
+    modal.appendChild(foot);
+
+    var defs = [
+      { key: "vtt", label: "WebVTT", text: data.vtt, desc: "起点 floor 毫秒、终点 ceil 毫秒，保留重叠。" },
+      { key: "json", label: "JSON · 精确时间", text: data.json, desc: "分数 [分子, 分母]，id 为「片段:字幕」，clip_order 标明片段顺序。" },
+      { key: "doc", label: "剪辑单", text: data.doc, desc: "当前的 sources + clips，可再次导入。" }
+    ];
+
+    function renderTab(key) {
+      clear(tabs);
+      defs.forEach(function (t) {
+        tabs.appendChild(el("button", {
+          class: "modal-tab", attrs: { type: "button", role: "tab", "aria-selected": String(t.key === key) },
+          text: t.label,
+          on: { click: function () { renderTab(t.key); } }
+        }));
+      });
+      clear(body);
+      var def = null;
+      defs.forEach(function (t) { if (t.key === key) def = t; });
+      var bytes = new Blob([def.text]).size;
+      var previewCap = 400000;
+      var shown = bytes > previewCap * 2 ? def.text.slice(0, previewCap) : def.text;
+      var ta = el("textarea", { attrs: { readonly: "", spellcheck: "false", "aria-label": def.label } });
+      ta.value = shown;
+      body.appendChild(ta);
+      if (shown.length < def.text.length) {
+        body.appendChild(el("p", {
+          class: "modal-note",
+          text: "文件共 " + fmtBytes(bytes) + "，预览只显示前 " + fmtBytes(previewCap) + "。「复制全文」会复制完整内容（" + def.text.length.toLocaleString("en-US") + " 字符），复制可能需要几秒。"
+        }));
+      }
+      note.textContent = def.desc + " · " + fmtBytes(bytes);
+      var truncated = shown.length < def.text.length;
+      selectBtn.disabled = truncated;
+      selectBtn.title = truncated ? "预览被截断，请用「复制全文」" : "";
+      selectBtn.onclick = function () { ta.focus(); ta.select(); };
+      copyBtn.onclick = function () { copyText(def.text, copyBtn); };
+    }
+    renderTab("vtt");
+    openModal();
+  }
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1024 / 1024).toFixed(1) + " MB";
+  }
+
+  function copyText(text, btn) {
+    function done(ok) {
+      if (!ok) { toast("浏览器拒绝写入剪贴板，请点「全选」后手动复制", true, 3200); return; }
+      var old = btn.textContent;
+      btn.textContent = "已复制";
+      toast("已复制全文", false, 1500);
+      setTimeout(function () { btn.textContent = old; }, 1600);
+    }
+    if (!navigator.clipboard || !navigator.clipboard.writeText) { done(false); return; }
+    navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+  }
+
+  /* ================================================================== *
+   * Modals
+   * ================================================================== */
+
+  function openModal() {
+    $("scrim").hidden = false;
+    $("modal").hidden = false;
+  }
+  function closeModal() {
+    $("scrim").hidden = true;
+    $("modal").hidden = true;
+    clear($("modal"));
+  }
+
+  function modalShell(title, sub, description) {
+    var modal = $("modal");
+    clear(modal);
+    var head = el("div", { class: "modal-head" });
+    head.appendChild(el("h2", { text: title, attrs: { id: "modalTitle" } }));
+    if (sub) head.appendChild(el("span", { class: "sub", text: sub }));
+    head.appendChild(el("button", { class: "x", attrs: { type: "button", "aria-label": "关闭" }, text: "✕", on: { click: closeModal } }));
+    modal.appendChild(head);
+    var body = el("div", { class: "modal-body" });
+    if (description) body.appendChild(el("p", { class: "modal-note", text: description }));
+    modal.appendChild(body);
+    var foot = el("div", { class: "modal-foot" });
+    modal.appendChild(foot);
+    return { modal: modal, body: body, head: head, footBar: foot };
+  }
+
+  function field(label, control) {
+    var f = el("div", { class: "field" });
+    f.appendChild(el("label", { text: label }));
+    f.appendChild(control);
+    return f;
+  }
+
+  function openPaste() {
+    var shell = modalShell("粘贴 JSON", "sources + clips", "支持多个源、空白段与 [p, q] 有理数速度。示例格式见「规则」。");
+    var ta = el("textarea", { attrs: { placeholder: '{\n  "sources": [ ... ],\n  "clips": [ ... ]\n}', spellcheck: "false", "aria-label": "JSON 文本" } });
+    shell.body.appendChild(ta);
+    shell.footBar.appendChild(el("span", { class: "note", text: "区间左闭右开，源时间一律整数毫秒。" }));
+    shell.footBar.appendChild(el("span", { style: "margin-left:auto" }));
+    shell.footBar.appendChild(el("button", { class: "btn ghost", attrs: { type: "button" }, text: "取消", on: { click: closeModal } }));
+    shell.footBar.appendChild(el("button", {
+      class: "btn primary", attrs: { type: "button" }, text: "载入",
+      on: { click: function () {
+        var raw;
+        try { raw = JSON.parse(ta.value); } catch (e) { toast("JSON 解析失败：" + e.message, true, 3200); return; }
+        closeModal();
+        loadDoc(raw, "粘贴.json");
+      } }
+    }));
+    openModal();
+    setTimeout(function () { ta.focus(); }, 30);
+  }
+
+  function openAddClip() {
+    if (!state.doc.sources.length) { toast("先导入至少一个源素材", true); return; }
+    var srcIdx = currentSourceIndex();
+    var src = sourceAt(srcIdx);
+    var dur = durOf(src);
+    var selCue = null;
+    if (state.selection && state.selection.type === "src" && state.selection.sourceIndex === srcIdx) selCue = cueAt(srcIdx, state.selection.cueIndex);
+    var defIn = selCue && typeof selCue.start === "number" ? selCue.start : 0;
+    var defOut = selCue && typeof selCue.end === "number" ? selCue.end : Math.min(dur, Math.max(1000, Math.round(dur / 2)));
+
+    var shell = modalShell("新建片段", state.activeClip >= 0 ? "插入到片段 #" + (state.activeClip + 1) + " 之后" : "追加到末尾");
+    var grid = el("div", { class: "form-grid" });
+    var srcSel = el("select", { attrs: { "aria-label": "源素材" } });
+    state.doc.sources.forEach(function (s) {
+      if (s && typeof s.id === "string") srcSel.appendChild(el("option", { text: s.id, attrs: { value: s.id } }));
+    });
+    if (src) srcSel.value = src.id;
+    var inInput = el("input", { attrs: { type: "number", step: "1", min: "0", value: String(defIn), "aria-label": "入点（毫秒）" } });
+    var outInput = el("input", { attrs: { type: "number", step: "1", min: "1", value: String(defOut), "aria-label": "出点（毫秒）" } });
+    var spInput = el("input", { attrs: { type: "text", value: "1/1", placeholder: "3/2", "aria-label": "速度 p/q" } });
+    grid.appendChild(field("源素材", srcSel));
+    grid.appendChild(field("速度 p/q（1/4–4）", spInput));
+    grid.appendChild(field("入点（毫秒，含）", inInput));
+    grid.appendChild(field("出点（毫秒，不含）", outInput));
+    shell.body.appendChild(grid);
+    shell.body.appendChild(el("p", { class: "modal-note", text: "源 " + (src ? src.id : "?") + " 时长 " + dur + " ms；片段产出时长 =（出点 − 入点）× q / p。" }));
+    shell.footBar.appendChild(el("span", { style: "margin-left:auto" }));
+    shell.footBar.appendChild(el("button", { class: "btn ghost", attrs: { type: "button" }, text: "取消", on: { click: closeModal } }));
+    shell.footBar.appendChild(el("button", {
+      class: "btn primary", attrs: { type: "button" }, text: "添加",
+      on: { click: function () {
+        var p = parseInt(inInput.value, 10), o = parseInt(outInput.value, 10);
+        var m = /^(\d+)\s*\/\s*(\d+)$/.exec(spInput.value.trim());
+        if (!m) { toast("速度写成 p/q，例如 3/2", true); return; }
+        var sp = [Number(m[1]), Number(m[2])];
+        if (!Number.isInteger(p) || !Number.isInteger(o)) { toast("入点与出点必须是整数毫秒", true); return; }
+        if (p < 0 || o <= p) { toast("片段区间长度必须为正", true); return; }
+        if (sp[0] === 0 || sp[1] === 0) { toast("速度不能为零", true); return; }
+        closeModal();
+        addClip(srcSel.value, p, o, sp);
+      } }
+    }));
+    openModal();
+    setTimeout(function () { inInput.focus(); inInput.select(); }, 30);
+  }
+
+  function openAddGap() {
+    var shell = modalShell("新建空白段", "成片里没有源素材的一段");
+    var input = el("input", { attrs: { type: "number", step: "1", min: "0", value: "500", "aria-label": "空白时长（毫秒）" }, style: "width:100%;padding:8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);font-family:var(--mono)" });
+    var f = field("时长（毫秒）", input);
+    shell.body.appendChild(f);
+    shell.body.appendChild(el("p", { class: "modal-note", text: "空白段不产出字幕，只把后面的时间轴往后推。它可以为 0，也可以插在任意两个片段之间。" }));
+    shell.footBar.appendChild(el("span", { style: "margin-left:auto" }));
+    shell.footBar.appendChild(el("button", { class: "btn ghost", attrs: { type: "button" }, text: "取消", on: { click: closeModal } }));
+    shell.footBar.appendChild(el("button", {
+      class: "btn primary", attrs: { type: "button" }, text: "添加",
+      on: { click: function () {
+        var d = parseInt(input.value, 10);
+        if (!Number.isInteger(d) || d < 0) { toast("时长必须是大于或等于 0 的整数毫秒", true); return; }
+        closeModal();
+        addGap(d);
+      } }
+    }));
+    openModal();
+    setTimeout(function () { input.focus(); input.select(); }, 30);
+  }
+
+  function openRules() {
+    var shell = modalShell("重排规则", "来自样例包 说明.md", null);
+    var rules = [
+      ["区间", "所有源时间都是整数毫秒，区间左闭右开。词必须按起点排序、互不重叠，并包含在所属字幕内。"],
+      ["片段", "clips 按成片顺序连接。普通片段取源上的 [in, out)，speed 为 [p, q]；空白段 source 为 null，只有 duration_ms。"],
+      ["长度", "片段成片长度 =（out − in）× q / p。内部全部用约分分数，不做浮点累计。"],
+      ["裁切", "每条字幕与每个同源片段求正长度交集。无 words 时保留整句 text；有 words 时只保留与片段有正长度交集的词，按词序用单个空格连接，一个词都不剩就不产出字幕。"],
+      ["边界", "结果字幕的起止是「原字幕 ∩ 片段」边界映射后的值，不缩到首尾词。映射为 T +（s − in）× q / p。"],
+      ["重复", "同一片段可重复使用，每次单独产出字幕；每片段每字幕至多一条结果，不跨片段合并。"],
+      ["排序与 id", "按精确 start、片段顺序、源字幕 id 字典序排序。来源 id 为「片段 id:字幕 id」。"],
+      ["WebVTT", "保留重叠；起点取 floor 毫秒、终点取 ceil 毫秒；时间格式 HH:MM:SS.mmm，小时至少两位。"],
+      ["JSON", "分数统一为 [分子字符串, 分母字符串]，十进制整数、最简、分母为正；带 clip_order 与精确起止。"],
+      ["非法输入", "非法区间、零速度、错序词会被逐条标出位置（sources[…] / clips[…] 路径），编辑面板与问题列表同步高亮。"]
+    ];
+    var list = el("div", { class: "rules" });
+    rules.forEach(function (r) {
+      var item = el("div", { class: "rule" });
+      item.appendChild(el("div", { class: "rule-k", text: r[0] }));
+      item.appendChild(el("div", { class: "rule-v", text: r[1] }));
+      list.appendChild(item);
+    });
+    shell.body.appendChild(list);
+    shell.footBar.appendChild(el("span", { class: "note", text: "样例：demo.zip · 许可 CC0-1.0" }));
+    shell.footBar.appendChild(el("span", { style: "margin-left:auto" }));
+    shell.footBar.appendChild(el("button", { class: "btn primary", attrs: { type: "button" }, text: "知道了", on: { click: closeModal } }));
+    openModal();
+  }
+
+  /* ================================================================== *
+   * Import / drop
+   * ================================================================== */
+
+  function readFile(file) {
+    if (!file) return;
+    if (file.size > 24 * 1024 * 1024) { toast("文件超过 24 MB", true, 3200); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var raw;
+      try { raw = JSON.parse(String(reader.result)); }
+      catch (e) { toast("JSON 解析失败：" + e.message, true, 3200); return; }
+      loadDoc(raw, file.name || "导入.json");
+    };
+    reader.onerror = function () { toast("文件读取失败", true); };
+    reader.readAsText(file);
+  }
+
+  function wireDrop() {
+    var overlay = $("dropOverlay");
+    var depth = 0;
+    window.addEventListener("dragenter", function (e) {
+      if (!e.dataTransfer || Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") < 0) return;
+      e.preventDefault();
+      depth++;
+      overlay.hidden = false;
+    });
+    window.addEventListener("dragover", function (e) { e.preventDefault(); });
+    window.addEventListener("dragleave", function () {
+      depth = Math.max(0, depth - 1);
+      if (!depth) overlay.hidden = true;
+    });
+    window.addEventListener("drop", function (e) {
+      e.preventDefault();
+      depth = 0;
+      overlay.hidden = true;
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files[0]) readFile(files[0]);
+    });
+  }
+
+  /* ================================================================== *
+   * Toast
+   * ================================================================== */
+
+  var toastTimer = null;
+  function toast(msg, bad, ms) {
+    var t = $("toast");
+    t.textContent = msg;
+    t.classList.toggle("bad", !!bad);
+    t.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, ms || 2400);
+  }
+
+  /* ================================================================== *
+   * Wiring
+   * ================================================================== */
+
+  function wire() {
+    $("btnImport").addEventListener("click", function () { $("fileInput").click(); });
+    $("fileInput").addEventListener("change", function (e) { readFile(e.target.files && e.target.files[0]); e.target.value = ""; });
+    $("btnPaste").addEventListener("click", openPaste);
+    $("btnSample").addEventListener("click", function () { loadDoc(clone(DEMO), "demo.json"); });
+    $("btnRules").addEventListener("click", openRules);
+    $("btnExport").addEventListener("click", function () { if (state.doc) openExport(); });
+    $("btnAddClip").addEventListener("click", openAddClip);
+    $("btnAddGap").addEventListener("click", openAddGap);
+    $("btnUndo").addEventListener("click", undo);
+    $("btnRedo").addEventListener("click", redo);
+    $("scrim").addEventListener("click", closeModal);
+    $("modal").addEventListener("click", function (e) { if (e.target === $("modal")) closeModal(); });
+    document.querySelectorAll(".pane-switch button").forEach(function (b) {
+      b.addEventListener("click", function () { switchPane(b.dataset.goto); });
+    });
+    var tourBtn = el("button", { class: "btn ghost", attrs: { type: "button" }, text: "多源示例", on: { click: function () { loadDoc(clone(TOUR), "tour.json"); } } });
+    $("btnRules").parentNode.insertBefore(tourBtn, $("btnRules"));
+
+    document.addEventListener("keydown", function (e) {
+      var mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+      else if (mod && e.shiftKey && e.key.toLowerCase() === "z") { e.preventDefault(); redo(); }
+      else if (e.key === "Escape" && !$("modal").hidden) closeModal();
+    });
+    wireDrop();
+  }
+
+  /* ================================================================== *
+   * Boot
+   * ================================================================== */
+
+  function boot() {
+    wire();
+    updateUndoButtons();
+    var restored = restore();
+    if (!restored) loadDoc(clone(DEMO), "demo.json", { quiet: true });
+    if (state.result.cues.length) selectOut(0);
+    else if (state.doc.clips.length) selectClip(0);
+    else if (state.doc.sources.length && state.doc.sources[0] && Array.isArray(state.doc.sources[0].cues) && state.doc.sources[0].cues.length) selectSourceCue(0, 0);
+    else renderAll();
+  }
+
+  window.CaptionWorkspace = {
+    load: function (doc, name) { return loadDoc(doc, name || "外部载入.json"); },
+    exportVTT: function () { return E.toWebVTT(state.result); },
+    exportJSON: function () { return JSON.stringify(E.toJSON(state.result), null, 2); },
+    getDoc: function () { return clone(state.doc); },
+    getResult: function () { return state.result; },
+    getErrors: function () { return state.errors.slice(); },
+    state: state
+  };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+
+</script>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>剪点字幕台</title>
+<meta name="description" content="按剪辑单裁切字幕、以精确分数重排时间轴，联动追溯源词，导出 WebVTT 与含来源关系的 JSON。">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="src/app.css">
+</head>
+<body>
+<div class="app" id="app" data-pane="source">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 28 28" width="26" height="26" fill="none">
+          <rect x="2.5" y="7" width="9" height="14" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="16.5" y="7" width="9" height="14" rx="1.2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M11.5 10.5h5M11.5 14h5M11.5 17.5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="1 2.4"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>剪点字幕台</h1>
+        <p>按剪辑单裁切字幕 · 精确分数重排</p>
+      </div>
+    </div>
+    <div class="doc-chip" id="docChip" title="当前载入的文档"><span class="dot" aria-hidden="true"></span><span id="docName">demo.json</span></div>
+    <div class="top-actions">
+      <button class="btn ghost" id="btnImport" type="button">导入 JSON</button>
+      <button class="btn ghost" id="btnPaste" type="button">粘贴</button>
+      <button class="btn ghost" id="btnSample" type="button">重载示例</button>
+      <button class="btn ghost" id="btnRules" type="button">规则</button>
+      <button class="btn primary" id="btnExport" type="button">导出</button>
+      <input type="file" id="fileInput" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <section class="ledger" id="ledger" aria-label="项目总览"></section>
+
+  <div class="pane-switch" role="tablist" aria-label="面板切换">
+    <button type="button" role="tab" data-goto="source" aria-selected="true">源字幕</button>
+    <button type="button" role="tab" data-goto="clip" aria-selected="false">剪辑单</button>
+    <button type="button" role="tab" data-goto="out" aria-selected="false">成片字幕</button>
+  </div>
+
+  <main class="bench">
+    <section class="panel pane" data-pane="source" aria-label="源字幕">
+      <header class="panel-head">
+        <div class="ph-title"><span class="eyebrow">01 / SOURCE</span><h2>源字幕</h2></div>
+        <div class="panel-tools" id="sourceTools"></div>
+      </header>
+      <div class="tabs" id="sourceTabs" role="tablist" aria-label="源素材"></div>
+      <div class="ruler" id="sourceRuler"></div>
+      <div class="vhost" id="sourceList" role="listbox" aria-label="源字幕列表"></div>
+      <footer class="panel-foot" id="sourceFoot"></footer>
+    </section>
+
+    <section class="panel pane" data-pane="clip" aria-label="剪辑单">
+      <header class="panel-head">
+        <div class="ph-title"><span class="eyebrow">02 / EDIT</span><h2>剪辑单</h2></div>
+        <div class="panel-tools">
+          <button class="btn tiny" id="btnAddClip" type="button">+ 片段</button>
+          <button class="btn tiny" id="btnAddGap" type="button">+ 空白</button>
+          <button class="btn tiny icon" id="btnUndo" type="button" title="撤销 (Ctrl+Z)" aria-label="撤销">↶</button>
+          <button class="btn tiny icon" id="btnRedo" type="button" title="重做 (Ctrl+Shift+Z)" aria-label="重做">↷</button>
+        </div>
+      </header>
+      <div class="otimeline" id="clipTimeline"></div>
+      <div class="vhost" id="clipList" aria-label="片段列表"></div>
+      <footer class="panel-foot" id="clipFoot"></footer>
+    </section>
+
+    <section class="panel pane" data-pane="out" aria-label="成片字幕">
+      <header class="panel-head">
+        <div class="ph-title"><span class="eyebrow">03 / CONFORM</span><h2>成片字幕</h2></div>
+        <div class="panel-tools" id="outTools"></div>
+      </header>
+      <div class="ruler oruler" id="outRuler"></div>
+      <div class="vhost" id="outList" role="listbox" aria-label="成片字幕列表"></div>
+      <footer class="panel-foot" id="outFoot"></footer>
+    </section>
+  </main>
+
+  <section class="trace" id="trace" aria-live="polite" aria-label="追溯"></section>
+</div>
+
+<div class="drop-overlay" id="dropOverlay" hidden><div><strong>松开以载入 JSON</strong><span>sources + clips</span></div></div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="src/engine.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
