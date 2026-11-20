@@ -1,0 +1,575 @@
+<title>平行移动扫掠工作台</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* 布局：左侧三维视口 + 右侧参数/诊断面板，窄屏堆叠为单列。
+   工程仪器风格：克制的中性灰蓝 + 单一蓝青强调色，语义色只用于状态。 */
+:root {
+  --bg: #eef1f6;
+  --surface: #ffffff;
+  --surface-2: #f4f6fa;
+  --fg: #18202b;
+  --fg-muted: #5b6577;
+  --fg-faint: #8a93a6;
+  --line: #d6dce6;
+  --line-strong: #b6bfce;
+  --accent: #1763d6;
+  --accent-soft: #e3edfd;
+  --accent-fg: #ffffff;
+  --ok: #1f8a4c;
+  --ok-soft: #e2f5e9;
+  --warn: #b26b00;
+  --warn-soft: #fdf0d8;
+  --critical: #c62f2f;
+  --critical-soft: #fce4e4;
+  --viewport: #10151f;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 16px rgba(16, 24, 40, .06);
+  --radius: 10px;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1219;
+    --surface: #171d28;
+    --surface-2: #1e2532;
+    --fg: #e6eaf2;
+    --fg-muted: #a7b0c0;
+    --fg-faint: #747e90;
+    --line: #2a3342;
+    --line-strong: #3b465a;
+    --accent: #6ea2ff;
+    --accent-soft: #1b2b45;
+    --accent-fg: #0b1626;
+    --ok: #55cf87;
+    --ok-soft: #142b1e;
+    --warn: #e3b25c;
+    --warn-soft: #33270f;
+    --critical: #ff7a7a;
+    --critical-soft: #3a1a1a;
+    --viewport: #0a0e15;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1219;
+  --surface: #171d28;
+  --surface-2: #1e2532;
+  --fg: #e6eaf2;
+  --fg-muted: #a7b0c0;
+  --fg-faint: #747e90;
+  --line: #2a3342;
+  --line-strong: #3b465a;
+  --accent: #6ea2ff;
+  --accent-fg: #0b1626;
+  --accent-soft: #1b2b45;
+  --ok: #55cf87;
+  --ok-soft: #142b1e;
+  --warn: #e3b25c;
+  --warn-soft: #33270f;
+  --critical: #ff7a7a;
+  --critical-soft: #3a1a1a;
+  --viewport: #0a0e15;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 22px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-block: 14px 12px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.brand h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand .sub {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+}
+.header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+  gap: 14px;
+  padding-bottom: 22px;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .workspace { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-width: 0;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--fg-muted);
+}
+.panel-body { padding: 12px 14px; }
+
+/* 视口 */
+.viewport-wrap { display: flex; flex-direction: column; min-width: 0; }
+.viewport {
+  position: relative;
+  background: var(--viewport);
+  height: min(62vh, 620px);
+  min-height: 340px;
+}
+@media (max-width: 980px) { .viewport { height: 48vh; } }
+#view-canvas { width: 100%; height: 100%; display: block; }
+.viewport-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  z-index: 3;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(13, 18, 28, .82);
+  color: #dce4f2;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  user-select: none;
+  backdrop-filter: blur(6px);
+}
+.chip input { accent-color: var(--accent); margin: 0; }
+.chip:hover { border-color: rgba(255,255,255,.4); }
+.viewport-legend {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 12px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: rgba(13, 18, 28, .82);
+  color: #c8d2e2;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  z-index: 3;
+}
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-swatch { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.stats-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.stat {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.stat.bad { color: var(--critical); border-color: var(--critical); }
+
+/* 表单控件 */
+label.field { display: block; margin-bottom: 10px; min-width: 0; }
+label.field > span {
+  display: block;
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+select, input[type="text"], input[type="number"], input:not([type]) {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+input:focus, select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+input.bad { border-color: var(--critical); background: var(--critical-soft); }
+input:disabled { opacity: .5; }
+
+button {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+button.primary:hover { filter: brightness(1.06); color: var(--accent-fg); }
+button.small { padding: 4px 9px; font-size: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.toggle-row:last-child { border-bottom: 0; }
+.toggle-row .lbl { font-weight: 500; }
+.toggle-row .hint { font-size: 11.5px; color: var(--fg-faint); }
+.switch { position: relative; width: 40px; height: 22px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track {
+  position: absolute;
+  inset: 0;
+  background: var(--line-strong);
+  border-radius: 999px;
+  transition: background .15s;
+}
+.switch .track::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .15s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(18px); }
+.switch input:disabled + .track { opacity: .45; }
+
+/* 表格 */
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--fg-muted);
+  background: var(--surface-2);
+  position: sticky;
+  top: 0;
+}
+td.idx, th.idx {
+  font-family: var(--font-mono);
+  color: var(--fg-faint);
+  text-align: right;
+  width: 38px;
+}
+td input {
+  width: 86px;
+  padding: 4px 6px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+#points-body tr.selected { background: var(--accent-soft); }
+#points-body tr.jump td { background: color-mix(in srgb, var(--warn-soft) 55%, transparent); }
+#points-body tr.zero td { background: color-mix(in srgb, var(--critical-soft) 60%, transparent); }
+.row-flag {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+tr.jump .row-flag { color: var(--warn); }
+tr.zero .row-flag { color: var(--critical); }
+.table-scroll.tall { max-height: 320px; overflow-y: auto; }
+
+/* 诊断 */
+.diag {
+  display: flex;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.diag-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; flex: none; }
+.diag.ok .diag-dot { background: var(--ok); }
+.diag.warn .diag-dot { background: var(--warn); }
+.diag.critical .diag-dot { background: var(--critical); }
+.diag.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.diag.critical { background: var(--critical-soft); border-color: color-mix(in srgb, var(--critical) 35%, var(--line)); }
+.diag-title { font-weight: 600; font-size: 12.5px; }
+.diag-msg { font-size: 12px; color: var(--fg-muted); }
+.diag.critical .diag-msg, .diag.warn .diag-msg { color: var(--fg); }
+
+.side-stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; min-width: 0; }
+@media (max-width: 460px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+
+#twist-hint { font-size: 11.5px; color: var(--fg-faint); margin-top: 4px; font-family: var(--font-mono); }
+#twist-hint.bad { color: var(--critical); }
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translate(-50%, 16px);
+  background: var(--critical);
+  color: #fff;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s, transform .18s;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  max-width: calc(100vw - 40px);
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.note {
+  font-size: 11.5px;
+  color: var(--fg-faint);
+  line-height: 1.55;
+}
+.mono { font-family: var(--font-mono); }
+.section-gap { margin-top: 14px; }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <h1>平行移动扫掠工作台</h1>
+    <span class="sub">parallel-transport frame · closure compensation · hand-rolled mesh</span>
+  </div>
+  <div class="header-actions">
+    <button class="small" id="theme-toggle" type="button" title="切换明暗主题">暗色</button>
+    <label class="chip" style="border-color: var(--line-strong); background: var(--surface); color: var(--fg);">
+      导入 JSON
+      <input type="file" id="file-input" accept=".json,application/json" hidden>
+    </label>
+    <button class="small" id="export-obj">导出 OBJ</button>
+    <button class="small primary" id="export-json">导出标架 JSON</button>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- 左：视口 -->
+  <div class="viewport-stack" style="display:flex;flex-direction:column;gap:14px;min-width:0;">
+    <div class="panel viewport-wrap">
+      <div class="viewport">
+        <canvas id="view-canvas"></canvas>
+        <div class="viewport-toolbar">
+          <label class="chip"><input type="checkbox" id="show-frames" checked> 标架轴</label>
+          <label class="chip"><input type="checkbox" id="show-path" checked> 路径</label>
+          <label class="chip"><input type="checkbox" id="show-wire"> 线框</label>
+          <button class="chip" id="frame-view" type="button" style="font-family:var(--font-mono)">复位视角</button>
+        </div>
+        <div class="viewport-legend">
+          <span class="legend-item"><span class="legend-swatch" style="background:#f25959"></span>切线 t</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:#66d972"></span>截面轴 n</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:#73a0ff"></span>截面轴 b</span>
+          <span class="legend-item"><span class="legend-swatch" style="background:#ffb020"></span>路径</span>
+        </div>
+      </div>
+      <div class="stats-bar" id="stats"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>路径点与半径</h2>
+        <div class="row">
+          <button class="small" id="add-point" type="button">插入点</button>
+          <button class="small" id="delete-point" type="button">删除选中</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="table-scroll tall">
+          <table>
+            <thead>
+              <tr><th class="idx">#</th><th>X</th><th>Y</th><th>Z</th><th>半径 r</th><th>标记</th></tr>
+            </thead>
+            <tbody id="points-body"></tbody>
+          </table>
+        </div>
+        <p class="note" style="margin-bottom:0;">点击行选中后可用下方字段精确编辑；黄色行表示该处存在 ≥90° 的框架跳变，红色行涉及零长段。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右：参数与诊断 -->
+  <div class="side-stack">
+    <div class="panel">
+      <div class="panel-head"><h2>样例与输入</h2></div>
+      <div class="panel-body">
+        <label class="field">
+          <span>内置样例（与样例包四个用例一致）</span>
+          <select id="sample-select"></select>
+        </label>
+        <div class="grid-4">
+          <label class="field" style="margin:0;">
+            <span>选中点 #</span>
+            <input id="editor-index" value="0" readonly>
+          </label>
+          <label class="field" style="margin:0;"><span>X</span><input id="edit-x" inputmode="decimal"></label>
+          <label class="field" style="margin:0;"><span>Y</span><input id="edit-y" inputmode="decimal"></label>
+          <label class="field" style="margin:0;"><span>Z</span><input id="edit-z" inputmode="decimal"></label>
+        </div>
+        <label class="field section-gap" style="margin-bottom:0;">
+          <span>选中点半径（必须 &gt; 0）</span>
+          <input id="edit-r" inputmode="decimal">
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>拓扑与扭转</h2></div>
+      <div class="panel-body">
+        <div class="toggle-row">
+          <div>
+            <div class="lbl">闭合路径</div>
+            <div class="hint">最后一段自动连回首点；不复制首环遮缝</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="closed-toggle"><span class="track"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="lbl">开放端盖</div>
+            <div class="hint">仅开放路径可用；起点朝 −t，终点朝 +t</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="caps-toggle" checked><span class="track"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="lbl">闭环扭转补偿</div>
+            <div class="hint">按 −h·s/L 逐环消除接缝扭角；关闭仅作诊断</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="compensate-toggle" checked><span class="track"></span></label>
+        </div>
+        <div class="section-gap">
+          <label class="field" style="margin-bottom:6px;">
+            <span>总扭转 θ（弧度，按 θ·s/L 分布；闭合时须为 2π 整数倍）</span>
+            <input id="twist-input" value="0" inputmode="decimal">
+          </label>
+          <div class="row">
+            <button class="small" id="twist-zero" type="button">0</button>
+            <button class="small" id="twist-pi" type="button">π</button>
+            <button class="small" id="twist-2pi" type="button">2π</button>
+          </div>
+          <div id="twist-hint"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>凸截面（逆时针，3–32 点）</h2>
+        <div class="row">
+          <button class="small" id="add-profile" type="button">加点</button>
+          <button class="small" id="delete-profile" type="button">删末点</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th class="idx">#</th><th>u（沿 n）</th><th>v（沿 b）</th></tr></thead>
+            <tbody id="profile-body"></tbody>
+          </table>
+        </div>
+        <p class="note" style="margin-bottom:0;margin-top:8px;">截面不自动反转：请保持严格凸且逆时针，环点为 P + r·(u·n + v·b)。</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>诊断报告</h2></div>
+      <div class="panel-body" id="diagnostics"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js"
+  }
+}
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
