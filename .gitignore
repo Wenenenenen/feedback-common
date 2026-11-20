@@ -15,3 +15,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 本项目生成物
+_samples_extracted/
+test-output/
+node_modules/

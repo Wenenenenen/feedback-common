@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>供体场纹理修补 · 多尺度 PatchMatch</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3f0;
+  --surface: #fcfcfb;
+  --surface-2: #f0efeb;
+  --border: #d8d6d0;
+  --text-primary: #141413;
+  --text-secondary: #52514e;
+  --text-muted: #7a7872;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --danger: #c93a39;
+  --ok: #0c8a5e;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 14px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #151514;
+    --surface: #1e1e1d;
+    --surface-2: #262625;
+    --border: #3a3a38;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8e8c85;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --danger: #e66767;
+    --ok: #22b584;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151514;
+  --surface: #1e1e1d;
+  --surface-2: #262625;
+  --border: #3a3a38;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8e8c85;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --danger: #e66767;
+  --ok: #22b584;
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+header {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 18px 24px 12px;
+}
+header h1 { font-size: 19px; margin: 0; font-weight: 650; }
+header .sub { color: var(--text-muted); font-size: 12.5px; }
+header .spacer { flex: 1; }
+main {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+  padding: 8px 24px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.panel h2 {
+  font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-muted); margin: 0 0 10px; font-weight: 650;
+}
+label.field { display: block; margin-bottom: 10px; font-size: 13px; color: var(--text-secondary); }
+label.field span { display: block; margin-bottom: 4px; }
+input[type="number"], input[type="text"], select {
+  width: 100%; padding: 7px 9px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text-primary); font: inherit;
+}
+input[type="range"] { width: 100%; accent-color: var(--series-1); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1; }
+button {
+  font: inherit; font-weight: 600; border-radius: 8px; padding: 9px 12px;
+  border: 1px solid var(--border); cursor: pointer;
+  background: var(--surface-2); color: var(--text-primary);
+  transition: filter .12s ease, transform .05s ease;
+}
+button:hover:not(:disabled) { filter: brightness(1.06); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.small { padding: 6px 9px; font-size: 12.5px; font-weight: 600; }
+.radio-group { display: flex; gap: 6px; margin-bottom: 10px; }
+.radio-group label {
+  flex: 1; text-align: center; padding: 7px 4px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  cursor: pointer; font-size: 12.5px;
+}
+.radio-group input { vertical-align: middle; margin-right: 4px; accent-color: var(--series-1); }
+.radio-group label:has(input:checked) {
+  border-color: var(--series-1); color: var(--series-1); font-weight: 650;
+}
+.checkline { display: flex; align-items: center; gap: 7px; margin: 6px 0; font-size: 13px; color: var(--text-secondary); }
+.checkline input { accent-color: var(--series-1); }
+#status-line {
+  border-radius: 8px; padding: 9px 12px; font-size: 13px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text-secondary); min-height: 38px;
+}
+#status-line[data-kind="error"] { color: var(--danger); border-color: var(--danger); }
+#status-line[data-kind="ok"] { color: var(--ok); }
+#progress-bar { display: none; margin-top: 10px; }
+#progress-text { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 5px; }
+.progress-track { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
+.progress-fill { height: 100%; width: 0%; background: var(--series-1); transition: width .2s ease; }
+.canvas-wrap {
+  background:
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--surface-2) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--surface-2) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--surface-2) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; display: flex; justify-content: center; align-items: center;
+  overflow: auto; min-height: 320px;
+}
+#main-canvas {
+  image-rendering: pixelated;
+  width: auto; height: auto;
+  max-width: 100%; max-height: 72vh;
+  min-width: 240px; min-height: 200px;
+  border-radius: 4px; cursor: crosshair;
+}
+input[type="file"] {
+  width: 100%; font-size: 12.5px; color: var(--text-secondary);
+  border: 1px dashed var(--border); border-radius: 8px; padding: 8px;
+  background: var(--surface-2);
+}
+input[type="file"]::file-selector-button {
+  font: inherit; font-weight: 600; font-size: 12.5px;
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 5px 10px; margin-right: 10px; cursor: pointer;
+  background: var(--surface); color: var(--text-primary);
+}
+.muted { color: var(--text-muted); font-size: 12px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12.5px; margin: 0; }
+.kv dt { color: var(--text-muted); }
+.kv dd { margin: 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+#mse-chart { color: var(--text-secondary); }
+#mse-chart svg { width: 100%; height: auto; }
+#inspect-info { font-size: 12.5px; color: var(--text-secondary); min-height: 20px; }
+.legend-dots { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); margin-top: 6px; flex-wrap: wrap; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.dot.blue { background: var(--series-1); }
+.dot.orange { background: var(--series-2); }
+.dot.red { background: var(--danger); opacity: .75; }
+details.notes summary { cursor: pointer; color: var(--text-muted); font-size: 12.5px; }
+details.notes p, details.notes li { font-size: 12.5px; color: var(--text-secondary); }
+details.notes code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+.theme-btn { background: transparent; border: 1px solid var(--border); padding: 5px 10px; border-radius: 7px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>供体场纹理修补</h1>
+  <span class="sub">自实现多尺度 PatchMatch · 传播 + 随机搜索 + 重叠 patch 投票 · 供体仅来自原始已知区</span>
+  <span class="spacer"></span>
+  <button class="theme-btn" id="theme-toggle" type="button">切换深浅色</button>
+</header>
+
+<main>
+  <div class="sidebar">
+    <section class="panel">
+      <h2>1 · 导入</h2>
+      <label class="field"><span>RGB 图像（8 位 PNG，边长 ≤ 512）</span>
+        <input type="file" id="image-file" accept="image/png,.png">
+      </label>
+      <label class="field"><span>二值掩膜（同尺寸灰度 PNG，255 = 待修补，可选）</span>
+        <input type="file" id="mask-file" accept="image/png,.png">
+      </label>
+      <p class="muted">当前待修补像素：<strong id="mask-count">0</strong></p>
+    </section>
+
+    <section class="panel">
+      <h2>2 · 掩膜编辑</h2>
+      <div class="radio-group">
+        <label><input type="radio" name="mode" id="mode-paint" checked>画缺口</label>
+        <label><input type="radio" name="mode" id="mode-erase">擦除</label>
+        <label><input type="radio" name="mode" id="mode-inspect">点选定位</label>
+      </div>
+      <label class="field"><span>画笔边长：<b id="brush-size-val">5</b> px</span>
+        <input type="range" id="brush-size" min="1" max="31" value="5" step="1">
+      </label>
+      <div class="checkline"><input type="checkbox" id="toggle-mask" checked><label for="toggle-mask">显示红色掩膜</label></div>
+      <div class="checkline"><input type="checkbox" id="toggle-overlay" checked><label for="toggle-overlay">显示点选供体框线</label></div>
+      <button class="small" id="btn-clear-mask" type="button">清空掩膜</button>
+    </section>
+
+    <section class="panel">
+      <h2>3 · 参数</h2>
+      <div class="row">
+        <label class="field"><span>Patch 边长（奇数 3–15）</span>
+          <input type="number" id="param-patch" value="7" min="3" max="15" step="2">
+        </label>
+        <label class="field"><span>多尺度层数（1–4）</span>
+          <input type="number" id="param-levels" value="1" min="1" max="4" step="1">
+        </label>
+      </div>
+      <div class="row">
+        <label class="field"><span>每层迭代（1–30）</span>
+          <input type="number" id="param-iters" value="30" min="1" max="30" step="1">
+        </label>
+        <label class="field"><span>随机种子（整数或字符串）</span>
+          <input type="text" id="param-seed" value="7">
+        </label>
+      </div>
+      <div class="row">
+        <button class="primary" id="btn-run" type="button">开始修补</button>
+        <button class="danger" id="btn-cancel" type="button" disabled>取消任务</button>
+      </div>
+      <div id="progress-bar">
+        <div id="progress-text"></div>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="muted" id="progress-meta" style="margin-top:5px"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>4 · 导出</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="small" id="btn-export-img" type="button">修补 PNG</button>
+        <button class="small" id="btn-export-nnf" type="button">供体场 NNF</button>
+      </div>
+      <div class="row">
+        <button class="small" id="btn-export-snap" type="button">目标快照 PNG</button>
+        <button class="small" id="btn-export-params" type="button">参数与误差 JSON</button>
+      </div>
+      <p class="muted" style="margin-bottom:0">NNF 为逐像素交错 int32 小端 (sx,sy)，非掩膜位置 (-1,-1)。</p>
+    </section>
+  </div>
+
+  <div class="content">
+    <section class="panel">
+      <h2>画布</h2>
+      <div class="canvas-wrap"><canvas id="main-canvas" width="0" height="0"></canvas></div>
+      <div class="legend-dots">
+        <span><span class="dot red"></span>待修补掩膜</span>
+        <span><span class="dot blue"></span>目标 patch（点选）</span>
+        <span><span class="dot orange"></span>供体 patch（点选）</span>
+      </div>
+      <div id="status-line" style="margin-top:10px">请先导入图像。</div>
+    </section>
+
+    <section class="panel">
+      <h2>逐轮结果与匹配误差</h2>
+      <label class="field"><span>查看轮次</span>
+        <select id="iter-select"><option>（修补后可选）</option></select>
+      </label>
+      <div id="mse-chart"></div>
+      <dl class="kv" id="verify-panel" style="margin-top:8px">
+        <dt>最终平均归一化 MSE</dt><dd id="v-mean">—</dd>
+        <dt>最大单 patch MSE</dt><dd id="v-max">—</dd>
+        <dt>非法供体数</dt><dd id="v-illegal">—</dd>
+        <dt>复核目标像素数</dt><dd id="v-count">—</dd>
+      </dl>
+      <div id="inspect-info" style="margin-top:8px"></div>
+    </section>
+
+    <section class="panel">
+      <details class="notes">
+        <summary>算法与复现说明</summary>
+        <ul>
+          <li>供体中心必须使整个 <code>(2r+1)²</code> 源 patch 完整落在<b>原始已知区</b>；每层及上采样后重新检查，不合格即重选，合成像素永不作供体。</li>
+          <li>每轮在固定当前图 I 上做邻居传播（正反扫描交替）与指数减半随机搜索，随后用重叠 patch 加权投票重建掩膜内像素；已知像素逐字节保持。</li>
+          <li>投票权重：<code>w = round(1024 / (SSD/(3·P²·255²) + 1e-4))</code>，裁剪到 [1, 1048576] 的整数；重叠像素按权重平均后四舍五入。</li>
+          <li>误差定义：目标有效（图内）偏移上 RGB 归一化 [0,1] 平方差的均值；源端始终取原始图。</li>
+          <li>随机全部来自 mulberry32（种子经 xmur3 混洗），同环境、同种子、同参数逐字节复现；无任何时间或地址相关随机源。</li>
+          <li>粗层无合法供体时跳过该层；原尺寸无合法供体时明确报告无法修补，不产生结果文件。</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+</main>
+
+<script type="module" src="./src/app.js"></script>
+<script>
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+</script>
+</body>
+</html>
