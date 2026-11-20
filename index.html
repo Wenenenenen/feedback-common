@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LUT 链校验台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>LUT 链校验台</h1>
+  <p class="sub">1D 线性 / 3D 四面体插值 · 逐级 DOMAIN 处理 · 最多 8 级串联 · 不预乘、不提前夹紧</p>
+</header>
+
+<main>
+  <!-- 左列：图像与探针 -->
+  <section class="col">
+    <div class="panel">
+      <h2>图像</h2>
+      <div class="row">
+        <input type="file" id="pngFile" accept="image/png,.png">
+        <button id="exportPng" disabled>导出处理后 PNG</button>
+      </div>
+      <div class="hint">支持 8 位 RGBA PNG，边长 ≤ 1024。alpha 原样保留（含透明像素的 RGB），计算不预乘。</div>
+      <div id="imgError" class="error"></div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="view" width="1" height="1"></canvas>
+        <div id="marker" hidden></div>
+      </div>
+      <div id="imgInfo" class="hint"></div>
+    </div>
+
+    <div class="panel">
+      <h2>探针</h2>
+      <div class="row">
+        <label>R <input type="number" id="probeR" step="any" value="0.15"></label>
+        <label>G <input type="number" id="probeG" step="any" value="0.35"></label>
+        <label>B <input type="number" id="probeB" step="any" value="0.55"></label>
+        <button id="probeGo">应用</button>
+      </div>
+      <div class="hint">点选图像像素或直接输入浮点 RGB，查看每级输入输出。输出可超出 [0,1]，仅在下一级 DOMAIN 输入处夹紧。</div>
+      <div id="probeSrc" class="hint"></div>
+      <div id="probeTable"></div>
+    </div>
+  </section>
+
+  <!-- 右列：链、烘焙、对比、工程 -->
+  <section class="col">
+    <div class="panel">
+      <h2>LUT 链 <span class="badge" id="stageCount">0 / 8</span></h2>
+      <div class="row">
+        <input type="file" id="cubeFiles" accept=".cube,text/plain" multiple>
+      </div>
+      <div class="hint">.cube 支持 TITLE、DOMAIN_MIN/MAX、LUT_1D_SIZE(2..4096)、LUT_3D_SIZE(2..65)、# 注释与科学计数法；单文件一种表。</div>
+      <div id="cubeError" class="error"></div>
+      <ol id="stageList" class="stages"></ol>
+    </div>
+
+    <div class="panel">
+      <h2>烘焙为单张 3D 表</h2>
+      <div class="row wrap">
+        <label>DOMAIN_MIN
+          <input type="number" id="bakeMinR" step="any" value="0">
+          <input type="number" id="bakeMinG" step="any" value="0">
+          <input type="number" id="bakeMinB" step="any" value="0">
+        </label>
+      </div>
+      <div class="row wrap">
+        <label>DOMAIN_MAX
+          <input type="number" id="bakeMaxR" step="any" value="1">
+          <input type="number" id="bakeMaxG" step="any" value="1">
+          <input type="number" id="bakeMaxB" step="any" value="1">
+        </label>
+        <label>边长 <input type="number" id="bakeSize" min="2" max="65" step="1" value="17"></label>
+        <button id="bakeGo">烘焙</button>
+      </div>
+      <div id="bakeError" class="error"></div>
+      <div id="bakeInfo" class="hint"></div>
+      <div class="row">
+        <button id="exportCube" disabled>导出烘焙 .cube</button>
+        <button id="useBaked" disabled>载入为对比表</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>烘焙误差对比</h2>
+      <div class="row">
+        <input type="file" id="compareFile" accept=".cube,text/plain">
+        <span class="hint">或先用上方「载入为对比表」</span>
+      </div>
+      <div id="compareInfo" class="hint"></div>
+      <div class="row">
+        <label>探针数 <input type="number" id="probeCount" min="1" max="100000" step="1" value="500"></label>
+        <label>种子 <input type="number" id="probeSeed" step="1" value="24341"></label>
+        <button id="compareGo" disabled>生成连续探针并对比</button>
+      </div>
+      <div class="row">
+        <button id="addProbeColor" disabled>把当前探针颜色加入对比</button>
+      </div>
+      <div id="compareError" class="error"></div>
+      <div id="compareSummary"></div>
+      <div id="compareTable"></div>
+    </div>
+
+    <div class="panel">
+      <h2>工程</h2>
+      <div class="row">
+        <button id="exportProject">导出工程 JSON</button>
+        <input type="file" id="projectFile" accept=".json,application/json">
+      </div>
+      <div class="hint">工程包含完整表内容、顺序、启用状态和烘焙设置，可重新载入。</div>
+      <div id="projectError" class="error"></div>
+      <div id="projectInfo" class="hint"></div>
+    </div>
+  </section>
+</main>
+
+<script src="lut-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
