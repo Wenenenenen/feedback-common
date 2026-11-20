@@ -1,0 +1,40 @@
+{
+  "frames": [
+    {
+      "file": "rgb-0.png",
+      "shift": [
+        0,
+        0
+      ]
+    },
+    {
+      "file": "rgb-1.png",
+      "shift": [
+        1,
+        0
+      ]
+    },
+    {
+      "file": "rgb-2.png",
+      "shift": [
+        0,
+        1
+      ]
+    },
+    {
+      "file": "rgb-3.png",
+      "shift": [
+        1,
+        1
+      ]
+    }
+  ],
+  "kernel": [
+    [
+      1
+    ]
+  ],
+  "lambda": 0,
+  "tol": 1e-10,
+  "max_iter": 300
+}

@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>亚像素重建台</title>
+<style>
+/* ---- 设计 tokens：中性灰偏冷，蓝色主强调，深浅双主题 ---- */
+:root {
+  --bg: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --muted: #898781;
+  --gridline: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --accent-strong: #1c5cab;
+  --good: #0ca30c;
+  --warn: #b97900;
+  --critical: #d03b3b;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --shadow: 0 1px 3px rgba(11, 11, 11, 0.07), 0 4px 14px rgba(11, 11, 11, 0.05);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --fg: #f0efec;
+    --fg-2: #c3c2b7;
+    --muted: #898781;
+    --gridline: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --accent-strong: #6da7ec;
+    --good: #0ca30c;
+    --warn: #fab219;
+    --critical: #e66767;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232322;
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --muted: #898781;
+  --gridline: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5;
+  --accent-strong: #6da7ec;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --critical: #e66767;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(12px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+
+header.app-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+header.app-head h1 {
+  font-size: 22px;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+header.app-head .sub {
+  color: var(--fg-2);
+  font-size: 13px;
+  flex: 1 1 260px;
+  min-width: 200px;
+}
+.icon-btn {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.icon-btn:hover { border-color: var(--accent); }
+
+.grid { display: grid; gap: 14px; }
+.grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+  .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.card h2 {
+  font-size: 14px;
+  font-weight: 650;
+  margin: 0 0 12px;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card h2 .step {
+  display: inline-flex;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+/* 导入区 */
+.drop-zone {
+  border: 1.5px dashed var(--axis);
+  border-radius: 10px;
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.drop-zone strong { color: var(--accent); }
+.drop-zone .hint { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+
+/* 表格 */
+table.frames {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.frames th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 550;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gridline);
+  white-space: nowrap;
+}
+table.frames td { padding: 6px 8px; border-bottom: 1px solid var(--gridline); vertical-align: middle; }
+table.frames td:first-child {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table-scroll { overflow-x: auto; }
+
+input, select, button { font: inherit; }
+input[type="number"], select {
+  width: 100%;
+  min-width: 0;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 8px;
+}
+.num-input { max-width: 86px; }
+.kernel-input { padding: 6px 4px; text-align: center; }
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 550;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) { background: var(--accent-strong); }
+.btn.danger { color: var(--critical); }
+.btn.small { padding: 4px 10px; font-size: 12.5px; }
+.btn.ghost { background: transparent; }
+
+.kernel-grid { display: grid; gap: 6px; max-width: 260px; }
+.kernel-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.kernel-sum.bad { color: var(--critical); font-weight: 650; }
+
+/* 参数行 */
+.param-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+@media (max-width: 700px) { .param-row { grid-template-columns: 1fr; } }
+.param label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--fg-2);
+  margin-bottom: 4px;
+}
+.param label output { color: var(--fg); font-variant-numeric: tabular-nums; }
+.param input[type="range"] { width: 100%; accent-color: var(--accent); }
+.param input[type="number"] { width: 100%; }
+
+.run-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+
+/* 状态条 */
+.status {
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg-2);
+}
+.status.ok { border-color: var(--good); }
+.status.error { border-color: var(--critical); color: var(--critical); }
+.status.warn { border-color: var(--warn); color: var(--warn); }
+.status.running { border-color: var(--accent); color: var(--accent-strong); }
+
+#progress-log {
+  margin-top: 10px;
+  max-height: 110px;
+  overflow-y: auto;
+  font: 12px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--fg-2);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* 统计块 */
+.stat-tile { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.stat-tile .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.stat-tile .value { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+
+/* 图像与画布 */
+.canvas-frame {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+.canvas-frame.checker {
+  background:
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%, transparent 75%, var(--surface-2) 75%),
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%, transparent 75%, var(--surface-2) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+canvas.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+  max-width: 100%;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.legend-bar { height: 10px; width: 160px; border-radius: 5px; border: 1px solid var(--border); }
+.muted { color: var(--muted); font-size: 12px; }
+
+/* 图表 */
+.conv-svg { width: 100%; height: auto; display: block; }
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+  font-size: 12px;
+  min-width: 150px;
+  z-index: 5;
+}
+.tt-head { font-weight: 650; margin-bottom: 4px; }
+.tt-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.tt-key {
+  width: 14px; height: 3px; border-radius: 2px;
+  background: var(--key-color);
+  display: inline-block;
+}
+.tt-name { color: var(--fg-2); flex: 1; }
+.tt-row strong { font-variant-numeric: tabular-nums; }
+.chart-legend { display: flex; gap: 16px; margin-top: 6px; flex-wrap: wrap; font-size: 12.5px; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-2); }
+.legend-line { width: 16px; height: 3px; border-radius: 2px; }
+.chart-wrap { position: relative; }
+.chart-tick { font-variant-numeric: tabular-nums; }
+
+/* 探查面板 */
+.kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--gridline);
+  font-size: 13px;
+}
+.kv-key { color: var(--fg-2); }
+.kv-val { font-variant-numeric: tabular-nums; text-align: right; }
+.probe-head { font-weight: 650; margin-bottom: 6px; }
+.probe-sub { margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+.section-gap { margin-top: 14px; }
+[hidden] { display: none !important; }
+.results { display: none; }
+.results.visible { display: block; }
+
+.export-row { display: flex; gap: 10px; flex-wrap: wrap; }
+footer.foot {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+code {
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app-head">
+    <h1>亚像素重建台</h1>
+    <span class="sub">多帧低分辨率 burst → 2× 高分辨率重建 · 矩阵无关投影/严格转置 · 共轭梯度求解</span>
+    <button id="theme-toggle" class="icon-btn" type="button">切换深浅色</button>
+  </header>
+
+  <div class="grid">
+    <!-- 1. 导入 -->
+    <section class="card">
+      <h2><span class="step">1</span>导入观测帧、掩膜与 JSON（2–8 张同尺寸 8 位灰度/RGB PNG，单边 ≤ 128）</h2>
+      <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="选择或拖入文件">
+        拖入文件，或 <strong>点击选择</strong>（可一次选入 PNG 与 JSON）
+        <span class="hint">JSON 可带 kernel / 逐帧 shift / mask 引用与求解参数；无 JSON 时可在下方手工配置</span>
+      </div>
+      <input id="file-input" type="file" accept=".png,.json" multiple hidden>
+      <div class="run-row">
+        <button id="add-frame" class="btn" type="button">添加文件</button>
+        <span class="muted">已配置帧 <strong id="frame-count">0</strong> 张</span>
+      </div>
+      <div class="table-scroll section-gap">
+        <table class="frames">
+          <thead>
+            <tr><th>观测 PNG</th><th>dx（高分辨率像素，[-4,4]）</th><th>dy</th><th>置信掩膜</th><th></th></tr>
+          </thead>
+          <tbody id="frame-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="grid cols-2">
+      <!-- 2. 核 -->
+      <section class="card">
+        <h2><span class="step">2</span>模糊核（边长 1/3/5，非负且和为 1，原点在中心）</h2>
+        <div class="kernel-meta">
+          <label>边长
+            <select id="kernel-size" style="width:90px; display:inline-block; margin-left:6px;">
+              <option value="1">1</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <button id="kernel-normalize" class="btn small" type="button">归一化（显式操作）</button>
+          <span>系数和：<strong id="kernel-sum" class="kernel-sum">1</strong></span>
+        </div>
+        <div id="kernel-grid" class="kernel-grid section-gap"></div>
+        <p class="muted section-gap">求解器不会对越界采样或核系数做任何隐式重归一化；和不为 1 时拒绝运行。</p>
+      </section>
+
+      <!-- 3. 参数 -->
+      <section class="card">
+        <h2><span class="step">3</span>求解参数</h2>
+        <div class="param-row">
+          <div class="param">
+            <label for="lambda">正则强度 λ <output id="lambda-val">0.01</output></label>
+            <input id="lambda" type="range" min="0" max="1" step="0.001" value="0.01">
+          </div>
+          <div class="param">
+            <label for="tol">容差 tol <output id="tol-val">1e-7</output></label>
+            <input id="tol" type="number" min="1e-10" max="1e-2" step="any" value="0.0000001">
+          </div>
+          <div class="param">
+            <label for="max-iter">迭代上限 <output id="max-iter-val">300</output></label>
+            <input id="max-iter" type="number" min="1" max="300" step="1" value="300">
+          </div>
+        </div>
+        <p class="muted section-gap">固定 η = 1e-6；停止条件 ‖r‖/max(‖b‖,1e-12) ≤ tol；零初始化，迭代全程不截断。</p>
+        <div class="run-row">
+          <button id="run-btn" class="btn primary" type="button">开始重建</button>
+          <button id="cancel-btn" class="btn danger" type="button" disabled>取消</button>
+        </div>
+        <div id="status-bar" class="status section-gap" role="status">等待导入数据。</div>
+        <div id="progress-log" hidden></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 结果区 -->
+  <div id="results" class="results section-gap">
+    <div class="grid cols-4 section-gap">
+      <div class="stat-tile"><div class="label">重建网格</div><div class="value" id="stat-grid">—</div></div>
+      <div class="stat-tile"><div class="label">收敛（迭代 / 原因）</div><div class="value" id="stat-conv">—</div></div>
+      <div class="stat-tile"><div class="label">最终相对残差</div><div class="value" id="stat-residual">—</div></div>
+      <div class="stat-tile"><div class="label">边界与缺测</div><div class="value" id="stat-boundary">—</div></div>
+    </div>
+    <div class="stat-tile section-gap" style="max-width:100%">
+      <div class="label">截断情况</div>
+      <div class="value" id="stat-clip">—</div>
+    </div>
+
+    <div class="grid cols-2 section-gap">
+      <section class="card">
+        <h2>重建图（展示已截到 [0,1]；浮点导出保留未截断原值）</h2>
+        <div class="canvas-frame checker"><canvas id="recon-canvas" class="pixelated"></canvas></div>
+      </section>
+      <section class="card">
+        <h2>CG 收敛曲线（对数纵轴）</h2>
+        <div class="chart-wrap" id="conv-chart"></div>
+      </section>
+    </div>
+
+    <section class="card section-gap">
+      <h2>逐帧回投影残差 r = A·X − Y（未乘权重；斜纹 = 掩膜为 0 的缺测像素）</h2>
+      <div class="run-row" style="margin-top:0">
+        <label>帧
+          <select id="probe-frame" style="width:220px; display:inline-block; margin-left:6px;"></select>
+        </label>
+        <label>通道
+          <select id="probe-channel" style="width:90px; display:inline-block; margin-left:6px;"></select>
+        </label>
+        <span class="muted">点击残差图或观测图选取观测像素，查看其对高分辨率网格的贡献</span>
+      </div>
+      <div class="grid cols-2 section-gap">
+        <div>
+          <div class="canvas-frame"><canvas id="residual-canvas" class="pixelated"></canvas></div>
+          <div class="legend">
+            <span>负</span>
+            <span class="legend-bar" id="residual-legend-bar"></span>
+            <span>正</span>
+            <span id="residual-legend-label"></span>
+          </div>
+          <div class="muted" id="residual-rmse"></div>
+        </div>
+        <div>
+          <div class="canvas-frame"><canvas id="observation-canvas" class="pixelated"></canvas></div>
+          <div class="muted">该帧原始观测（点击选像素）</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card section-gap">
+      <h2>观测像素贡献（A 的对应行：双线性取样 × 真卷积核，越界 tap 已剔除）</h2>
+      <div class="grid cols-2">
+        <div>
+          <div class="canvas-frame"><canvas id="contrib-canvas" class="pixelated"></canvas></div>
+          <div class="legend">
+            <span>小</span>
+            <span class="legend-bar" id="contrib-legend-bar"></span>
+            <span>大</span>
+            <span id="contrib-legend-label"></span>
+          </div>
+        </div>
+        <div id="probe-detail"></div>
+      </div>
+    </section>
+
+    <section class="card section-gap">
+      <h2>导出</h2>
+      <div class="export-row">
+        <button id="export-png" class="btn" type="button">导出 PNG（8 位，已截断）</button>
+        <button id="export-float" class="btn" type="button">导出未截断浮点图（小端 float64）</button>
+        <button id="export-params" class="btn" type="button">导出完整参数 JSON</button>
+      </div>
+      <p class="muted section-gap" style="margin-bottom:0">
+        浮点文件为裸 <code>.bin</code>：行优先、RGB 逐像素交错；形状、字节序与全部参数见 JSON 导出。
+      </p>
+    </section>
+  </div>
+
+  <footer class="foot">
+    观测模型：真卷积 <code>B[y,x]=Σ k[j,i]·X[y-(j-c),x-(i-c)]</code>（图外 X=0）→
+    在 B 坐标 <code>(2u+dx, 2v+dy)</code> 双线性取样，越界四邻项视 0 且不重归一化。
+    目标 <code>J=½Σw(AX−Y)² + λ/2·Σ_边(差分)² + η/2·ΣX²</code>，η=1e-6。
+    全部算子为手写矩阵无关实现，Aᵀ 与 A 共用同一组系数严格配对，未使用任何现成超分辨率/复原接口。
+    本地建议通过 <code>npm start</code> 或 <code>python3 -m http.server</code> 访问，以启用模块 Worker。
+  </footer>
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

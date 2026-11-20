@@ -1,0 +1,11 @@
+{
+  "name": "burst-subpixel-reconstructor",
+  "version": "1.0.0",
+  "description": "多帧亚像素重建：矩阵无关投影/转置算子 + 共轭梯度求解（纯前端，无依赖）",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node tools/test.mjs",
+    "start": "node tools/serve.mjs"
+  }
+}

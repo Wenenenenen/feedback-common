@@ -1,0 +1,56 @@
+{
+  "frames": [
+    {
+      "file": "blur-0.png",
+      "shift": [
+        0.5,
+        0
+      ],
+      "mask": "mask.png"
+    },
+    {
+      "file": "blur-1.png",
+      "shift": [
+        0,
+        0.5
+      ],
+      "mask": "mask.png"
+    },
+    {
+      "file": "blur-2.png",
+      "shift": [
+        1.5,
+        1
+      ],
+      "mask": "mask.png"
+    },
+    {
+      "file": "blur-3.png",
+      "shift": [
+        1,
+        1.5
+      ],
+      "mask": "mask.png"
+    }
+  ],
+  "kernel": [
+    [
+      0,
+      0.1,
+      0
+    ],
+    [
+      0.2,
+      0.5,
+      0
+    ],
+    [
+      0,
+      0,
+      0.2
+    ]
+  ],
+  "lambda": 0.01,
+  "tol": 1e-07,
+  "max_iter": 300
+}
