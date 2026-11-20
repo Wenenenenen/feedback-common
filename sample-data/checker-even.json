@@ -1,0 +1,41 @@
+{
+  "tiles": [
+    {
+      "id": "a",
+      "weight": 1,
+      "edges": [
+        "0",
+        "0",
+        "1",
+        "1"
+      ],
+      "color": "#e4a85d"
+    },
+    {
+      "id": "b",
+      "weight": 1,
+      "edges": [
+        "1",
+        "1",
+        "0",
+        "0"
+      ],
+      "color": "#5287bd"
+    }
+  ],
+  "height": 4,
+  "wrap_x": true,
+  "wrap_y": true,
+  "seed": 7,
+  "budget": 100000,
+  "pins": [
+    {
+      "x": 0,
+      "y": 0,
+      "allowed": [
+        "a"
+      ]
+    }
+  ],
+  "width": 4
+}

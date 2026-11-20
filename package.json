@@ -1,0 +1,15 @@
+{
+  "name": "wfc-tile-foundry",
+  "version": "1.0.0",
+  "description": "可回溯的 WFC 地图拼块生成工具：自研候选传播、加权选择与 DFS 回溯，区分已求解/证明无解/预算耗尽",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "serve": "python3 -m http.server 8731",
+    "test": "node --test tests/solver.test.js tests/e2e.test.js",
+    "test:browser": "node tests/browser.smoke.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WFC 拼块铸造炉 · Tile Foundry</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header>
+  <h1>WFC 拼块铸造炉</h1>
+  <span class="sub">候选传播 · 加权选择 · 可回溯求解（无外部约束求解器）</span>
+  <span class="spacer"></span>
+  <button id="btn-sample-even" class="small">样例 checker-even</button>
+  <button id="btn-sample-odd" class="small">样例 checker-odd</button>
+  <button id="btn-sample-backtrack" class="small">样例 backtrack</button>
+</header>
+
+<div class="layout">
+  <!-- 左栏：配置 -->
+  <div>
+    <div class="panel">
+      <h2>地图与边界</h2>
+      <div class="row">
+        <label class="field"><span>宽 width（1–32）</span><input id="cfg-width" type="number" min="1" max="32"></label>
+        <label class="field"><span>高 height（1–32）</span><input id="cfg-height" type="number" min="1" max="32"></label>
+      </div>
+      <div class="row">
+        <label class="field"><span>种子 seed（uint32）</span><input id="cfg-seed" type="number" min="0" max="4294967295"></label>
+        <label class="field"><span>预算 budget（试选次数）</span><input id="cfg-budget" type="number" min="1"></label>
+      </div>
+      <div class="checkline"><input id="cfg-wrap-x" type="checkbox"><label for="cfg-wrap-x">横向周期边界 wrap_x</label></div>
+      <div class="checkline"><input id="cfg-wrap-y" type="checkbox"><label for="cfg-wrap-y">纵向周期边界 wrap_y</label></div>
+      <p class="muted small">改动尺寸、边界、拼块或固定地块都会先取消当前任务，需重新运行。</p>
+    </div>
+
+    <div class="panel">
+      <h2>拼块（最多 24 种）</h2>
+      <div id="tile-editor"></div>
+      <div class="row">
+        <button id="btn-add-tile">＋ 新增拼块</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>固定地块 pins</h2>
+      <div class="checkline">
+        <input type="radio" name="pin-mode" id="pin-mode-draw" value="draw" checked>
+        <label for="pin-mode-draw">画 pin 模式</label>
+        <input type="radio" name="pin-mode" id="pin-mode-inspect" value="inspect" style="margin-left:12px">
+        <label for="pin-mode-inspect">查看候选模式</label>
+      </div>
+      <label class="field"><span>画 pin 时允许的拼块（可多选）</span>
+        <select id="pin-allowed" multiple size="4"></select>
+      </label>
+      <div class="row">
+        <button id="btn-clear-pins" class="danger">清空全部 pin</button>
+      </div>
+      <div class="pins-list" id="pins-list" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- 中栏：画布与控制 -->
+  <div>
+    <div class="panel">
+      <h2>求解控制</h2>
+      <div class="status-bar">
+        <span>状态 <span id="status-badge" class="badge ready">未运行</span></span>
+        <span>试选 <b id="stat-trials">0</b>/<span id="stat-budget">0</span></span>
+        <span>事件 <b id="stat-events">0</b></span>
+        <span>深度 <b id="stat-depth">0</b></span>
+        <span>未定格 <b id="stat-unfixed">0</b></span>
+      </div>
+      <div class="toolbar">
+        <button id="btn-run" class="primary">▶ 运行</button>
+        <button id="btn-pause" disabled>⏸ 暂停</button>
+        <button id="btn-step">⏭ 单步</button>
+        <button id="btn-stop" class="danger">■ 取消任务</button>
+        <label class="small muted" style="display:flex;align-items:center;gap:6px;margin-left:auto">
+          速度
+          <input id="run-speed" type="range" min="0" max="3" step="1" value="2" style="width:110px">
+        </label>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="board" width="640" height="640"></canvas>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div id="msg" class="msg"></div>
+    </div>
+
+    <div class="panel">
+      <h2>导入 / 导出</h2>
+      <div class="toolbar" style="margin-bottom:6px">
+        <button id="btn-export-map">导出地图 JSON</button>
+        <button id="btn-export-png">导出地图 PNG</button>
+        <button id="btn-export-config">导出配置</button>
+        <button id="btn-export-trace">导出求解轨迹</button>
+      </div>
+      <div class="toolbar" style="margin-bottom:0">
+        <button id="btn-import-config">导入配置 / 轨迹</button>
+        <input id="import-file" type="file" accept=".json,application/json" hidden>
+        <button id="btn-verify-replay" disabled>复算校验轨迹</button>
+      </div>
+      <p class="muted small" style="margin-bottom:0">
+        重新导入配置并运行，相同种子得到完全相同的选择轨迹；导入轨迹可拖动时间轴回放每一步。
+      </p>
+    </div>
+  </div>
+
+  <!-- 右栏：候选与轨迹 -->
+  <div>
+    <div class="panel">
+      <h2>格内候选与删除原因</h2>
+      <div id="cell-head" class="muted small mono">点击画布上的格子（查看候选模式）</div>
+      <div id="candidates" style="margin-top:6px"></div>
+      <div id="reasons" style="margin-top:8px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>求解轨迹</h2>
+      <div class="scrub">
+        <input id="trace-scrub" type="range" min="0" max="0" value="0">
+        <span id="trace-pos" class="mono small">0/0</span>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <button id="btn-trace-prev">← 上一事件</button>
+        <button id="btn-trace-next">下一事件 →</button>
+      </div>
+      <div id="trace-log"></div>
+      <label class="checkline small" style="margin-top:8px">
+        <input id="follow-tail" type="checkbox" checked> 运行时自动滚动到最新
+      </label>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js?v=5"></script>
+</body>
+</html>

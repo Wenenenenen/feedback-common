@@ -1,0 +1,44 @@
+{
+  "width": 3,
+  "height": 1,
+  "tiles": [
+    {
+      "id": "a-dead",
+      "weight": 100,
+      "edges": [
+        "x",
+        "p",
+        "x",
+        "q"
+      ],
+      "color": "#c65b60"
+    },
+    {
+      "id": "b-live",
+      "weight": 1,
+      "edges": [
+        "x",
+        "r",
+        "x",
+        "r"
+      ],
+      "color": "#5eae87"
+    },
+    {
+      "id": "c-dead",
+      "weight": 1,
+      "edges": [
+        "x",
+        "q",
+        "x",
+        "p"
+      ],
+      "color": "#9878c0"
+    }
+  ],
+  "wrap_x": true,
+  "wrap_y": false,
+  "seed": 0,
+  "budget": 1000,
+  "pins": []
+}

@@ -1,0 +1,5 @@
+{
+  "checker-even": "已求解",
+  "checker-odd": "无解",
+  "backtrack": "存在全部b-live的合法解，含q分支不能闭合三格环"
+}
