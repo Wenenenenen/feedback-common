@@ -1,0 +1,8 @@
+{
+  "first": "a.png",
+  "second": "subpixel-b.png",
+  "truth": "subpixel-truth.raw",
+  "valid": "subpixel-truth-valid.png",
+  "u": 1.5,
+  "v": -0.75
+}

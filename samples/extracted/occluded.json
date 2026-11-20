@@ -1,0 +1,8 @@
+{
+  "first": "a.png",
+  "second": "occluded-b.png",
+  "truth": "occluded-truth.raw",
+  "valid": "occluded-truth-valid.png",
+  "u": 3,
+  "v": -2
+}

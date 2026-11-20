@@ -1,0 +1,8 @@
+{
+  "first": "a.png",
+  "second": "integer-b.png",
+  "truth": "integer-truth.raw",
+  "valid": "integer-truth-valid.png",
+  "u": 3,
+  "v": -2
+}

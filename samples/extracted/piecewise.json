@@ -1,0 +1,12 @@
+{
+  "first": "a.png",
+  "second": "piecewise-b.png",
+  "truth": "piecewise-truth.raw",
+  "valid": "piecewise-truth-valid.png",
+  "moving_source_rectangle": [
+    32,
+    20,
+    64,
+    52
+  ]
+}

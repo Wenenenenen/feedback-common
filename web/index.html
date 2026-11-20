@@ -1,0 +1,296 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>稠密运动核对台</title>
+<style>
+/* layout: control rail + visualization grid, stacking on narrow screens.
+   Palette: cool slate neutrals with a cyan/amber semantic pair. */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --fg: #1a2230;
+  --muted: #5d6b7e;
+  --line: #d3dae3;
+  --accent: #1f78d1;
+  --accent-soft: #e3f0fc;
+  --good: #1e9e6a;
+  --warn: #d18a1f;
+  --bad: #d1493f;
+  --invalid: #181b21;
+  --shadow: 0 1px 3px rgba(20, 30, 45, .08), 0 4px 14px rgba(20, 30, 45, .06);
+  --radius: 10px;
+  --mono: "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+:root[data-theme="dark"], :root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --bg: #12161d;
+  --panel: #1b212b;
+  --panel-2: #232b38;
+  --fg: #e7ecf3;
+  --muted: #97a3b4;
+  --line: #313b49;
+  --accent: #5aa6f0;
+  --accent-soft: #1e2c3d;
+  --good: #46c08b;
+  --warn: #e0b057;
+  --bad: #e5776d;
+  --invalid: #101318;
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f4f6f8; --panel: #ffffff; --panel-2: #eef1f5;
+    --fg: #1a2230; --muted: #5d6b7e; --line: #d3dae3;
+    --accent: #1f78d1; --accent-soft: #e3f0fc;
+    --good: #1e9e6a; --warn: #d18a1f; --bad: #d1493f; --invalid: #181b21;
+    --shadow: 0 1px 3px rgba(20,30,45,.08), 0 4px 14px rgba(20,30,45,.06);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px;
+}
+.app { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; }
+header.top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+header.top h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+header.top .sub { color: var(--muted); font-size: 13px; }
+.theme-btn { margin-left: auto; }
+
+.grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.card > .card-h {
+  padding: 12px 14px; border-bottom: 1px solid var(--line);
+  font-weight: 650; font-size: 13px; letter-spacing: .3px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card > .card-b { padding: 14px; }
+.stack { display: grid; gap: 12px; }
+
+label.fld { display: grid; gap: 5px; }
+label.fld .lab { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+label.fld .lab b { color: var(--fg); font-family: var(--mono); font-weight: 600; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+select, input[type=number] {
+  width: 100%; background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font: inherit;
+}
+input[type=file] { width: 100%; font-size: 12px; color: var(--muted); }
+input[type=file]::file-selector-button {
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; margin-right: 8px;
+}
+.btn {
+  appearance: none; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--fg); border-radius: 8px; padding: 9px 12px; font: inherit; font-weight: 600;
+  cursor: pointer; transition: filter .15s, background .15s;
+}
+.btn:hover { filter: brightness(1.05); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row .btn { flex: 1; min-width: 90px; }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); }
+.pill.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+
+.progress { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+.progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+.status-line { font-size: 12.5px; color: var(--muted); font-family: var(--mono); min-height: 18px; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button {
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  border-radius: 7px; padding: 6px 11px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.viz-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+@media (max-width: 720px) { .viz-grid { grid-template-columns: 1fr; } }
+.viz-cell { min-width: 0; }
+.viz-cell h3 { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center; }
+.canvas-wrap { position: relative; background: var(--invalid); border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--line); aspect-ratio: 4 / 3; }
+.canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend .wheel-span canvas { width: 30px; height: 30px; image-rendering: auto; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--line); }
+
+.readout { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px;
+  font-family: var(--mono); background: var(--panel-2); border-radius: 8px; padding: 12px; }
+.readout dt { color: var(--muted); } .readout dd { margin: 0; }
+.samples { display: flex; gap: 6px; flex-wrap: wrap; }
+.samples button { font-size: 12px; }
+.hint { font-size: 11.5px; color: var(--muted); }
+.scalar-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 720px) { .scalar-grid { grid-template-columns: repeat(2,1fr); } }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; min-width: 0; }
+.stat .k { font-size: 11px; color: var(--muted); letter-spacing: .3px; }
+.stat .val { font-family: var(--mono); font-size: 16px; font-weight: 650; margin-top: 2px; }
+.checkline { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted); }
+.checkline input { accent-color: var(--accent); }
+.err { color: var(--bad); font-size: 12.5px; }
+[hidden] { display: none !important; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>稠密运动核对台</h1>
+    <span class="sub">粗到细局部迭代 Lucas–Kanade · 独立前后向估计 · 无现成光流/配准接口</span>
+    <button class="btn theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <div class="grid">
+    <!-- ===================== 控制栏 ===================== -->
+    <div class="stack">
+      <section class="card">
+        <div class="card-h">1 · 输入两帧（同尺寸 · 边长 ≤256 · 8 位灰度 PNG）</div>
+        <div class="card-b stack">
+          <label class="fld">
+            <span class="lab">第一帧 A</span>
+            <input type="file" id="fileA" accept="image/png,.png">
+          </label>
+          <label class="fld">
+            <span class="lab">第二帧 B</span>
+            <input type="file" id="fileB" accept="image/png,.png">
+          </label>
+          <div>
+            <div class="lab hint" style="margin-bottom:6px">载入内置样例</div>
+            <div class="samples" id="sampleBtns"></div>
+          </div>
+          <div id="loadMsg" class="hint"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h">2 · 参数</div>
+        <div class="card-b stack">
+          <label class="fld">
+            <span class="lab">窗口边长（奇数 3–15）<b id="vWindow">5</b></span>
+            <input type="range" id="pWindow" min="3" max="15" step="2" value="5">
+          </label>
+          <label class="fld">
+            <span class="lab">金字塔层数（1–5）<b id="vLevels">3</b></span>
+            <input type="range" id="pLevels" min="1" max="5" step="1" value="3">
+          </label>
+          <label class="fld">
+            <span class="lab">每层迭代数（1–30）<b id="vIters">10</b></span>
+            <input type="range" id="pIters" min="1" max="30" step="1" value="10">
+          </label>
+          <label class="fld">
+            <span class="lab">前后向一致性阈值（px）<b id="vFb">1.00</b></span>
+            <input type="range" id="pFb" min="0.1" max="5" step="0.05" value="1">
+          </label>
+          <label class="fld">
+            <span class="lab">纹理门控 λmin（结构张量）<b id="vEigen">4.0</b></span>
+            <input type="range" id="pEigen" min="0" max="40" step="0.5" value="4">
+          </label>
+          <label class="checkline">
+            <input type="checkbox" id="pMedian" checked>
+            迭代间 3×3 中值空间耦合（抑制发散像素）
+          </label>
+          <label class="fld">
+            <span class="lab">估计方向</span>
+            <select id="pDirection">
+              <option value="forward">前向 A→B（F）</option>
+              <option value="backward">反向 B→A（反向仍独立估计）</option>
+            </select>
+          </label>
+          <div class="btn-row">
+            <button class="btn primary" id="runBtn" disabled>计算</button>
+            <button class="btn danger" id="cancelBtn" disabled>取消</button>
+          </div>
+          <div class="progress"><div id="progBar"></div></div>
+          <div class="status-line" id="statusLine">等待输入…</div>
+          <div id="errLine" class="err" hidden></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h">3 · 导出（按包内坐标）</div>
+        <div class="card-b stack">
+          <p class="hint" style="margin:0">flow.raw 为逐像素交错 u,v 的 float32 小端；valid.png 为 0/255；JSON 记录尺寸与方向。无效像素流写 0，仅靠掩膜区分无效与零运动。</p>
+          <div class="btn-row">
+            <button class="btn" id="exportBtn" disabled>下载 ZIP 包</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===================== 可视化 ===================== -->
+    <div class="stack">
+      <section class="card">
+        <div class="card-h">
+          结果总览
+          <span class="pill" id="pillState" style="margin-left:auto">未计算</span>
+        </div>
+        <div class="card-b stack">
+          <div class="scalar-grid">
+            <div class="stat"><div class="k">有效像素</div><div class="val" id="stValid">–</div></div>
+            <div class="stat"><div class="k">有效占比</div><div class="val" id="stRatio">–</div></div>
+            <div class="stat"><div class="k">中位 |流| (px)</div><div class="val" id="stMag">–</div></div>
+            <div class="stat"><div class="k">中位重投影差</div><div class="val" id="stReproj">–</div></div>
+            <div class="stat"><div class="k">中位 FB 误差</div><div class="val" id="stFb">–</div></div>
+            <div class="stat"><div class="k">零运动且有效</div><div class="val" id="stZero">–</div></div>
+            <div class="stat"><div class="k">实际金字塔层</div><div class="val" id="stLevels">–</div></div>
+            <div class="stat"><div class="k">尺寸 W×H</div><div class="val" id="stSize">–</div></div>
+          </div>
+
+          <div class="tabs" id="viewTabs" role="tablist">
+            <button data-view="direction" aria-selected="true">方向颜色</button>
+            <button data-view="vectors">矢量叠加</button>
+            <button data-view="valid">有效区</button>
+            <button data-view="reproj">重投影差异</button>
+            <button data-view="fb">一致性误差</button>
+            <button data-view="frames">两帧原图</button>
+          </div>
+
+          <div class="viz-grid">
+            <div class="viz-cell">
+              <h3>源帧 <span id="capA"></span></h3>
+              <div class="canvas-wrap"><canvas id="cvA"></canvas></div>
+            </div>
+            <div class="viz-cell">
+              <h3>目标帧 <span id="capB"></span></h3>
+              <div class="canvas-wrap"><canvas id="cvB"></canvas></div>
+            </div>
+          </div>
+          <div class="legend" id="legend"></div>
+
+          <div class="card" style="box-shadow:none">
+            <div class="card-h">点选查看对应（点击任一画布的像素）</div>
+            <div class="card-b">
+              <dl class="readout" id="readout">
+                <dt>A 像素</dt><dd>未选择</dd>
+                <dt>对应 B 位置</dt><dd>–</dd>
+                <dt>流 (u, v)</dt><dd>–</dd>
+                <dt>是否有效</dt><dd>–</dd>
+                <dt>重投影差</dt><dd>–</dd>
+                <dt>FB 误差</dt><dd>–</dd>
+                <dt>纹理 λmin</dt><dd>–</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
