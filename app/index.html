@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>时域历史重投影校验台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* ---- 设计 token：工程仪表风，青色主色，中性石板灰 ---- */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #e8ecf1;
+  --surface-3: #dde3ea;
+  --fg: #16202b;
+  --fg-dim: #5c6b7a;
+  --line: #cbd4dd;
+  --accent: #0e7c86;
+  --accent-fg: #ffffff;
+  --accent-soft: #d7eef0;
+  --danger: #c0392b;
+  --ok: #2ea043;
+  --shadow: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .06);
+  --radius: 10px;
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161d;
+    --surface: #18212b;
+    --surface-2: #212d39;
+    --surface-3: #2b3947;
+    --fg: #e6edf3;
+    --fg-dim: #93a1b0;
+    --line: #33424f;
+    --accent: #38b6c0;
+    --accent-fg: #062024;
+    --accent-soft: #17353a;
+    --danger: #ff7a6b;
+    --ok: #57d774;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161d; --surface: #18212b; --surface-2: #212d39; --surface-3: #2b3947;
+  --fg: #e6edf3; --fg-dim: #93a1b0; --line: #33424f;
+  --accent: #38b6c0; --accent-fg: #062024; --accent-soft: #17353a;
+  --danger: #ff7a6b; --ok: #57d774;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.mono, code, textarea { font-family: var(--font-mono); }
+.dim { color: var(--fg-dim); }
+h1 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+     color: var(--fg-dim); margin: 0 0 10px; }
+
+/* ---- 顶部栏 ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-block: 14px 12px;
+}
+.topbar .brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.topbar .sub { color: var(--fg-dim); font-size: 12px; }
+.topbar .spacer { flex: 1; }
+select, input[type=number], .btn {
+  font: inherit; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 10px;
+}
+.btn { cursor: pointer; transition: background .12s, border-color .12s; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.small { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
+input[type=file] { font-size: 12.5px; max-width: 210px; }
+
+/* ---- 通用面板 ---- */
+.panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px;
+}
+.grid { display: grid; gap: 14px; }
+
+/* ---- 参数行 ---- */
+.params {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px 22px; align-items: end;
+}
+.param label { display: flex; justify-content: space-between; font-weight: 500; margin-bottom: 6px; }
+.param label .val { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
+.param input[type=range] { width: 100%; accent-color: var(--accent); }
+.param .hint { font-size: 11.5px; color: var(--fg-dim); margin-top: 3px; }
+
+/* ---- 进度 / 状态 ---- */
+.progress-wrap { height: 6px; background: var(--surface-3); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+.progress { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+.status { font-size: 12.5px; color: var(--fg-dim); margin-top: 8px; min-height: 18px;
+          font-variant-numeric: tabular-nums; }
+.error {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--fg); border-radius: var(--radius); padding: 12px 14px;
+  white-space: pre-wrap; font-size: 13px; margin-bottom: 12px;
+}
+
+/* ---- 播放控制 ---- */
+.transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.transport input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+.frame-input { width: 74px; }
+.frame-label { font-family: var(--font-mono); font-size: 12.5px; min-width: 86px; text-align: center; }
+.fps-sel { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 12.5px; }
+
+/* ---- 三视图 ---- */
+.views { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.view-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.view-card h3 { margin: 0; font-size: 13px; font-weight: 600; display: flex;
+  justify-content: space-between; align-items: baseline; gap: 8px; }
+.view-card h3 .tag { font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); font-weight: 400; }
+.canvas-box {
+  position: relative; background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  min-height: 120px;
+  line-height: 0;
+}
+canvas {
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  width: 100%; height: auto;
+  cursor: crosshair; display: block;
+}.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--fg-dim); }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-item i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+/* ---- 检视器 ---- */
+.insp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.pill {
+  --pill: var(--accent);
+  background: color-mix(in srgb, var(--pill) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pill) 55%, var(--line));
+  color: var(--fg); font-size: 12px; padding: 3px 9px; border-radius: 99px; font-weight: 600;
+}
+dl.kv { display: grid; grid-template-columns: minmax(130px, 38%) 1fr; gap: 5px 12px; margin: 0 0 10px; }
+dl.kv dt { color: var(--fg-dim); font-size: 12.5px; }
+dl.kv dd { margin: 0; font-size: 12.5px; min-width: 0; overflow-wrap: anywhere; }
+table.samples { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 10px; }
+table.samples th, table.samples td {
+  border: 1px solid var(--line); padding: 4px 6px; text-align: left;
+  white-space: nowrap;
+}
+table.samples th { background: var(--surface-2); font-weight: 600; }
+table.samples td { font-family: var(--font-mono); }
+table.samples .bad-row { background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.table-scroll { overflow-x: auto; }
+table.samples { min-width: 480px; }
+
+/* ---- 导出条 ---- */
+.export-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- 弹窗 ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(8, 12, 18, .62);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  width: min(860px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+.modal header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px;
+  border-bottom: 1px solid var(--line); font-weight: 600; }
+.modal .body { padding: 16px; overflow: auto; }
+.modal img { border: 1px solid var(--line); border-radius: 8px; }
+.export-text { width: 100%; height: 52vh; resize: vertical; background: var(--surface-2);
+  color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+
+/* ---- 布局编排 ---- */
+.stack { display: grid; gap: 14px; padding-bottom: 28px; }
+.main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+@media (max-width: 1080px) {
+  .main-grid { grid-template-columns: 1fr; }
+  .views { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .params { grid-template-columns: 1fr; }
+  canvas { max-height: 34vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>时域历史重投影校验台</h1>
+      <span class="sub">线性 RGB · 前向深度 · 运动向量 · 逐帧抖动 — 自行实现的重投影 / 深度拒绝 / 邻域限幅 / 历史计数，无现成 TAA 接口</span>
+    </div>
+    <div class="spacer"></div>
+    <select id="sequenceSelect" aria-label="选择内置序列"></select>
+    <label class="btn small" for="btnLoadFile">上传 JSON / .gz
+      <input id="btnLoadFile" type="file" accept=".json,.gz,application/json,application/gzip" hidden>
+    </label>
+  </header>
+
+  <div id="errorBox" class="error" hidden></div>
+
+  <main class="stack">
+    <section class="panel">
+      <h2>算法参数（改动后自动从第 0 帧全量重算，结果与从头计算一致）</h2>
+      <div class="params">
+        <div class="param">
+          <label for="tau">深度阈值 tau <span class="val" id="tauVal">0.05</span></label>
+          <input id="tau" type="range" min="0" max="0.5" step="0.005" value="0.05">
+          <div class="hint">有效条件：|当前深度−历史深度| ≤ tau · max(1, 当前深度)，范围 0–0.5</div>
+        </div>
+        <div class="param">
+          <label for="historyWeight">历史权重 w <span class="val" id="wVal">0.9</span></label>
+          <input id="historyWeight" type="range" min="0" max="0.99" step="0.01" value="0.9">
+          <div class="hint">a = min(w, n/(n+1))，范围 0–0.99</div>
+        </div>
+        <div class="param">
+          <label for="cap">计数上限 cap <span class="val" id="capVal">8</span></label>
+          <input id="cap" type="range" min="1" max="64" step="1" value="8">
+          <div class="hint">新计数 = min(cap, n+1)，范围 1–64</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="btnResetParams">恢复默认 (0.05 / 0.9 / 8)</button>
+          <button class="btn" id="btnCancel" disabled>取消计算</button>
+          <button class="btn" id="btnSelfCheck">一致性自检</button>
+        </div>
+      </div>
+      <div class="progress-wrap"><div class="progress" id="progress"></div></div>
+      <div class="status" id="status">初始化…</div>
+    </section>
+
+    <section class="panel">
+      <h2>帧导航（逐帧 / 播放 / 任意跳转）</h2>
+      <div class="transport">
+        <button class="btn small" id="btnFirst">⏮</button>
+        <button class="btn small" id="btnPrev">◀ 上一帧</button>
+        <button class="btn primary small" id="btnPlay">播放</button>
+        <button class="btn small" id="btnNext">下一帧 ▶</button>
+        <button class="btn small" id="btnLast">⏭</button>
+        <input id="scrubber" type="range" min="0" max="0" step="1" value="0" aria-label="帧跳转">
+        <span class="frame-label" id="frameLabel">帧 0 / 0</span>
+        <input class="frame-input" id="frameJump" type="number" min="0" max="0" value="0" aria-label="输入帧号">
+        <span class="fps-sel">速度
+          <select id="playFps">
+            <option value="2">2 fps</option>
+            <option value="6" selected>6 fps</option>
+            <option value="12">12 fps</option>
+            <option value="24">24 fps</option>
+          </select>
+        </span>
+        <label class="fps-sel"><input type="checkbox" id="playLoop" checked> 循环</label>
+      </div>
+      <div class="status" id="frameStats"></div>
+    </section>
+
+    <div class="main-grid">
+      <div class="stack" style="gap:14px">
+        <section class="panel">
+          <div class="grid views">
+            <div class="view-card">
+              <h3>当前帧 <span class="tag">线性 RGB → sRGB</span></h3>
+              <div class="canvas-box"><canvas id="canvasCurrent"></canvas></div>
+            </div>
+            <div class="view-card">
+              <h3>累积结果 <span class="tag">重投影混合输出</span></h3>
+              <div class="canvas-box"><canvas id="canvasAcc"></canvas></div>
+            </div>
+            <div class="view-card">
+              <h3>拒绝原因 <span class="tag">逐像素分类</span></h3>
+              <div class="canvas-box"><canvas id="canvasReason"></canvas></div>
+            </div>
+          </div>
+          <div class="legend" id="legend"></div>
+        </section>
+
+        <section class="panel">
+          <h2>导出当前帧 / 像素追踪</h2>
+          <div class="export-row">
+            <button class="btn small" id="btnPngCurrent">PNG·当前帧</button>
+            <button class="btn small" id="btnPngAcc">PNG·累积结果</button>
+            <button class="btn small" id="btnPngReason">PNG·拒绝原因</button>
+            <button class="btn small primary" id="btnExportFloat">线性浮点 JSON</button>
+            <button class="btn small primary" id="btnExportTrace">像素追踪 JSON</button>
+          </div>
+          <p class="dim" style="font-size:12px;margin:10px 0 0">
+            PNG：线性值夹到 [0,1] 后按标准 sRGB 传递函数编码；浮点 JSON 含尺寸、帧号、参数、颜色与计数；
+            追踪 JSON 针对所选像素输出全部已算帧的历史位置、四采样点、权重与混合前后数值。
+          </p>
+        </section>
+      </div>
+
+      <aside class="panel">
+        <h2>像素检视</h2>
+        <div id="inspector"><p class="dim">加载序列后，点击任一画布上的像素查看详情。</p></div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <header><span id="modalTitle">导出</span><button class="btn small" id="btnCloseModal">关闭</button></header>
+      <div class="body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script type="module" src="src/app.mjs"></script>
+</body>
+</html>

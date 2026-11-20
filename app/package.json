@@ -1,0 +1,17 @@
+{
+  "name": "temporal-history-reprojector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "时域抗锯齿历史重投影校验台：自行实现重投影、逐采样点深度拒绝、邻域限幅与历史计数，无现成 TAA 接口",
+  "type": "module",
+  "scripts": {
+    "serve": "node test/serve.mjs",
+    "test:cross": "node test/cross-check.mjs",
+    "test:pipeline": "node test/worker-pipeline.mjs",
+    "test:ghost": "node test/ghosting-check.mjs",
+    "test:browser": "node test/browser-smoke.mjs",
+    "test": "npm run test:cross && npm run test:pipeline && npm run test:ghost && npm run test:browser",
+    "snapshot": "python3 -I reference/gen_snapshots.py"
+  },
+  "license": "MIT"
+}

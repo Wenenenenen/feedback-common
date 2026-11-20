@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Node
+node_modules/
+# 跨语言校验生成的快照（可由 reference/gen_snapshots.py 重新生成，体积大）
+app/reference/snapshots/
