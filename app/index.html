@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Screen Ray Slab Tracer</title>
+<style>
+/* layout: fixed left canvas stage, right control rail, stacks on phones */
+:root {
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --ink: #16202b;
+  --ink-2: #4a5867;
+  --line: #d4dbe3;
+  --accent: #1f6fe5;
+  --accent-soft: #dce9fb;
+  --hit: #1f9d57;
+  --cand: #d9a21b;
+  --graze: #b06ad6;
+  --back: #d6485b;
+  --empty: #8a94a0;
+  --source: #0e9aa7;
+  --near: #e0693a;
+  --off: #7a8594;
+  --shadow: 0 1px 3px rgba(16, 28, 42, .08), 0 6px 18px rgba(16, 28, 42, .06);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141c;
+    --panel: #161e29;
+    --panel-2: #1d2734;
+    --ink: #e4eaf1;
+    --ink-2: #9aa8b8;
+    --line: #2b3746;
+    --accent: #6aa6f5;
+    --accent-soft: #1d2f49;
+    --hit: #46cf87;
+    --cand: #e7bb4e;
+    --graze: #c791e6;
+    --back: #f07486;
+    --empty: #6b7684;
+    --source: #3ec6d3;
+    --near: #ef8b5f;
+    --off: #8b96a5;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e141c; --panel: #161e29; --panel-2: #1d2734;
+  --ink: #e4eaf1; --ink-2: #9aa8b8; --line: #2b3746;
+  --accent: #6aa6f5; --accent-soft: #1d2f49;
+  --hit: #46cf87; --cand: #e7bb4e; --graze: #c791e6;
+  --back: #f07486; --empty: #6b7684; --source: #3ec6d3;
+  --near: #ef8b5f; --off: #8b96a5;
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; padding-block: 16px; min-height: 100%; }
+@media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr); } }
+
+header.topbar {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+}
+header.topbar h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+header.topbar .sub { color: var(--ink-2); font-size: 12px; }
+.spacer { flex: 1; }
+button, select, input[type="number"], input[type="text"], textarea {
+  font: inherit; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+label.field { display: grid; gap: 3px; font-size: 11px; color: var(--ink-2); }
+label.field input, label.field select { width: 100%; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow);
+  padding: 14px; min-width: 0;
+}
+.panel h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .9px;
+  color: var(--ink-2); margin: 0 0 10px; font-weight: 700;
+}
+.panel + .panel { margin-top: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+
+.stage { position: relative; min-width: 0; }
+.canvas-wrap {
+  position: relative; width: 100%;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden;
+}
+canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; cursor: crosshair; }
+.hud {
+  position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap;
+  pointer-events: none;
+}
+.pill {
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 10px; font-size: 11px; font-family: var(--mono);
+}
+.pill.hit { color: var(--hit); border-color: var(--hit); }
+.pill.miss { color: var(--near); border-color: var(--near); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: 11px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+
+.rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.raylist { display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow-y: auto; }
+.rayitem {
+  display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 8px; align-items: center;
+  padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+  cursor: pointer;
+}
+.rayitem.active { border-color: var(--accent); background: var(--accent-soft); }
+.rayitem .name { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rayitem .meta { font-size: 10.5px; color: var(--ink-2); font-family: var(--mono); }
+.dot { width: 9px; height: 9px; border-radius: 50%; }
+.dot.hit { background: var(--hit); } .dot.miss { background: var(--near); } .dot.none { background: var(--empty); }
+
+table.data { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; }
+table.data th, table.data td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.data th { color: var(--ink-2); font-weight: 600; text-align: right; }
+table.data td:first-child, table.data th:first-child { text-align: left; }
+.tablewrap { overflow-x: auto; max-height: 260px; overflow-y: auto; }
+.status-tag { font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; }
+.tag-candidate { color: var(--cand); }
+.tag-hit { color: var(--hit); }
+.tag-graze { color: var(--graze); }
+.tag-backface { color: var(--back); }
+.tag-empty-depth, .tag-source-skip, .tag-miss { color: var(--empty); }
+.tag-near, .tag-far, .tag-off-screen, .tag-max-distance, .tag-source-only, .tag-epsilon { color: var(--near); }
+
+textarea { width: 100%; min-height: 110px; font-family: var(--mono); font-size: 11px; resize: vertical; }
+.note { font-size: 11px; color: var(--ink-2); }
+.kv { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 12px; font-family: var(--mono); font-size: 11.5px; }
+.kv b { color: var(--ink-2); font-weight: 600; }
+.toggleline { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.toggleline label { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
+.compare-ok { color: var(--hit); } .compare-bad { color: var(--back); }
+.banner { padding: 8px 10px; border-radius: 8px; font-size: 12px; display: none; margin-top: 10px; }
+.banner.show { display: block; }
+.banner.err { background: color-mix(in srgb, var(--back) 15%, var(--panel)); color: var(--back); border: 1px solid var(--back); }
+.banner.ok { background: color-mix(in srgb, var(--hit) 14%, var(--panel)); color: var(--hit); border: 1px solid var(--hit); }
+.rayeditor { display: grid; gap: 8px; }
+.rayeditor .grid3 input { font-family: var(--mono); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; }
+.checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px 10px; font-size: 12px; }
+.checkbox-grid label { display: inline-flex; gap: 6px; align-items: center; }
+.small { font-size: 11px; }
+.muted { color: var(--ink-2); }
+.mono { font-family: var(--mono); }
+hr.sep { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <h1>Screen Ray Slab Tracer</h1>
+      <div class="sub">透视投影 · 逐格解析区间 · 半开像素 [u,u+1)×[v,v+1) · 深度厚度板</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="field" style="min-width:170px">
+      场景
+      <select id="sceneSelect">
+        <option value="scene.json">48×32 教学场景</option>
+        <option value="capacity.json">256×192 容量场景</option>
+        <option value="__upload__">载入本地场景 JSON…</option>
+      </select>
+    </label>
+    <input type="file" id="sceneFile" accept=".json,application/json" hidden>
+    <button id="themeBtn" class="ghost" type="button">切换主题</button>
+  </header>
+
+  <main class="stage">
+    <div class="panel">
+      <h2>视图 · 点选像素生成反射射线</h2>
+      <div class="canvas-wrap">
+        <canvas id="view" width="48" height="32"></canvas>
+        <div class="hud" id="hud"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="banner err" id="errBanner"></div>
+      <div class="banner ok" id="okBanner"></div>
+      <hr class="sep">
+      <div class="row" style="justify-content:space-between">
+        <div class="muted small" id="cursorInfo">悬停查看像素 · 单击生成/替换反射射线</div>
+        <div class="row">
+          <button id="exportPng" type="button">导出 PNG</button>
+          <button id="exportJson" class="primary" type="button">导出追踪 JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>参考模式比对（逐像素穷举 vs 逐格遍历）</h2>
+      <div class="row" style="justify-content:space-between">
+        <label class="toggleline" style="margin:0">
+          <label><input type="checkbox" id="refMode"> 启用穷举参考</label>
+        </label>
+        <button id="runCompare" type="button">对全部射线跑比对</button>
+      </div>
+      <div id="compareSummary" class="small muted" style="margin-top:8px"></div>
+      <div class="tablewrap" style="margin-top:8px">
+        <table class="data" id="compareTable" hidden>
+          <thead><tr><th>射线</th><th>命中格</th><th>enter 差</th><th>候选数</th><th>结论</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <aside class="rail">
+    <section class="panel">
+      <h2>追踪参数</h2>
+      <div class="grid3">
+        <label class="field">thickness
+          <input type="number" id="thickness" step="0.01" min="0"></label>
+        <label class="field">epsilon
+          <input type="number" id="epsilon" step="0.0001" min="0"></label>
+        <label class="field">maxDistance
+          <input type="number" id="maxDistance" step="1" min="0"></label>
+      </div>
+      <hr class="sep">
+      <div class="kv" id="cameraInfo"></div>
+      <hr class="sep">
+      <div class="checkbox-grid">
+        <label><input type="checkbox" id="ovColor" checked> 颜色底图</label>
+        <label><input type="checkbox" id="ovDepth"> 深度着色</label>
+        <label><input type="checkbox" id="ovNormal"> 法线</label>
+        <label><input type="checkbox" id="ovCells" checked> 走过格子</label>
+        <label><input type="checkbox" id="ovInterval" checked> 命中区间</label>
+        <label><input type="checkbox" id="ovRay" checked> 射线路径</label>
+        <label><input type="checkbox" id="ovGrid"> 像素网格</label>
+        <label><input type="checkbox" id="ovLabels"> 命中原因标签</label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>射线列表</h2>
+      <div class="raylist" id="rayList"></div>
+      <hr class="sep">
+      <div class="row">
+        <button id="addRay" type="button">新建空射线</button>
+        <button id="dupRay" type="button">复制当前</button>
+        <button id="delRay" type="button">删除当前</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>当前射线编辑</h2>
+      <div class="rayeditor">
+        <label class="field">ID
+          <input type="text" id="rId"></label>
+        <div class="grid3">
+          <label class="field">origin x<input type="number" step="any" id="ox"></label>
+          <label class="field">origin y<input type="number" step="any" id="oy"></label>
+          <label class="field">origin z<input type="number" step="any" id="oz"></label>
+        </div>
+        <div class="grid3">
+          <label class="field">dir x<input type="number" step="any" id="dx"></label>
+          <label class="field">dir y<input type="number" step="any" id="dy"></label>
+          <label class="field">dir z<input type="number" step="any" id="dz"></label>
+        </div>
+        <div class="row">
+          <label class="small"><input type="checkbox" id="hasSource"> sourcePixel</label>
+          <label class="field" style="width:90px">x<input type="number" id="srcX" min="0"></label>
+          <label class="field" style="width:90px">y<input type="number" id="srcY" min="0"></label>
+        </div>
+        <div class="row">
+          <button id="normalizeDir" type="button">归一化方向</button>
+          <button id="applyRay" class="primary" type="button">应用并重追</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>当前射线结果</h2>
+      <div id="rayResult"></div>
+      <hr class="sep">
+      <h2 style="margin-top:4px">走过的格子与区间</h2>
+      <div class="tablewrap">
+        <table class="data" id="cellTable">
+          <thead><tr><th>pixel (x,y)</th><th>状态</th><th>enter</th><th>exit</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>批量载入 / 导出射线 JSON</h2>
+      <textarea id="bulkJson" placeholder='[{"id":"...","origin":[...],"direction":[...],"sourcePixel":[x,y]}]'></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="loadBulk" type="button">载入文本</button>
+        <button id="fillBulk" type="button">填入当前射线</button>
+        <input type="file" id="rayFile" accept=".json,application/json" hidden>
+        <button id="loadRayFile" type="button">从文件载入</button>
+      </div>
+      <p class="note" style="margin-bottom:0">点选生成规则：origin 为源格中心反投影，入射方向 normalize(origin)，反射方向 = 入射 − 2(入射·源法线)源法线，并自动设置 sourcePixel。源格法线朝后（点乘不为负）时给出提示。</p>
+    </section>
+  </aside>
+</div>
+
+<script src="tracer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
