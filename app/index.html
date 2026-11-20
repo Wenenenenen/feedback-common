@@ -1,0 +1,370 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>铰链 IK 校验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ---- 设计令牌: 工程仪表台, 冷灰蓝底 + 青色运动学强调 + 语义色 ---- */
+:root {
+  --bg: #0f1419;
+  --bg-2: #161d25;
+  --panel: #1b242e;
+  --panel-2: #212c38;
+  --line: #2d3a47;
+  --fg: #e4ebf1;
+  --fg-dim: #93a3b3;
+  --fg-faint: #637485;
+  --accent: #39c6c0;
+  --accent-soft: rgba(57, 198, 192, 0.14);
+  --good: #4cc38a;
+  --warn: #e0a84e;
+  --bad: #e5604e;
+  --joint: #7fb4e8;
+  --link: #b7c9da;
+  --target: #f2c14e;
+  --axis: #c77de8;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --radius: 10px;
+  --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #eef1f5;
+  --bg-2: #e4e9ef;
+  --panel: #ffffff;
+  --panel-2: #f3f6f9;
+  --line: #d3dce5;
+  --fg: #18222d;
+  --fg-dim: #4d5d6d;
+  --fg-faint: #7a8a9a;
+  --accent: #0e8c88;
+  --accent-soft: rgba(14, 140, 136, 0.12);
+  --good: #1f9d63;
+  --warn: #b9791f;
+  --bad: #cc3f2d;
+  --joint: #2f7fc4;
+  --link: #3c4d5e;
+  --target: #c8891a;
+  --axis: #9a4dc4;
+  --shadow: 0 10px 28px rgba(20, 40, 60, 0.12);
+  color-scheme: light;
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(14px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-bottom, 0px));
+}
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-rows: 1fr;
+  gap: 14px;
+  max-width: 1500px;
+  margin: 0 auto;
+  height: calc(100vh - 32px);
+  height: calc(100dvh - 32px);
+  min-height: 0;
+}
+@media (max-width: 980px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
+  .viewport { height: 58vh; min-height: 380px; }
+}
+
+h1, h2, h3 { margin: 0; font-weight: 650; text-wrap: balance; }
+h1 { font-size: 17px; letter-spacing: 0.2px; }
+h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--fg-faint); }
+h3 { font-size: 13px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- 视口 ---------- */
+.viewport {
+  position: relative;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.viewport canvas { flex: 1; min-height: 0; width: 100%; display: block; cursor: grab; touch-action: none; }
+.viewport canvas.dragging { cursor: grabbing; }
+.vp-head {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 12px 14px; pointer-events: none; z-index: 3;
+}
+.vp-title { background: rgba(15, 20, 25, 0.62); backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; }
+:root[data-theme="light"] .vp-title { background: rgba(255,255,255,0.78); }
+.vp-title .sub { font-size: 11.5px; color: var(--fg-dim); margin-top: 1px; }
+.vp-hint {
+  position: absolute; bottom: 12px; left: 14px; z-index: 3;
+  font-size: 11.5px; color: var(--fg-dim);
+  background: rgba(15, 20, 25, 0.55); border: 1px solid var(--line);
+  padding: 5px 9px; border-radius: 7px; pointer-events: none;
+}
+:root[data-theme="light"] .vp-hint { background: rgba(255,255,255,0.75); }
+.legend {
+  position: absolute; bottom: 12px; right: 14px; z-index: 3;
+  display: flex; flex-direction: column; gap: 5px;
+  background: rgba(15, 20, 25, 0.55); border: 1px solid var(--line);
+  padding: 8px 10px; border-radius: 8px; font-size: 11.5px; pointer-events: none;
+}
+:root[data-theme="light"] .legend { background: rgba(255,255,255,0.78); }
+.legend .row { display: flex; align-items: center; gap: 7px; color: var(--fg-dim); }
+.swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.swatch.line { height: 3px; border-radius: 2px; }
+
+/* ---------- 侧栏 ---------- */
+.sidebar { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 13px 14px;
+}
+.card.flush { padding: 0; overflow: hidden; }
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+
+/* 状态条 */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.status-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.status-converged { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.status-stalled { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.status-running { color: var(--warn); background: color-mix(in srgb, var(--warn) 13%, transparent); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.status-idle { color: var(--fg-dim); background: var(--panel-2); border-color: var(--line); }
+
+/* 指标网格 */
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.metric { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.metric .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--fg-faint); }
+.metric .v { font-family: var(--font-mono); font-size: 15px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric .v.bad { color: var(--bad); }
+.metric .v.good { color: var(--good); }
+
+/* 按钮 */
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font-family: var(--font-ui); font-size: 13px; font-weight: 600;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+  padding: 8px 13px; border-radius: 8px; cursor: pointer;
+  transition: background 0.13s, border-color 0.13s, transform 0.05s;
+}
+button:hover { border-color: var(--accent); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.42; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #06231f; }
+:root[data-theme="light"] button.primary { color: #ffffff; }
+button.primary:hover { filter: brightness(1.06); }
+button.ghost { background: transparent; }
+button.danger:hover { border-color: var(--bad); color: var(--bad); }
+button.small { padding: 5px 9px; font-size: 12px; }
+
+/* 输入 */
+label.fld { display: block; font-size: 11.5px; color: var(--fg-dim); margin-bottom: 7px; }
+label.fld span { display: block; margin-bottom: 3px; }
+input[type="number"], input[type="text"], select {
+  width: 100%; background: var(--bg-2); border: 1px solid var(--line);
+  color: var(--fg); border-radius: 7px; padding: 6px 8px;
+  font-family: var(--font-mono); font-size: 12.5px;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+
+/* 关节/末端列表 */
+.list { max-height: 280px; overflow-y: auto; }
+.row-item { border-bottom: 1px solid var(--line); padding: 9px 14px; }
+.row-item:last-child { border-bottom: none; }
+.row-item .top { display: flex; align-items: center; gap: 8px; }
+.row-item .name { font-weight: 600; font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag { font-size: 10px; font-family: var(--font-mono); color: var(--fg-faint); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; }
+.tag.lock { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.angle-line { display: grid; grid-template-columns: 1fr 78px; gap: 9px; align-items: center; margin-top: 7px; }
+.angle-line input[type="number"] { text-align: right; }
+.limit-note { font-size: 10.5px; color: var(--fg-faint); font-family: var(--font-mono); margin-top: 3px; }
+
+/* 末端目标编辑 */
+.eff-item { border-bottom: 1px solid var(--line); padding: 10px 14px; }
+.eff-item:last-child { border-bottom: none; }
+.eff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 7px; }
+.eff-grid label.fld { margin: 0; }
+.eff-grid .axis-tag { font-family: var(--font-mono); color: var(--fg-faint); }
+.eff-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--fg-dim); margin-top: 6px; gap: 8px; }
+.eff-meta .err { font-family: var(--font-mono); font-weight: 600; }
+
+/* 日志 */
+.log-wrap { max-height: 200px; overflow: auto; background: var(--bg-2); }
+table.log { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
+table.log th { position: sticky; top: 0; background: var(--panel-2); color: var(--fg-faint);
+  text-align: right; padding: 5px 8px; font-weight: 600; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.log td { text-align: right; padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); white-space: nowrap; }
+table.log td:first-child, table.log th:first-child { text-align: left; }
+table.log tr.fresh { background: var(--accent-soft); }
+
+/* 配置区 */
+.config-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+textarea {
+  width: 100%; min-height: 90px; resize: vertical;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 8px; padding: 9px; font-family: var(--font-mono); font-size: 11.5px;
+}
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--panel); border: 1px solid var(--accent); color: var(--fg);
+  padding: 10px 18px; border-radius: 9px; box-shadow: var(--shadow);
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 50;
+  max-width: 88vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { border-color: var(--bad); }
+.reason-box { font-size: 12px; color: var(--fg-dim); background: var(--panel-2);
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: 7px;
+  padding: 8px 10px; margin-top: 9px; }
+.reason-box.bad { border-left-color: var(--bad); }
+.reason-box.good { border-left-color: var(--good); }
+.controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.toggle-theme { position: absolute; top: 12px; right: 14px; z-index: 4; pointer-events: auto; }
+.hidden { display: none !important; }
+.muted { color: var(--fg-faint); font-size: 11.5px; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.gap6 { gap: 6px; }
+</style>
+
+<div class="app">
+  <!-- ============ 左: 3D 视口 ============ -->
+  <section class="viewport">
+    <div class="vp-head">
+      <div class="vp-title">
+        <h1>铰链 IK 校验台</h1>
+        <div class="sub" id="vp-sub">载入样例中…</div>
+      </div>
+      <button class="small ghost toggle-theme" id="theme-btn" type="button">切换主题</button>
+    </div>
+    <canvas id="gl"></canvas>
+    <div class="vp-hint">左键拖动旋转视角 · 滚轮缩放 · 右键平移 · 拖动黄色目标球调整目标</div>
+    <div class="legend">
+      <div class="row"><span class="swatch" style="background:var(--joint)"></span>关节 / 骨架</div>
+      <div class="row"><span class="swatch line" style="background:var(--axis)"></span>关节旋转轴</div>
+      <div class="row"><span class="swatch" style="background:var(--target)"></span>末端目标 (可拖动)</div>
+      <div class="row"><span class="swatch" style="background:var(--good)"></span>当前末端位置</div>
+    </div>
+  </section>
+
+  <!-- ============ 右: 控制面板 ============ -->
+  <aside class="sidebar">
+    <!-- 求解状态 -->
+    <div class="card">
+      <div class="card-head">
+        <h2>求解状态</h2>
+        <span class="status-pill status-idle" id="status-pill">未运行</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="k">迭代轮次</div><div class="v mono" id="m-iter">0</div></div>
+        <div class="metric"><div class="k">最大位置误差</div><div class="v mono" id="m-maxerr">—</div></div>
+        <div class="metric"><div class="k">位置代价 Σw·e²</div><div class="v mono" id="m-poscost">—</div></div>
+        <div class="metric"><div class="k">正则项 λ·ΣΔθ²</div><div class="v mono" id="m-regcost">—</div></div>
+        <div class="metric" style="grid-column:1/3"><div class="k">总代价</div><div class="v mono" id="m-totalcost">—</div></div>
+      </div>
+      <div class="reason-box hidden" id="reason-box"><span id="reason-text"></span></div>
+    </div>
+
+    <!-- 运行控制 -->
+    <div class="card">
+      <div class="card-head"><h2>运行控制</h2><span class="muted mono" id="budget-note"></span></div>
+      <div class="controls-grid">
+        <button class="primary" id="btn-run" type="button">运行到停止</button>
+        <button id="btn-step" type="button">单步</button>
+        <button id="btn-stop" type="button" disabled>暂停</button>
+        <button class="ghost" id="btn-reset" type="button">重置为初值</button>
+      </div>
+      <button class="ghost small" id="btn-determinism" type="button" style="width:100%;margin-top:8px">确定性自检 (同初值双跑逐位比对)</button>
+      <div class="flex-between gap6" style="margin-top:10px">
+        <label class="fld" style="margin:0;flex:1">
+          <span>连续运行每轮间隔 (ms)</span>
+          <input type="number" id="run-delay" value="20" min="0" max="500" step="5">
+        </label>
+        <label class="fld" style="margin:0;flex:1">
+          <span>正则系数 λ</span>
+          <input type="number" id="lambda-in" step="0.001" min="0">
+        </label>
+      </div>
+    </div>
+
+    <!-- 末端目标 -->
+    <div class="card flush">
+      <div class="card-head" style="padding:13px 14px 0"><h2>末端目标</h2></div>
+      <div id="eff-list"></div>
+    </div>
+
+    <!-- 关节角度 -->
+    <div class="card flush">
+      <div class="card-head" style="padding:13px 14px 0">
+        <h2>关节角度 (度)</h2>
+        <label class="flex-between gap6" style="font-size:11.5px;color:var(--fg-dim)">
+          <input type="checkbox" id="show-axes" checked> 显示轴
+        </label>
+      </div>
+      <div class="list" id="joint-list"></div>
+    </div>
+
+    <!-- 迭代日志 -->
+    <div class="card flush">
+      <div class="card-head" style="padding:13px 14px 8px">
+        <h2>每轮记录</h2>
+        <button class="small ghost" id="btn-export-log" type="button">导出日志 JSON</button>
+      </div>
+      <div class="log-wrap">
+        <table class="log">
+          <thead><tr><th>轮</th><th>总代价</th><th>位置代价</th><th>正则</th><th>最大误差</th><th>μ</th></tr></thead>
+          <tbody id="log-body"><tr><td colspan="6" class="muted" style="text-align:center;padding:14px">尚无迭代</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 配置导入导出 -->
+    <div class="card">
+      <div class="card-head"><h2>配置与样例</h2></div>
+      <div class="config-row" style="margin-bottom:10px">
+        <select id="sample-select" style="flex:1;min-width:0"></select>
+        <button class="small" id="btn-load-sample" type="button">载入</button>
+      </div>
+      <label class="fld" style="margin-bottom:8px">
+        <span>本地槽位名称 (保存/重载姿态与目标, 仅存于本浏览器)</span>
+        <input type="text" id="slot-name" placeholder="例如: 左臂校准-01">
+      </label>
+      <div class="btns" style="margin-bottom:10px">
+        <button class="small" id="btn-save" type="button">保存到槽位</button>
+        <button class="small ghost" id="btn-delete-slot" type="button">删除该槽位</button>
+        <button class="small ghost" id="btn-copy-config" type="button">复制配置</button>
+        <label class="small" style="border:1px solid var(--line);background:var(--panel-2);padding:5px 9px;border-radius:8px;cursor:pointer;font-weight:600">
+          导入文件
+          <input type="file" id="file-in" accept=".json,application/json" hidden>
+        </label>
+      </div>
+      <details>
+        <summary class="muted" style="cursor:pointer">查看 / 编辑当前完整 JSON 配置</summary>
+        <textarea id="config-text" spellcheck="false" style="margin-top:8px"></textarea>
+        <div class="btns" style="margin-top:8px">
+          <button class="small primary" id="btn-apply-config" type="button">应用 JSON</button>
+          <span class="muted" id="save-slot-note"></span>
+        </div>
+      </details>
+    </div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>

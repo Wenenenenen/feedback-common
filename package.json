@@ -1,0 +1,14 @@
+{
+  "name": "hinge-ik-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "带关节限位、锁定与姿态正则项的多目标铰链逆运动学校验台 (纯前端, 无第三方依赖)",
+  "scripts": {
+    "build": "node tools/build.js",
+    "test:js": "node tools/crosscheck.js && node tools/test_iterator.js && node tools/test_coupling.js",
+    "test:py": "python3 -I tools/test_solver.py",
+    "test:browser": "node tools/browser-smoke.js",
+    "test": "npm run test:py && npm run test:js"
+  },
+  "engines": { "node": ">=18" }
+}
