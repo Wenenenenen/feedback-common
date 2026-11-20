@@ -1,0 +1,12 @@
+{
+  "name": "g53-progressive-stream",
+  "version": "1.0.0",
+  "private": true,
+  "description": "G53 灰度图渐进传输编码实验（手工 5/3 提升 + 带符号位平面流）",
+  "scripts": {
+    "test": "node tests/g53.test.js"
+  },
+  "dependencies": {
+    "pako": "^2.1.1"
+  }
+}

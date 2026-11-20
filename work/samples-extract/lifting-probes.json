@@ -1,0 +1,42 @@
+{
+  "forward_1d": [
+    {
+      "input": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "expected": [
+        0,
+        2,
+        4,
+        0,
+        0
+      ]
+    },
+    {
+      "input": [
+        3,
+        -2,
+        7
+      ],
+      "expected": [
+        0,
+        4,
+        -7
+      ]
+    },
+    {
+      "input": [
+        -5
+      ],
+      "expected": [
+        -5
+      ]
+    }
+  ],
+  "crc": "按zlib.crc32计算无符号32位值",
+  "full_roundtrip_max_error": 0
+}

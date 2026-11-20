@@ -1,0 +1,590 @@
+<title>G53 渐进流实验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+/*
+  设计计划 —— 信号分析仪 / 示波器工作台
+  布局：左控制栏（固定卡片栈）+ 右工作区（状态瓦片 + 双画布 + 选项卡）
+  配色：冷灰中性底 + 青绿信号主色 + 琥珀高频/警示色 + 红/绿语义色，深浅双主题
+  字体：Space Grotesk 标题 / Inter 正文 / JetBrains Mono 数据
+*/
+:root {
+  --bg: #eef2f4;
+  --panel: #ffffff;
+  --panel-2: #f6f9fa;
+  --ink: #15202b;
+  --muted: #5c6d7a;
+  --line: #d4dde3;
+  --accent: #0e7c86;
+  --accent-soft: #d8f0f1;
+  --amber: #b45309;
+  --amber-soft: #fdeccf;
+  --good: #15803d;
+  --good-soft: #dcf3e3;
+  --bad: #b91c1c;
+  --bad-soft: #fbe0e0;
+  --heat-zero: #eef2f4;
+  --shadow: 0 1px 2px rgba(16, 32, 43, .06), 0 4px 14px rgba(16, 32, 43, .06);
+  --radius: 10px;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c131a;
+    --panel: #131d27;
+    --panel-2: #182531;
+    --ink: #e2ebf2;
+    --muted: #8fa3b2;
+    --line: #263744;
+    --accent: #3dd9cc;
+    --accent-soft: #10323a;
+    --amber: #f5a623;
+    --amber-soft: #382a12;
+    --good: #54d487;
+    --good-soft: #0f3020;
+    --bad: #f47373;
+    --bad-soft: #3a1717;
+    --heat-zero: #131d27;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .28);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c131a;
+  --panel: #131d27;
+  --panel-2: #182531;
+  --ink: #e2ebf2;
+  --muted: #8fa3b2;
+  --line: #263744;
+  --accent: #3dd9cc;
+  --accent-soft: #10323a;
+  --amber: #f5a623;
+  --amber-soft: #382a12;
+  --good: #54d487;
+  --good-soft: #0f3020;
+  --bad: #f47373;
+  --bad-soft: #3a1717;
+  --heat-zero: #131d27;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .28);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+code, .mono { font-family: var(--font-mono); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-block: 14px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar h1 { font-size: 19px; letter-spacing: .2px; display: flex; align-items: center; gap: 10px; }
+.scope-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--muted);
+  background: var(--panel);
+}
+.spacer { flex: 1; }
+.theme-btn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+.theme-btn:hover { border-color: var(--accent); }
+
+/* ---------- 布局 ---------- */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 18px;
+  padding-block: 18px 40px;
+  align-items: start;
+}
+@media (max-width: 920px) { .shell { grid-template-columns: 1fr; } }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.card h2 {
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card h2::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.row + .row { margin-top: 8px; }
+label.field { display: block; font-size: 12px; color: var(--muted); }
+label.field + label.field, .field + .field { margin-top: 10px; }
+
+button.ui {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+button.ui:hover { border-color: var(--accent); color: var(--accent); }
+button.ui.primary { background: var(--accent); border-color: var(--accent); color: #04201f; font-weight: 600; }
+button.ui.primary:hover { filter: brightness(1.06); color: #04201f; }
+button.ui:disabled { opacity: .45; cursor: not-allowed; }
+select, input[type="number"], input[type="text"] {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="file"] { max-width: 100%; font-size: 12px; }
+.sample-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.sample-btn {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-size: 11.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.sample-btn img { width: 44px; height: 44px; image-rendering: pixelated; object-fit: contain; background: var(--heat-zero); border-radius: 4px; }
+.sample-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ---------- 状态瓦片 ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.tile .k { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.tile .v { font-family: var(--font-mono); font-size: 19px; margin-top: 2px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.tile .sub { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.waiting { color: var(--amber); background: var(--amber-soft); border-color: transparent; }
+.pill.waiting::before { background: var(--amber); animation: blink 1.2s infinite; }
+.pill.good { color: var(--good); background: var(--good-soft); border-color: transparent; }
+.pill.good::before { background: var(--good); }
+.pill.bad { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
+.pill.bad::before { background: var(--bad); }
+.pill.done { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.pill.done::before { background: var(--accent); }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pill.waiting::before { animation: none; } }
+
+.banner {
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 13px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid transparent;
+}
+.banner.bad { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.banner.warn { background: var(--amber-soft); color: var(--amber); }
+.banner.good { background: var(--good-soft); color: var(--good); }
+.banner code { font-size: 12px; word-break: break-all; }
+
+/* ---------- 画布 ---------- */
+.canvas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.canvas-box {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  min-width: 0;
+}
+.canvas-box .cap {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  font-size: 12px; color: var(--muted); margin-bottom: 8px;
+}
+.canvas-box .cap b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
+.canvas-wrap {
+  display: flex; align-items: center; justify-content: center;
+  background:
+    repeating-conic-gradient(color-mix(in srgb, var(--line) 55%, transparent) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+  border-radius: 6px;
+  padding: 8px;
+  overflow: hidden;
+}
+.canvas-wrap canvas { image-rendering: pixelated; max-width: 100%; height: auto; display: block; }
+
+/* ---------- 进度条 ---------- */
+.progress { height: 10px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width .12s linear; }
+.layer-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--panel-2);
+}
+.chip.verified { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); background: var(--good-soft); }
+.chip.current { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); background: var(--amber-soft); }
+
+/* ---------- 选项卡 ---------- */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tab {
+  border: 0;
+  background: none;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tabpane { padding-top: 14px; }
+
+table.records { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.records th, table.records td {
+  text-align: left;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+table.records th { font-family: var(--font-body); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+.table-scroll { overflow-x: auto; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-weight: 600; }
+.tag.verified { color: var(--good); background: var(--good-soft); }
+.tag.waiting { color: var(--amber); background: var(--amber-soft); }
+.tag.pending { color: var(--muted); background: var(--panel-2); }
+
+/* ---------- 系数热图 ---------- */
+.coeff-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 260px); gap: 14px; }
+@media (max-width: 700px) { .coeff-layout { grid-template-columns: 1fr; } }
+#coeffCanvas { cursor: crosshair; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; height: auto; }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); margin-top: 8px; font-family: var(--font-mono); }
+.legend .bar { flex: 1; max-width: 220px; height: 10px; border-radius: 999px; border: 1px solid var(--line); }
+.inspector { font-size: 12.5px; }
+.inspector dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+.inspector dt { color: var(--muted); }
+.inspector dd { margin: 0; font-family: var(--font-mono); word-break: break-all; min-width: 0; }
+.coeff-table { font-family: var(--font-mono); font-size: 11px; border-collapse: collapse; }
+.coeff-table td { border: 1px solid var(--line); padding: 3px 6px; text-align: right; min-width: 44px; }
+
+/* ---------- 格式说明 ---------- */
+.spec { font-size: 13px; }
+.spec pre {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.spec h3 { font-size: 14px; margin: 16px 0 6px; }
+.spec ul { padding-left: 20px; margin: 6px 0; }
+.spec li { margin-block: 4px; }
+
+.dropzone {
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+  transition: border-color .15s, background .15s;
+}
+.dropzone.drag { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+textarea.b64 {
+  width: 100%;
+  min-height: 74px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  resize: vertical;
+}
+.muted { color: var(--muted); font-size: 12px; }
+.checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.checkbox input { accent-color: var(--accent); }
+.kvline { font-family: var(--font-mono); font-size: 12px; color: var(--muted); word-break: break-all; }
+</style>
+
+<div class="topbar">
+  <h1><span class="scope-dot"></span>G53 渐进流实验台</h1>
+  <span class="badge">整数 5/3 提升 · 带符号位平面</span>
+  <span class="spacer"></span>
+  <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+</div>
+
+<div class="shell">
+  <!-- ============ 左：控制栏 ============ -->
+  <div class="col">
+    <section class="card">
+      <h2>输入图像</h2>
+      <div class="sample-grid" id="sampleGrid"></div>
+      <div class="row" style="margin-top:10px">
+        <label class="dropzone" style="flex:1" id="pngDrop">
+          拖入或选择 8 位灰度 PNG（边长 1–1024）
+          <input type="file" id="pngInput" accept=".png,image/png" hidden>
+        </label>
+      </div>
+      <div class="kvline" id="srcInfo" style="margin-top:8px">尚未载入图像</div>
+    </section>
+
+    <section class="card">
+      <h2>编码参数</h2>
+      <label class="field">分解层数
+        <div class="row" style="justify-content:space-between">
+          <input type="range" id="levelRange" min="0" max="1" value="1" style="flex:1">
+          <b class="mono" id="levelVal" style="min-width:34px;text-align:right">1</b>
+        </div>
+      </label>
+      <div class="muted" id="levelHint"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="ui primary" id="encodeBtn" type="button">编码生成 G53 流</button>
+      </div>
+      <div class="kvline" id="encodeInfo" style="margin-top:8px"></div>
+    </section>
+
+    <section class="card">
+      <h2>渐进喂入</h2>
+      <label class="field">已喂入字节
+        <input type="range" id="byteRange" min="0" max="1" value="0" disabled>
+      </label>
+      <div class="row" style="justify-content:space-between">
+        <span class="mono" id="byteVal">0 / 0</span>
+        <span class="mono" id="bytePct">0.0%</span>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="field" style="flex:1">分片大小
+          <select id="chunkSize">
+            <option value="1">1 字节</option>
+            <option value="13">13 字节（一条记录头）</option>
+            <option value="64" selected>64 字节</option>
+            <option value="512">512 字节</option>
+            <option value="4096">4096 字节</option>
+            <option value="record">按记录边界</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="ui" id="feedBtn" type="button">喂入一片</button>
+        <button class="ui" id="playBtn" type="button">自动播放</button>
+        <button class="ui" id="resetBtn" type="button">重置</button>
+        <button class="ui" id="halfBtn" type="button">截在半层</button>
+      </div>
+      <label class="checkbox" style="margin-top:10px">
+        <input type="checkbox" id="corruptChk">
+        <span>损坏演示：翻转第 1 条记录负载中的 1 字节（完整记录 → CRC 硬错误）</span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>流导入 / 导出</h2>
+      <div class="row">
+        <button class="ui primary" id="exportBtn" type="button" disabled>导出完整 .g53</button>
+        <button class="ui" id="copyB64Btn" type="button" disabled>复制 Base64</button>
+      </div>
+      <label class="dropzone" style="margin-top:10px" id="g53Drop">
+        拖入或选择 .g53 流重新导入
+        <input type="file" id="g53Input" accept=".g53,application/octet-stream" hidden>
+      </label>
+      <label class="field" style="margin-top:10px">或粘贴 Base64
+        <textarea class="b64" id="b64Input" placeholder="data:application/octet-stream;base64, ..."></textarea>
+      </label>
+      <div class="row" style="margin-top:8px">
+        <button class="ui" id="b64ImportBtn" type="button">从 Base64 导入</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 右：工作区 ============ -->
+  <div class="col">
+    <div class="tiles">
+      <div class="tile"><div class="k">已收字节</div><div class="v" id="tBytes">0</div><div class="sub" id="tBytesSub">共 0 B</div></div>
+      <div class="tile"><div class="k">有效层</div><div class="v" id="tLayers">0 / 0</div><div class="sub" id="tLayersSub">位号 —</div></div>
+      <div class="tile"><div class="k">解析状态</div><div class="v" style="font-size:15px;display:flex;align-items:center;height:26px"><span class="pill" id="tState">未编码</span></div><div class="sub" id="tStateSub">等待编码</div></div>
+      <div class="tile"><div class="k">最大灰度误差</div><div class="v" id="tMaxErr">—</div><div class="sub" id="tMaxErrSub">有符号域，未夹紧</div></div>
+      <div class="tile"><div class="k">MAE / RMSE</div><div class="v" id="tMae">—</div><div class="sub" id="tRmse">RMSE —</div></div>
+      <div class="tile"><div class="k">PSNR</div><div class="v" id="tPsnr">—</div><div class="sub" id="tClampSub">越界像素 —</div></div>
+    </div>
+
+    <div class="banner bad" id="errBanner" hidden>
+      <span>●</span>
+      <div><b>流错误（硬失败，不会当作截断处理）</b><div id="errText" style="margin-top:2px"></div></div>
+    </div>
+    <div class="banner good" id="losslessBanner" hidden>
+      <span>✓</span>
+      <div><b>逐像素无损还原</b><div class="mono" style="margin-top:2px;font-size:12px" id="losslessText"></div></div>
+    </div>
+    <div class="banner warn" id="waitBanner" hidden>
+      <span>◐</span>
+      <div><b>末尾记录不完整</b><div style="margin-top:2px">已保留完整校验通过的层，剩余字节等待更多数据到达——不会误报为损坏。</div></div>
+    </div>
+
+    <section class="card">
+      <h2>重建预览</h2>
+      <div class="progress"><i id="progBar" style="width:0%"></i></div>
+      <div class="layer-chips" id="layerChips"></div>
+      <div class="canvas-grid" style="margin-top:12px">
+        <div class="canvas-box">
+          <div class="cap"><b>原图</b><span id="origCap">—</span></div>
+          <div class="canvas-wrap"><canvas id="origCanvas" width="80" height="80"></canvas></div>
+        </div>
+        <div class="canvas-box">
+          <div class="cap"><b>当前重建</b><span id="recCap">—</span></div>
+          <div class="canvas-wrap"><canvas id="recCanvas" width="80" height="80"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tabs">
+        <button class="tab active" data-tab="coeff" type="button">子带与整数系数</button>
+        <button class="tab" data-tab="records" type="button">层记录</button>
+        <button class="tab" data-tab="spec" type="button">G53 格式说明</button>
+      </div>
+
+      <div class="tabpane" id="tab-coeff">
+        <div class="row" style="margin-bottom:10px">
+          <label class="field">高亮分解轮次
+            <select id="bandLevel"></select>
+          </label>
+          <label class="checkbox"><input type="checkbox" id="fullCoeffChk"><span>显示完整系数（忽略当前喂入进度）</span></label>
+        </div>
+        <div class="coeff-layout">
+          <div>
+            <div class="canvas-wrap" style="padding:0;background:var(--panel-2)">
+              <canvas id="coeffCanvas"></canvas>
+            </div>
+            <div class="legend">
+              <span id="legNeg">负</span>
+              <span class="bar" id="legBar"></span>
+              <span id="legPos">正</span>
+              <span style="margin-left:auto" id="legScale"></span>
+            </div>
+          </div>
+          <div class="inspector card" style="box-shadow:none">
+            <h2 style="margin-bottom:8px">系数检视</h2>
+            <dl>
+              <dt>坐标</dt><dd id="inspCoord">点击热图选取</dd>
+              <dt>所属子带</dt><dd id="inspBand">—</dd>
+              <dt>当前值</dt><dd id="inspCur">—</dd>
+              <dt>完整值</dt><dd id="inspFull">—</dd>
+            </dl>
+            <div style="margin-top:12px" id="coeffTableWrap" class="table-scroll"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabpane" id="tab-records" hidden>
+        <div class="table-scroll">
+          <table class="records">
+            <thead><tr><th>#</th><th>位号</th><th>解压字节</th><th>压缩字节</th><th>CRC32</th><th>状态</th></tr></thead>
+            <tbody id="recordsBody"><tr><td colspan="6" class="muted">尚未编码</td></tr></tbody>
+          </table>
+        </div>
+        <div class="kvline" id="headerInfo" style="margin-top:10px"></div>
+      </div>
+
+      <div class="tabpane spec" id="tab-spec" hidden>
+        <h3>容器</h3>
+        <pre>头部 14 字节，小端：&lt;4s I I B B&gt;
+  魔数 "G53A" | 宽 uint32 | 高 uint32 | 实际层数 uint8 | 最高幅值位号 uint8
+  全零系数时最高位号 = 255，头后无任何层
+
+每个位平面一条记录（位号从高到低，必须连续递减）：
+  记录头 13 字节，小端：&lt;B I I I&gt;
+    位号 | 解压字节数 | 压缩字节数 | CRC32（针对解压负载）
+  负载 = zlib 流</pre>
+        <h3>整数 5/3 提升（先行后列，像素先减 128，不量化）</h3>
+        <ul>
+          <li>偶项 <span class="mono">e</span> 与奇项 <span class="mono">o</span> 拆分，低频在前、高频在后；没有奇项（长度 1）时原样保留。</li>
+          <li><span class="mono">d_i = o_i − floor((e_i + e_min(i+1,last)) / 2)</span></li>
+          <li><span class="mono">s_i = e_i + floor((d_max(i−1,0) + d_min(i,last) + 2) / 4)</span></li>
+          <li>递归作用于左上低频；单轴为 1 时继续变换另一轴；层数不得超过可变换次数。</li>
+        </ul>
+        <h3>带符号位平面流</h3>
+        <ul>
+          <li>按最终系数矩阵行优先，每层每个系数写 1 个幅值位，MSB 优先打包，尾部补零。</li>
+          <li>系数首次出现 1 时紧随 1 个符号位，负系数符号为 1；补齐位必须为 0。</li>
+          <li>解码端未收到的位一律视为 0，不补中点；显示可夹紧，误差计算在有符号域进行、不提前夹紧。</li>
+        </ul>
+        <h3>渐进语义</h3>
+        <ul>
+          <li>末尾不完整记录：等待更多字节，已通过校验的完整层可独立提交预览。</li>
+          <li>完整但 CRC 错误（或 zlib 无法解压）：立即报错，不能当成截断。</li>
+          <li>完整流 inverse 后 +128 必须逐像素还原；单行、单列、全零系数、补齐位走同一套格式。</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="assets/pako.min.js"></script>
+<script src="src/g53.js"></script>
+<script src="src/png8.js"></script>
+<script src="src/zlib-browser.js"></script>
+<script src="src/app.js"></script>
