@@ -1,0 +1,8 @@
+{
+  "patch": 4,
+  "radius": 4,
+  "stride": 2,
+  "capacity": 4,
+  "sigma": 18,
+  "threshold": 2.7
+}

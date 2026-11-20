@@ -1,0 +1,20 @@
+{
+  "name": "group-transform-denoiser",
+  "version": "1.0.0",
+  "description": "相似图块协同去噪工作台：图块匹配、正交 DCT、Walsh-Hadamard 组变换、硬阈值初估与维纳二次重建",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node tools/serve.js",
+    "serve": "node tools/serve.js",
+    "test": "node --test test/engine.test.js test/png.test.js",
+    "e2e": "node tools/e2e.js",
+    "cli": "node tools/cli.js",
+    "build": "node tools/build.js",
+    "samples": "node tools/extract-samples.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

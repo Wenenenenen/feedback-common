@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>相似图块协同去噪工作台</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>相似图块协同去噪工作台</h1>
+        <p>图块匹配 · 正交 DCT · Walsh-Hadamard 组变换 · 硬阈值初估 · 维纳重建</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <label class="field inline">
+        <span>样例</span>
+        <select id="sampleSelect">
+          <option value="noisy">含细纹噪声 48×40（附干净参考）</option>
+          <option value="thin">1×9 窄图</option>
+          <option value="single">1×1 单像素</option>
+        </select>
+      </label>
+      <button id="importBtn" class="btn">导入 PNG…</button>
+      <input type="file" id="importFile" accept="image/png,.png" hidden />
+      <button id="referenceBtn" class="btn ghost">载入参考图…</button>
+      <input type="file" id="referenceFile" accept="image/png,.png" hidden />
+      <div class="menu-wrap">
+        <button id="exportBtn" class="btn primary" disabled>导出结果 <span aria-hidden="true">▾</span></button>
+        <div id="exportMenu" class="menu" hidden>
+          <button data-export="pilot">初估 PNG</button>
+          <button data-export="final">最终 PNG</button>
+          <button data-export="float">浮点结果（.npy）</button>
+          <button data-export="report">参数报告（.json）</button>
+          <hr />
+          <button data-export="zip">全部打包（.zip）</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar">
+      <section class="card">
+        <h2>参数</h2>
+        <div class="control-grid">
+          <div class="control">
+            <label for="patch">图块大小 p</label>
+            <select id="patch">
+              <option value="4">4 × 4</option>
+              <option value="8">8 × 8</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="capacity">组容量 K</label>
+            <select id="capacity">
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="stride">步长 s</label>
+            <select id="stride"></select>
+          </div>
+          <div class="control">
+            <label for="radius">搜索半径 r</label>
+            <div class="range-row">
+              <input type="range" id="radius" min="4" max="12" step="1" value="4" />
+              <output id="radiusVal">4</output>
+            </div>
+          </div>
+          <div class="control wide">
+            <label for="sigma">噪声标准差 σ</label>
+            <div class="range-row">
+              <input type="range" id="sigma" min="0" max="50" step="0.5" value="18" />
+              <output id="sigmaVal">18</output>
+            </div>
+          </div>
+          <div class="control wide">
+            <label for="threshold">硬阈值倍数 <span class="muted">(× σ)</span></label>
+            <div class="range-row">
+              <input type="range" id="threshold" min="0.5" max="5" step="0.1" value="2.7" />
+              <output id="thresholdVal">2.7</output>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="runBtn" class="btn primary block">重新运行</button>
+          <button id="cancelBtn" class="btn block" disabled>取消</button>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">正在加载样例…</span>
+        </div>
+        <div class="progress" aria-hidden="true"><div id="progressBar" class="progress-bar"></div></div>
+        <p id="staleNote" class="hint warn" hidden>当前显示的结果来自旧参数，新结果计算中。</p>
+      </section>
+
+      <section class="card" id="metricsCard">
+        <h2>统计</h2>
+        <dl class="metrics" id="metrics">
+          <div><dt>图像</dt><dd id="mImage">—</dd></div>
+          <div><dt>参考图块</dt><dd id="mRefs">—</dd></div>
+          <div><dt>平均组员</dt><dd id="mGroup">—</dd></div>
+          <div><dt>平均候选</dt><dd id="mCand">—</dd></div>
+          <div><dt>初估耗时</dt><dd id="mT1">—</dd></div>
+          <div><dt>最终耗时</dt><dd id="mT2">—</dd></div>
+          <div><dt>对照 PSNR</dt><dd id="mPsnr">—</dd></div>
+          <div><dt>权重为 0 像素</dt><dd id="mZero">—</dd></div>
+        </dl>
+        <p class="hint">对照 PSNR 基于“载入参考图”或样例自带的干净图，仅用于评估，不参与去噪。</p>
+      </section>
+
+      <section class="card">
+        <h2>规则自检</h2>
+        <p class="hint">用样例包 primitives.json 的 DCT 与 Hadamard 期望值核对实现。</p>
+        <button id="selfTest" class="btn block">运行自检</button>
+        <pre id="selfTestOut" class="code" hidden></pre>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="views" id="views">
+        <figure class="view" data-view="original">
+          <figcaption>
+            <div><span class="view-title">原图</span><span class="badge muted" id="badgeOriginal">输入</span></div>
+            <span class="view-meta" id="metaOriginal">—</span>
+          </figcaption>
+          <div class="view-box"><div class="canvas-stack"><canvas id="canvasOriginal" aria-label="原图"></canvas><canvas id="overlayOriginal" class="overlay" aria-hidden="true"></canvas></div><div class="empty" data-empty>载入图像后显示</div></div>
+        </figure>
+        <figure class="view" data-view="pilot">
+          <figcaption>
+            <div><span class="view-title">初估（硬阈值）</span><span class="badge" id="badgePilot">阶段 1</span></div>
+            <span class="view-meta" id="metaPilot">—</span>
+          </figcaption>
+          <div class="view-box"><div class="canvas-stack"><canvas id="canvasPilot" aria-label="初估图"></canvas><canvas id="overlayPilot" class="overlay" aria-hidden="true"></canvas></div><div class="empty" data-empty>尚未运行</div></div>
+        </figure>
+        <figure class="view" data-view="final">
+          <figcaption>
+            <div><span class="view-title">最终（维纳）</span><span class="badge" id="badgeFinal">阶段 2</span></div>
+            <span class="view-meta" id="metaFinal">—</span>
+          </figcaption>
+          <div class="view-box"><div class="canvas-stack"><canvas id="canvasFinal" aria-label="最终图"></canvas><canvas id="overlayFinal" class="overlay" aria-hidden="true"></canvas></div><div class="empty" data-empty>尚未运行</div></div>
+        </figure>
+        <figure class="view" data-view="weight">
+          <figcaption>
+            <div><span class="view-title">聚合权重</span>
+              <select id="weightStage" class="mini" aria-label="权重阶段">
+                <option value="2">阶段 2</option>
+                <option value="1">阶段 1</option>
+              </select>
+            </div>
+            <span class="view-meta" id="metaWeight">—</span>
+          </figcaption>
+          <div class="view-box">
+            <div class="canvas-stack"><canvas id="canvasWeight" aria-label="聚合权重"></canvas><canvas id="overlayWeight" class="overlay" aria-hidden="true"></canvas></div>
+            <div class="empty" data-empty>尚未运行</div>
+            <div class="ramp" id="weightRamp" hidden aria-label="权重色阶：左低右高">
+              <span>低</span><i></i><span>高</span>
+            </div>
+          </div>
+        </figure>
+      </div>
+
+      <section class="inspector card" id="inspector">
+        <header class="inspector-head">
+          <div>
+            <h2>组检查器</h2>
+            <p class="hint" id="inspectHint">在任一视图上点选参考图块。</p>
+          </div>
+          <div class="inspect-summary" id="inspectSummary"></div>
+        </header>
+
+        <div class="inspector-body">
+          <div class="inspect-left">
+            <div class="subhead">
+              <span>组位置</span>
+              <span class="hint" id="inspectCoord">—</span>
+            </div>
+            <div class="group-canvas-wrap"><canvas id="groupCanvas" aria-label="组位置示意"></canvas></div>
+            <div class="legend" id="groupLegend"></div>
+            <div class="subhead"><span>组员</span><span class="hint">距离为每像素均方误差</span></div>
+            <div class="member-table-wrap">
+              <table class="member-table" id="memberTable">
+                <thead>
+                  <tr><th>#</th><th>y</th><th>x</th><th>d₁</th><th>d₂</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="hint" id="memberNote"></p>
+          </div>
+
+          <div class="inspect-right">
+            <div class="tabs-row">
+              <div class="segmented" id="stageTabs" role="tablist" aria-label="阶段">
+                <button data-stage="1" class="active" role="tab" aria-selected="true">初估阶段</button>
+                <button data-stage="2" role="tab" aria-selected="false">维纳阶段</button>
+              </div>
+              <div class="segmented" id="modeTabs" role="tablist" aria-label="系数视图">
+                <button data-mode="dct" class="active" role="tab" aria-selected="true">空间 DCT</button>
+                <button data-mode="group" role="tab" aria-selected="false">组域系数</button>
+                <button data-mode="gain" role="tab" aria-selected="false">维纳增益</button>
+                <button data-mode="output" role="tab" aria-selected="false">输出系数</button>
+              </div>
+            </div>
+            <div class="matrix-wrap">
+              <div class="matrix-col">
+                <canvas id="matrixCanvas" aria-label="系数矩阵热图"></canvas>
+                <p class="hint" id="matrixLegend">—</p>
+              </div>
+              <div class="numeric-col">
+                <div class="subhead"><span id="matrixTitle">组员 #0 · 空间 DCT</span><span class="hint" id="matrixInfo"></span></div>
+                <div id="numericGrid" class="numeric-grid"></div>
+                <p class="hint" id="matrixNote"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="alert" hidden></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
