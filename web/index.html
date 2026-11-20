@@ -1,0 +1,1259 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>相位展开校验台</title>
+<style>
+/* ---- layout concept: 仪器面板 — 左主图、右控制/读数、暗色数据卡片 ---- */
+:root{
+  --page:#f4f5f7; --surface:#ffffff; --surface-2:#eef1f5; --ink:#16202b;
+  --ink-2:#4d5a68; --muted:#85909c; --line:#d8dde4; --line-soft:#e7eaee;
+  --accent:#1f6fd6; --accent-ink:#ffffff;
+  --good:#0c8a3c; --warn:#b8770a; --critical:#c43636;
+  --pos:#c43636; --neg:#1f6fd6; --ramp-bg:#fcfcfb;
+  --shadow:0 1px 2px rgba(16,24,32,.06),0 4px 14px rgba(16,24,32,.06);
+  --radius:10px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --page:#101317; --surface:#181d24; --surface-2:#20262f; --ink:#e8edf3;
+    --ink-2:#b3bdc8; --muted:#7d8794; --line:#2c343e; --line-soft:#242b34;
+    --accent:#5598e7; --accent-ink:#0c1420;
+    --good:#34c46b; --warn:#e0b34a; --critical:#e66767;
+    --pos:#e66767; --neg:#5598e7; --ramp-bg:#1a1f27;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#101317; --surface:#181d24; --surface-2:#20262f; --ink:#e8edf3;
+  --ink-2:#b3bdc8; --muted:#7d8794; --line:#2c343e; --line-soft:#242b34;
+  --accent:#5598e7; --accent-ink:#0c1420;
+  --good:#34c46b; --warn:#e0b34a; --critical:#e66767;
+  --pos:#e66767; --neg:#5598e7; --ramp-bg:#1a1f27;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--page); color:var(--ink); font-family:var(--sans);
+  font-size:14px; line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px;
+}
+h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.2px}
+h2{font-size:12.5px;margin:0 0 8px;color:var(--ink-2);font-weight:650;
+   text-transform:uppercase;letter-spacing:.08em}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;max-width:1500px;margin:0 auto;align-items:start}
+header.bar{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+header.bar .sub{color:var(--muted);font-size:12.5px}
+header.bar .sp{flex:1}
+.card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);
+      box-shadow:var(--shadow);padding:14px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+label{font-size:12.5px;color:var(--ink-2)}
+button{font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);
+       border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=number],input[type=text],select{
+  font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:7px;padding:5px 8px;width:100%;min-width:0}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row.tight{gap:6px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{padding:5px 11px;font-size:13px;border-radius:999px;background:transparent;border-color:transparent;color:var(--ink-2)}
+.tabs button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.view-wrap{display:flex;flex-direction:column;gap:10px}
+.canvas-box{position:relative;background:var(--ramp-bg);border:1px solid var(--line);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;min-height:240px;overflow:hidden;padding:8px}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;max-width:100%;height:auto;
+  border-radius:3px;cursor:crosshair;background:#000}
+.legend{display:flex;flex-direction:column;gap:4px}
+.legend .bar{height:12px;border-radius:3px;border:1px solid var(--line)}
+.legend .ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
+  word-break:break-all;min-width:0}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;
+  font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--surface-2)}
+.pill.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--line))}
+.pill.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.pill.crit{color:var(--critical);border-color:color-mix(in srgb,var(--critical) 45%,var(--line))}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:5px 7px;text-align:right;border-bottom:1px solid var(--line-soft);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface)}
+.tbl-scroll{max-height:230px;overflow:auto;border:1px solid var(--line-soft);border-radius:8px}
+.table-btn{background:none;border:none;padding:2px 6px;color:var(--accent);cursor:pointer;font:inherit}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.status-line{font-size:12.5px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2)}
+.status-line.err{color:var(--critical);border-color:color-mix(in srgb,var(--critical) 45%,var(--line))}
+.status-line.ok{color:var(--good)}
+details{border:1px solid var(--line-soft);border-radius:8px;padding:8px 10px;background:var(--surface)}
+details>summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink-2)}
+details[open]>summary{margin-bottom:8px}
+.progress{height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.progress>i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+.drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:16px;text-align:center;
+  color:var(--muted);background:var(--surface)}
+.drop.drag{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.small{font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.checkline{display:flex;gap:7px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+.pixel-tile{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:12.5px}
+.pixel-tile b{font-family:var(--mono);font-weight:600;text-align:right;word-break:break-all}
+.pixel-tile span{color:var(--muted)}
+.hint{font-size:11.5px;color:var(--muted);line-height:1.45}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);
+  color:var(--page);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;
+  transition:opacity .2s;z-index:50;max-width:88vw}
+.toast.show{opacity:.94}
+@media (max-width:980px){ .app{grid-template-columns:1fr} }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <h1>相位展开校验台</h1>
+    <span class="sub">四邻接加权最小二乘 · 包裹相位积分一致性校验（不调用任何相位展开接口）</span>
+    <span class="sp"></span>
+    <button id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <!-- 左：主视图 -->
+  <div class="stack">
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <div class="tabs" id="viewTabs" role="tablist">
+          <button data-view="wrapped" class="on">包裹相位</button>
+          <button data-view="unwrapped">展开相位</button>
+          <button data-view="components">连通区</button>
+          <button data-view="charge">残差电荷</button>
+          <button data-view="edgeres">边残差</button>
+          <button data-view="quality">质量图</button>
+        </div>
+        <span class="pill" id="solvePill" hidden></span>
+      </div>
+      <div class="view-wrap">
+        <div class="canvas-box" id="canvasBox">
+          <canvas id="view" width="8" height="8"></canvas>
+        </div>
+        <div class="legend">
+          <div class="bar" id="legendBar"></div>
+          <div class="ticks"><span id="legendLo">—</span><span id="legendMid">—</span><span id="legendHi">—</span></div>
+          <div class="small muted" id="legendNote"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>像素探针（点击图像取点）</h2>
+      <div id="probeEmpty" class="hint">尚未取点。在任意视图上点击像素，查看包裹值、展开值、质量、连通区与锚点、各邻边残差。</div>
+      <div id="probeBody" hidden>
+        <div class="pixel-tile" id="probeGrid"></div>
+        <div style="margin-top:8px" class="tbl-scroll" hidden id="probeEdgeWrap">
+          <table id="probeEdgeTbl"><thead><tr><th>邻边</th><th>w</th><th>g</th><th>r=Δu−g</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 右：控制与读数 -->
+  <div class="stack">
+    <section class="card">
+      <h2>数据导入</h2>
+      <div class="drop" id="drop">
+        拖入文件，或
+        <div class="row" style="justify-content:center;margin-top:8px">
+          <button type="button" id="pickBtn">选择文件</button>
+          <button type="button" id="zipBtn">选择 ZIP</button>
+          <button type="button" id="demoBtn">内置样例</button>
+        </div>
+        <div class="hint" style="margin-top:8px">
+          支持 .json 描述文件、小端 float32 的 phase/quality .raw、valid .png，或整包 .zip。
+          无 JSON 时需手填边长，单边长 ≤ 512。
+        </div>
+      </div>
+      <input type="file" id="fileInput" multiple hidden
+        accept=".raw,.png,.json,.zip">
+      <div class="grid2" style="margin-top:10px">
+        <div class="field"><label>宽 W</label><input type="number" id="inW" min="1" max="512" placeholder="自动"></div>
+        <div class="field"><label>高 H</label><input type="number" id="inH" min="1" max="512" placeholder="自动"></div>
+      </div>
+      <div id="loadStatus" class="status-line" style="margin-top:10px">未加载数据。</div>
+    </section>
+
+    <section class="card">
+      <h2>参数</h2>
+      <div class="field">
+        <label>质量阈值 t（有效 = mask 且 quality &gt; t，范围 [0,1]）</label>
+        <div class="row tight">
+          <input type="range" id="thrRange" min="0" max="1" step="0.001" value="0">
+          <input type="number" id="thrNum" min="0" max="1" step="0.001" value="0" style="width:96px">
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div class="field"><label>PCG 容差</label><input type="number" id="inTol" value="1e-12" min="1e-14" step="1e-9"></div>
+        <div class="field"><label>最大迭代</label><input type="number" id="inMaxit" value="2000" min="1" step="50"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button type="button" class="primary" id="runBtn" disabled>组装并求解</button>
+        <span class="hint">改阈值后需重新求解；色阶仅影响显示。</span>
+      </div>
+      <div style="margin-top:10px"><div class="progress"><i id="progBar"></i></div>
+        <div class="hint" id="progText" style="margin-top:4px"></div></div>
+    </section>
+
+    <section class="card" id="resultCard" hidden>
+      <h2>能量与收敛</h2>
+      <dl class="kv" id="metricList"></dl>
+      <div id="integralNote" class="status-line" style="margin-top:10px"></div>
+      <div class="hint" style="margin-top:8px">
+        自由变量梯度无穷范数 ‖∇E‖∞ 衡量求解是否到达驻点（收敛后应≈0）。环路矛盾的证据是
+        <b>非零残差电荷与显著非零的总能量</b>：加权最小二乘总存在驻点，但不相容闭环无法让所有边残差同时为零，
+        矛盾被分摊为能量，不会被强行置零或隐藏。
+      </div>
+    </section>
+
+    <section class="card" id="compCard" hidden>
+      <h2>连通区（点击行定位锚点）</h2>
+      <div class="tbl-scroll">
+        <table id="compTable"><thead><tr>
+          <th>#</th><th>像素数</th><th>锚点(x,y)</th><th>锚点φ</th><th>区内电荷和</th><th>区内能量</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <section class="card" id="chargeCard" hidden>
+      <h2>残差电荷单元</h2>
+      <div class="tbl-scroll">
+        <table id="chargeTable"><thead><tr>
+          <th>(x,y)</th><th>电荷</th><th>环路和/2π</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <section class="card" id="exportCard" hidden>
+      <h2>导出</h2>
+      <div class="row tight">
+        <button type="button" id="expRaw">u.raw (float32 LE)</button>
+        <button type="button" id="expPng">valid.png</button>
+        <button type="button" id="expJson">params.json</button>
+        <button type="button" class="primary" id="expZip">打包 ZIP</button>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        无效位置 u 写 0，不使用 NaN；导出掩膜与求解所用有效区完全一致。
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>方法说明</h2>
+      <details>
+        <summary>边权、周期差与最小二乘定义</summary>
+        <div class="hint" style="margin-top:8px">
+          仅四邻接；边权 w<sub>pq</sub>=min(quality<sub>p</sub>,quality<sub>q</sub>)；
+          对右、下边取 g<sub>pq</sub>=wrap(φ<sub>q</sub>−φ<sub>p</sub>)，
+          wrap(a)=a−2π·floor((a+π)/(2π))。求解
+          min Σ w<sub>pq</sub>(u<sub>q</sub>−u<sub>p</sub>−g<sub>pq</sub>)²。
+          每个有效连通分量以行优先最小像素为锚点固定 u=φ，单像素分量同样固定。
+          线性系统在网格上隐式组装，Jacobi 预处理共轭梯度求解，无第三方求解库、无相位展开接口。
+        </div>
+      </details>
+      <details style="margin-top:8px">
+        <summary>残差电荷与边残差</summary>
+        <div class="hint" style="margin-top:8px">
+          四角均有效的 2×2 单元，顺时针累加包裹差后除以 2π 就近取整得残差电荷。
+          边残差 r<sub>pq</sub>=u<sub>q</sub>−u<sub>p</sub>−g<sub>pq</sub>；
+          总能量 E=Σ w r²。孔洞两侧像素不相邻、不会拼接；零质量与无效像素不参与任何连通与边。
+        </div>
+      </details>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ================= 通用二进制工具 ================= */
+const TAU = Math.PI*2;
+function wrap(a){ return a - TAU*Math.floor((a+Math.PI)/TAU); }
+function crc32Table(){
+  const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}
+  return t;
+}
+const CRC_T=crc32Table();
+function crc32(u8){
+  let c=0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) c=CRC_T[(c^u8[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function u16le(v){return [v&255,(v>>8)&255];}
+function u32le(v){return [v&255,(v>>8)&255,(v>>16)&255,(v>>24)&255];}
+function bytesFrom(...parts){
+  let n=0; for(const p of parts) n+=p.length;
+  const out=new Uint8Array(n); let o=0;
+  for(const p of parts){out.set(p,o);o+=p.length;} return out;
+}
+function readU16(dv,o){return dv.getUint16(o,true);}
+function readU32(dv,o){return dv.getUint32(o,true);}
+
+/* ================= 极简 PNG 解码（支持样例常见灰度/真彩/索引，filter 0-4，zlib）================= */
+function paeth(a,b,c){const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c);
+  return pa<=pb&&pa<=pc?a:(pb<=pc?b:c);}
+function decodePNG(buf){
+  const u8=new Uint8Array(buf);
+  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+  if(u8[0]!==0x89||u8[1]!==0x50||u8[2]!==0x4e||u8[3]!==0x47) throw new Error("不是有效 PNG 文件");
+  let pos=8, W=0,H=0,bd=0,ct=0,idat=[];
+  while(pos+8<=u8.length){
+    // PNG 所有多字节整数均为大端
+    const len=dv.getUint32(pos,false), type=dv.getUint32(pos+4,false);
+    const data=u8.subarray(pos+8,pos+8+len);
+    if(type===0x49484452){ W=dv.getUint32(pos+8,false);H=dv.getUint32(pos+12,false);bd=u8[pos+16];ct=u8[pos+17]; }
+    else if(type===0x49444154){ idat.push(data); }
+    else if(type===0x49454e44){ break; }
+    pos+=12+len;
+  }
+  if(bd!==8) throw new Error("仅支持 8 位 PNG（当前位深 "+bd+"）");
+  const chMap={0:1,2:3,3:1,4:2,6:4}; const ch=chMap[ct];
+  if(!ch) throw new Error("不支持的 PNG 颜色类型 "+ct);
+  const inflated=pakoInflate(concat(idat));
+  const stride=W*ch; const out=new Uint8Array(H*stride);
+  let p=0; const prev=new Uint8Array(stride);
+  for(let y=0;y<H;y++){
+    const ft=inflated[p++]; const line=inflated.subarray(p,p+stride); p+=stride;
+    const cur=new Uint8Array(stride);
+    for(let i=0;i<stride;i++){
+      const a=i>=ch?cur[i-ch]:0, b=prev[i], c=i>=ch?prev[i-ch]:0; let v=line[i];
+      if(ft===1)v=(v+a)&255; else if(ft===2)v=(v+b)&255;
+      else if(ft===3)v=(v+((a+b)>>1))&255;
+      else if(ft===4)v=(v+paeth(a,b,c))&255;
+      else if(ft!==0) throw new Error("未知 PNG 过滤器 "+ft);
+      cur[i]=v;
+    }
+    out.set(cur,y*stride); prev.set(cur);
+  }
+  // 统一返回单通道灰度（索引色经调色板；本工具掩膜只需亮度/阈值）
+  const gray=new Uint8Array(W*H);
+  if(ct===0||ct===4){ for(let i=0;i<W*H;i++)gray[i]=out[i*ch]; }
+  else if(ct===2||ct===6){ for(let i=0;i<W*H;i++)gray[i]=(out[i*ch]*299+out[i*ch+1]*587+out[i*ch+2]*114+500)/1000|0; }
+  else if(ct===3){ throw new Error("索引 PNG 请改用灰度/真彩 PNG 掩膜"); }
+  return {W,H,gray};
+}
+function concat(arrs){let n=0;for(const a of arrs)n+=a.length;const o=new Uint8Array(n);let k=0;for(const a of arrs){o.set(a,k);k+=a.length;}return o;}
+
+/* ---- 最小 zlib inflate（RFC1950/1951，stored+fixed+dynamic Huffman）---- */
+function pakoInflate(input,raw){
+  // raw=true：裸 deflate 流（ZIP method 8），无 zlib 头与 Adler 尾；否则要求 zlib 包装
+  if(!raw && (input.length<2||(input[0]&0x0F)!==8))
+    throw new Error("不支持的 zlib 包装（CM="+(input[0]&0x0F)+"）");
+  const bit=new BitReader(input,raw?0:2);
+  // 单一连续输出缓冲：回溯距离直接按索引寻址（重叠拷贝语义），避免分块索引错误
+  let cap=Math.max(1024,input.length*4), out=new Uint8Array(cap), olen=0;
+  function push(v){
+    if(olen===cap){cap*=2;const bigger=new Uint8Array(cap);bigger.set(out);out=bigger;}
+    out[olen++]=v;
+  }
+  while(true){
+    const bfinal=bit.bit();
+    const btype=bit.bits(2);
+    if(btype===0){ bit.alignByte();
+      const len=bit.u8()|(bit.u8()<<8); const nlen=bit.u8()|(bit.u8()<<8);
+      if((len^nlen)!==0xFFFF) throw new Error("zlib stored 块长度错误");
+      for(let i=0;i<len;i++)push(bit.u8());
+    } else {
+      let litLen,dist;
+      if(btype===1){ litLen=FIXED_LL; dist=FIXED_D; }
+      else if(btype===2){ const res=readDynamicTables(bit); litLen=res.ll; dist=res.dist; }
+      else throw new Error("无效 deflate 块类型");
+      while(true){
+        const sym=decodeSym(bit,litLen);
+        if(sym===256) break;
+        if(sym<256){ push(sym); continue; }
+        const lenBase=LEN_BASE[sym-257], lenExtra=LEN_EXTRA[sym-257];
+        let len=lenBase+(lenExtra?bit.bits(lenExtra):0);
+        const ds=decodeSym(bit,dist);
+        const dBase=DIST_BASE[ds], dExtra=DIST_EXTRA[ds];
+        const distance=dBase+(dExtra?bit.bits(dExtra):0);
+        if(distance>olen) throw new Error("zlib 回溯距离越界（dist="+distance+" > 已输出 "+olen+"）");
+        for(let k=0;k<len;k++) push(out[olen-distance]); // 重叠时读到刚写入的字节
+      }
+    }
+    if(bfinal) break;
+  }
+  return out.slice(0,olen);
+}
+class BitReader{
+  constructor(u8,start){
+    // 保留对传入 Uint8Array 的引用，兼容 subarray 产生的 byteOffset（ZIP 切片普遍带偏移）
+    this.buf=u8; this.base=u8.byteOffset; this.p=start; this.nb=0; this.acc=0;
+  }
+  alignByte(){
+    // 丢弃当前字节内尚未消费的位；p 已指向“下一个待读字节”，对齐后即从该字节开始
+    this.nb=0;
+  }
+  u8(){ this.alignByte(); const v=this.buf[this.p++]; return v; }
+  bit(){ if(this.nb===0){this.acc=this.buf[this.p++];this.nb=8;} const v=this.acc&1; this.acc>>=1; this.nb--; return v; }
+  bits(n){let v=0;for(let i=0;i<n;i++)v|=this.bit()<<i;return v;}
+}
+function readDynamicTables(bit){
+  const hlit=bit.bits(5)+257, hdist=bit.bits(5)+1, hclen=bit.bits(4)+4;
+  const order=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+  const clLen=new Array(19).fill(0);
+  for(let i=0;i<hclen;i++)clLen[order[i]]=bit.bits(3);
+  const clCode=buildHuff(clLen);
+  const lengths=new Array(hlit+hdist).fill(0);
+  let i=0;
+  while(i<lengths.length){
+    const s=decodeSym(bit,clCode);
+    if(s<16){lengths[i++]=s;}
+    else if(s===16){const rep=bit.bits(2)+3;const v=lengths[i-1];for(let k=0;k<rep;k++)lengths[i++]=v;}
+    else if(s===17){const rep=bit.bits(3)+3;for(let k=0;k<rep;k++)lengths[i++]=0;}
+    else {const rep=bit.bits(7)+11;for(let k=0;k<rep;k++)lengths[i++]=0;}
+  }
+  return {ll:buildHuff(lengths.slice(0,hlit)), dist:buildHuff(lengths.slice(hlit))};
+}
+function buildHuff(lengths){
+  // 零长度符号不参与编码，求最大码长时必须忽略，否则全零表会得到 maxBits=0
+  let maxBits=0;
+  for(const l of lengths) if(l>maxBits)maxBits=l;
+  const blCount=new Array(maxBits+1).fill(0);
+  for(const l of lengths) if(l)blCount[l]++;
+  const nextCode=new Array(maxBits+1).fill(0);
+  let code=0;
+  for(let bits=1;bits<=maxBits;bits++){code=(code+blCount[bits-1])<<1;nextCode[bits]=code;}
+  const table=[];
+  for(let sym=0;sym<lengths.length;sym++){
+    const len=lengths[sym]; if(!len)continue;
+    table.push({sym,len,code:nextCode[len]++});
+  }
+  table.maxBits=maxBits;
+  return table;
+}
+function decodeSym(bit,table){
+  let code=0;
+  for(let len=1;len<=table.maxBits;len++){
+    code=(code<<1)|bit.bit();
+    for(const e of table) if(e.len===len&&e.code===code) return e.sym;
+  }
+  throw new Error("Huffman 解码失败");
+}
+const LEN_BASE=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+const LEN_EXTRA=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+const DIST_BASE=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+const DIST_EXTRA=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+function makeFixed(){
+  const ll=new Array(288).fill(0);
+  for(let i=0;i<144;i++)ll[i]=8; for(let i=144;i<256;i++)ll[i]=9;
+  for(let i=256;i<280;i++)ll[i]=7; for(let i=280;i<288;i++)ll[i]=8;
+  const dist=new Array(30).fill(5);
+  return {ll:buildHuff(ll),dist:buildHuff(dist)};
+}
+const FIXED=makeFixed(), FIXED_LL=FIXED.ll, FIXED_D=FIXED.dist;
+
+/* ---- 最小 zlib store 压缩（用于 PNG/ZIP 导出，无需 deflate 实现）---- */
+function zlibStore(data){
+  const blocks=[]; let pos=0;
+  do{
+    const chunk=data.subarray(pos,pos+65535); const last=(pos+chunk.length>=data.length);
+    const hdr=new Uint8Array(5);
+    hdr[0]=last?1:0;
+    hdr[1]=chunk.length&255; hdr[2]=(chunk.length>>8)&255;
+    hdr[3]=~chunk.length&255; hdr[4]=(~chunk.length>>8)&255;
+    blocks.push(hdr,chunk); pos+=chunk.length;
+  }while(pos<data.length);
+  const body=concat(blocks);
+  // adler32
+  let a=1,b=0;
+  for(let i=0;i<data.length;i++){a=(a+data[i])%65521;b=(b+a)%65521;}
+  const adler=((b<<16)|a)>>>0;
+  return bytesFrom(new Uint8Array([0x78,0x01]),body,new Uint8Array(u32le(adler)));
+}
+function u32be(v){return [(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255];}
+function encodeGrayPNG(W,H,gray){
+  const stride=W+1; const raw=new Uint8Array(H*stride);
+  for(let y=0;y<H;y++){raw[y*stride]=0;raw.set(gray.subarray(y*W,(y+1)*W),y*stride+1);}
+  const z=zlibStore(raw);
+  const ihdr=bytesFrom(new Uint8Array(u32be(W)),new Uint8Array(u32be(H)),new Uint8Array([8,0,0,0,0]));
+  function chunk(type,payload){
+    const typeB=new TextEncoder().encode(type);
+    const body=bytesFrom(typeB,payload);
+    // PNG 长度字段为大端；CRC 为其原始 32 位值，按大端写入
+    return bytesFrom(new Uint8Array(u32be(payload.length)),body,new Uint8Array(u32be(crc32(body))));
+  }
+  return new Blob([bytesFrom(new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]),
+    chunk("IHDR",ihdr),chunk("IDAT",z),chunk("IEND",new Uint8Array(0)))],{type:"image/png"});
+}
+
+/* ================= ZIP 读取（本地文件头解析，stored/deflate）================= */
+function parseZip(buf){
+  const u8=new Uint8Array(buf);
+  // DataView 必须携带 byteOffset/length，否则传入带偏移的 buffer 时会按整个底层 buffer 误寻址
+  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+  // 找 EOCD
+  let eocd=-1;
+  for(let i=u8.length-22;i>=0;i--){
+    if(readU32(dv,i)===0x06054b50){eocd=i;break;}
+  }
+  if(eocd<0) throw new Error("ZIP 结构缺失（未找到 EOCD）");
+  const n=readU16(dv,eocd+10);
+  let p=readU32(dv,eocd+16);
+  const files={};
+  for(let k=0;k<n;k++){
+    if(readU32(dv,p)!==0x02014b50) throw new Error("ZIP 中央目录损坏");
+    const method=readU16(dv,p+10);
+    const compSize=readU32(dv,p+20), uncompSize=readU32(dv,p+24);
+    const nameLen=readU16(dv,p+28), extraLen=readU16(dv,p+30), commentLen=readU16(dv,p+32);
+    const localOff=readU32(dv,p+42);
+    const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nameLen));
+    const lhName=readU16(dv,localOff+26), lhExtra=readU16(dv,localOff+28);
+    const dataStart=localOff+30+lhName+lhExtra;
+    const comp=u8.subarray(dataStart,dataStart+compSize);
+    let data;
+    if(method===0) data=comp.slice();
+    else if(method===8) data=pakoInflate(comp,true);
+    else throw new Error("ZIP 内 "+name+" 使用了不支持的压缩方式 "+method);
+    if(data.length!==uncompSize) throw new Error("ZIP 内 "+name+" 解压长度不符");
+    files[name.split("/").pop()]=data;
+    p+=46+nameLen+extraLen+commentLen;
+  }
+  return files;
+}
+
+/* ================= ZIP 写出（stored，零依赖）================= */
+function buildZip(entries){ // [{name, u8}]
+  const enc=new TextEncoder();
+  const locals=[], centrals=[]; let offset=0;
+  const now=new Date();
+  const dosTime=((now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()/2|0))&0xFFFF;
+  const dosDate=(((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate())&0xFFFF;
+  for(const e of entries){
+    const nameB=enc.encode(e.name); const data=e.u8;
+    const crc=crc32(data);
+    const lh=bytesFrom(
+      new Uint8Array(u32le(0x04034b50)),new Uint8Array(u16le(20)),new Uint8Array(u16le(0)),
+      new Uint8Array(u16le(0)),new Uint8Array(u16le(dosTime)),new Uint8Array(u16le(dosDate)),
+      new Uint8Array(u32le(crc)),new Uint8Array(u32le(data.length)),new Uint8Array(u32le(data.length)),
+      new Uint8Array(u16le(nameB.length)),new Uint8Array(u16le(0)),nameB,data);
+    locals.push(lh);
+    const ch=bytesFrom(
+      new Uint8Array(u32le(0x02014b50)),new Uint8Array(u16le(20)),new Uint8Array(u16le(20)),
+      new Uint8Array(u16le(0)),new Uint8Array(u16le(0)),new Uint8Array(u16le(dosTime)),
+      new Uint8Array(u16le(dosDate)),new Uint8Array(u32le(crc)),
+      new Uint8Array(u32le(data.length)),new Uint8Array(u32le(data.length)),
+      new Uint8Array(u16le(nameB.length)),new Uint8Array(u16le(0)),new Uint8Array(u16le(0)),
+      new Uint8Array(u16le(0)),new Uint8Array(u16le(0)),new Uint8Array(u32le(0)),
+      new Uint8Array(u32le(offset)),nameB);
+    centrals.push(ch); offset+=lh.length;
+  }
+  const central=concat(centrals);
+  const eocd=bytesFrom(
+    new Uint8Array(u32le(0x06054b50)),new Uint8Array(u16le(0)),new Uint8Array(u16le(0)),
+    new Uint8Array(u16le(entries.length)),new Uint8Array(u16le(entries.length)),
+    new Uint8Array(u32le(central.length)),new Uint8Array(u32le(offset)),new Uint8Array(u16le(0)));
+  return new Blob([concat(locals),central,eocd],{type:"application/zip"});
+}
+</script>
+<script>
+"use strict";
+/* ================= 全局状态 ================= */
+const S = {
+  W:0,H:0,phi:null,quality:null,mask:null, // mask: Uint8 0/1（PNG 255->1）
+  files:{}, meta:null, caseName:"未命名",
+  threshold:0, result:null, view:"wrapped",
+  ranges:{ unwrapped:null, edgeres:null }, // 显示色阶（不参与计算）
+};
+const $=id=>document.getElementById(id);
+
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
+function setStatus(el,msg,kind){el.textContent=msg;el.className="status-line"+(kind?" "+kind:"");}
+function fmt(v,d=6){
+  if(v===null||v===undefined||Number.isNaN(v))return "—";
+  if(!Number.isFinite(v))return v>0?"+∞":"−∞";
+  const a=Math.abs(v);
+  if(a!==0&&(a>=1e5||a<1e-4))return v.toExponential(4);
+  return v.toFixed(d);
+}
+
+/* ================= 文件导入 ================= */
+async function handleFiles(fileList){
+  try{
+    const files={};
+    for(const f of fileList){
+      const buf=await f.arrayBuffer();
+      const base=f.name.split("/").pop();
+      if(/\.zip$/i.test(base)){
+        const inner=parseZip(buf);
+        for(const [name,data] of Object.entries(inner)) files[name]=data;
+      }else files[base]=new Uint8Array(buf);
+    }
+    await ingest(files);
+  }catch(err){ console.error(err); setStatus($("loadStatus"),"导入失败："+err.message,"err"); }
+}
+async function ingest(files){
+  // 找 JSON
+  let meta=null,metaName=null;
+  for(const [name,data] of Object.entries(files)){
+    if(/\.json$/i.test(name)){
+      try{ meta=JSON.parse(new TextDecoder().decode(data)); metaName=name; break; }
+      catch(e){ /* 忽略坏 JSON */ }
+    }
+  }
+  function pick(re){ for(const name of Object.keys(files)) if(re.test(name)) return name; return null; }
+  const phaseName = meta?.phase || pick(/phase.*\.raw$/i) || pick(/\.raw$/i);
+  const qualName  = meta?.quality || pick(/qualit.*\.raw$/i);
+  const maskName  = meta?.mask || pick(/valid.*\.png$/i) || pick(/\.png$/i);
+  if(!phaseName) throw new Error("未找到相位 .raw 文件");
+  if(!qualName) throw new Error("未找到质量 .raw 文件");
+  if(!maskName) throw new Error("未找到有效掩膜 .png 文件");
+
+  const W = meta?.width || parseInt($("inW").value,10);
+  const H = meta?.height || parseInt($("inH").value,10);
+  if(!W||!H) throw new Error("缺少尺寸信息：请提供 JSON 或手动填写宽高");
+  if(W>512||H>512||W<1||H<1) throw new Error("边长需在 1..512 之间（当前 "+W+"×"+H+"）");
+  const N=W*H;
+  // 显式按小端解码，避免 ZIP 解压产物 byteOffset 非 4 字节对齐时 TypedArray 构造抛错
+  function asF32(name){
+    const u8=files[name];
+    if(u8.length!==N*4) throw new Error(name+" 长度 "+u8.length+" 与 "+W+"×"+H+"×4 字节不符");
+    const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+    const out=new Float32Array(N);
+    for(let i=0;i<N;i++) out[i]=dv.getFloat32(i*4,true);
+    return out;
+  }
+  const phi=asF32(phaseName);
+  const quality=asF32(qualName);
+  const png=decodePNG(files[maskName].buffer.slice(files[maskName].byteOffset));
+  if(png.W!==W||png.H!==H) throw new Error("掩膜尺寸 "+png.W+"×"+png.H+" 与数据尺寸不一致");
+  const mask=new Uint8Array(N);
+  for(let i=0;i<N;i++) mask[i]=png.gray[i]===255?1:0;
+  // 基本合法性
+  for(let i=0;i<N;i++){
+    if(!Number.isFinite(phi[i])) throw new Error("相位含 NaN/Inf（第 "+i+" 个值），拒绝计算");
+    if(!Number.isFinite(quality[i])||quality[i]<0||quality[i]>1)
+      throw new Error("质量须落在 [0,1]（第 "+i+" 个值 "+quality[i]+"）");
+  }
+  Object.assign(S,{W,H,phi:Float32Array.from(phi),quality:Float32Array.from(quality),mask,
+    files,meta,caseName:(metaName||phaseName).replace(/\.[^.]+$/,""),result:null,
+    ranges:{unwrapped:null,edgeres:null}});
+  $("inW").value=W;$("inH").value=H;
+  if(meta?.threshold!==undefined){ S.threshold=clamp(+meta.threshold,0,1); }
+  else S.threshold=parseFloat($("thrNum").value)||0;
+  $("thrRange").value=S.threshold;$("thrNum").value=S.threshold;
+  $("runBtn").disabled=false;
+  setStatus($("loadStatus"),
+    "已加载 "+S.caseName+"："+W+"×"+H+"，相位 "+phaseName+"，质量 "+qualName+"，掩膜 "+maskName+
+    (meta?"（含 JSON 描述）":""),"ok");
+  ["resultCard","compCard","chargeCard","exportCard"].forEach(id=>$(id).hidden=true);
+  runSolve();
+}
+function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
+
+/* ================= 连通区（4 邻接，行优先 BFS）================= */
+function labelComponents(valid){
+  const {W,H}=S,N=W*H;
+  const label=new Int32Array(N).fill(-1);
+  const comps=[]; // {anchor,size,indices:[]}
+  for(let s=0;s<N;s++){
+    if(!valid[s]||label[s]>=0)continue;
+    const cid=comps.length; const q=[s]; label[s]=cid;
+    let anchor=s,size=0; const indices=[];
+    while(q.length){
+      const p=q.pop(); const y=(p/W)|0,x=p-y*W; size++; indices.push(p);
+      if(p<anchor)anchor=p;
+      let nb;
+      if(x>0){nb=p-1;if(valid[nb]&&label[nb]<0){label[nb]=cid;q.push(nb);}}
+      if(x+1<W){nb=p+1;if(valid[nb]&&label[nb]<0){label[nb]=cid;q.push(nb);}}
+      if(y>0){nb=p-W;if(valid[nb]&&label[nb]<0){label[nb]=cid;q.push(nb);}}
+      if(y+1<H){nb=p+W;if(valid[nb]&&label[nb]<0){label[nb]=cid;q.push(nb);}}
+    }
+    comps.push({anchor,size,indices});
+  }
+  return {label,comps};
+}
+
+/* ================= 组装 + PCG 求解 =================
+   全局网格上隐式组装：
+   对每条右/下边 (i,j)，w=min(q_i,q_j)，g=wrap(phi_j-phi_i)
+   A_ii+=w; A_jj+=w; A_ij=A_ji=-w; b_i-=wg; b_j+=wg
+   锚点行替换为 u=phi_anchor，并把锚点贡献移入自由变量右端。 */
+async function runSolve(){
+  if(!S.phi)return;
+  const {W,H,phi,quality}=S,N=W*H; const t0=performance.now();
+  setProgress(0,"准备有效区…");
+  await tick();
+  const thr=S.threshold;
+  const valid=new Uint8Array(N);
+  for(let i=0;i<N;i++) valid[i]=(S.mask[i]===1 && quality[i]>thr)?1:0;
+  const validCount=valid.reduce((s,v)=>s+v,0);
+
+  const {label,comps}=labelComponents(valid);
+  const C=comps.length;
+  const isAnchor=new Uint8Array(N);
+  for(const c of comps) isAnchor[c.anchor]=1;
+
+  // 边（仅有效边）。先按普通数组收集，再转定长 TypedArray 并按分量连续重排，
+  // 使每个分量的 matVec 只扫描自己的边区间，避免跨分量重复全量遍历。
+  const rawI=[],rawJ=[],rawW=[],rawG=[],rawC=[];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const p=y*W+x; if(!valid[p])continue;
+    if(x+1<W){const j=p+1;if(valid[j]){
+      rawI.push(p);rawJ.push(j);rawW.push(Math.min(quality[p],quality[j]));
+      rawG.push(wrap(phi[j]-phi[p]));rawC.push(label[p]);}}
+    if(y+1<H){const j=p+W;if(valid[j]){
+      rawI.push(p);rawJ.push(j);rawW.push(Math.min(quality[p],quality[j]));
+      rawG.push(wrap(phi[j]-phi[p]));rawC.push(label[p]);}}
+  }
+  const E=rawI.length;
+  const order=Array.from({length:E},(_,k)=>k).sort((a,b)=>rawC[a]-rawC[b]);
+  const eI=new Int32Array(E),eJ=new Int32Array(E),eW=new Float64Array(E),eG=new Float64Array(E);
+  const compEdgeStart=new Int32Array(C+1);
+  let prevCid=-1;
+  for(let n=0;n<E;n++){
+    const k=order[n],cid=rawC[k];
+    while(prevCid<cid){prevCid++;compEdgeStart[prevCid]=n;}
+    eI[n]=rawI[k];eJ[n]=rawJ[k];eW[n]=rawW[k];eG[n]=rawG[k];
+  }
+  for(let c=prevCid+1;c<=C;c++)compEdgeStart[c]=E;
+
+  // 对角、右端：标准拉普拉斯系统 A u = b（b_i=-Σwg, b_j=+Σwg），不对锚点做任何移项。
+  const diag=new Float64Array(N);
+  const b=new Float64Array(N);
+  for(let k=0;k<E;k++){
+    const i=eI[k],j=eJ[k],w=eW[k],g=eG[k];
+    diag[i]+=w;diag[j]+=w;b[i]-=w*g;b[j]+=w*g;
+  }
+  // Dirichlet 边界 u_anchor=phi_anchor 完全通过“初值 + 搜索方向在锚点恒零”施加：
+  // matVec 用含锚点值的完整 u 计算，自由节点残差 r=b-Au 自动包含 -A_pa·phi_a 的边界贡献，
+  // 无需手动改右端（手动移项会与 matVec 的锚点边贡献重复计数）。
+  // 无效像素 diag=0 -> 预条件取 1（这些变量恒为 0，不进入迭代）
+  const Minv=new Float64Array(N);
+  for(let p=0;p<N;p++) Minv[p]=(isAnchor[p]||!valid[p])?1:(diag[p]>0?1/diag[p]:1);
+  for(let p=0;p<N;p++) Minv[p]=(isAnchor[p]||!valid[p])?1:(diag[p]>0?1/diag[p]:1);
+
+  // 按连通分量逐块做边界条件式 PCG。拉普拉斯按分量块对角解耦：
+  // 每块独立的 alpha/beta/点积，避免不相连分量在全局内积中互相污染。
+  const u=new Float64Array(N);
+  for(const c of comps) u[c.anchor]=phi[c.anchor];
+  const r=new Float64Array(N),Ap=new Float64Array(N),z=new Float64Array(N),
+        pvec=new Float64Array(N),Au=new Float64Array(N);
+  const tol=Math.min(0.1,Math.max(1e-14,parseFloat($("inTol").value)||1e-10));
+  const maxit=Math.max(1,parseInt($("inMaxit").value,10)||2000);
+  const freeCount=validCount-C;
+  let iter=0, rnorm0=0, rnorm=0, converged=true;
+
+  // 拉普拉斯矩阵向量乘，限定在某分量的连续边区间 [k0,k1)。
+  // 权重已预算在 eW，内循环仅一次乘法与两次累加；TypedArray 定长访问避免装箱。
+  function matVecRange(xv,out,k0,k1){
+    for(let k=k0;k<k1;k++){
+      const i=eI[k],j=eJ[k],wd=eW[k]*(xv[j]-xv[i]);
+      out[i]-=wd; out[j]+=wd;
+    }
+  }
+
+  for(let cid=0;cid<comps.length;cid++){
+    const comp=comps[cid];
+    const freeNodes=comp.indices.filter(p=>!isAnchor[p]);
+    const k0=compEdgeStart[cid], k1=compEdgeStart[cid+1];
+    if(freeNodes.length===0) continue; // 单像素分量：锚点已固定，无需迭代
+    // 该分量初始残差 r = b - A u（锚点贡献经边进入 A u）
+    Au.fill(0); matVecRange(u,Au,k0,k1);
+    let rn0=0;
+    for(const p of freeNodes){ r[p]=b[p]-Au[p]; if(Math.abs(r[p])>rn0)rn0=Math.abs(r[p]); }
+    rnorm0=Math.max(rnorm0,rn0);
+    if(rn0===0) continue;
+    for(const p of freeNodes){ z[p]=Minv[p]*r[p]; pvec[p]=z[p]; }
+    let rz=0; for(const p of freeNodes) rz+=r[p]*z[p];
+    let rn=rn0, localIt=0, ok=false;
+    while(localIt<maxit){
+      Ap.fill(0); matVecRange(pvec,Ap,k0,k1);
+      let pAp=0; for(const p of freeNodes)pAp+=pvec[p]*Ap[p];
+      if(!(pAp>0)) break;
+      const alpha=rz/pAp;
+      for(const p of freeNodes){ u[p]+=alpha*pvec[p]; r[p]-=alpha*Ap[p]; }
+      rn=0; for(const p of freeNodes){ const a=Math.abs(r[p]); if(a>rn)rn=a; }
+      localIt++; iter++;
+      if(rn<=tol*rn0){ ok=true; break; }
+      for(const p of freeNodes) z[p]=Minv[p]*r[p];
+      let rzNew=0; for(const p of freeNodes)rzNew+=r[p]*z[p];
+      const beta=rzNew/rz; rz=rzNew;
+      for(const p of freeNodes) pvec[p]=z[p]+beta*pvec[p];
+      if((iter&63)===0){ setProgress(Math.min(1,iter/maxit),"PCG 分量 "+cid+"，迭代 "+iter+"，残差∞="+fmt(rn,3)); await tick(); }
+    }
+    rnorm=Math.max(rnorm,rn);
+    if(!ok) converged=false;
+    // 清零该分量工作向量，避免泄漏到下一块
+    for(const p of comp.indices){ r[p]=0;z[p]=0;pvec[p]=0;Ap[p]=0; }
+  }
+  setProgress(1,"后处理残差与电荷…"); await tick();
+
+  /* ---- 边残差与能量 ---- */
+  const edgeR=new Float64Array(E);
+  let energy=0, sumW=0, maxAbsR=0;
+  const compEnergy=new Float64Array(C), compChargeSum=new Int32Array(C);
+  for(let k=0;k<E;k++){
+    const rv=u[eJ[k]]-u[eI[k]]-eG[k]; edgeR[k]=rv;
+    energy+=eW[k]*rv*rv; sumW+=eW[k];
+    maxAbsR=Math.max(maxAbsR,Math.abs(rv));
+    const cid=label[eI[k]]; if(cid>=0)compEnergy[cid]+=eW[k]*rv*rv;
+  }
+  // 最终自由梯度无穷范数（直接由残差向量给出，锚点行除外）
+  Au.fill(0); matVecRange(u,Au,0,E);
+  let gradInf=0;
+  for(let p=0;p<N;p++) if(valid[p]&&!isAnchor[p])gradInf=Math.max(gradInf,Math.abs(b[p]-Au[p]));
+
+  /* ---- 2×2 残差电荷 ---- */
+  const charges=[]; // {x,y,q,loopSum}
+  const chargeMap=new Int8Array(W*H); // 存单元左上角索引处
+  for(let y=0;y+1<H;y++)for(let x=0;x+1<W;x++){
+    const a=y*W+x,b=a+1,d=a+W,c=d+1;
+    if(valid[a]&&valid[b]&&valid[c]&&valid[d]){
+      const s=wrap(phi[b]-phi[a])+wrap(phi[c]-phi[b])+wrap(phi[d]-phi[c])+wrap(phi[a]-phi[d]);
+      const q=Math.round(s/TAU);
+      if(q!==0){
+        charges.push({x,y,q,loop:s/TAU});
+        chargeMap[a]=q;
+        const cid=label[a]; compChargeSum[cid]+=q;
+      }
+    }
+  }
+
+  /* ---- 每像素最大邻边 |r|（供边残差视图）---- */
+  const pixEdge=new Float64Array(N);
+  for(let k=0;k<E;k++){const a=Math.abs(edgeR[k]);
+    if(a>pixEdge[eI[k]])pixEdge[eI[k]]=a; if(a>pixEdge[eJ[k]])pixEdge[eJ[k]]=a;}
+
+  /* ---- 导出用 float32 u：无效位置写 0，不用 NaN ---- */
+  const uOut=new Float32Array(N);
+  for(let p=0;p<N;p++) uOut[p]=valid[p]?u[p]:0;
+
+  const result={
+    valid,validCount,label,comps,isAnchor,freeCount,
+    eI,eJ,eW,
+    eG,edgeR,u,uOut,pixEdge,charges,chargeMap,
+    energy,sumW,maxAbsR,gradInf,iter,converged,rnorm0,rnorm,
+    compEnergy,compChargeSum,tol,maxit,elapsed:performance.now()-t0,
+  };
+  S.result=result;
+  S.ranges={unwrapped:null,edgeres:null};
+  setProgress(1,"完成");
+  renderResults();
+  toast("求解完成："+C+" 个连通区，"+iter+" 次迭代");
+}
+function tick(){return new Promise(r=>setTimeout(r,0));}
+function setProgress(frac,msg){$("progBar").style.width=(frac*100).toFixed(1)+"%";$("progText").textContent=msg||"";}
+
+/* ================= 结果面板 ================= */
+function renderResults(){
+  const r=S.result; if(!r)return;
+  $("resultCard").hidden=false;$("compCard").hidden=false;
+  $("chargeCard").hidden=false;$("exportCard").hidden=false;
+  const nonzero=r.charges.length;
+  const rows=[
+    ["有效像素",r.validCount+" / "+(S.W*S.H)],
+    ["连通分量数",String(r.comps.length)+"（含单像素 "+r.comps.filter(c=>c.size===1).length+" 个）"],
+    ["自由变量数",String(r.freeCount)],
+    ["有效边数",String(r.eI.length)],
+    ["总能量 E=Σw·r²",fmt(r.energy,8)],
+    ["Σw（参考量）",fmt(r.sumW,4)],
+    ["最大 |边残差 r|",fmt(r.maxAbsR,6)],
+    ["自由变量梯度∞ ‖∇E‖∞",fmt(r.gradInf,6)],
+    ["PCG 迭代次数",String(r.iter)+(r.converged?"（收敛）":"（达上限）")],
+    ["相对残差∞ ‖r‖/‖r₀‖",fmt(r.rnorm0>0?r.rnorm/r.rnorm0:0,4)],
+    ["初始/当前残差∞",fmt(r.rnorm0,4)+" / "+fmt(r.rnorm,4)],
+    ["求解耗时",r.elapsed.toFixed(0)+" ms"],
+    ["非零电荷单元",String(nonzero)],
+  ];
+  $("metricList").innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("");
+
+  const pill=$("solvePill");pill.hidden=false;
+  const note=$("integralNote");
+  if(r.validCount===0){
+    pill.className="pill warn";pill.textContent="空有效区";
+    note.className="status-line warn";note.innerHTML="有效区为空：无变量、无边、无能量。导出的 u.raw 全 0、valid.png 全黑。";
+  }else if(nonzero>0){
+    pill.className="pill crit";pill.textContent="存在矛盾闭环";
+    note.className="status-line err";
+    note.innerHTML="检测到 <b>"+nonzero+"</b> 个非零残差电荷单元（电荷和 "+
+      r.charges.reduce((s,c)=>s+c.q,0)+"）。包裹相位在这些环路上不相容，<b>不存在使全部边残差为零的积分解</b>；"+
+      "加权最小二乘仍收敛到驻点（‖∇E‖∞≈0），但矛盾无法消除，被真实地分摊为非零能量 E="+
+      fmt(r.energy,5)+"，未被置零或宣称为零残差。";
+  }else{
+    pill.className="pill good";pill.textContent="环路相容";
+    note.className="status-line ok";
+    note.innerHTML="所有 2×2 有效环路电荷为 0，数据可精确积分；数值残差仅来自浮点与求解容差（E≈"+
+      fmt(r.energy,3)+"，‖∇E‖∞≈"+fmt(r.gradInf,3)+"）。";
+  }
+
+  // 连通区表
+  const tb=$("compTable").querySelector("tbody");
+  tb.innerHTML=r.comps.map((c,cid)=>{
+    const ax=(c.anchor%S.W), ay=(c.anchor/S.W)|0;
+    return `<tr><td><button class="table-btn" data-anchor="${c.anchor}">#${cid}</button></td>
+      <td>${c.size}</td><td>(${ax},${ay})</td><td>${fmt(S.phi[c.anchor],5)}</td>
+      <td style="color:${r.compChargeSum[cid]!==0?'var(--critical)':'inherit'}">${r.compChargeSum[cid]}</td>
+      <td>${fmt(r.compEnergy[cid],6)}</td></tr>`;
+  }).join("")||`<tr><td colspan="6" class="muted">无有效连通区</td></tr>`;
+  tb.querySelectorAll("button[data-anchor]").forEach(btn=>
+    btn.addEventListener("click",()=>probeAt(parseInt(btn.dataset.anchor,10),true)));
+
+  // 电荷表
+  const ctb=$("chargeTable").querySelector("tbody");
+  ctb.innerHTML=r.charges.map(c=>`<tr><td><button class="table-btn" data-charge="${c.y*S.W+c.x}">(${c.x},${c.y})</button></td>
+    <td style="color:${c.q>0?'var(--pos)':'var(--neg)'};font-weight:650">${c.q>0?"+":""}${c.q}</td>
+    <td>${fmt(c.loop,5)}</td></tr>`).join("")
+    ||`<tr><td colspan="3" class="muted">无残差电荷</td></tr>`;
+  ctb.querySelectorAll("button[data-charge]").forEach(btn=>
+    btn.addEventListener("click",()=>probeAt(parseInt(btn.dataset.charge,10),true)));
+
+  drawView();
+}
+</script>
+<script>
+"use strict";
+/* ================= 颜色映射（显示专用，不参与计算）================= */
+function hsl2rgb(h,s,l){
+  const a=s*Math.min(l,1-l);
+  const f=n=>{const k=(n+h/30)%12;return l-a*Math.max(-1,Math.min(k-3,9-k,1));};
+  return [Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255)];
+}
+// 周期相位色环 HSL（包裹相位专用）
+const RING_LUT=(()=>{const lut=new Uint8Array(256*3);
+  for(let i=0;i<256;i++){const [r,g,b]=hsl2rgb(i/255*360,0.78,0.55);
+    lut[i*3]=r;lut[i*3+1]=g;lut[i*3+2]=b;}return lut;})();
+// 顺序蓝色阶（展开/质量/残差量级）
+const SEQ_LUT=(()=>{const lut=new Uint8Array(256*3);
+  const c0=[237,243,251],c1=[13,54,107]; // 浅 -> 深蓝
+  for(let i=0;i<256;i++){const t=i/255;
+    lut[i*3]=Math.round(c0[0]+(c1[0]-c0[0])*t);
+    lut[i*3+1]=Math.round(c0[1]+(c1[1]-c0[1])*t);
+    lut[i*3+2]=Math.round(c0[2]+(c1[2]-c0[2])*t);}return lut;})();
+// 发散蓝-灰-红（带符号量）
+const DIV_LUT=(()=>{const lut=new Uint8Array(256*3);
+  const neg=[31,111,214],mid=[238,237,233],pos=[196,54,54];
+  for(let i=0;i<256;i++){const t=i/255;
+    const c=t<0.5?mix(neg,mid,t*2):mix(mid,pos,(t-0.5)*2);
+    lut[i*3]=c[0];lut[i*3+1]=c[1];lut[i*3+2]=c[2];}return lut;
+  function mix(a,b,t){return [Math.round(a[0]+(b[0]-a[0])*t),
+    Math.round(a[1]+(b[1]-a[1])*t),Math.round(a[2]+(b[2]-a[2])*t)];}})();
+const INVALID_RGB=[74,74,78];
+const CAT_COLORS=[[42,120,214],[235,104,52],[27,175,122],[237,161,0],
+  [232,123,164],[12,163,12],[98,80,214],[227,73,72]];
+function catColor(k){const c=CAT_COLORS[k%CAT_COLORS.length];
+  const m=(k/CAT_COLORS.length)|0; if(m%2===1)return c.map(v=>Math.round(v*0.72+40));return c;}
+
+/* ================= 视图渲染 ================= */
+const canvas=$("view"), ctx=canvas.getContext("2d");
+function drawView(){
+  if(!S.phi)return;
+  const {W,H}=S,N=W*H, r=S.result;
+  canvas.width=W;canvas.height=H;
+  const img=ctx.createImageData(W,H);
+  const d=img.data;
+  const view=S.view;
+  const valid=r?r.valid:new Uint8Array(N).fill(0);
+  const legendLo=$("legendLo"),legendMid=$("legendMid"),legendHi=$("legendHi"),
+        legendBar=$("legendBar"),legendNote=$("legendNote");
+  legendBar.style.background="";
+  let lo=0,hi=1,divMode=false,ringMode=false,seqMode=false,catMode=false;
+
+  if(view==="wrapped"){ ringMode=true; }
+  else if(view==="unwrapped"){
+    seqMode=true;
+    if(!S.ranges.unwrapped){let a=Infinity,b=-Infinity;
+      for(let i=0;i<N;i++)if(valid[i]){a=Math.min(a,r.u[i]);b=Math.max(b,r.u[i]);}
+      S.ranges.unwrapped=[a,b];}
+    [lo,hi]=S.ranges.unwrapped;
+  }
+  else if(view==="quality"){ seqMode=true; lo=0;hi=1; }
+  else if(view==="edgeres"){
+    seqMode=true;
+    if(!S.ranges.edgeres){let b=1e-300;
+      for(let i=0;i<N;i++)if(valid[i])b=Math.max(b,r.pixEdge[i]);
+      S.ranges.edgeres=[0,b];}
+    [lo,hi]=S.ranges.edgeres;
+  }
+  else if(view==="charge"){ divMode=true; lo=-1;hi=1; }
+  else if(view==="components"){ catMode=true; }
+
+  for(let i=0;i<N;i++){
+    const o=i*4;
+    if(!valid[i]){ d[o]=INVALID_RGB[0];d[o+1]=INVALID_RGB[1];d[o+2]=INVALID_RGB[2];d[o+3]=255;continue; }
+    let rgb;
+    if(ringMode){
+      let v=S.phi[i]; if(v<0)v+=TAU;
+      const idx=Math.min(255,Math.max(0,Math.round(v/TAU*255)));
+      rgb=[RING_LUT[idx*3],RING_LUT[idx*3+1],RING_LUT[idx*3+2]];
+    }else if(catMode){
+      rgb=catColor(r.label[i]);
+    }else if(divMode){
+      const q=r.chargeMap[i]||0;
+      if(q===0) rgb=[DIV_LUT[127*3],DIV_LUT[127*3+1],DIV_LUT[127*3+2]];
+      else{const t=Math.min(1,Math.abs(q)/2);
+        const idx=q>0?Math.round(128+127*t):Math.round(127-127*t);
+        rgb=[DIV_LUT[idx*3],DIV_LUT[idx*3+1],DIV_LUT[idx*3+2]];}
+    }else{
+      let v;
+      if(view==="unwrapped")v=r.u[i];
+      else if(view==="quality")v=S.quality[i];
+      else v=r.pixEdge[i];
+      const t=hi>lo?(v-lo)/(hi-lo):0;
+      const idx=Math.min(255,Math.max(0,Math.round(t*255)));
+      rgb=[SEQ_LUT[idx*3],SEQ_LUT[idx*3+1],SEQ_LUT[idx*3+2]];
+    }
+    d[o]=rgb[0];d[o+1]=rgb[1];d[o+2]=rgb[2];d[o+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+
+  // 图例
+  if(ringMode){
+    legendBar.style.background="linear-gradient(90deg,hsl(0,78%,55%),hsl(60,78%,55%),hsl(120,78%,55%),hsl(180,78%,55%),hsl(240,78%,55%),hsl(300,78%,55%),hsl(360,78%,55%))";
+    legendLo.textContent="−π";legendMid.textContent="0";legendHi.textContent="+π";
+    legendNote.textContent="周期色环：相差 2π 的相位同色（仅显示，不影响计算）";
+  }else if(catMode){
+    legendBar.style.background="repeating-linear-gradient(90deg,"+
+      CAT_COLORS.map((c,k)=>`rgb(${c.join(",")}) ${(k/CAT_COLORS.length*100).toFixed(1)}%,rgb(${c.join(",")}) ${((k+1)/CAT_COLORS.length*100).toFixed(1)}%`).join(",")+")";
+    legendLo.textContent="分量 0";legendMid.textContent="…";legendHi.textContent="#"+Math.max(0,r.comps.length-1);
+    legendNote.textContent="每个有效连通分量一种颜色；灰色为无效区，锚点在探针中标出";
+  }else if(divMode){
+    legendBar.style.background="linear-gradient(90deg,rgb(31,111,214),rgb(238,237,233),rgb(196,54,54))";
+    legendLo.textContent="负电荷";legendMid.textContent="0";legendHi.textContent="正电荷";
+    legendNote.textContent="2×2 单元残差电荷（就近取整，单位 2π）；仅四角均有效的单元参与";
+  }else{
+    legendBar.style.background="linear-gradient(90deg,rgb(237,243,251),rgb(13,54,107))";
+    legendLo.textContent=fmt(lo,4);legendMid.textContent=fmt((lo+hi)/2,4);legendHi.textContent=fmt(hi,4);
+    legendNote.textContent= view==="quality"?"质量 quality ∈ [0,1]，阈值 t="+S.threshold+
+      "（quality≤t 或掩膜 0 均为无效）":
+      view==="edgeres"?"每像素相邻边中最大 |r|，r=u_q−u_p−g；色阶范围可点击图例重置":
+      "展开相位 u（弧度）；色阶仅改变显示，不改变求解结果";
+  }
+  drawProbeMarker();
+}
+
+/* ================= 像素探针 ================= */
+let probeIdx=-1;
+function canvasIdxFromEvent(ev){
+  const rect=canvas.getBoundingClientRect();
+  const x=Math.floor((ev.clientX-rect.left)/rect.width*S.W);
+  const y=Math.floor((ev.clientY-rect.top)/rect.height*S.H);
+  if(x<0||y<0||x>=S.W||y>=S.H)return -1;
+  return y*S.W+x;
+}
+canvas.addEventListener("click",ev=>{
+  if(!S.phi)return;
+  const idx=canvasIdxFromEvent(ev);
+  if(idx>=0)probeAt(idx,false);
+});
+function probeAt(idx,flash){
+  probeIdx=idx; drawView();
+  const r=S.result;
+  $("probeEmpty").hidden=true;$("probeBody").hidden=false;
+  const x=idx%S.W,y=(idx/S.W)|0;
+  const valid=r&&r.valid[idx];
+  const cid=valid?r.label[idx]:-1;
+  const anchor=valid?r.comps[cid].anchor:-1;
+  const isAnc=valid&&r.isAnchor[idx];
+  const cells=[
+    ["坐标 (x,y)",`(${x}, ${y})`],
+    ["状态",valid?"有效":"<span style='color:var(--muted)'>无效（掩膜0或 quality≤t）</span>"],
+    ["包裹相位 φ",fmt(S.phi[idx],6)],
+    ["展开相位 u",valid?fmt(r.u[idx],6):"—（导出写 0）"],
+    ["质量 quality",fmt(S.quality[idx],4)],
+    ["连通分量",valid?("#"+cid+"（共 "+r.comps.length+" 个）"):"—"],
+    ["锚点",valid?(`(${anchor%S.W},${(anchor/S.W)|0})，u=φ=${fmt(S.phi[anchor],5)}`+(isAnc?"　<b>本像素即锚点</b>":"")):"—"],
+  ];
+  $("probeGrid").innerHTML=cells.map(([k,v])=>`<span>${k}</span><b>${v}</b>`).join("");
+  // 邻边表
+  const wrap2=$("probeEdgeWrap");
+  if(!valid){wrap2.hidden=true;return;}
+  wrap2.hidden=false;
+  const rows=[];
+  const nbs=[["右",idx+1,(x+1<S.W)],["下",idx+S.W,(y+1<S.H)],
+             ["左",idx-1,(x>0)],["上",idx-S.W,(y>0)]];
+  for(const [name,nb,ok] of nbs){
+    if(!ok||!r.valid[nb]){rows.push(`<tr><td>${name}</td><td colspan="3" class="muted">无有效邻边（边界/孔洞/无效）</td></tr>`);continue;}
+    // 在边数组中定位（右/下边以当前像素为 i；左/上边以邻像素为 i）
+    let found=null;
+    if(name==="右"||name==="下"){
+      for(let k=0;k<r.eI.length;k++) if(r.eI[k]===idx&&r.eJ[k]===nb){found=k;break;}
+    }else{
+      for(let k=0;k<r.eI.length;k++) if(r.eI[k]===nb&&r.eJ[k]===idx){found=k;break;}
+    }
+    if(found===null){rows.push(`<tr><td>${name}</td><td colspan="3" class="muted">无边</td></tr>`);continue;}
+    const k=found;
+    const rv=r.edgeR[k];
+    rows.push(`<tr><td>${name} → (${nb%S.W},${(nb/S.W)|0})</td>
+      <td>${fmt(r.eW[k],4)}</td><td>${fmt(r.eG[k],5)}</td>
+      <td style="color:${Math.abs(rv)>1e-3?'var(--critical)':'inherit'}">${fmt(rv,5)}</td></tr>`);
+  }
+  $("probeEdgeTbl").querySelector("tbody").innerHTML=rows.join("");
+  if(flash) canvas.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+function drawProbeMarker(){
+  if(probeIdx<0||!S.phi)return;
+  const x=probeIdx%S.W,y=(probeIdx/S.W)|0;
+  ctx.save();
+  ctx.strokeStyle="#ffffff";ctx.lineWidth=Math.max(1,S.W/256);
+  ctx.strokeRect(x+0.5,y+0.5,1,1);
+  ctx.strokeStyle="#000000";ctx.setLineDash([1,1]);
+  ctx.strokeRect(x+0.5,y+0.5,1,1);
+  ctx.restore();
+}
+</script>
+<script src="demo-data.js"></script>
+<script>
+"use strict";
+/* ================= 导出 ================= */
+function downloadBlob(blob,name){
+  try{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=name;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+  }catch(e){ toast("当前查看环境拦截了下载，请在本地页面或导出 ZIP 中获取"); }
+}
+function exportParams(){
+  const r=S.result;
+  return {
+    case:S.caseName, width:S.W, height:S.H,
+    threshold:S.threshold,
+    valid_rule:"mask===255 且 quality > threshold",
+    edge_weight:"w_pq=min(quality_p,quality_q)，仅四邻接右/下边",
+    wrapped_difference:"g_pq=wrap(phi_q-phi_p), wrap(a)=a-2*pi*floor((a+pi)/(2*pi))",
+    objective:"min sum w_pq*(u_q-u_p-g_pq)^2",
+    anchor_rule:"每个有效连通分量行优先最小像素固定 u_anchor=phi_anchor（含单像素分量）",
+    solver:{type:"Jacobi 预处理共轭梯度（网格隐式组装，无第三方求解库，无相位展开接口）",
+      tolerance:r.tol,max_iterations:r.maxit,iterations:r.iter,converged:r.converged},
+    component_count:r.comps.length,
+    components:r.comps.map((c,cid)=>({
+      index:cid,size:c.size,
+      anchor_x:c.anchor%S.W,anchor_y:(c.anchor/S.W)|0,
+      anchor_phi:S.phi[c.anchor],
+      charge_sum:r.compChargeSum[cid],energy:r.compEnergy[cid]})),
+    nonzero_charge_cells:r.charges.map(c=>({x:c.x,y:c.y,charge:c.q,loop_over_2pi:c.loop})),
+    energy:r.energy, sum_weights:r.sumW, max_abs_edge_residual:r.maxAbsR,
+    free_gradient_inf_norm:r.gradInf,
+    integral_solution_exists:r.charges.length===0 && r.validCount>0,
+    note:r.charges.length>0
+      ?"存在非零残差电荷：包裹相位含不相容闭环，不存在零残差精确积分解，以上为加权最小二乘折中结果。"
+      :(r.validCount===0?"空有效区。":"所有环路电荷为零，可精确积分。"),
+    export_convention:"u.raw 为小端 float32 弧度，无效位置写 0（无 NaN）；valid.png 为 0/255 灰度 PNG。",
+    exported_at:new Date().toISOString(),
+  };
+}
+$("expRaw").addEventListener("click",()=>{
+  const r=S.result; if(!r)return;
+  // 确保小端（Float32Array 依平台，显式按 LE 拷贝）
+  const buf=new ArrayBuffer(r.uOut.length*4), dv=new DataView(buf);
+  for(let i=0;i<r.uOut.length;i++)dv.setFloat32(i*4,r.uOut[i],true);
+  downloadBlob(new Blob([buf],{type:"application/octet-stream"}),S.caseName+"-unwrapped.raw");
+});
+$("expPng").addEventListener("click",()=>{
+  const r=S.result; if(!r)return;
+  const gray=new Uint8Array(S.W*S.H);
+  for(let i=0;i<gray.length;i++)gray[i]=r.valid[i]?255:0;
+  downloadBlob(encodeGrayPNG(S.W,S.H,gray),S.caseName+"-valid.png");
+});
+$("expJson").addEventListener("click",()=>{
+  if(!S.result)return;
+  downloadBlob(new Blob([JSON.stringify(exportParams(),null,2)],{type:"application/json"}),
+    S.caseName+"-params.json");
+});
+$("expZip").addEventListener("click",()=>{
+  const r=S.result; if(!r)return;
+  const buf=new ArrayBuffer(r.uOut.length*4),dv=new DataView(buf);
+  for(let i=0;i<r.uOut.length;i++)dv.setFloat32(i*4,r.uOut[i],true);
+  const gray=new Uint8Array(S.W*S.H);
+  for(let i=0;i<gray.length;i++)gray[i]=r.valid[i]?255:0;
+  const pngBlob=encodeGrayPNG(S.W,S.H,gray);
+  const jsonU8=new TextEncoder().encode(JSON.stringify(exportParams(),null,2));
+  (async()=>{
+    const pngU8=new Uint8Array(await pngBlob.arrayBuffer());
+    const zip=buildZip([
+      {name:S.caseName+"-unwrapped.raw",u8:new Uint8Array(buf)},
+      {name:S.caseName+"-valid.png",u8:pngU8},
+      {name:S.caseName+"-params.json",u8:jsonU8},
+    ]);
+    downloadBlob(zip,S.caseName+"-unwrapped.zip");
+  })();
+});
+
+/* ================= 事件绑定 ================= */
+$("viewTabs").addEventListener("click",ev=>{
+  const btn=ev.target.closest("button[data-view]"); if(!btn)return;
+  S.view=btn.dataset.view;
+  $("viewTabs").querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===btn));
+  drawView();
+});
+$("thrRange").addEventListener("input",()=>{
+  S.threshold=clamp(parseFloat($("thrRange").value)||0,0,1);
+  $("thrNum").value=S.threshold;
+});
+$("thrNum").addEventListener("change",()=>{
+  S.threshold=clamp(parseFloat($("thrNum").value)||0,0,1);
+  $("thrRange").value=S.threshold;
+});
+// 阈值改完即重算（求解很快）；拖动过程不重算，change 时重算
+$("thrRange").addEventListener("change",()=>{ if(S.phi)runSolve(); });
+$("thrNum").addEventListener("change",()=>{ if(S.phi)runSolve(); });
+$("inTol").addEventListener("change",()=>{ if(S.phi)runSolve(); });
+$("inMaxit").addEventListener("change",()=>{ if(S.phi)runSolve(); });
+$("runBtn").addEventListener("click",runSolve);
+
+$("pickBtn").addEventListener("click",()=>$("fileInput").click());
+$("zipBtn").addEventListener("click",()=>{ $("fileInput").accept=".zip"; $("fileInput").click();
+  setTimeout(()=>$("fileInput").accept=".raw,.png,.json,.zip",500); });
+$("fileInput").addEventListener("change",async e=>{
+  if(e.target.files.length)await handleFiles(e.target.files);
+  e.target.value="";
+});
+const drop=$("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("drag");}));
+drop.addEventListener("drop",async e=>{
+  if(e.dataTransfer.files.length)await handleFiles(e.dataTransfer.files);
+});
+$("demoBtn").addEventListener("click",async()=>{
+  try{
+    if(!window.DEMO_ZIP_B64) throw new Error("样例数据未随页面发布");
+    const bin=atob(window.DEMO_ZIP_B64);
+    const u8=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i)&0xff;
+    const files=parseZip(u8.buffer);
+    await ingest(files);
+    toast("已载入内置样例包（含 clean / vortex / empty 三个 JSON 描述）");
+  }catch(err){ console.error(err); setStatus($("loadStatus"),"样例载入失败："+err.message,"err"); }
+});
+// 主题切换
+$("themeBtn").addEventListener("click",()=>{
+  const root=document.documentElement;
+  const dark=matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur=root.dataset.theme||(dark?"dark":"light");
+  root.dataset.theme=cur==="dark"?"light":"dark";
+});
+// 点击图例重置对应色阶
+$("legendBar").addEventListener("click",()=>{
+  if(S.view==="unwrapped"){S.ranges.unwrapped=null;drawView();}
+  if(S.view==="edgeres"){S.ranges.edgeres=null;drawView();}
+});
+// 初始空态绘制
+(function init(){
+  canvas.width=8;canvas.height=8;
+  const g=ctx.createImageData(8,8);
+  for(let i=0;i<64;i++){g.data[i*4]=74;g.data[i*4+1]=74;g.data[i*4+2]=78;g.data[i*4+3]=255;}
+  ctx.putImageData(g,0,0);
+  $("legendLo").textContent="";$("legendMid").textContent="等待数据";$("legendHi").textContent="";
+})();
+</script>
