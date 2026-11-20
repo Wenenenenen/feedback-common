@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232a78d6'/%3E%3Cpath d='M3 11h4M3 8h7M3 5h5' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>Census-SGM 视差核对台</title>
+<style>
+/* 观感：中性冷灰面板 + 蓝/橙/青绿语义三色；浅深两套各自选色。 */
+:root {
+  color-scheme: light;
+  --page: #f3f4f2;
+  --surface-1: #fcfcfb;
+  --surface-2: #eceeeb;
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --muted: #898781;
+  --line: #dcded9;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --accent: #2a78d6;
+  --accent-soft: #e4eefb;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --invalid: #2b2b29;
+  --shadow: 0 1px 2px rgba(20, 24, 32, .06), 0 6px 18px rgba(20, 24, 32, .06);
+  --radius: 10px;
+  --mono: "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --fg: #f0efec;
+    --fg-2: #c3c2b7;
+    --muted: #898781;
+    --line: #2c2c2a;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --accent: #3987e5;
+    --accent-soft: #1d2a3b;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --invalid: #080808;
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 6px 18px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --muted: #898781;
+  --line: #2c2c2a;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --accent: #3987e5;
+  --accent-soft: #1d2a3b;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --invalid: #080808;
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 6px 18px rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--page); color: var(--fg); }
+body {
+  font: 14px/1.5 var(--sans);
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+  padding-block: 14px 28px;
+}
+.app { max-width: 1560px; margin: 0 auto; display: grid; gap: 12px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; }
+header.top h1 { font-size: 19px; margin: 0; letter-spacing: .2px; }
+header.top p { margin: 0; color: var(--fg-2); font-size: 12.5px; }
+header.top .spacer { flex: 1; }
+.theme-btn {
+  font: inherit; font-size: 12px; color: var(--fg-2); background: var(--surface-1);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.theme-btn:hover { border-color: var(--axis); }
+
+.panel {
+  background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.toolbar { padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.field { display: grid; gap: 3px; min-width: 0; }
+.field > label, .field > .lbl { font-size: 11px; color: var(--muted); letter-spacing: .3px; }
+.field.row { display: flex; align-items: center; gap: 7px; }
+input[type=number], select, input[type=file] {
+  font: inherit; font-size: 12.5px; color: var(--fg); background: var(--surface-1);
+  border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; min-width: 0;
+}
+input[type=number] { width: 74px; font-family: var(--mono); }
+input[type=number]:invalid { border-color: var(--critical); }
+input[type=range] { width: 112px; accent-color: var(--accent); }
+select { max-width: 210px; }
+button {
+  font: inherit; font-size: 12.5px; color: var(--fg); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--axis); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover { filter: brightness(1.06); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--fg-2); cursor: pointer; }
+.switch input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+.hr { height: 1px; background: var(--line); margin: 2px 0; }
+.grow { flex: 1 1 auto; }
+
+#status { font-size: 12px; color: var(--fg-2); }
+#status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); vertical-align: 1px; }
+#status.busy .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+#status.ok .dot { background: var(--good); }
+#status.err .dot { background: var(--critical); }
+@keyframes pulse { 50% { opacity: .35; } }
+#notice {
+  display: none; padding: 8px 12px; border-radius: 8px; font-size: 12.5px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--fg-2);
+}
+#notice.show { display: block; }
+#notice.err { border-color: var(--critical); color: var(--fg); background: color-mix(in srgb, var(--critical) 12%, var(--surface-1)); }
+#notice.ok { border-color: var(--good); color: var(--fg); background: color-mix(in srgb, var(--good) 10%, var(--surface-1)); }
+
+main.workspace {
+  display: grid; gap: 12px;
+  grid-template-columns: minmax(380px, 1.12fr) minmax(360px, 1fr);
+  align-items: start;
+}
+main.workspace > .col { display: grid; gap: 12px; align-content: start; }
+@media (max-width: 1080px) { main.workspace { grid-template-columns: 1fr; } }
+
+.viewer { padding: 10px 12px 12px; display: grid; gap: 10px; }
+.viewer-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.tabs { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 8px; padding: 2px; }
+.tabs button { border: 0; background: transparent; padding: 5px 11px; border-radius: 6px; color: var(--fg-2); font-size: 12.5px; }
+.tabs button[aria-selected="true"] { background: var(--surface-1); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); font-weight: 600; }
+.viewer-head .spacer { flex: 1; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--fg-2); cursor: pointer; }
+
+.canvas-stage { position: relative; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.canvas-box { position: relative; }
+canvas.maincv, canvas.sidecv {
+  display: block; image-rendering: pixelated; border: 1px solid var(--line);
+  border-radius: 4px; cursor: crosshair; background: var(--invalid);
+  touch-action: none;
+}
+.canvas-main-box { flex: 1 1 320px; min-width: 0; max-width: 620px; }
+.canvas-side-box { flex: 0 0 auto; width: min(34%, 220px); min-width: 110px; }
+canvas.maincv, canvas.sidecv { width: 100%; height: auto; }
+.canvas-cap { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.canvas-cap b { color: var(--fg-2); font-weight: 600; }
+#marker {
+  position: absolute; pointer-events: none; display: none; border: 1.5px solid var(--series-2);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.3);
+  border-radius: 2px;
+}
+#pairline {
+  position: absolute; inset: 0; pointer-events: none; z-index: 2;
+}
+.legend-row { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--fg-2); }
+.legend-row .key { display: inline-flex; align-items: center; gap: 5px; }
+.legend-row .sw { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.18); }
+.legend-row .ln { width: 16px; height: 2px; border-radius: 1px; }
+.scalebar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.scalebar .ramp { flex: 1; height: 9px; border-radius: 3px; border: 1px solid var(--line); }
+.scalebar > span { flex: 0 0 auto; font-family: var(--mono); }
+.scalebar .ticks { display: flex; justify-content: space-between; width: 100%; font-family: var(--mono); }
+
+.side { display: grid; gap: 12px; }
+.card { padding: 10px 12px 12px; }
+.card h2 { margin: 0 0 8px; font-size: 13px; letter-spacing: .3px; display: flex; align-items: baseline; gap: 8px; }
+.card h2 .sub { font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.card h2 .right { margin-left: auto; font-weight: 400; font-size: 11.5px; color: var(--muted); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+.kpi { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; border: 1px solid transparent; }
+.kpi .k { font-size: 10.5px; color: var(--muted); letter-spacing: .2px; }
+.kpi .v { font-size: 18px; font-weight: 600; font-variant-numeric: proportional-nums; letter-spacing: -.2px; }
+.kpi .n { font-size: 10.5px; color: var(--muted); }
+.kpi.pass { border-color: color-mix(in srgb, var(--good) 55%, var(--line)); }
+.kpi.fail { border-color: var(--critical); }
+.kpi.pass .v { color: var(--good); }
+.kpi.fail .v { color: var(--critical); }
+.kpi .v .ic { font-size: 12px; margin-right: 2px; }
+
+table.tbl { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+table.tbl th, table.tbl td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: right; }
+table.tbl th { color: var(--muted); font-weight: 600; text-align: right; background: transparent; }
+table.tbl th:first-child, table.tbl td:first-child { text-align: left; }
+table.tbl td.mono, table.tbl th.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+table.tbl tr.sel td { background: var(--accent-soft); }
+table.tbl tr:hover td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+table.tbl td.win { color: var(--good); font-weight: 700; }
+.scroll { max-height: 250px; overflow: auto; border-radius: 6px; }
+
+.viz-svg { display: block; overflow: visible; }
+.viz-grid { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.viz-axis-line { stroke: var(--axis); stroke-width: 1; shape-rendering: crispEdges; }
+.viz-axis { fill: var(--muted); font-size: 10px; font-family: var(--sans); }
+.viz-mark { stroke: var(--series-2); stroke-width: 1.5; stroke-dasharray: 0; opacity: .8; }
+.viz-cross { stroke: var(--fg-2); stroke-width: 1; opacity: .55; }
+.viz-bar { transition: fill-opacity .1s; }
+.viz-bar:hover { fill-opacity: 1; }
+.viz-tip {
+  position: absolute; z-index: 5; pointer-events: none; min-width: 92px;
+  background: var(--surface-1); border: 1px solid var(--line); border-radius: 7px;
+  box-shadow: var(--shadow); padding: 6px 8px; font-size: 11.5px;
+}
+.viz-tip-head { color: var(--muted); font-size: 10.5px; margin-bottom: 3px; font-family: var(--mono); }
+.viz-tip-row { display: flex; align-items: center; gap: 6px; }
+.viz-tip-row strong { font-variant-numeric: tabular-nums; }
+.viz-tip-name { color: var(--fg-2); }
+.viz-key { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }
+.chart-wrap { position: relative; }
+.chart-title { font-size: 11.5px; color: var(--fg-2); margin: 10px 0 2px; font-weight: 600; }
+.chart-title .sub { font-weight: 400; color: var(--muted); }
+.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 10px; }
+.multiples .mult { border: 1px solid var(--line); border-radius: 7px; padding: 4px 5px 2px; background: var(--surface-1); }
+.multiples .mult .cap { font-size: 10.5px; color: var(--fg-2); display: flex; justify-content: space-between; gap: 6px; }
+.multiples .mult .cap b { color: var(--fg); font-family: var(--mono); font-weight: 600; }
+
+.hint { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; }
+.hint kbd { font-family: var(--mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 10.5px; }
+
+.empty { color: var(--muted); font-size: 12.5px; padding: 16px 4px; text-align: center; }
+.pix-head { font-family: var(--mono); font-size: 12px; color: var(--fg-2); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.pix-head b { color: var(--fg); }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-2); }
+.badge.good { border-color: var(--good); color: var(--good); }
+.badge.bad { border-color: var(--critical); color: var(--critical); }
+.badge.warn { border-color: var(--warn); color: var(--fg); }
+.qrow { display: flex; flex-wrap: wrap; gap: 6px 12px; font-family: var(--mono); font-size: 11.5px; color: var(--fg-2); }
+.qrow .w { color: var(--fg); }
+
+.check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.probe-out { font-family: var(--mono); font-size: 11.5px; white-space: pre; overflow: auto; max-height: 160px; background: var(--surface-2); padding: 8px; border-radius: 6px; margin: 0; }
+.probe-out .ok { color: var(--good); }
+.probe-out .no { color: var(--critical); }
+
+details.adv { border-top: 1px solid var(--line); padding-top: 8px; }
+details.adv summary { cursor: pointer; font-size: 11.5px; color: var(--muted); }
+details.adv[open] summary { margin-bottom: 8px; }
+
+footer.foot { color: var(--muted); font-size: 11.5px; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0 2px; }
+footer.foot code { font-family: var(--mono); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Census-SGM 视差核对台</h1>
+    <p>5×5 Census · 八方向半全局聚合 · 唯一性 · 亚像素 · 左右一致性 · 全部自行实现</p>
+    <span class="spacer"></span>
+    <span id="status" role="status" aria-live="polite"><span class="dot"></span>未加载</span>
+    <button id="theme-btn" class="theme-btn" type="button">深色</button>
+  </header>
+
+  <section class="panel toolbar" aria-label="输入与参数">
+    <div class="field">
+      <span class="lbl">样例</span>
+      <select id="sample-select">
+        <option value="">— 选择内置样例 —</option>
+        <option value="flat">常视差（flat）</option>
+        <option value="occlusion">遮挡（occlusion）</option>
+      </select>
+    </div>
+    <div class="field">
+      <span class="lbl">左图（8 位灰度）</span>
+      <input id="left-file" type="file" accept="image/png,.png">
+    </div>
+    <div class="field">
+      <span class="lbl">右图（8 位灰度）</span>
+      <input id="right-file" type="file" accept="image/png,.png">
+    </div>
+    <div class="field">
+      <span class="lbl">真值（可选，16 位）</span>
+      <input id="truth-file" type="file" accept="image/png,.png">
+    </div>
+    <div class="hr grow"></div>
+    <div class="field"><label for="min-d">最小视差</label><input id="min-d" type="number" min="0" max="63" step="1" value="0"></div>
+    <div class="field"><label for="max-d">最大视差</label><input id="max-d" type="number" min="0" max="63" step="1" value="12"></div>
+    <div class="field"><label for="p1">P1（小惩罚）</label><input id="p1" type="number" min="0" step="0.5" value="3"></div>
+    <div class="field"><label for="p2">P2（大惩罚）</label><input id="p2" type="number" min="0" step="1" value="24"></div>
+    <div class="field"><label for="uniq">唯一性阈值</label><input id="uniq" type="number" min="0" max="1" step="0.01" value="0.05"></div>
+    <div class="field"><label for="lrthr">一致性阈值（像素）</label><input id="lrthr" type="number" min="0" step="0.5" value="1"></div>
+    <label class="switch" for="subpix"><input id="subpix" type="checkbox" checked>亚像素修正</label>
+    <button id="run" class="primary" type="button">计算</button>
+    <button id="export-png" type="button" disabled>导出 16 位 PNG</button>
+    <button id="export-params" type="button" disabled>导出参数</button>
+  </section>
+
+  <div id="notice" role="alert"></div>
+
+  <main class="workspace">
+    <div class="col">
+    <section class="panel viewer" aria-label="图像视图">
+      <div class="viewer-head">
+        <div class="tabs" role="tablist" aria-label="主视图">
+          <button role="tab" data-view="disp" aria-selected="true">视差</button>
+          <button role="tab" data-view="invalid" aria-selected="false">无效区</button>
+          <button role="tab" data-view="reason" aria-selected="false">无效原因</button>
+          <button role="tab" data-view="left" aria-selected="false">左图</button>
+          <button role="tab" data-view="right" aria-selected="false">右图对齐</button>
+          <button role="tab" data-view="error" aria-selected="false">误差</button>
+        </div>
+        <span class="spacer"></span>
+        <label class="chk"><input id="show-pair" type="checkbox" checked>显示左右对应位置</label>
+      </div>
+      <div class="canvas-stage">
+        <div class="canvas-box canvas-main-box">
+          <canvas id="main-cv" class="maincv" width="96" height="64"></canvas>
+          <div id="marker"></div>
+        </div>
+        <div class="canvas-box canvas-side-box">
+          <canvas id="side-cv" class="sidecv" width="96" height="64" title="右图对应位置"></canvas>
+          <div class="canvas-cap" id="side-cap">右图对应区</div>
+        </div>
+      </div>
+      <div class="legend-row" id="view-legend"></div>
+      <div class="scalebar" id="view-scale" hidden>
+        <span id="scale-min">0</span>
+        <div class="ramp" id="scale-ramp"></div>
+        <span id="scale-max">12</span>
+      </div>
+      <p class="hint">点击任意像素查看该点代价与八方向贡献 · 主视图下方的读数是<b>浮点视差</b>；视差 0 与“无效”是两种状态，图例与刻度分开标。</p>
+    </section>
+
+    <section class="panel card" aria-label="评估">
+      <h2>评估 <span class="sub" id="eval-sub">— 无真值</span></h2>
+      <div class="kpis" id="kpis"></div>
+      <p class="hint" id="eval-hint">导入 16 位真值图后，按包内约定统计有效率与 1 像素误差率。</p>
+    </section>
+    </div>
+
+    <div class="side col">
+      <section class="panel card" aria-label="像素核对">
+        <h2>像素核对 <span class="sub" id="pix-sub">点击图像</span></h2>
+        <div id="pix-empty" class="empty">点击主视图中的像素，查看原始代价、八方向贡献与最终曲线。</div>
+        <div id="pix-body" hidden>
+          <div class="pix-head" id="pix-head"></div>
+          <div class="qrow" id="pix-chain" style="margin-top:6px"></div>
+          <div class="chart-title">原始代价 C(p,d) <span class="sub">0..24 汉明距离；灰色竖条 = 该候选越界或窗口不完整（不参与选优）</span></div>
+          <div class="chart-wrap" id="chart-cost"></div>
+          <div class="chart-title">聚合代价 Σ L（八方向） <span class="sub">与上图同一 d 轴；橙色竖线为 d₀</span></div>
+          <div class="chart-wrap" id="chart-sum"></div>
+          <details class="adv" style="margin-top:6px" open>
+            <summary>八方向 L 贡献 <span class="sub">各方向独立路径；竖线为 d₀</span></summary>
+            <div class="multiples" id="chart-dirs"></div>
+            <div class="legend-row" id="dirs-legend" style="margin-top:4px"></div>
+          </details>
+          <details class="adv" style="margin-top:6px">
+            <summary>逐候选数值</summary>
+            <div class="scroll"><table class="tbl" id="cand-tbl"></table></div>
+          </details>
+          <details class="adv" style="margin-top:6px">
+            <summary>反向（右图为基准）一致性</summary>
+            <div id="rev-body" class="qrow"></div>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel card" aria-label="自检">
+        <h2>规范自检 <span class="sub">按包内 path-probe 与约定</span></h2>
+        <div class="check-grid">
+          <div>
+            <div class="lbl" style="font-size:11px;color:var(--muted)">路径递推探针</div>
+            <pre class="probe-out" id="probe-path">运行中…</pre>
+          </div>
+          <div>
+            <div class="lbl" style="font-size:11px;color:var(--muted)">零视差 / 无效 编码</div>
+            <pre class="probe-out" id="probe-enc">运行中…</pre>
+          </div>
+          <div>
+            <div class="lbl" style="font-size:11px;color:var(--muted)">左右一致性符号</div>
+            <pre class="probe-out" id="probe-lr">运行中…</pre>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <span>导出编码 0=无效，其余 <code>1+floor(256·d+0.5)</code></span>
+    <span>视差区间 0..63 · 图像 ≤320×240 · 全程离线</span>
+  </footer>
+</div>
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

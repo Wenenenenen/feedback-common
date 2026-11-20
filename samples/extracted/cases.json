@@ -1,0 +1,20 @@
+{
+  "flat": {
+    "left": "left.png",
+    "right": "right-flat.png",
+    "truth": "truth-flat.png"
+  },
+  "occlusion": {
+    "left": "left.png",
+    "right": "right-occlusion.png",
+    "truth": "truth-occlusion.png"
+  },
+  "settings": {
+    "min_disparity": 0,
+    "max_disparity": 12,
+    "P1": 3,
+    "P2": 24,
+    "uniqueness": 0.05,
+    "lr_threshold": 1
+  }
+}
