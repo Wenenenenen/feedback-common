@@ -1,0 +1,12 @@
+{
+  "name": "arap-handle-deformer",
+  "version": "1.0.0",
+  "description": "带硬位置约束的 ARAP 局部刚性网格变形网页（SO(3) 正旋转，自研稀疏求解与 WebGL 线框）",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/solver.test.js",
+    "test:e2e": "node test/e2e.test.mjs",
+    "serve": "node test/server.mjs"
+  },
+  "license": "MIT"
+}
