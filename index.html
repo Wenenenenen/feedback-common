@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JPEG MCU 检查器</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>JPEG MCU 检查器</h1>
+  <p class="sub">8 位基线 Huffman · 灰度 / YCbCr 4:4:4、4:2:2、4:2:0 · ≤1024×1024 · 自研解码，不借助浏览器解码</p>
+  <div id="drop" class="drop">
+    <input type="file" id="file" accept=".jpg,.jpeg,image/jpeg">
+    <span>选择或拖入 JPEG 文件</span>
+  </div>
+  <div id="error" class="error" hidden></div>
+  <div id="info" class="info" hidden></div>
+  <div id="actions" class="actions" hidden>
+    <button id="export-png">导出解码 PNG</button>
+    <button id="export-json">导出块系数 JSON</button>
+    <label><input type="checkbox" id="show-mcu" checked> MCU 网格</label>
+    <label><input type="checkbox" id="show-block" checked> 块网格</label>
+  </div>
+</header>
+
+<main id="main" hidden>
+  <section class="pane markers">
+    <h2>标记段（字节范围）</h2>
+    <table id="marker-table">
+      <thead><tr><th>偏移 [起, 止)</th><th>标记</th><th>说明</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="pane canvas-pane">
+    <h2>解码图像</h2>
+    <div class="canvas-wrap"><canvas id="view"></canvas></div>
+    <p class="hint">点击图像查看对应 MCU 与块；粗线为 MCU 边界，细线为 8×8 块边界。</p>
+  </section>
+
+  <section class="pane detail">
+    <h2>块详情</h2>
+    <div id="block-detail" class="block-detail empty">尚未选择块</div>
+  </section>
+</main>
+
+<script src="js/jpeg-decoder.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+:root {
+  --bg: #f6f7f9;
+  --pane: #ffffff;
+  --ink: #1d2430;
+  --muted: #66707e;
+  --line: #d9dee5;
+  --accent: #1f6feb;
+  --accent-soft: #e3edfc;
+  --bad: #b62324;
+  --bad-bg: #fdecec;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 14px/1.55 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+header { padding: 16px 20px 8px; }
+h1 { margin: 0 0 2px; font-size: 20px; }
+.sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+
+.drop {
+  position: relative;
+  border: 2px dashed var(--line);
+  border-radius: 8px;
+  background: var(--pane);
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  cursor: pointer;
+}
+.drop:hover, .drop.over { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--bad);
+  border-radius: 6px;
+  background: var(--bad-bg);
+  color: var(--bad);
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.info {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--pane);
+  font-size: 13px;
+}
+.info b { font-family: var(--mono); }
+
+.actions { margin-top: 10px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+button {
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+.actions label { color: var(--muted); font-size: 13px; user-select: none; }
+
+main {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.1fr) minmax(280px, 1fr) minmax(320px, 1.2fr);
+  gap: 14px;
+  padding: 14px 20px 24px;
+  align-items: start;
+}
+@media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+
+.pane {
+  background: var(--pane);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.pane h2 { margin: 0 0 10px; font-size: 14px; color: var(--muted); font-weight: 600; }
+
+#marker-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+#marker-table th, #marker-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+#marker-table th { color: var(--muted); font-weight: 600; }
+#marker-table td.off { font-family: var(--mono); white-space: nowrap; }
+#marker-table td.mk { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+#marker-table tr.rst td.mk { color: #9a5b00; }
+#marker-table tr.entropy td.mk { color: #6f3cc3; }
+
+.canvas-wrap { overflow: auto; max-height: 70vh; }
+#view { image-rendering: pixelated; cursor: crosshair; display: block; }
+.hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+
+.block-detail.empty { color: var(--muted); }
+.block-detail h3 { margin: 0 0 6px; font-size: 13.5px; }
+.block-detail .kv { font-size: 12.5px; margin: 2px 0; }
+.block-detail .kv b { font-family: var(--mono); }
+.block-detail .restart-note {
+  margin: 6px 0;
+  padding: 5px 8px;
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  border-radius: 5px;
+  font-size: 12.5px;
+}
+.comp-tabs { display: flex; gap: 6px; margin: 8px 0; }
+.comp-tabs button {
+  background: var(--pane);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 3px 10px;
+  font-size: 12.5px;
+}
+.comp-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.coef-grid { border-collapse: collapse; font-family: var(--mono); font-size: 11px; margin: 6px 0 12px; }
+.coef-grid td {
+  border: 1px solid var(--line);
+  min-width: 38px;
+  padding: 1px 4px;
+  text-align: right;
+}
+.coef-grid td.dc { background: var(--accent-soft); font-weight: 700; }
+.coef-grid td.nz { color: var(--accent); }
+.coef-caption { font-size: 12px; color: var(--muted); margin: 8px 0 2px; }
