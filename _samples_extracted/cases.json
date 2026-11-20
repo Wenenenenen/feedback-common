@@ -1,0 +1,31 @@
+{
+  "small": {
+    "image": "small-hole.png",
+    "mask": "small-hole-mask.png",
+    "truth": "small-hole-truth.png",
+    "settings": {
+      "patch_size": 7,
+      "levels": 1,
+      "iterations": 30,
+      "seed": 7
+    },
+    "masked_mae_max": 8
+  },
+  "constant": {
+    "image": "constant-hole.png",
+    "mask": "constant-mask.png",
+    "expected_fill": [
+      64,
+      128,
+      192
+    ]
+  },
+  "impossible": {
+    "image": "constant-hole.png",
+    "mask": "all-mask.png"
+  },
+  "empty": {
+    "image": "constant-hole.png",
+    "mask": "empty-mask.png"
+  }
+}
