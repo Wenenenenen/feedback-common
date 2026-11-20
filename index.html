@@ -1,0 +1,482 @@
+<title>缝线缩放工作台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ===== 设计 token：影像工作台，深色技术质感，浅色平行主题 =====
+   布局：顶栏 + 左控制面板 / 中央画布 / 右导出与记录三栏，窄屏堆叠 */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --line: #d8dce4;
+  --fg: #1a1f2b;
+  --fg-dim: #5c6577;
+  --accent: #0e7c86;
+  --accent-soft: #d7eff1;
+  --warn: #b25e09;
+  --warn-soft: #fbeeda;
+  --danger: #c2314b;
+  --danger-soft: #fbe3e8;
+  --seam: #ffe14d;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 28, 45, .06), 0 8px 24px rgba(20, 28, 45, .08);
+  --font-display: "Space Grotesk", "Noto Sans SC", system-ui, sans-serif;
+  --font-body: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #10141c;
+    --surface: #181e29;
+    --surface-2: #202838;
+    --line: #2c3648;
+    --fg: #e8ecf4;
+    --fg-dim: #98a3b8;
+    --accent: #4cc7d2;
+    --accent-soft: #163840;
+    --warn: #f0b45c;
+    --warn-soft: #3a2c17;
+    --danger: #ff7a92;
+    --danger-soft: #3d1d26;
+    --seam: #ffe14d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #10141c;
+  --surface: #181e29;
+  --surface-2: #202838;
+  --line: #2c3648;
+  --fg: #e8ecf4;
+  --fg-dim: #98a3b8;
+  --accent: #4cc7d2;
+  --accent-soft: #163840;
+  --warn: #f0b45c;
+  --warn-soft: #3a2c17;
+  --danger: #ff7a92;
+  --danger-soft: #3d1d26;
+  --seam: #ffe14d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-block: 14px 12px;
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: env(safe-area-inset-top, 0px);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 18px; letter-spacing: .2px; }
+.brand .sub { color: var(--fg-dim); font-size: 12px; }
+.topbar .spacer { flex: 1; }
+.icon-btn, .btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.icon-btn:hover, .btn:hover { border-color: var(--accent); }
+.icon-btn:active, .btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #062327; font-weight: 600; }
+:root[data-theme="dark"] .btn.primary { color: #042024; }
+.btn:disabled, .icon-btn:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+.theme-toggle { padding: 7px 10px; }
+
+/* ---------- 主布局 ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 300px;
+  gap: 16px;
+  padding-block: 16px;
+  align-items: start;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.panel + .panel { margin-top: 14px; }
+.panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--fg-dim);
+  margin-bottom: 10px;
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+.field { margin-bottom: 12px; min-width: 0; }
+.field label { display: block; font-size: 12px; color: var(--fg-dim); margin-bottom: 4px; }
+.field input[type="number"], .field input[type="text"] {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.file-slot {
+  display: block;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--fg-dim);
+  font-size: 13px;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.file-slot:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.file-slot input { display: none; }
+.file-name { font-size: 12px; color: var(--fg-dim); word-break: break-all; margin-top: 4px; font-family: var(--font-mono); }
+
+.radio-grid { display: grid; gap: 6px; }
+.radio-grid label {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.radio-grid label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.radio-grid input { accent-color: var(--accent); }
+
+.seg { display: flex; gap: 6px; }
+.seg button {
+  flex: 1; border: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 8px; padding: 7px 8px; cursor: pointer; font-size: 13px;
+}
+.seg button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.switch-row input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+#validation { font-size: 12px; margin-top: 6px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+#validation[data-invalid="true"] { color: var(--danger); }
+
+/* ---------- 画布区 ---------- */
+.stage-wrap { min-width: 0; }
+.stage-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.pill {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.canvas-frame {
+  background:
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%, transparent 75%, var(--surface-2) 75%),
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%, transparent 75%, var(--surface-2) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 320px;
+  overflow: auto;
+}
+#stage {
+  max-width: 100%;
+  max-height: 70vh;
+  min-width: 160px;
+  min-height: 120px;
+  width: auto;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+  box-shadow: var(--shadow);
+  background: #000;
+  object-fit: contain;
+}
+#stage.energy-mode { cursor: default; }
+
+#status {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+#status[data-tone="error"] { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+#status[data-tone="warn"] { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+
+/* ---------- 播放器 ---------- */
+#player-panel { margin-top: 14px; }
+.player-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#player-title { font-size: 13px; font-weight: 600; flex: 1; min-width: 160px; }
+#player-index { font-family: var(--font-mono); color: var(--fg-dim); font-size: 12px; }
+.player-controls { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+#player-slider { flex: 1; }
+
+/* ---------- 右栏 ---------- */
+.history-item { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); }
+.export-list { display: grid; gap: 8px; }
+.export-list .btn { width: 100%; text-align: left; }
+.samples { display: grid; gap: 8px; }
+.samples button { text-align: left; }
+kbd {
+  font-family: var(--font-mono); font-size: 11px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+}
+.hint { font-size: 12px; color: var(--fg-dim); }
+.hint li { margin-bottom: 4px; }
+
+/* ---------- JSON 模态 ---------- */
+dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  width: min(720px, calc(100vw - 32px));
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(8, 12, 20, .55); }
+#json-text {
+  width: 100%; height: 50vh;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 1fr; }
+  .canvas-frame { min-height: 240px; }
+}
+@media (max-width: 440px) {
+  .row2 { grid-template-columns: 1fr; }
+  .brand .sub { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>缝线缩放工作台</h1>
+    <span class="sub">Seam Retargeting · 能量 / 寻缝 / 插缝均按约定口径本地实现</span>
+  </div>
+  <span class="spacer"></span>
+  <span class="pill" id="size-badge">未载入</span>
+  <button class="icon-btn" id="undo-btn" disabled title="撤销 (Ctrl+Z)">↶ 撤销</button>
+  <button class="icon-btn" id="redo-btn" disabled title="重做 (Ctrl+Shift+Z)">↷ 重做</button>
+  <button class="icon-btn theme-toggle" id="theme-toggle" title="切换主题">◐</button>
+</header>
+
+<main class="layout">
+  <!-- 左栏：输入与参数 -->
+  <section class="left-col">
+    <div class="panel">
+      <h2>输入</h2>
+      <label class="file-slot">
+        选择 8 位 RGB PNG（边长 2–512）
+        <input type="file" id="file-image" accept="image/png">
+      </label>
+      <div class="file-name" id="image-name"></div>
+      <div style="height:10px"></div>
+      <label class="file-slot">
+        选择同尺寸保护掩膜（可选，灰度 PNG）
+        <input type="file" id="file-mask" accept="image/png">
+      </label>
+      <div class="file-name" id="mask-name-slot"></div>
+    </div>
+
+    <div class="panel">
+      <h2>内置样例</h2>
+      <div class="samples">
+        <button class="btn" data-sample="samples/portrait.png|samples/protect.png">人物宣传图 + 保护掩膜（48×36）</button>
+        <button class="btn" data-sample="samples/flat.png|">纯色图（6×5，验证平局规则）</button>
+        <button class="btn" data-sample="samples/flat.png|samples/barrier-mask.png">纯色图 + 屏障掩膜（无合法路径）</button>
+      </div>
+      <p class="hint" style="margin-top:8px">坏尺寸掩膜（bad-mask 3×3）会被尺寸校验拒绝。</p>
+    </div>
+
+    <div class="panel">
+      <h2>保护画笔</h2>
+      <div class="seg" role="group" aria-label="画笔模式">
+        <label class="radio-grid" style="display:contents">
+          <label style="margin:0"><input type="radio" name="brush-mode" value="paint" checked> 画笔（标记保护）</label>
+          <label style="margin:0"><input type="radio" name="brush-mode" value="erase"> 橡皮（取消保护）</label>
+        </label>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>笔刷半径 <span id="brush-size-val" style="float:right;font-family:var(--font-mono)">4</span></label>
+        <input type="range" id="brush-size" min="1" max="24" value="4">
+      </div>
+      <div class="switch-row field">
+        <span>显示保护区域</span>
+        <input type="checkbox" id="mask-toggle" checked>
+      </div>
+      <button class="btn" id="clear-mask" style="width:100%">清空保护掩膜</button>
+    </div>
+
+    <div class="panel">
+      <h2>目标与顺序</h2>
+      <div class="row2">
+        <div class="field">
+          <label for="target-w">目标宽（2–768）</label>
+          <input type="number" id="target-w" min="2" max="768" step="1">
+        </div>
+        <div class="field">
+          <label for="target-h">目标高（2–768）</label>
+          <input type="number" id="target-h" min="2" max="768" step="1">
+        </div>
+      </div>
+      <div class="field">
+        <label>两轴处理顺序</label>
+        <div class="radio-grid">
+          <label><input type="radio" name="order" value="width-first" checked> 先宽后高</label>
+          <label><input type="radio" name="order" value="height-first"> 先高后宽</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>能量视图轴</label>
+        <div class="seg">
+          <button type="button" id="axis-x" class="active">竖缝能量（宽轴）</button>
+          <button type="button" id="axis-y">水平缝能量（高轴）</button>
+        </div>
+      </div>
+      <div id="validation">请先载入图像</div>
+      <button class="btn primary" id="run-btn" disabled style="width:100%;margin-top:10px">执行内容感知缩放</button>
+    </div>
+  </section>
+
+  <!-- 中栏：画布与回放 -->
+  <section class="stage-wrap">
+    <div class="stage-toolbar">
+      <button class="icon-btn" id="view-energy" aria-pressed="false">查看能量图</button>
+      <span class="spacer" style="flex:1"></span>
+      <span class="hint">像素级渲染，红色半透明为保护区域</span>
+    </div>
+    <div class="canvas-frame">
+      <canvas id="stage" width="2" height="2" aria-label="图像工作区"></canvas>
+    </div>
+    <div id="status" data-tone="info">准备就绪。</div>
+
+    <div class="panel" id="player-panel" hidden>
+      <h2>逐步回放</h2>
+      <div class="player-head">
+        <span id="player-title">—</span>
+        <span id="player-index">0 / 0</span>
+        <button class="icon-btn" id="player-energy" aria-pressed="false">能量</button>
+        <button class="icon-btn" id="player-close" title="关闭回放">✕</button>
+      </div>
+      <div class="player-controls">
+        <button class="icon-btn" id="player-prev">← 上一步</button>
+        <input type="range" id="player-slider" min="0" max="0" value="0" aria-label="回放进度">
+        <button class="icon-btn" id="player-next">下一步 →</button>
+      </div>
+      <p class="hint" style="margin-top:8px">
+        发现阶段展示缩小副本上的缝（黄线）；应用阶段在批次原图上叠加全部映回的缝（多色）。
+        方向键 <kbd>←</kbd> <kbd>→</kbd> 可逐帧切换。
+      </p>
+    </div>
+  </section>
+
+  <!-- 右栏：历史与导出 -->
+  <section class="right-col">
+    <div class="panel">
+      <h2>当前操作</h2>
+      <div class="history-item" id="history-label">—</div>
+      <p class="hint" style="margin-top:8px">
+        撤销/重做以整次用户操作为单位：一次变换、一笔画笔、一次掩膜载入或清屏。
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>导出</h2>
+      <div class="export-list">
+        <button class="btn" id="export-image">导出结果图像（RGB PNG）</button>
+        <button class="btn" id="export-mask">导出变换后掩膜（灰度 PNG）</button>
+        <button class="btn" id="export-record">导出缝线记录（带批次坐标 JSON）</button>
+        <button class="btn" id="view-json">查看 / 复制缝线 JSON</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>口径备忘</h2>
+      <ul class="hint" style="padding-left:16px">
+        <li>能量 L=0.2126R+0.7152G+0.0722B，双向梯度绝对值之和，边界夹取。</li>
+        <li>保护像素代价为 +∞；累计代价平局时前驱与终点均取最小列。</li>
+        <li>扩图每批 ≤ 当前轴长−1，缝在缩小副本上发现后映回批次原图插入，不复制刚插入的缝。</li>
+        <li>插入像素取原像素与原右邻线性 RGB 均值（右边界复制自身），掩膜取两邻逻辑或。</li>
+        <li>无合法路径时停止并保留上一步结果。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<dialog id="json-modal">
+  <h2 style="margin-bottom:10px">缝线记录 JSON</h2>
+  <textarea id="json-text" readonly spellcheck="false"></textarea>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+    <button class="btn" id="copy-json">复制全部</button>
+    <button class="btn primary" id="json-close">关闭</button>
+  </div>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+<script>
+  // 主题切换（不依赖模块，首屏即生效）
+  (function () {
+    const btn = document.getElementById('theme-toggle');
+    const root = document.documentElement;
+    const saved = (function () { try { return localStorage.getItem('srt-theme'); } catch { return null; } })();
+    if (saved) root.dataset.theme = saved;
+    btn.addEventListener('click', function () {
+      const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      try { localStorage.setItem('srt-theme', next); } catch {}
+    });
+  })();
+</script>
