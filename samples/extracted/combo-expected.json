@@ -1,0 +1,10 @@
+{
+  "performed": [
+    {
+      "id": "dash",
+      "t": 40
+    }
+  ],
+  "dash_canceled_at": 70,
+  "occupied_until": 80
+}

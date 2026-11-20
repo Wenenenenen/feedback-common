@@ -1,0 +1,37 @@
+{
+  "config": {
+    "window_ms": 40,
+    "contexts": [
+      {
+        "id": "game",
+        "priority": 1,
+        "active": true
+      }
+    ],
+    "bindings": [
+      {
+        "id": "charge",
+        "context": "game",
+        "priority": 0,
+        "keys": [
+          "Q"
+        ],
+        "hold_ms": 100
+      }
+    ]
+  },
+  "events": [
+    {
+      "t": 10,
+      "seq": 0,
+      "type": "down",
+      "key": "Q"
+    },
+    {
+      "t": 110,
+      "seq": 1,
+      "type": "up",
+      "key": "Q"
+    }
+  ]
+}

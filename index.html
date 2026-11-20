@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>输入动作仲裁调试器</title>
+<style>
+  /* 布局:左侧固定配置栏 + 右侧流式主区,窄屏堆叠;深色单一主题(调试工具) */
+  :root {
+    color-scheme: dark;
+    --bg: #14171c; --panel: #1c2129; --panel2: #232933; --border: #333c4a;
+    --text: #d7dee8; --dim: #8a94a3; --accent: #4f9cff;
+    --started: #4f9cff; --performed: #3fb96f; --canceled: #e8a13c;
+    --eliminated: #e05c5c; --occupy: #a67ee8; --candidate: #7f8a99;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.5 "SF Mono", "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0 0 auto; z-index: 10;
+    height: env(safe-area-inset-top, 0px); background: var(--panel);
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+  }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button, select, input[type=text], input[type=number], textarea {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; font: inherit; cursor: pointer;
+  }
+  input[type=text], input[type=number], textarea { cursor: text; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  main { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 10px; padding: 10px 0; align-items: start; }
+  main > div { min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; }
+  .panel > h2 {
+    font-size: 12px; margin: 0; padding: 6px 10px; color: var(--dim);
+    border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: .5px;
+  }
+  .panel .body { padding: 8px 10px; }
+  table.cfg { width: 100%; border-collapse: collapse; }
+  table.cfg th { text-align: left; color: var(--dim); font-weight: normal; font-size: 11px; padding: 2px 4px; }
+  table.cfg td { padding: 2px 4px; }
+  table.cfg input, table.cfg select { width: 100%; padding: 2px 4px; }
+  table.cfg input[type=checkbox] { width: auto; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+  .msg { color: var(--eliminated); min-height: 16px; font-size: 12px; white-space: pre-wrap; }
+  .msg.ok { color: var(--performed); }
+  #capture {
+    border: 2px dashed var(--border); border-radius: 6px; padding: 18px; text-align: center;
+    color: var(--dim); outline: none; user-select: none;
+  }
+  #capture.armed { border-color: var(--accent); color: var(--text); }
+  .keys { display: flex; gap: 4px; flex-wrap: wrap; min-height: 24px; }
+  .key {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 2px 8px; font-weight: bold;
+  }
+  .key.occupied { border-color: var(--occupy); color: var(--occupy); }
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .chip { border-radius: 4px; padding: 1px 7px; font-size: 12px; border: 1px solid var(--border); background: var(--panel2); }
+  .chip.armed { color: var(--dim); }
+  .chip.candidate { color: var(--candidate); border-color: var(--candidate); }
+  .chip.started { color: var(--started); border-color: var(--started); }
+  .chip.performed { color: var(--performed); border-color: var(--performed); }
+  .chip.ended, .chip.disarmed { color: var(--dim); }
+  .tag { border-radius: 3px; padding: 0 5px; font-size: 11px; margin-right: 3px; white-space: nowrap; }
+  .tag.started { background: rgba(79,156,255,.15); color: var(--started); }
+  .tag.performed { background: rgba(63,185,111,.15); color: var(--performed); }
+  .tag.canceled { background: rgba(232,161,60,.15); color: var(--canceled); }
+  .tag.eliminated { background: rgba(224,92,92,.15); color: var(--eliminated); }
+  .tag.candidate { background: rgba(127,138,153,.15); color: var(--candidate); }
+  .tag.occupy, .tag.release { background: rgba(166,126,232,.15); color: var(--occupy); }
+  .tag.ignored { background: rgba(138,148,163,.12); color: var(--dim); }
+  .stream-wrap { max-height: 46vh; overflow: auto; }
+  table.stream { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.stream th, table.stream td { padding: 2px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  table.stream thead th { position: sticky; top: 0; background: var(--panel2); z-index: 1; }
+  table.stream tr.timer-row td { background: rgba(166,126,232,.05); }
+  .mono-dim { color: var(--dim); }
+  #actionlog { max-height: 180px; overflow: auto; }
+  #actionlog div { padding: 1px 0; }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  .progress { flex: 1; height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; min-width: 120px; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; }
+  .hidden { display: none !important; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>输入动作仲裁调试器</h1>
+  <div class="tabs">
+    <button id="tab-live" class="active">实时键盘</button>
+    <button id="tab-replay">日志回放</button>
+  </div>
+  <span style="flex:1"></span>
+  <label class="mono-dim">预置样例
+    <select id="preset">
+      <option value="">选择…</option>
+      <option value="combo">combo(组合键抢占)</option>
+      <option value="hold">hold-boundary(长按边界)</option>
+      <option value="ctxblur">context-blur(切上下文+失焦)</option>
+    </select>
+  </label>
+  <button id="btn-import">导入 JSON</button>
+  <button id="btn-export-config">导出配置</button>
+  <button id="btn-export-actions">导出动作日志</button>
+  <button id="btn-export-events">导出输入日志</button>
+</header>
+
+<main>
+  <div>
+    <div class="panel">
+      <h2>配置(修改后点“应用配置”,等价于游戏内换绑定)</h2>
+      <div class="body">
+        <div class="row">组合等待窗 window_ms <input id="cfg-window" type="number" min="0" style="width:80px"></div>
+        <table class="cfg" id="cfg-contexts">
+          <thead><tr><th>上下文</th><th>优先级</th><th>激活</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="row"><button id="btn-add-context">+ 上下文</button></div>
+        <table class="cfg" id="cfg-bindings">
+          <thead><tr><th>绑定</th><th>上下文</th><th>优先级</th><th>按键(逗号分隔)</th><th>hold_ms</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="row">
+          <button id="btn-add-binding">+ 绑定</button>
+          <button id="btn-apply-config">应用配置</button>
+          <span class="mono-dim" id="cfg-count"></span>
+        </div>
+        <div class="msg" id="cfg-msg"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>导入(配置 / 配置+事件,协议见 samples/extracted/说明.md)</h2>
+      <div class="body">
+        <input type="file" id="file-import" accept=".json,application/json">
+        <textarea id="paste-import" placeholder='或粘贴 {"config":{...},"events":[...]}'></textarea>
+        <div class="row"><button id="btn-do-import">解析导入</button></div>
+        <div class="msg" id="import-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel" id="panel-live">
+      <h2>实时键盘(失焦自动释放所有状态)</h2>
+      <div class="body">
+        <div id="capture" tabindex="0">点击此处开始捕获键盘(Esc 退出;自动重复已忽略)</div>
+        <div class="row">
+          <span class="mono-dim">逻辑时钟 <b id="live-clock">0</b> ms</span>
+          <span class="mono-dim">物理按键:</span><span class="keys" id="live-pressed"></span>
+          <span class="mono-dim">占用:</span><span class="keys" id="live-occupied"></span>
+          <button id="btn-live-reset">重置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="panel-replay">
+      <h2>日志回放(暂停 / 单步 / 变速均产生相同日志)</h2>
+      <div class="body">
+        <div class="row">
+          <button id="btn-play">▶ 播放</button>
+          <button id="btn-step">⏭ 单步</button>
+          <button id="btn-replay-reset">↺ 重置</button>
+          <label>速度
+            <select id="replay-speed">
+              <option value="0.25">0.25x</option><option value="0.5">0.5x</option>
+              <option value="1" selected>1x</option><option value="2">2x</option>
+              <option value="4">4x</option><option value="8">8x</option>
+              <option value="1000">最快</option>
+            </select>
+          </label>
+          <div class="progress"><div id="replay-progress"></div></div>
+          <span class="mono-dim">t=<b id="replay-clock">0</b> ms</span>
+        </div>
+        <div class="row mono-dim" id="replay-info">未载入事件</div>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="panel-export">
+      <h2>导出结果(可直接复制接入游戏)</h2>
+      <div class="body">
+        <div class="row">
+          <span class="mono-dim" id="export-label"></span>
+          <button id="btn-copy-export">复制</button>
+          <button id="btn-close-export">关闭</button>
+        </div>
+        <textarea id="export-output" readonly style="min-height:140px"></textarea>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>绑定状态</h2>
+      <div class="body"><div class="chips" id="binding-states"></div></div>
+    </div>
+
+    <div class="panel">
+      <h2>动作日志(started / performed / canceled)</h2>
+      <div class="body" id="actionlog"></div>
+    </div>
+
+    <div class="panel">
+      <h2>事件流(逐事件:物理按键 / 候选截止 / 获胜绑定 / 淘汰原因)</h2>
+      <div class="body">
+        <div class="row">
+          <label><input type="checkbox" id="filter-hide-input"> 隐藏纯输入行</label>
+          <label><input type="checkbox" id="filter-autoscroll" checked> 自动滚动</label>
+          <span class="mono-dim" id="stream-count"></span>
+        </div>
+        <div class="stream-wrap">
+          <table class="stream">
+            <thead><tr>
+              <th>t</th><th>输入</th><th>物理按键</th><th>候选(截止/就绪)</th><th>占用</th><th>结果</th>
+            </tr></thead>
+            <tbody id="stream-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="arbiter.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

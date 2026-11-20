@@ -1,0 +1,79 @@
+{
+  "config": {
+    "window_ms": 40,
+    "contexts": [
+      {
+        "id": "game",
+        "priority": 1,
+        "active": true
+      },
+      {
+        "id": "menu",
+        "priority": 10,
+        "active": false
+      }
+    ],
+    "bindings": [
+      {
+        "id": "single",
+        "context": "game",
+        "priority": 0,
+        "keys": [
+          "K"
+        ],
+        "hold_ms": 0
+      },
+      {
+        "id": "dash",
+        "context": "game",
+        "priority": 0,
+        "keys": [
+          "K",
+          "Shift"
+        ],
+        "hold_ms": 0
+      },
+      {
+        "id": "menu-ok",
+        "context": "menu",
+        "priority": 0,
+        "keys": [
+          "K"
+        ],
+        "hold_ms": 0
+      }
+    ]
+  },
+  "events": [
+    {
+      "t": 0,
+      "seq": 0,
+      "type": "down",
+      "key": "K"
+    },
+    {
+      "t": 20,
+      "seq": 1,
+      "type": "down",
+      "key": "Shift"
+    },
+    {
+      "t": 30,
+      "seq": 2,
+      "type": "down",
+      "key": "K"
+    },
+    {
+      "t": 70,
+      "seq": 3,
+      "type": "up",
+      "key": "Shift"
+    },
+    {
+      "t": 80,
+      "seq": 4,
+      "type": "up",
+      "key": "K"
+    }
+  ]
+}
