@@ -1,0 +1,1900 @@
+<title>光照贴图掩膜排布器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Lightmap Mask Packer 界面样式 */
+:root {
+  /* 布局：顶栏 + 主区(左画布/右检查器)，窄屏堆叠 */
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --border: #d3d9e0;
+  --fg: #1b2430;
+  --fg-dim: #5b6675;
+  --fg-faint: #8a94a3;
+  --accent: #2563c9;
+  --accent-fg: #ffffff;
+  --good: #1f8a4c;
+  --warn: #b7791f;
+  --critical: #c0392b;
+  --occ-swatch: #2f6fed;
+  --pad-swatch: #f2c14e;
+  --empty-swatch: #fbfcfe;
+  --grid-line: #e2e7ed;
+  --shadow: 0 1px 3px rgba(20, 30, 45, .10), 0 6px 18px rgba(20, 30, 45, .07);
+  --radius: 10px;
+  --mono: "SFMono-Regular", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171f; --surface: #1a212c; --surface-2: #222b38; --border: #313c4b;
+    --fg: #e6ebf2; --fg-dim: #a7b2c0; --fg-faint: #748090;
+    --accent: #5b93f0; --accent-fg: #0c1422;
+    --good: #4cc38a; --warn: #e0b341; --critical: #ef6b5d;
+    --occ-swatch: #4d86f7; --pad-swatch: #c99a2e; --empty-swatch: #10151d;
+    --grid-line: #28323f;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171f; --surface: #1a212c; --surface-2: #222b38; --border: #313c4b;
+  --fg: #e6ebf2; --fg-dim: #a7b2c0; --fg-faint: #748090;
+  --accent: #5b93f0; --accent-fg: #0c1422;
+  --good: #4cc38a; --warn: #e0b341; --critical: #ef6b5d;
+  --occ-swatch: #4d86f7; --pad-swatch: #c99a2e; --empty-swatch: #10151d;
+  --grid-line: #28323f;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.45;
+}
+.app { display: flex; flex-direction: column; min-height: 100%; }
+
+/* 顶栏 */
+.topbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+.brand .sub { color: var(--fg-faint); font-size: 12px; white-space: nowrap; }
+.topbar .spacer { flex: 1; }
+.topbar .group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+button, select, input[type="number"], input[type="file"]::file-selector-button {
+  font: inherit; color: var(--fg);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 11px; cursor: pointer;
+}
+button { white-space: nowrap; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+button.ghost { background: transparent; }
+button.danger { color: var(--critical); border-color: var(--critical); background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+label.field { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 12px; }
+input[type="number"] { width: 64px; padding: 5px 7px; }
+input[type="range"] { accent-color: var(--accent); }
+select { padding: 6px 8px; max-width: 180px; }
+
+/* 主区 */
+.main {
+  display: grid; grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+  align-items: start;
+}
+@media (max-width: 980px) { .main { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  min-width: 0;
+}
+.panel > header {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;
+}
+.panel > section { padding: 12px 14px; }
+.panel > section + section { border-top: 1px solid var(--border); }
+
+/* 画布列 */
+.canvas-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.canvas-wrap { position: relative; overflow: auto; background: var(--empty-swatch); border-radius: var(--radius); }
+canvas#atlas { display: block; image-rendering: pixelated; cursor: grab; touch-action: none; }
+canvas#atlas.dragging { cursor: grabbing; }
+.canvas-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
+  position: sticky; top: 0; z-index: 5;
+}
+.canvas-toolbar .zoom-label { font-variant-numeric: tabular-nums; color: var(--fg-dim); font-size: 12px; min-width: 52px; }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--fg-dim); }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); display: inline-block; }
+.swatch.occ { background: var(--occ-swatch); }
+.swatch.pad { background: var(--pad-swatch); }
+.swatch.empty { background: var(--empty-swatch); }
+
+/* 统计条 */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; min-width: 0; }
+.stat .k { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .6px; }
+.stat .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.stat .v small { font-size: 11px; font-weight: 500; color: var(--fg-dim); }
+
+/* 检查器列 */
+.inspector { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.chart-list { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.chart-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: 1px solid transparent; border-radius: 8px; cursor: pointer; min-width: 0;
+}
+.chart-row:hover { background: var(--surface-2); }
+.chart-row.selected { background: var(--surface-2); border-color: var(--accent); }
+.chart-row .dot { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid rgba(0,0,0,.2); }
+.chart-row .name { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.chart-row .badge { font-size: 10px; padding: 2px 6px; border-radius: 99px; flex: none; }
+.badge.locked { background: var(--warn); color: #1a1305; }
+.badge.unplaced { background: var(--critical); color: #fff; }
+.badge.placed { background: var(--good); color: #fff; }
+.badge.conflict { background: var(--critical); color: #fff; }
+.chart-row .mini-pos { font-family: var(--mono); font-size: 10px; color: var(--fg-faint); flex: none; }
+
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; font-size: 12.5px; min-width: 0; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; min-width: 0; }
+
+.mesh-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.mesh-tabs button { padding: 4px 10px; font-size: 12px; }
+.mesh-canvas-wrap { background: var(--empty-swatch); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
+canvas.mesh { display: block; image-rendering: pixelated; }
+.mesh-note { font-size: 11px; color: var(--fg-faint); margin-top: 6px; }
+
+/* 消息 */
+.messages { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow: auto; }
+.msg { border-radius: 8px; padding: 9px 11px; font-size: 12.5px; border: 1px solid var(--border); border-left-width: 4px; min-width: 0; }
+.msg.info { border-left-color: var(--accent); background: var(--surface-2); }
+.msg.ok { border-left-color: var(--good); }
+.msg.warn { border-left-color: var(--warn); }
+.msg.error { border-left-color: var(--critical); }
+.msg .title { font-weight: 700; margin-bottom: 3px; }
+.msg .cells { font-family: var(--mono); font-size: 11px; color: var(--fg-dim); overflow-wrap: anywhere; }
+.msg ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* 模态 */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(10, 15, 22, .55);
+  display: none; align-items: center; justify-content: center; z-index: 50; padding: 16px;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  width: min(760px, 100%); max-height: 86vh; display: flex; flex-direction: column; box-shadow: var(--shadow);
+}
+.modal header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.modal header h2 { font-size: 15px; margin: 0; flex: 1; }
+.modal .body { padding: 14px 16px; overflow: auto; min-width: 0; }
+.modal pre {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5;
+  overflow: auto; max-height: 52vh; margin: 0; white-space: pre;
+}
+.modal .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px 16px; }
+.modal img { max-width: 100%; image-rendering: pixelated; border: 1px solid var(--border); border-radius: 8px; }
+
+.empty-hint { color: var(--fg-faint); font-size: 12.5px; padding: 8px 0; }
+.hidden { display: none !important; }
+.mono { font-family: var(--mono); }
+.tag-input-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.small { font-size: 12px; color: var(--fg-dim); }
+hr.sep { border: 0; border-top: 1px solid var(--border); margin: 10px 0; }
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 99px;
+  font-size: 12.5px; z-index: 60; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s;
+  pointer-events: none; max-width: 90vw;
+}
+.toast.show { opacity: .96; }
+
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>光照贴图掩膜排布器</h1>
+      <span class="sub">离散格 · 孔洞/断开 · 仅平移与 90° 旋转</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="group">
+      <label class="field">补边
+        <input type="number" id="paddingInput" min="0" max="4" step="1" value="2">
+      </label>
+      <div class="group" style="gap:6px">
+        <button id="sampleSmall" class="ghost">样例 small</button>
+        <button id="sampleCapacity" class="ghost">样例 capacity(64块)</button>
+      </div>
+      <input type="file" id="fileInput" accept=".json,application/json">
+      <button id="packBtn" class="primary">重排未锁定图块</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- 左：画布与统计 -->
+    <div class="canvas-col">
+      <section class="panel">
+        <div class="canvas-toolbar">
+          <button id="zoomOut" title="缩小">−</button>
+          <span class="zoom-label" id="zoomLabel">24px</span>
+          <button id="zoomIn" title="放大">+</button>
+          <button id="zoomFit">适应</button>
+          <button id="togglePadding" class="active">补边</button>
+          <button id="toggleGrid" class="active">网格</button>
+          <span class="spacer" style="flex:1"></span>
+          <div class="legend">
+            <span class="item"><span class="swatch occ"></span>实际占用</span>
+            <span class="item"><span class="swatch pad"></span>补边</span>
+            <span class="item"><span class="swatch empty"></span>空白</span>
+          </div>
+        </div>
+        <div class="canvas-wrap" style="padding:12px">
+          <canvas id="atlas"></canvas>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header>画布统计</header>
+        <section>
+          <div class="stats">
+            <div class="stat"><div class="k">已放置</div><div class="v" id="statPlaced">–</div></div>
+            <div class="stat"><div class="k">实际占用</div><div class="v" id="statOccupied">–</div></div>
+            <div class="stat"><div class="k">补边格</div><div class="v" id="statPadding">–</div></div>
+            <div class="stat"><div class="k">空白格</div><div class="v" id="statFree">–</div></div>
+            <div class="stat"><div class="k">利用率</div><div class="v" id="statUtil">–</div></div>
+            <div class="stat"><div class="k">冲突数</div><div class="v" id="statConflicts">–</div></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>消息与诊断</header>
+        <section><div class="messages" id="messages">
+          <div class="msg info"><div class="title">等待载入</div><div>选择输入 JSON，或点击下方内置样例。所有冲突会在此逐格列出。</div></div>
+        </div></section>
+      </section>
+    </div>
+
+    <!-- 右：检查器 -->
+    <aside class="inspector">
+      <section class="panel">
+        <header>图块（点击选择）</header>
+        <section>
+          <div class="chart-list" id="chartList">
+            <div class="empty-hint">尚未载入数据。</div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>选中图块操作</header>
+        <section>
+          <div class="row-actions" style="margin-bottom:10px">
+            <button id="rotateBtn" title="快捷键 R">旋转 90°</button>
+            <button id="lockBtn" title="快捷键 L">锁定/解锁</button>
+            <button id="clearBtn" class="danger">清除未锁定</button>
+          </div>
+          <div class="row-actions">
+            <button id="upBtn">↑</button>
+            <button id="downBtn">↓</button>
+            <button id="leftBtn">←</button>
+            <button id="rightBtn">→</button>
+            <span class="small" style="align-self:center">方向键微调 1 格</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>原网格与变换后 UV</header>
+        <section>
+          <div id="chartDetail"><div class="empty-hint">在画布或上方列表点击图块。</div></div>
+          <div id="meshSection" hidden>
+            <hr class="sep">
+            <div class="small" style="margin-bottom:6px">原网格（含三角形）</div>
+            <div class="mesh-canvas-wrap" style="margin-bottom:10px"><canvas class="mesh" id="meshOriginal"></canvas></div>
+            <div class="small" style="margin-bottom:6px">变换后（占用+补边+三角形）</div>
+            <div class="mesh-canvas-wrap"><canvas class="mesh" id="meshTransformed"></canvas></div>
+            <div class="mesh-note" id="meshNote"></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>导出</header>
+        <section>
+          <div class="row-actions">
+            <button id="exportLayout" class="primary">布局 JSON</button>
+            <button id="exportUV">逐角 UV</button>
+            <button id="exportOwnership">归属图 PNG+色表</button>
+          </div>
+          <p class="small" style="margin:10px 0 0">若浏览器拦截下载，模态框中提供完整文本与复制按钮。</p>
+        </section>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <header>
+      <h2 id="modalTitle">导出</h2>
+      <button id="modalClose" class="ghost">✕</button>
+    </header>
+    <div class="body" id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/*
+ * lightmap-mask-packer 核心引擎
+ * 纯逻辑、无 DOM 依赖，浏览器与 Node 均可使用。
+ * 所有遍历顺序均为显式确定顺序，不使用 Date/Math.random，
+ * 同一输入与同一锁定条件必然产生相同结果。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.LMP = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var MAX_CHARTS = 64;
+  var MAX_MASK_SIDE = 32;
+  var MAX_ATLAS = 512;
+  var DEFAULT_NODE_BUDGET = 100000;
+  var REPORT_CELL_CAP = 24;
+
+  function err(msg) { return new Error(msg); }
+
+  // ---------- 解析与校验 ----------
+
+  function parseInput(raw) {
+    if (typeof raw === 'string') raw = JSON.parse(raw);
+    if (!raw || typeof raw !== 'object') throw err('输入不是 JSON 对象');
+    var atlasSize = raw.atlasSize;
+    if (!Number.isInteger(atlasSize) || atlasSize < 1 || atlasSize > MAX_ATLAS)
+      throw err('atlasSize 必须是 1..' + MAX_ATLAS + ' 的整数');
+    var padding = raw.padding;
+    if (!Number.isInteger(padding) || padding < 0 || padding > 4)
+      throw err('padding 必须是 0..4 的整数');
+    if (!Array.isArray(raw.charts) || raw.charts.length === 0)
+      throw err('charts 为空');
+    if (raw.charts.length > MAX_CHARTS)
+      throw err('图块数量不能超过 ' + MAX_CHARTS + ' 块');
+
+    var seenIds = Object.create(null);
+    var charts = raw.charts.map(function (c, idx) {
+      if (!c || typeof c !== 'object') throw err('第 ' + idx + ' 个图块不是对象');
+      var id = String(c.id);
+      if (seenIds[id]) throw err('图块 id 重复: ' + id);
+      seenIds[id] = 1;
+      if (!Array.isArray(c.mask) || c.mask.length === 0)
+        throw err(id + ': mask 为空');
+      var h = c.mask.length;
+      var w = c.mask[0].length;
+      if (w > MAX_MASK_SIDE || h > MAX_MASK_SIDE)
+        throw err(id + ': 掩膜边长不能超过 ' + MAX_MASK_SIDE);
+      var occ = [];
+      for (var y = 0; y < h; y++) {
+        var row = c.mask[y];
+        if (typeof row !== 'string' || row.length !== w)
+          throw err(id + ': 第 ' + y + ' 行掩膜长度不一致');
+        for (var x = 0; x < w; x++) {
+          var ch = row.charAt(x);
+          if (ch === '#') occ.push([x, y]);
+          else if (ch !== '.') throw err(id + ': 掩膜只能包含 # 与 .');
+        }
+      }
+      if (occ.length === 0) throw err(id + ': 掩膜没有任何占用格');
+
+      if (!Array.isArray(c.vertices) || c.vertices.length === 0)
+        throw err(id + ': vertices 为空');
+      var vertices = c.vertices.map(function (v, vi) {
+        if (!Array.isArray(v) || v.length < 2 ||
+          typeof v[0] !== 'number' || typeof v[1] !== 'number')
+          throw err(id + ': 顶点 ' + vi + ' 不是二维数');
+        return [v[0], v[1]];
+      });
+      if (!Array.isArray(c.triangles) || c.triangles.length === 0)
+        throw err(id + ': triangles 为空');
+      var triangles = c.triangles.map(function (t, ti) {
+        if (!Array.isArray(t) || t.length !== 3 ||
+          !Number.isInteger(t[0]) || !Number.isInteger(t[1]) || !Number.isInteger(t[2]))
+          throw err(id + ': 三角形 ' + ti + ' 不是 3 个整数索引');
+        t.forEach(function (vi) {
+          if (vi < 0 || vi >= vertices.length)
+            throw err(id + ': 三角形 ' + ti + ' 引用了不存在的顶点 ' + vi);
+        });
+        return [t[0], t[1], t[2]];
+      });
+
+      var placement = null;
+      if (c.placement) {
+        var p = c.placement;
+        if (!Number.isInteger(p.x) || !Number.isInteger(p.y) ||
+          (p.rotation !== 0 && p.rotation !== 90))
+          throw err(id + ': placement 需要整数 x,y 且 rotation 为 0 或 90');
+        placement = { x: p.x, y: p.y, rotation: p.rotation };
+      }
+      var locked = !!c.locked;
+      if (locked && !placement) throw err(id + ': locked 图块必须提供 placement');
+
+      return {
+        index: idx, id: id, w: w, h: h, occ: occ,
+        vertices: vertices, triangles: triangles,
+        locked: locked, given: placement
+      };
+    });
+
+    return { atlasSize: atlasSize, padding: padding, charts: charts };
+  }
+
+  // ---------- 几何变换 ----------
+
+  // 旋转 90°（y 向下坐标系中的顺时针）：
+  // 格子 (x,y) -> (h-1-y, x)；连续顶点 (x,y) -> (h-y, x)
+  function rotateCell(x, y, h) { return [h - 1 - y, x]; }
+  function rotatePoint(x, y, h) { return [h - y, x]; }
+
+  // 计算某图块在 rotation(0/90) 下的占用格与补边格（相对旋转后包围框左上角）
+  function buildVariant(chart, rotation, padding) {
+    var r = rotation === 90 ? 1 : 0;
+    var rw = r ? chart.h : chart.w;
+    var rh = r ? chart.w : chart.h;
+    var rotOcc = chart.occ.map(function (cell) {
+      return r ? rotateCell(cell[0], cell[1], chart.h) : [cell[0], cell[1]];
+    });
+    // 切比雪夫距离 <= padding 的整数格膨胀（对占用格，而非包围框）
+    var claimMap = Object.create(null);
+    var claim = [];
+    for (var i = 0; i < rotOcc.length; i++) {
+      var cx = rotOcc[i][0], cy = rotOcc[i][1];
+      for (var dy = -padding; dy <= padding; dy++) {
+        for (var dx = -padding; dx <= padding; dx++) {
+          var nx = cx + dx, ny = cy + dy;
+          var key = nx + ',' + ny;
+          if (!claimMap[key]) {
+            claimMap[key] = true;
+            claim.push([nx, ny]);
+          }
+        }
+      }
+    }
+    claim.sort(function (a, b) { return a[1] - b[1] || a[0] - b[0]; });
+    return {
+      rotation: rotation, r: r, rw: rw, rh: rh,
+      occ: rotOcc, claim: claim, claimCount: claim.length
+    };
+  }
+
+  function buildVariants(chart, padding) {
+    var v0 = buildVariant(chart, 0, padding);
+    var v90 = buildVariant(chart, 90, padding);
+    var variants = [v0];
+    // 旋转后形状完全相同则去重，保证确定性且避免重复搜索
+    var sig0 = signature(v0.claim);
+    if (signature(v90.claim) !== sig0) variants.push(v90);
+    return variants;
+  }
+
+  function signature(cells) {
+    return cells.map(function (c) { return c[0] + ',' + c[1]; }).sort().join(';');
+  }
+
+  // 连续顶点变换：先旋转再平移；UV = 变换后坐标 / atlasSize，v 保持向下
+  function transformGeometry(chart, placement, atlasSize) {
+    var r = placement.rotation === 90 ? 1 : 0;
+    var px = placement.x, py = placement.y;
+    var positions = chart.vertices.map(function (v) {
+      var t = r ? rotatePoint(v[0], v[1], chart.h) : [v[0], v[1]];
+      return [t[0] + px, t[1] + py];
+    });
+    var uvs = positions.map(function (p) {
+      return [p[0] / atlasSize, p[1] / atlasSize];
+    });
+    return { positions: positions, uvs: uvs };
+  }
+
+  // ---------- 布局计算与校验 ----------
+
+  // 根据 placements（id -> {x,y,rotation}）计算完整布局：
+  // 占用/补边归属网格、冲突、越界与统计。不修改入参。
+  function computeLayout(parsed, placements) {
+    var size = parsed.atlasSize;
+    var n = size * size;
+    var claimGrid = new Int32Array(n).fill(-1);
+    var occGrid = new Int32Array(n).fill(-1);
+    var conflicts = [];
+    var placedCharts = [];
+
+    parsed.charts.forEach(function (chart) {
+      var pl = placements[chart.id];
+      if (!pl) return;
+      var variant = buildVariant(chart, pl.rotation, parsed.padding);
+      var absClaim = variant.claim.map(function (c) {
+        return [c[0] + pl.x, c[1] + pl.y];
+      });
+      var absOcc = variant.occ.map(function (c) {
+        return [c[0] + pl.x, c[1] + pl.y];
+      });
+
+      var oob = [];
+      var overlapMap = Object.create(null);
+      absClaim.forEach(function (cell) {
+        var x = cell[0], y = cell[1];
+        if (x < 0 || y < 0 || x >= size || y >= size) {
+          if (oob.length < REPORT_CELL_CAP) oob.push([x, y]);
+          return;
+        }
+        var idx = y * size + x;
+        var owner = claimGrid[idx];
+        if (owner >= 0 && owner !== chart.index) {
+          var key = owner;
+          if (!overlapMap[key]) overlapMap[key] = { cells: [], count: 0 };
+          overlapMap[key].count++;
+          if (overlapMap[key].cells.length < REPORT_CELL_CAP)
+            overlapMap[key].cells.push([x, y]);
+        }
+      });
+      if (oob.length)
+        conflicts.push({ kind: 'out-of-bounds', chart: chart.id, cells: oob });
+      Object.keys(overlapMap).sort(function (a, b) { return a - b; }).forEach(function (k) {
+        var ownerIdx = +k;
+        conflicts.push({
+          kind: 'claim-overlap',
+          a: chart.id, b: parsed.charts[ownerIdx].id,
+          cells: overlapMap[k].cells, cellCount: overlapMap[k].count
+        });
+      });
+
+      // 登记到网格（越界格跳过；冲突格后者保留，用于继续暴露更多问题）
+      absClaim.forEach(function (cell) {
+        var x = cell[0], y = cell[1];
+        if (x < 0 || y < 0 || x >= size || y >= size) return;
+        claimGrid[y * size + x] = chart.index;
+      });
+      absOcc.forEach(function (cell) {
+        var x = cell[0], y = cell[1];
+        if (x < 0 || y < 0 || x >= size || y >= size) return;
+        occGrid[y * size + x] = chart.index;
+      });
+      placedCharts.push({
+        chart: chart, placement: { x: pl.x, y: pl.y, rotation: pl.rotation },
+        variant: variant, absClaim: absClaim, absOcc: absOcc
+      });
+    });
+
+    var occupiedCells = 0, paddingCells = 0;
+    for (var i = 0; i < n; i++) {
+      if (claimGrid[i] >= 0) {
+        if (occGrid[i] >= 0) occupiedCells++;
+        else paddingCells++;
+      }
+    }
+    var usedCells = occupiedCells + paddingCells;
+    return {
+      claimGrid: claimGrid, occGrid: occGrid,
+      conflicts: conflicts, placedCharts: placedCharts,
+      stats: {
+        occupiedCells: occupiedCells,
+        paddingCells: paddingCells,
+        usedCells: usedCells,
+        freeCells: n - usedCells,
+        totalCells: n,
+        utilization: usedCells / n
+      }
+    };
+  }
+
+  // 仅校验给定布局（如导入的 layout JSON），返回冲突与统计
+  function validateLayout(parsed, placements) {
+    var layout = computeLayout(parsed, placements);
+    var missing = parsed.charts
+      .filter(function (c) { return !placements[c.id]; })
+      .map(function (c) { return c.id; });
+    return {
+      valid: layout.conflicts.length === 0,
+      conflicts: layout.conflicts,
+      missing: missing,
+      stats: layout.stats
+    };
+  }
+
+  // ---------- 排布（确定性 DFS） ----------
+
+  function pack(parsed, opts) {
+    opts = opts || {};
+    var budget = opts.nodeBudget || DEFAULT_NODE_BUDGET;
+    var size = parsed.atlasSize;
+    var padding = parsed.padding;
+    var grid = new Int32Array(size * size).fill(-1);
+
+    // 预计算变体与固定排序
+    var variants = parsed.charts.map(function (c) { return buildVariants(c, padding); });
+    var totalClaim = parsed.charts.reduce(function (s, c) {
+      return s + variants[c.index][0].claimCount;
+    }, 0);
+
+    // 1) 锁定图块先行，逐格记录冲突（优先级最高：用户给的约束必须先核对）
+    var lockedPlacements = {};
+    for (var li = 0; li < parsed.charts.length; li++) {
+      var chart = parsed.charts[li];
+      if (!chart.locked) continue;
+      var pl = chart.given;
+      var variant = buildVariant(chart, pl.rotation, padding);
+      var fit = diagnosePlacement(grid, size, parsed, chart, variant, pl.x, pl.y);
+      if (!fit.ok) {
+        return {
+          status: 'locked-conflict',
+          reason: fit.reason,
+          conflicts: fit.conflicts,
+          lockedChart: chart.id,
+          message: formatLockedFailure(chart.id, fit),
+          placements: [], nodes: 0
+        };
+      }
+      commit(grid, variant, pl.x, pl.y, chart.index);
+      lockedPlacements[chart.id] = { x: pl.x, y: pl.y, rotation: pl.rotation };
+    }
+
+    // 2) 面积下界：所有补边格互斥且必须在画布内（锁定约束核对通过后才谈容量）
+    if (totalClaim > size * size) {
+      return {
+        status: 'impossible',
+        reason: 'area-lower-bound',
+        message: '补边后总需求 ' + totalClaim + ' 格 > 画布容量 ' + (size * size) +
+          ' 格（原占用合计 ' + parsed.charts.reduce(function (s, c) { return s + c.occ.length; }, 0) +
+          ' 格），可证明无解。不会缩放任何图块。',
+        totalClaim: totalClaim, capacity: size * size,
+        placements: [], nodes: 0
+      };
+    }
+
+    // 3) 单块可行性（任何旋转下补边包围框都超出画布 => 可证明无解）
+    for (var si = 0; si < parsed.charts.length; si++) {
+      var ch = parsed.charts[si];
+      if (ch.locked) continue;
+      var anyFits = variants[ch.index].some(function (v) {
+        // 补边后的实际包围框尺寸能否放进画布（相对坐标可为负，平移后即可入画）
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        v.claim.forEach(function (c) {
+          if (c[0] < minX) minX = c[0];
+          if (c[1] < minY) minY = c[1];
+          if (c[0] > maxX) maxX = c[0];
+          if (c[1] > maxY) maxY = c[1];
+        });
+        return (maxX - minX + 1) <= size && (maxY - minY + 1) <= size;
+      });
+      if (!anyFits) {
+        return {
+          status: 'impossible',
+          reason: 'chart-too-large',
+          message: '图块 ' + ch.id + ' 的补边包围框在任何旋转下都超出 ' +
+            size + 'x' + size + ' 画布，可证明无解。',
+          placements: [], nodes: 0
+        };
+      }
+    }
+
+    // 4) 待排图块固定顺序：补边格数降序、占用格数降序、输入顺序
+    var order = parsed.charts.filter(function (c) { return !c.locked; });
+    order.sort(function (a, b) {
+      var ca = variants[a.index][0].claimCount;
+      var cb = variants[b.index][0].claimCount;
+      if (ca !== cb) return cb - ca;
+      if (a.occ.length !== b.occ.length) return b.occ.length - a.occ.length;
+      return a.index - b.index;
+    });
+
+    // ---- 阶段一：确定性贪心，候选空间完备（前沿+边界锚点） ----
+    var frontier = createFrontier(size, grid);
+    var greedyMap = greedyScan(grid, size, order, variants, frontier);
+    if (greedyMap) {
+      var all0 = Object.assign({}, lockedPlacements, greedyMap);
+      var layout0 = computeLayout(parsed, all0);
+      return {
+        status: 'ok', reason: null, phase: 'greedy',
+        message: '全部 ' + parsed.charts.length + ' 块排布完成（贪心确定性扫描，无回溯）。',
+        nodes: 0, budget: budget,
+        placements: mapToPlacementList(all0, parsed),
+        stats: layout0.stats
+      };
+    }
+
+    // 贪心未成功 => 重建网格与前沿，进入固定预算的回溯
+    grid.fill(-1);
+    var lockedCharts = parsed.charts.filter(function (c) { return c.locked; });
+    lockedCharts.forEach(function (chart) {
+      var pl = chart.given;
+      var v = buildVariant(chart, pl.rotation, padding);
+      commit(grid, v, pl.x, pl.y, chart.index);
+    });
+    frontier = createFrontier(size, grid);
+
+    var nodes = 0, budgetHit = false, backResult = {};
+    function dfs(depth) {
+      if (nodes >= budget) { budgetHit = true; return false; }
+      nodes++;
+      if (depth === order.length) return true;
+      var cur = order[depth];
+      var vs = variants[cur.index];
+      for (var vi = 0; vi < vs.length; vi++) {
+        var v = vs[vi];
+        var candidates = fitCandidates(grid, size, cur.index, v, frontier);
+        for (var ci = 0; ci < candidates.length; ci++) {
+          var c = candidates[ci];
+          var undo = commitTracked(grid, size, frontier, v, c.x, c.y, cur.index);
+          if (dfs(depth + 1)) {
+            backResult[cur.id] = { x: c.x, y: c.y, rotation: v.rotation };
+            return true;
+          }
+          rollbackTracked(grid, size, frontier, v, c.x, c.y, cur.index, undo);
+        }
+      }
+      return false;
+    }
+    var ok = dfs(0);
+
+    if (!ok) {
+      var unplaced = order.map(function (c) { return c.id; });
+      if (budgetHit) {
+        return {
+          status: 'not-found',
+          reason: 'budget-reached',
+          phase: 'backtrack',
+          message: '贪心失败后启动回溯，搜索节点预算 ' + budget +
+            ' 用尽仍未找到可行布局，标记为未找到（不能证明无解）。未放置 ' +
+            unplaced.length + ' 块：' + unplaced.join(', ') + '。不会缩放任何图块。',
+          unplaced: unplaced, nodes: nodes, budget: budget,
+          placements: mapToPlacementList(lockedPlacements, parsed)
+        };
+      }
+      return {
+        status: 'not-found',
+        reason: 'exhausted-within-budget',
+        phase: 'backtrack',
+        message: '贪心失败后启动回溯，在节点预算 ' + budget +
+          ' 内枚举完全部候选位置仍未找到可行布局，标记为未找到（不能证明无解）。未放置 ' +
+          unplaced.length + ' 块。不会缩放任何图块。',
+        unplaced: unplaced, nodes: nodes, budget: budget,
+        placements: mapToPlacementList(lockedPlacements, parsed)
+      };
+    }
+
+    var all = Object.assign({}, lockedPlacements, backResult);
+    var layout = computeLayout(parsed, all);
+    return {
+      status: 'ok', reason: null, phase: 'backtrack',
+      message: '全部 ' + parsed.charts.length + ' 块排布完成（回溯搜索，节点数 ' + nodes + '）。',
+      nodes: nodes, budget: budget,
+      placements: mapToPlacementList(all, parsed),
+      stats: layout.stats
+    };
+  }
+
+  function mapToPlacementList(map, parsed) {
+    return parsed.charts
+      .filter(function (c) { return map[c.id]; })
+      .map(function (c) {
+        var p = map[c.id];
+        return { id: c.id, x: p.x, y: p.y, rotation: p.rotation };
+      });
+  }
+
+  // ---------- 前沿空闲格 ----------
+  // 锚点 = 画布边界格（含原点）∪ 与已占格四邻接的空闲格。
+  // 完备性：任何合法放置向上再向左滑动，终止时其某个补边格要么落在边界，
+  // 要么与已占格四邻接，故锚点对齐生成的候选集包含最优位置，回溯不丢解。
+  function createFrontier(size, grid) {
+    var mark = new Uint8Array(size * size); // 1=锚点（边界格或前沿格）
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        if (x === 0 || y === 0 || x === size - 1 || y === size - 1)
+          mark[y * size + x] = 1;
+      }
+    }
+    for (var i = 0; i < grid.length; i++) {
+      if (grid[i] < 0) continue;
+      var cx = i % size, cy = (i / size) | 0;
+      var ns = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+      for (var k = 0; k < 4; k++) {
+        var nx = ns[k][0], ny = ns[k][1];
+        if (nx >= 0 && ny >= 0 && nx < size && ny < size && grid[ny * size + nx] < 0)
+          mark[ny * size + nx] = 1;
+      }
+    }
+    return { mark: mark };
+  }
+
+  function isAnchor(frontier, idx) { return frontier.mark[idx] === 1; }
+
+  // 带撤销日志的提交：记录锚点增删，供回溯恢复
+  function commitTracked(grid, size, frontier, variant, px, py, idx) {
+    var removed = [];
+    var added = [];
+    for (var i = 0; i < variant.claim.length; i++) {
+      var x = variant.claim[i][0] + px, y = variant.claim[i][1] + py;
+      if (x < 0 || y < 0 || x >= size || y >= size) continue;
+      var k = y * size + x;
+      if (grid[k] < 0 && frontier.mark[k]) { removed.push(k); frontier.mark[k] = 0; }
+      grid[k] = idx;
+    }
+    for (var j = 0; j < variant.claim.length; j++) {
+      var cx = variant.claim[j][0] + px, cy = variant.claim[j][1] + py;
+      var nbs = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+      for (var m = 0; m < 4; m++) {
+        var nx = nbs[m][0], ny = nbs[m][1];
+        if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+        var nk = ny * size + nx;
+        if (grid[nk] < 0 && frontier.mark[nk] === 0) {
+          frontier.mark[nk] = 1;
+          added.push(nk);
+        }
+      }
+    }
+    return { removed: removed, added: added };
+  }
+
+  function rollbackTracked(grid, size, frontier, variant, px, py, idx, undo) {
+    undo.added.forEach(function (k) { frontier.mark[k] = 0; });
+    undo.removed.forEach(function (k) { frontier.mark[k] = 1; });
+    rollback(grid, variant, px, py, idx);
+  }
+
+  function claimBounds(claim) {
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (var i = 0; i < claim.length; i++) {
+      var x = claim[i][0], y = claim[i][1];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+
+  // 完备候选：让每个补边格依次对齐每个锚点（边界格或前沿空闲格）。
+  // 结果按 (y,x) 确定性排序；整数键去重，越界位置用包围框先行剪枝。
+  function fitCandidates(grid, size, selfIdx, variant, frontier) {
+    var seen = new Set();
+    var out = [];
+    var claim = variant.claim;
+    var b = variant._bounds || (variant._bounds = claimBounds(claim));
+    var keyBase = size * 4; // 平移范围 [-size, size-1]，加偏移后非负
+    function consider(px, py) {
+      if (px + b.minX < 0 || py + b.minY < 0 ||
+        px + b.maxX >= size || py + b.maxY >= size) return;
+      var key = (py + size) * keyBase + (px + size);
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (tryPlace(grid, size, selfIdx, variant, px, py)) out.push(px, py);
+    }
+    // 空画布首块：原点放置（边界锚点对齐不必然生成它）
+    consider(0, 0);
+    for (var i = 0; i < grid.length; i++) {
+      if (!isAnchor(frontier, i)) continue;
+      var fx = i % size, fy = (i / size) | 0;
+      for (var j = 0; j < claim.length; j++) {
+        consider(fx - claim[j][0], fy - claim[j][1]);
+      }
+    }
+    var res = [];
+    for (var k = 0; k < out.length; k += 2) res.push({ x: out[k], y: out[k + 1] });
+    res.sort(function (a, c) { return a.y - c.y || a.x - c.x; });
+    return res;
+  }
+
+  // 贪心：按固定图块顺序，每块在完备候选中选最靠下、再靠左（变体按既定顺序，0 度优先）
+  function greedyScan(grid, size, order, variants, frontier) {
+    var result = {};
+    for (var i = 0; i < order.length; i++) {
+      var cur = order[i];
+      var best = null;
+      for (var vi = 0; vi < variants[cur.index].length; vi++) {
+        var v = variants[cur.index][vi];
+        var candidates = fitCandidates(grid, size, cur.index, v, frontier);
+        if (candidates.length && (!best ||
+          candidates[0].y < best.y ||
+          (candidates[0].y === best.y && candidates[0].x < best.x))) {
+          best = { x: candidates[0].x, y: candidates[0].y, variant: v };
+        }
+      }
+      if (!best) return null;
+      commitTracked(grid, size, frontier, best.variant, best.x, best.y, cur.index);
+      result[cur.id] = { x: best.x, y: best.y, rotation: best.variant.rotation };
+    }
+    return result;
+  }
+
+  // 热路径：仅判断该放置是否合法（越界或与他块补边冲突即失败）
+  function tryPlace(grid, size, selfIdx, variant, px, py) {
+    var claim = variant.claim;
+    for (var i = 0; i < claim.length; i++) {
+      var x = claim[i][0] + px;
+      var y = claim[i][1] + py;
+      if (x < 0 || y < 0 || x >= size || y >= size) return false;
+      var owner = grid[y * size + x];
+      if (owner >= 0 && owner !== selfIdx) return false;
+    }
+    return true;
+  }
+
+  // 锁定图块专用：收集逐格越界/冲突信息用于报告
+  function diagnosePlacement(grid, size, parsed, chart, variant, px, py) {
+    var oob = [];
+    var overlapMap = Object.create(null);
+    for (var i = 0; i < variant.claim.length; i++) {
+      var x = variant.claim[i][0] + px;
+      var y = variant.claim[i][1] + py;
+      if (x < 0 || y < 0 || x >= size || y >= size) {
+        if (oob.length < REPORT_CELL_CAP) oob.push([x, y]);
+        continue;
+      }
+      var owner = grid[y * size + x];
+      if (owner >= 0 && owner !== chart.index) {
+        if (!overlapMap[owner]) overlapMap[owner] = { cells: [], count: 0 };
+        overlapMap[owner].count++;
+        if (overlapMap[owner].cells.length < REPORT_CELL_CAP)
+          overlapMap[owner].cells.push([x, y]);
+      }
+    }
+    if (!oob.length && !Object.keys(overlapMap).length) return { ok: true };
+    var conflicts = [];
+    if (oob.length) conflicts.push({ kind: 'out-of-bounds', chart: chart.id, cells: oob });
+    Object.keys(overlapMap).sort(function (a, b) { return a - b; }).forEach(function (k) {
+      conflicts.push({
+        kind: 'claim-overlap',
+        a: chart.id, b: parsed.charts[+k].id,
+        cells: overlapMap[k].cells, cellCount: overlapMap[k].count
+      });
+    });
+    return {
+      ok: false,
+      reason: oob.length ? 'out-of-bounds' : 'overlap',
+      conflicts: conflicts
+    };
+  }
+
+  function commit(grid, variant, px, py, idx) {
+    var size = Math.round(Math.sqrt(grid.length));
+    for (var j = 0; j < variant.claim.length; j++) {
+      var cx = variant.claim[j][0] + px, cy = variant.claim[j][1] + py;
+      if (cx < 0 || cy < 0 || cx >= size || cy >= size) continue;
+      grid[cy * size + cx] = idx;
+    }
+  }
+
+  function rollback(grid, variant, px, py, idx) {
+    var size = Math.round(Math.sqrt(grid.length));
+    for (var j = 0; j < variant.claim.length; j++) {
+      var cx = variant.claim[j][0] + px, cy = variant.claim[j][1] + py;
+      if (cx < 0 || cy < 0 || cx >= size || cy >= size) continue;
+      var k = cy * size + cx;
+      if (grid[k] === idx) grid[k] = -1;
+    }
+  }
+
+  function formatLockedFailure(id, fit) {
+    var parts = ['锁定图块 ' + id + ' 无法放置：'];
+    fit.conflicts.forEach(function (c) {
+      if (c.kind === 'out-of-bounds')
+        parts.push('补边格越界 ' + c.cells.length + ' 处，例如 ' + formatCells(c.cells));
+      else
+        parts.push('与 ' + c.b + ' 补边冲突 ' + c.cellCount + ' 格，例如 ' + formatCells(c.cells));
+    });
+    parts.push('请调整该图块的锁定位置或补边大小，不会缩放任何图块。');
+    return parts.join('；');
+  }
+
+  function formatCells(cells) {
+    return cells.map(function (c) { return '(' + c[0] + ',' + c[1] + ')'; }).join(' ');
+  }
+
+  // ---------- 导出 ----------
+
+  function buildLayoutJSON(parsed, placementList) {
+    var map = {};
+    placementList.forEach(function (p) { map[p.id] = p; });
+    var layout = computeLayout(parsed, map);
+    return {
+      atlasSize: parsed.atlasSize,
+      padding: parsed.padding,
+      placements: placementList,
+      stats: {
+        occupiedCells: layout.stats.occupiedCells,
+        paddingCells: layout.stats.paddingCells,
+        freeCells: layout.stats.freeCells,
+        utilization: Number(layout.stats.utilization.toFixed(6))
+      }
+    };
+  }
+
+  function buildCornerUV(parsed, placementList) {
+    var map = {};
+    placementList.forEach(function (p) { map[p.id] = p; });
+    return {
+      atlasSize: parsed.atlasSize,
+      padding: parsed.padding,
+      charts: parsed.charts.filter(function (c) { return map[c.id]; }).map(function (chart) {
+        var pl = map[chart.id];
+        var geo = transformGeometry(chart, pl, parsed.atlasSize);
+        return {
+          id: chart.id,
+          placement: { x: pl.x, y: pl.y, rotation: pl.rotation },
+          vertices: chart.vertices.map(function (v, i) {
+            return {
+              index: i,
+              original: [v[0], v[1]],
+              position: [round6(geo.positions[i][0]), round6(geo.positions[i][1])],
+              uv: [round6(geo.uvs[i][0]), round6(geo.uvs[i][1])]
+            };
+          }),
+          triangles: chart.triangles.map(function (t) {
+            return {
+              indices: [t[0], t[1], t[2]],
+              corners: t.map(function (vi) {
+                return {
+                  vertex: vi,
+                  position: [round6(geo.positions[vi][0]), round6(geo.positions[vi][1])],
+                  uv: [round6(geo.uvs[vi][0]), round6(geo.uvs[vi][1])]
+                };
+              })
+            };
+          })
+        };
+      })
+    };
+  }
+
+  function round6(n) { return Math.round(n * 1e6) / 1e6; }
+
+  // 确定性调色板：按图块输入索引取色
+  function chartColor(index) {
+    var hue = (index * 137.508) % 360;
+    return {
+      occ: 'hsl(' + hue.toFixed(2) + ', 68%, 52%)',
+      pad: 'hsl(' + hue.toFixed(2) + ', 60%, 78%)'
+    };
+  }
+
+  return {
+    parseInput: parseInput,
+    buildVariant: buildVariant,
+    buildVariants: buildVariants,
+    transformGeometry: transformGeometry,
+    computeLayout: computeLayout,
+    validateLayout: validateLayout,
+    pack: pack,
+    buildLayoutJSON: buildLayoutJSON,
+    buildCornerUV: buildCornerUV,
+    chartColor: chartColor,
+    rotateCell: rotateCell,
+    rotatePoint: rotatePoint,
+    formatCells: formatCells
+  };
+});
+
+</script>
+<script>
+/* 内置样例数据（取自 samples，仅用于页面首屏即可操作） */
+window.SAMPLES = {"small":{"atlasSize":32,"padding":2,"charts":[{"id":"chart-0","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":true,"placement":{"x":2,"y":2,"rotation":0}},{"id":"chart-1","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"chart-2","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"chart-3","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false}]},"capacity":{"atlasSize":128,"padding":1,"charts":[{"id":"c0","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c1","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c2","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c3","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c4","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c5","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c6","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c7","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c8","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c9","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c10","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c11","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c12","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c13","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c14","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c15","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c16","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c17","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c18","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c19","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c20","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c21","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c22","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c23","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c24","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c25","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c26","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c27","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c28","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c29","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c30","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c31","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c32","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c33","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c34","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c35","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c36","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c37","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c38","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c39","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c40","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c41","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c42","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c43","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c44","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c45","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c46","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c47","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c48","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c49","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c50","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c51","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c52","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c53","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c54","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c55","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c56","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c57","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c58","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c59","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false},{"id":"c60","mask":["########","########","##......","##......","##......","##......","##......","##......"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[8,2],[1,3],[0,3],[2,3],[1,4],[0,4],[2,4],[1,5],[0,5],[2,5],[1,6],[0,6],[2,6],[1,7],[0,7],[2,7],[1,8],[0,8],[2,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[2,5,20],[2,20,18],[5,7,21],[5,21,20],[7,9,22],[7,22,21],[9,11,23],[9,23,22],[11,13,24],[11,24,23],[13,15,25],[13,25,24],[15,17,26],[15,26,25],[19,18,27],[19,27,28],[18,20,29],[18,29,27],[28,27,30],[28,30,31],[27,29,32],[27,32,30],[31,30,33],[31,33,34],[30,32,35],[30,35,33],[34,33,36],[34,36,37],[33,35,38],[33,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c61","mask":["########","#......#","#......#","#......#","#......#","#......#","#......#","########"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[3,0],[3,1],[4,0],[4,1],[5,0],[5,1],[6,0],[6,1],[7,0],[7,1],[8,0],[8,1],[1,2],[0,2],[8,2],[7,2],[1,3],[0,3],[8,3],[7,3],[1,4],[0,4],[8,4],[7,4],[1,5],[0,5],[8,5],[7,5],[1,6],[0,6],[8,6],[7,6],[1,7],[0,7],[8,7],[7,7],[1,8],[0,8],[2,7],[2,8],[3,7],[3,8],[4,7],[4,8],[5,7],[5,8],[6,7],[6,8],[7,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[4,6,7],[4,7,5],[6,8,9],[6,9,7],[8,10,11],[8,11,9],[10,12,13],[10,13,11],[12,14,15],[12,15,13],[14,16,17],[14,17,15],[3,2,18],[3,18,19],[15,17,20],[15,20,21],[19,18,22],[19,22,23],[21,20,24],[21,24,25],[23,22,26],[23,26,27],[25,24,28],[25,28,29],[27,26,30],[27,30,31],[29,28,32],[29,32,33],[31,30,34],[31,34,35],[33,32,36],[33,36,37],[35,34,38],[35,38,39],[37,36,40],[37,40,41],[39,38,42],[39,42,43],[38,44,45],[38,45,42],[44,46,47],[44,47,45],[46,48,49],[46,49,47],[48,50,51],[48,51,49],[50,52,53],[50,53,51],[52,41,54],[52,54,53],[41,40,55],[41,55,54]],"locked":false},{"id":"c62","mask":["...##...","...##...","...##...","########","########","...##...","...##...","...##..."],"vertices":[[3,0],[4,0],[4,1],[3,1],[5,0],[5,1],[4,2],[3,2],[5,2],[4,3],[3,3],[5,3],[0,3],[1,3],[1,4],[0,4],[2,3],[2,4],[3,4],[4,4],[5,4],[6,3],[6,4],[7,3],[7,4],[8,3],[8,4],[1,5],[0,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[4,6],[3,6],[5,6],[4,7],[3,7],[5,7],[4,8],[3,8],[5,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[3,2,6],[3,6,7],[2,5,8],[2,8,6],[7,6,9],[7,9,10],[6,8,11],[6,11,9],[12,13,14],[12,14,15],[13,16,17],[13,17,14],[16,10,18],[16,18,17],[10,9,19],[10,19,18],[9,11,20],[9,20,19],[11,21,22],[11,22,20],[21,23,24],[21,24,22],[23,25,26],[23,26,24],[15,14,27],[15,27,28],[14,17,29],[14,29,27],[17,18,30],[17,30,29],[18,19,31],[18,31,30],[19,20,32],[19,32,31],[20,22,33],[20,33,32],[22,24,34],[22,34,33],[24,26,35],[24,35,34],[30,31,36],[30,36,37],[31,32,38],[31,38,36],[37,36,39],[37,39,40],[36,38,41],[36,41,39],[40,39,42],[40,42,43],[39,41,44],[39,44,42]],"locked":false},{"id":"c63","mask":["##....##","##....##","##....##","##....##","##....##","##....##","##....##","##....##"],"vertices":[[0,0],[1,0],[1,1],[0,1],[2,0],[2,1],[6,0],[7,0],[7,1],[6,1],[8,0],[8,1],[1,2],[0,2],[2,2],[7,2],[6,2],[8,2],[1,3],[0,3],[2,3],[7,3],[6,3],[8,3],[1,4],[0,4],[2,4],[7,4],[6,4],[8,4],[1,5],[0,5],[2,5],[7,5],[6,5],[8,5],[1,6],[0,6],[2,6],[7,6],[6,6],[8,6],[1,7],[0,7],[2,7],[7,7],[6,7],[8,7],[1,8],[0,8],[2,8],[7,8],[6,8],[8,8]],"triangles":[[0,1,2],[0,2,3],[1,4,5],[1,5,2],[6,7,8],[6,8,9],[7,10,11],[7,11,8],[3,2,12],[3,12,13],[2,5,14],[2,14,12],[9,8,15],[9,15,16],[8,11,17],[8,17,15],[13,12,18],[13,18,19],[12,14,20],[12,20,18],[16,15,21],[16,21,22],[15,17,23],[15,23,21],[19,18,24],[19,24,25],[18,20,26],[18,26,24],[22,21,27],[22,27,28],[21,23,29],[21,29,27],[25,24,30],[25,30,31],[24,26,32],[24,32,30],[28,27,33],[28,33,34],[27,29,35],[27,35,33],[31,30,36],[31,36,37],[30,32,38],[30,38,36],[34,33,39],[34,39,40],[33,35,41],[33,41,39],[37,36,42],[37,42,43],[36,38,44],[36,44,42],[40,39,45],[40,45,46],[39,41,47],[39,47,45],[43,42,48],[43,48,49],[42,44,50],[42,50,48],[46,45,51],[46,51,52],[45,47,53],[45,53,51]],"locked":false}]}};
+
+</script>
+<script>
+/* Lightmap Mask Packer 页面应用 */
+(function () {
+  'use strict';
+  var L = window.LMP;
+
+  // ---------- 应用状态 ----------
+  var state = {
+    parsed: null,            // LMP.parseInput 结果
+    rawInput: null,          // 原始 JSON（用于重新解析与导出）
+    placements: {},          // id -> {x,y,rotation}（含手动放置）
+    locked: {},              // id -> bool（界面锁定状态，初始取自输入）
+    selectedId: null,
+    cell: 24,                // 画布每格像素
+    showPadding: true,
+    showGrid: true,
+    drag: null,              // 拖拽上下文
+    hoverCell: null,
+    messageSeq: 0
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var atlasCanvas = $('atlas');
+  var ctx = atlasCanvas.getContext('2d');
+
+  // ---------- 工具 ----------
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._h);
+    toast._h = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  function addMessage(kind, title, detail) {
+    var box = $('messages');
+    var seq = ++state.messageSeq;
+    var div = document.createElement('div');
+    div.className = 'msg ' + kind;
+    var html = '<div class="title">[' + seq + '] ' + escapeHtml(title) + '</div>';
+    if (detail) html += '<div class="cells">' + escapeHtml(detail) + '</div>';
+    div.innerHTML = html;
+    box.prepend(div);
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function download(filename, text, mime) {
+    // 沙盒里 <a download> 可能失效：同时提供模态查看与复制
+    var blob = new Blob([text], { type: mime || 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 800);
+  }
+  function chartById(id) {
+    if (!state.parsed) return null;
+    for (var i = 0; i < state.parsed.charts.length; i++)
+      if (state.parsed.charts[i].id === id) return state.parsed.charts[i];
+    return null;
+  }
+  function currentVariant(chart) {
+    var pl = state.placements[chart.id];
+    var rot = pl ? pl.rotation : 0;
+    return L.buildVariant(chart, rot, state.parsed.padding);
+  }
+  function hsl(idx, l, s) {
+    var hue = (idx * 137.508) % 360;
+    return 'hsl(' + hue.toFixed(1) + ',' + (s || 66) + '%,' + l + '%)';
+  }
+
+  // ---------- 载入数据 ----------
+  function loadInput(obj) {
+    var parsed;
+    try {
+      parsed = L.parseInput(obj);
+    } catch (e) {
+      addMessage('error', '输入解析失败', e.message);
+      return false;
+    }
+    state.rawInput = JSON.parse(JSON.stringify(obj));
+    state.parsed = parsed;
+    state.placements = {};
+    state.locked = {};
+    state.selectedId = null;
+    parsed.charts.forEach(function (c) {
+      state.locked[c.id] = c.locked;
+      if (c.given) state.placements[c.id] = { x: c.given.x, y: c.given.y, rotation: c.given.rotation };
+    });
+    $('messages').innerHTML = '';
+    addMessage('info', '已载入 ' + parsed.charts.length + ' 个图块',
+      '画布 ' + parsed.atlasSize + '×' + parsed.atlasSize + '，补边 ' + parsed.padding + ' 格');
+    setupCanvasSize();
+    renderAll();
+    return true;
+  }
+
+  function currentPackInput() {
+    // 把界面锁定状态与手动位置回写到引擎输入
+    var raw = JSON.parse(JSON.stringify(state.rawInput));
+    raw.padding = parseInt($('paddingInput').value, 10);
+    raw.charts.forEach(function (c) {
+      c.locked = !!state.locked[c.id];
+      if (c.locked && state.placements[c.id]) {
+        c.placement = {
+          x: state.placements[c.id].x, y: state.placements[c.id].y,
+          rotation: state.placements[c.id].rotation
+        };
+      } else {
+        delete c.placement;
+      }
+    });
+    return L.parseInput(raw);
+  }
+
+  // ---------- 画布尺寸与坐标 ----------
+  function setupCanvasSize() {
+    var size = state.parsed.atlasSize;
+    var cell = state.cell;
+    atlasCanvas.width = size * cell;
+    atlasCanvas.height = size * cell;
+  }
+  function eventToCell(e) {
+    var rect = atlasCanvas.getBoundingClientRect();
+    var x = Math.floor((e.clientX - rect.left) / state.cell);
+    var y = Math.floor((e.clientY - rect.top) / state.cell);
+    var size = state.parsed.atlasSize;
+    if (x < 0 || y < 0 || x >= size || y >= size) return null;
+    return { x: x, y: y };
+  }
+
+  // ---------- 渲染主画布 ----------
+  function renderAtlas() {
+    if (!state.parsed) return;
+    var size = state.parsed.atlasSize;
+    var cell = state.cell;
+    var W = size * cell;
+    ctx.clearRect(0, 0, W, W);
+
+    // 空白底色
+    ctx.fillStyle = cssVar('--empty-swatch');
+    ctx.fillRect(0, 0, W, W);
+
+    var layout = L.computeLayout(state.parsed, state.placements);
+    var conflictCharts = {};
+    layout.conflicts.forEach(function (cf) {
+      if (cf.a) conflictCharts[cf.a] = true;
+      if (cf.b) conflictCharts[cf.b] = true;
+    });
+
+    // 先画补边，再画占用
+    layout.placedCharts.forEach(function (pc) {
+      var idx = pc.chart.index;
+      var padColor = hsl(idx, 80, 62);
+      var occColor = hsl(idx, 52, 64);
+      if (state.showPadding) {
+        ctx.fillStyle = padColor;
+        pc.absClaim.forEach(function (c) {
+          ctx.fillRect(c[0] * cell, c[1] * cell, cell, cell);
+        });
+      }
+      ctx.fillStyle = occColor;
+      pc.absOcc.forEach(function (c) {
+        ctx.fillRect(c[0] * cell, c[1] * cell, cell, cell);
+      });
+    });
+
+    // 冲突格红叉高亮
+    layout.conflicts.forEach(function (cf) {
+      cf.cells.forEach(function (c) {
+        ctx.strokeStyle = cssVar('--critical');
+        ctx.lineWidth = Math.max(1.5, cell / 10);
+        ctx.beginPath();
+        ctx.moveTo(c[0] * cell + 2, c[1] * cell + 2);
+        ctx.lineTo((c[0] + 1) * cell - 2, (c[1] + 1) * cell - 2);
+        ctx.moveTo((c[0] + 1) * cell - 2, c[1] * cell + 2);
+        ctx.lineTo(c[0] * cell + 2, (c[1] + 1) * cell - 2);
+        ctx.stroke();
+      });
+    });
+
+    // 网格线
+    if (state.showGrid && cell >= 6) {
+      ctx.strokeStyle = cssVar('--grid-line');
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (var i = 0; i <= size; i++) {
+        ctx.moveTo(i * cell + .5, 0); ctx.lineTo(i * cell + .5, W);
+        ctx.moveTo(0, i * cell + .5); ctx.lineTo(W, i * cell + .5);
+      }
+      ctx.stroke();
+    }
+
+    // 选中描边 + 拖拽预览
+    if (state.selectedId) {
+      var sel = chartById(state.selectedId);
+      var pl = state.placements[sel.id];
+      if (pl) {
+        var v = L.buildVariant(sel, pl.rotation, state.parsed.padding);
+        ctx.strokeStyle = cssVar('--accent');
+        ctx.lineWidth = Math.max(2, cell / 8);
+        ctx.strokeRect(pl.x * cell + 1, pl.y * cell + 1,
+          v.rw * cell - 2, v.rh * cell - 2);
+      }
+    }
+    if (state.drag && state.drag.preview) {
+      var d = state.drag;
+      var dv = L.buildVariant(d.chart, d.rotation, state.parsed.padding);
+      var ok = placementLegal(d.chart, d.preview.x, d.preview.y, d.rotation);
+      ctx.fillStyle = ok ? 'rgba(31,138,76,.35)' : 'rgba(192,57,43,.35)';
+      dv.claim.forEach(function (c) {
+        ctx.fillRect((c[0] + d.preview.x) * cell, (c[1] + d.preview.y) * cell, cell, cell);
+      });
+      ctx.strokeStyle = ok ? cssVar('--good') : cssVar('--critical');
+      ctx.lineWidth = 2;
+      ctx.strokeRect(d.preview.x * cell + 1, d.preview.y * cell + 1, dv.rw * cell - 2, dv.rh * cell - 2);
+    }
+    updateStats(layout);
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function updateStats(layout) {
+    var s = layout.stats;
+    $('statOccupied').innerHTML = s.occupiedCells + ' <small>格</small>';
+    $('statPadding').innerHTML = s.paddingCells + ' <small>格</small>';
+    $('statFree').innerHTML = s.freeCells + ' <small>格</small>';
+    $('statUtil').innerHTML = (s.utilization * 100).toFixed(1) + '<small>%</small>';
+    var placed = Object.keys(state.placements).length;
+    $('statPlaced').textContent = placed + ' / ' + state.parsed.charts.length;
+    $('statConflicts').textContent = layout.conflicts.length;
+    $('statConflicts').style.color = layout.conflicts.length ? cssVar('--critical') : '';
+  }
+
+  // 合法性（补边不越界、不与他块冲突；自身忽略）
+  function placementLegal(chart, px, py, rotation) {
+    var v = L.buildVariant(chart, rotation, state.parsed.padding);
+    var size = state.parsed.atlasSize;
+    for (var i = 0; i < v.claim.length; i++) {
+      var x = v.claim[i][0] + px, y = v.claim[i][1] + py;
+      if (x < 0 || y < 0 || x >= size || y >= size) return false;
+    }
+    for (var j = 0; j < state.parsed.charts.length; j++) {
+      var other = state.parsed.charts[j];
+      if (other.id === chart.id) continue;
+      var op = state.placements[other.id];
+      if (!op) continue;
+      var ov = L.buildVariant(other, op.rotation, state.parsed.padding);
+      var set = {};
+      ov.claim.forEach(function (c) { set[(c[0] + op.x) + ',' + (c[1] + op.y)] = true; });
+      for (var k = 0; k < v.claim.length; k++) {
+        var key = (v.claim[k][0] + px) + ',' + (v.claim[k][1] + py);
+        if (set[key]) return false;
+      }
+    }
+    return true;
+  }
+
+  // ---------- 画布交互：点选/拖拽 ----------
+  atlasCanvas.addEventListener('pointerdown', function (e) {
+    if (!state.parsed) return;
+    var cell0 = eventToCell(e);
+    if (!cell0) return;
+    var layout = L.computeLayout(state.parsed, state.placements);
+    var idx = layout.occGrid[cell0.y * state.parsed.atlasSize + cell0.x];
+    if (idx < 0) idx = layout.claimGrid[cell0.y * state.parsed.atlasSize + cell0.x];
+    if (idx < 0) { state.selectedId = null; renderAll(); return; }
+    var chart = state.parsed.charts[idx];
+    state.selectedId = chart.id;
+    var pl = state.placements[chart.id];
+    if (!pl) { renderAll(); return; }
+    if (state.locked[chart.id]) {
+      addMessage('warn', '图块 ' + chart.id + ' 已锁定', '解锁后才能拖动；可用右侧按钮解锁。');
+      renderAll(); return;
+    }
+    atlasCanvas.setPointerCapture(e.pointerId);
+    atlasCanvas.classList.add('dragging');
+    state.drag = {
+      chart: chart, startX: pl.x, startY: pl.y,
+      rotation: pl.rotation,
+      grabDX: cell0.x - pl.x, grabDY: cell0.y - pl.y,
+      preview: { x: pl.x, y: pl.y }, moved: false
+    };
+    renderAll();
+  });
+
+  atlasCanvas.addEventListener('pointermove', function (e) {
+    if (!state.parsed) return;
+    var cell0 = eventToCell(e);
+    state.hoverCell = cell0;
+    if (!state.drag || !cell0) { renderAtlas(); return; }
+    var d = state.drag;
+    var nx = cell0.x - d.grabDX;
+    var ny = cell0.y - d.grabDY;
+    if (nx !== d.preview.x || ny !== d.preview.y) d.moved = true;
+    d.preview = { x: nx, y: ny };
+    renderAtlas();
+  });
+
+  atlasCanvas.addEventListener('pointerup', function (e) {
+    if (!state.drag) return;
+    var d = state.drag;
+    atlasCanvas.releasePointerCapture(e.pointerId);
+    atlasCanvas.classList.remove('dragging');
+    var target = d.preview;
+    state.drag = null;
+    if (d.moved) {
+      if (placementLegal(d.chart, target.x, target.y, d.rotation)) {
+        state.placements[d.chart.id] = { x: target.x, y: target.y, rotation: d.rotation };
+        addMessage('ok', '已移动 ' + d.chart.id, '新位置 (' + target.x + ',' + target.y + ') 旋转 ' + d.rotation + '°');
+      } else {
+        // 放下时冲突：逐格报告
+        reportConflict(d.chart, target.x, target.y, d.rotation);
+        state.placements[d.chart.id] = { x: d.startX, y: d.startY, rotation: d.rotation };
+      }
+    }
+    renderAll();
+  });
+
+  function reportConflict(chart, px, py, rotation) {
+    var parsed = state.parsed;
+    var v = L.buildVariant(chart, rotation, parsed.padding);
+    var size = parsed.atlasSize;
+    var oob = [], overlaps = {};
+    v.claim.forEach(function (c) {
+      var x = c[0] + px, y = c[1] + py;
+      if (x < 0 || y < 0 || x >= size || y >= size) { oob.push([x, y]); return; }
+      for (var i = 0; i < parsed.charts.length; i++) {
+        var o = parsed.charts[i];
+        if (o.id === chart.id) continue;
+        var op = state.placements[o.id];
+        if (!op) continue;
+        var ov = L.buildVariant(o, op.rotation, parsed.padding);
+        for (var j = 0; j < ov.claim.length; j++) {
+          if (ov.claim[j][0] + op.x === x && ov.claim[j][1] + op.y === y) {
+            if (!overlaps[o.id]) overlaps[o.id] = [];
+            if (overlaps[o.id].length < 12) overlaps[o.id].push([x, y]);
+          }
+        }
+      }
+    });
+    var detail = [];
+    if (oob.length) detail.push('越界格 ' + oob.length + ' 处：' + L.formatCells(oob.slice(0, 12)));
+    Object.keys(overlaps).forEach(function (oid) {
+      detail.push('与 ' + oid + ' 冲突格：' + L.formatCells(overlaps[oid]));
+    });
+    addMessage('error', '无法放下 ' + chart.id + '（位置 (' + px + ',' + py + ') 旋转 ' + rotation + '°）',
+      detail.join('；') || '补边格越界或与相邻图块补边重叠');
+  }
+
+  // ---------- 按钮动作 ----------
+  function doPack() {
+    if (!state.parsed) { toast('请先载入数据'); return; }
+    var parsed;
+    try { parsed = currentPackInput(); }
+    catch (e) { addMessage('error', '重排输入构建失败', e.message); return; }
+    var t0 = performance.now();
+    var r = L.pack(parsed);
+    var ms = (performance.now() - t0).toFixed(0);
+    if (r.status === 'ok') {
+      r.placements.forEach(function (p) { state.placements[p.id] = { x: p.x, y: p.y, rotation: p.rotation }; });
+      addMessage('ok', '排布成功（' + r.phase + '，' + ms + 'ms，节点 ' + r.nodes + '）', r.message);
+    } else if (r.status === 'locked-conflict') {
+      addMessage('error', '锁定冲突：' + r.lockedChart, r.message);
+      (r.conflicts || []).forEach(function (cf) {
+        addMessage('error', cf.kind === 'out-of-bounds' ? '越界' : '补边重叠',
+          (cf.b || '') + ' ' + L.formatCells(cf.cells));
+      });
+    } else if (r.status === 'impossible') {
+      addMessage('error', '可证明无解（未缩放任何图块）', r.message);
+    } else {
+      addMessage('warn', '未找到可行布局（不能证明无解，未缩放任何图块）', r.message);
+    }
+    renderAll();
+  }
+
+  function rotateSelected() {
+    if (!state.selectedId) { toast('请先选择图块'); return; }
+    var chart = chartById(state.selectedId);
+    if (state.locked[chart.id]) { addMessage('warn', chart.id + ' 已锁定，无法旋转'); return; }
+    var pl = state.placements[chart.id] || { x: 0, y: 0, rotation: 0 };
+    var newRot = pl.rotation === 0 ? 90 : 0;
+    // 以包围框左上角为锚旋转：新尺寸可能变化，保持左上角并做合法性检查
+    if (placementLegal(chart, pl.x, pl.y, newRot)) {
+      state.placements[chart.id] = { x: pl.x, y: pl.y, rotation: newRot };
+      addMessage('ok', chart.id + ' 旋转为 ' + newRot + '°');
+    } else {
+      reportConflict(chart, pl.x, pl.y, newRot);
+    }
+    renderAll();
+  }
+
+  function nudge(dx, dy) {
+    if (!state.selectedId) { toast('请先选择图块'); return; }
+    var chart = chartById(state.selectedId);
+    if (state.locked[chart.id]) { addMessage('warn', chart.id + ' 已锁定'); return; }
+    var pl = state.placements[chart.id];
+    if (!pl) { toast('该图块尚未放置'); return; }
+    var nx = pl.x + dx, ny = pl.y + dy;
+    if (placementLegal(chart, nx, ny, pl.rotation)) {
+      pl.x = nx; pl.y = ny;
+      addMessage('info', chart.id + ' 微调到 (' + nx + ',' + ny + ')');
+    } else {
+      reportConflict(chart, nx, ny, pl.rotation);
+    }
+    renderAll();
+  }
+
+  function toggleLock() {
+    if (!state.selectedId) { toast('请先选择图块'); return; }
+    var id = state.selectedId;
+    state.locked[id] = !state.locked[id];
+    addMessage('info', id + (state.locked[id] ? ' 已锁定' : ' 已解锁'),
+      state.locked[id] ? '重排时保持当前位置不变' : '重排时可被引擎重新放置');
+    renderAll();
+  }
+
+  function clearUnlocked() {
+    var removed = [];
+    state.parsed.charts.forEach(function (c) {
+      if (!state.locked[c.id] && state.placements[c.id]) {
+        delete state.placements[c.id];
+        removed.push(c.id);
+      }
+    });
+    addMessage('info', '已清除 ' + removed.length + ' 个未锁定图块的放置', removed.join(', '));
+    renderAll();
+  }
+
+  // ---------- 图块列表 ----------
+  function renderChartList() {
+    var box = $('chartList');
+    box.innerHTML = '';
+    var layout = state.parsed ? L.computeLayout(state.parsed, state.placements) : null;
+    var conflictSet = {};
+    if (layout) layout.conflicts.forEach(function (cf) {
+      if (cf.a) conflictSet[cf.a] = true;
+      if (cf.b) conflictSet[cf.b] = true;
+    });
+    state.parsed.charts.forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'chart-row' + (c.id === state.selectedId ? ' selected' : '');
+      var pl = state.placements[c.id];
+      var badge = '';
+      if (conflictSet[c.id]) badge = '<span class="badge conflict">冲突</span>';
+      else if (state.locked[c.id]) badge = '<span class="badge locked">锁定</span>';
+      else if (pl) badge = '<span class="badge placed">已放</span>';
+      else badge = '<span class="badge unplaced">未放</span>';
+      row.innerHTML =
+        '<span class="dot" style="background:' + hsl(c.index, 52, 64) + '"></span>' +
+        '<span class="name">' + escapeHtml(c.id) + '</span>' +
+        (pl ? '<span class="mini-pos">' + pl.x + ',' + pl.y + ' r' + pl.rotation + '</span>' : '') +
+        badge;
+      row.addEventListener('click', function () {
+        state.selectedId = c.id;
+        renderAll();
+      });
+      box.appendChild(row);
+    });
+  }
+
+  // ---------- 检查器：网格与 UV ----------
+  function renderInspector() {
+    var detail = $('chartDetail');
+    if (!state.selectedId) {
+      detail.innerHTML = '<div class="empty-hint">在画布或左侧列表点击图块查看原网格、变换与逐角 UV。</div>';
+      $('meshSection').hidden = true;
+      return;
+    }
+    var c = chartById(state.selectedId);
+    var pl = state.placements[c.id];
+    var v = L.buildVariant(c, pl ? pl.rotation : 0, state.parsed.padding);
+    var dl = [
+      ['ID', c.id],
+      ['原始尺寸', c.w + ' × ' + c.h],
+      ['占用格', c.occ.length],
+      ['补边格', v.claimCount + '（padding=' + state.parsed.padding + '）'],
+      ['旋转后', v.rw + ' × ' + v.rh],
+      ['锁定', state.locked[c.id] ? '是' : '否'],
+      ['放置', pl ? '(' + pl.x + ', ' + pl.y + ') ' + pl.rotation + '°' : '未放置']
+    ];
+    detail.innerHTML = '<dl class="kv">' +
+      dl.map(function (p) { return '<dt>' + p[0] + '</dt><dd>' + escapeHtml(p[1]) + '</dd>'; }).join('') +
+      '</dl>';
+    drawMesh(c, pl);
+  }
+
+  function drawMesh(chart, pl) {
+    var pad = state.parsed.padding;
+    // 原网格
+    var oc = $('meshOriginal'), octx = oc.getContext('2d');
+    var scale = 18;
+    oc.width = chart.w * scale; oc.height = chart.h * scale;
+    octx.fillStyle = cssVar('--empty-swatch');
+    octx.fillRect(0, 0, oc.width, oc.height);
+    var occSet = {};
+    chart.occ.forEach(function (c) { occSet[c[0] + ',' + c[1]] = true; });
+    for (var y = 0; y < chart.h; y++) for (var x = 0; x < chart.w; x++) {
+      if (occSet[x + ',' + y]) {
+        octx.fillStyle = hsl(chart.index, 52, 64);
+        octx.fillRect(x * scale, y * scale, scale, scale);
+      }
+    }
+    drawTriangles(octx, chart, null, scale);
+    drawGridLines(octx, chart.w, chart.h, scale);
+    $('meshSection').hidden = false;
+
+    // 变换后
+    var tc = $('meshTransformed'), tctx = tc.getContext('2d');
+    var rot = pl ? pl.rotation : 0;
+    var tv = L.buildVariant(chart, rot, pad);
+    tc.width = tv.rw * scale; tc.height = tv.rh * scale;
+    tctx.fillStyle = cssVar('--empty-swatch');
+    tctx.fillRect(0, 0, tc.width, tc.height);
+    // 补边
+    tctx.fillStyle = hsl(chart.index, 80, 62);
+    tv.claim.forEach(function (c) { tctx.fillRect(c[0] * scale, c[1] * scale, scale, scale); });
+    // 占用
+    tctx.fillStyle = hsl(chart.index, 52, 64);
+    tv.occ.forEach(function (c) { tctx.fillRect(c[0] * scale, c[1] * scale, scale, scale); });
+    if (pl) drawTriangles(tctx, chart, pl, scale);
+    drawGridLines(tctx, tv.rw, tv.rh, scale);
+    $('meshNote').textContent = pl
+      ? '上图：原网格与三角形；下图：旋转 ' + rot + '° 后（含补边），平移 (' + pl.x + ',' + pl.y + ') 后 UV=连续坐标/' + state.parsed.atlasSize
+      : '该图块尚未放置，下图仅显示旋转 ' + rot + '° 的局部形态。';
+  }
+
+  function drawGridLines(c2d, w, h, scale) {
+    c2d.strokeStyle = cssVar('--grid-line');
+    c2d.lineWidth = 1;
+    c2d.beginPath();
+    for (var i = 0; i <= w; i++) { c2d.moveTo(i * scale + .5, 0); c2d.lineTo(i * scale + .5, h * scale); }
+    for (var j = 0; j <= h; j++) { c2d.moveTo(0, j * scale + .5); c2d.lineTo(w * scale, j * scale + .5); }
+    c2d.stroke();
+  }
+
+  function drawTriangles(c2d, chart, pl, scale) {
+    var geo = pl ? L.transformGeometry(chart, pl, state.parsed.atlasSize) : null;
+    c2d.strokeStyle = 'rgba(10,15,22,.85)';
+    c2d.fillStyle = 'rgba(10,15,22,.85)';
+    c2d.lineWidth = 1.2;
+    chart.triangles.forEach(function (t) {
+      var pts = t.map(function (vi) {
+        if (pl) return [geo.positions[vi][0] - pl.x, geo.positions[vi][1] - pl.y];
+        return chart.vertices[vi];
+      });
+      c2d.beginPath();
+      c2d.moveTo(pts[0][0] * scale, pts[0][1] * scale);
+      c2d.lineTo(pts[1][0] * scale, pts[1][1] * scale);
+      c2d.lineTo(pts[2][0] * scale, pts[2][1] * scale);
+      c2d.closePath();
+      c2d.stroke();
+    });
+  }
+
+  // ---------- 导出 ----------
+  function placedList() {
+    return state.parsed.charts
+      .filter(function (c) { return state.placements[c.id]; })
+      .map(function (c) {
+        var p = state.placements[c.id];
+        return { id: c.id, x: p.x, y: p.y, rotation: p.rotation };
+      });
+  }
+
+  function exportLayout() {
+    var data = L.buildLayoutJSON(state.parsed, placedList());
+    var text = JSON.stringify(data, null, 2);
+    showExportModal('布局 JSON', text, 'layout.json');
+  }
+  function exportCornerUV() {
+    var data = L.buildCornerUV(state.parsed, placedList());
+    var text = JSON.stringify(data, null, 2);
+    showExportModal('逐角 UV', text, 'corner-uv.json');
+  }
+  function exportOwnership() {
+    // PNG（1 格 1 像素）+ JSON 色表，区分原占用/补边/空白
+    var size = state.parsed.atlasSize;
+    var layout = L.computeLayout(state.parsed, placedMap());
+    var cv = document.createElement('canvas');
+    cv.width = size; cv.height = size;
+    var c2d = cv.getContext('2d');
+    var img = c2d.createImageData(size, size);
+    var palette = {}; // id -> {occ:[r,g,b], pad:[...]}
+    function rgb(idx, light) {
+      var hue = (idx * 137.508) % 360;
+      return hslToRgb(hue / 360, light > 70 ? .6 : .64, light / 100);
+    }
+    state.parsed.charts.forEach(function (c) {
+      palette[c.id] = { occ: rgb(c.index, 52), pad: rgb(c.index, 80) };
+    });
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        var i = y * size + x;
+        var off = i * 4;
+        var owner = layout.claimGrid[i];
+        if (owner < 0) { // 空白
+          img.data[off] = 255; img.data[off + 1] = 255; img.data[off + 2] = 255; img.data[off + 3] = 255;
+        } else {
+          var id = state.parsed.charts[owner].id;
+          var isOcc = layout.occGrid[i] >= 0;
+          var col = isOcc ? palette[id].occ : palette[id].pad;
+          img.data[off] = col[0]; img.data[off + 1] = col[1]; img.data[off + 2] = col[2]; img.data[off + 3] = 255;
+        }
+      }
+    }
+    c2d.putImageData(img, 0, 0);
+    var colorTable = {
+      atlasSize: size, padding: state.parsed.padding,
+      cellKind: { occupied: '图块原占用格（深色）', padding: '补边膨胀格（浅色）', empty: '空白格 #FFFFFF' },
+      colors: Object.keys(palette).map(function (id) {
+        return {
+          id: id,
+          occupied: '#' + palette[id].occ.map(function (v) { return hex2(v); }).join(''),
+          padding: '#' + palette[id].pad.map(function (v) { return hex2(v); }).join('')
+        };
+      }),
+      empty: '#FFFFFF'
+    };
+    var tableText = JSON.stringify(colorTable, null, 2);
+    cv.toBlob(function (blob) {
+      var url = URL.createObjectURL(blob);
+      showOwnershipModal(url, tableText, blob);
+    });
+  }
+  function placedMap() {
+    var m = {};
+    placedList().forEach(function (p) { m[p.id] = p; });
+    return m;
+  }
+  function hex2(v) { var s = v.toString(16); return s.length < 2 ? '0' + s : s; }
+  function hslToRgb(h, s, l) {
+    var r, g, b;
+    if (s === 0) { r = g = b = l; }
+    else {
+      var hue2 = function (p, q, t) {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+      var q = l < .5 ? l * (1 + s) : l + s - l * s;
+      var p = 2 * l - q;
+      r = hue2(p, q, h + 1 / 3); g = hue2(p, q, h); b = hue2(p, q, h - 1 / 3);
+    }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  var modal = $('modal'), modalTitle = $('modalTitle'), modalBody = $('modalBody'), modalActions = $('modalActions');
+  function showExportModal(title, text, filename) {
+    modalTitle.textContent = title;
+    modalBody.innerHTML = '<pre id="modalPre"></pre>';
+    $('modalPre').textContent = text;
+    modalActions.innerHTML = '';
+    addModalButton('下载 ' + filename, function () { download(filename, text); }, true);
+    addModalButton('复制到剪贴板', function () {
+      navigator.clipboard.writeText(text).then(function () { toast('已复制'); },
+        function () {
+          var ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); toast('已复制'); } catch (e) { toast('复制失败，请手动选择'); }
+          ta.remove();
+        });
+    });
+    addModalButton('关闭', closeModal);
+    modal.classList.add('open');
+  }
+  function showOwnershipModal(pngUrl, tableText, blob) {
+    modalTitle.textContent = '图块归属图（PNG + JSON 色表）';
+    modalBody.innerHTML =
+      '<div class="small" style="margin-bottom:8px">每像素对应一个格子；深色=原占用，浅色=补边，白色=空白。下方为放大预览，导出为原始 ' +
+      state.parsed.atlasSize + '×' + state.parsed.atlasSize + ' 像素。</div>' +
+      '<img alt="ownership preview" src="' + pngUrl + '" style="width:100%;image-rendering:pixelated">' +
+      '<hr class="sep"><pre id="modalPre"></pre>';
+    $('modalPre').textContent = tableText;
+    modalActions.innerHTML = '';
+    addModalButton('下载 ownership.png', function () {
+      var a = document.createElement('a');
+      a.href = pngUrl; a.download = 'ownership.png';
+      document.body.appendChild(a); a.click(); a.remove();
+    }, true);
+    addModalButton('下载 color-table.json', function () { download('color-table.json', tableText); });
+    addModalButton('复制色表 JSON', function () {
+      navigator.clipboard.writeText(tableText).then(function () { toast('已复制'); },
+        function () { toast('复制失败，请手动选择'); });
+    });
+    addModalButton('关闭', closeModal);
+    modal.classList.add('open');
+  }
+  function addModalButton(label, fn, primary) {
+    var b = document.createElement('button');
+    b.textContent = label;
+    if (primary) b.className = 'primary';
+    b.addEventListener('click', fn);
+    modalActions.appendChild(b);
+  }
+  function closeModal() { modal.classList.remove('open'); }
+
+  // ---------- 渲染总入口 ----------
+  function renderAll() {
+    if (!state.parsed) return;
+    renderAtlas();
+    renderChartList();
+    renderInspector();
+  }
+
+  // ---------- 事件绑定 ----------
+  $('fileInput').addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try { loadInput(JSON.parse(reader.result)); }
+      catch (err) { addMessage('error', '文件不是有效 JSON', err.message); }
+    };
+    reader.readAsText(f);
+  });
+  $('packBtn').addEventListener('click', doPack);
+  $('rotateBtn').addEventListener('click', rotateSelected);
+  $('lockBtn').addEventListener('click', toggleLock);
+  $('clearBtn').addEventListener('click', clearUnlocked);
+  $('upBtn').addEventListener('click', function () { nudge(0, -1); });
+  $('downBtn').addEventListener('click', function () { nudge(0, 1); });
+  $('leftBtn').addEventListener('click', function () { nudge(-1, 0); });
+  $('rightBtn').addEventListener('click', function () { nudge(1, 0); });
+  $('zoomOut').addEventListener('click', function () { setCell(Math.max(4, state.cell - 4)); });
+  $('zoomIn').addEventListener('click', function () { setCell(Math.min(64, state.cell + 4)); });
+  $('zoomFit').addEventListener('click', function () {
+    var wrap = atlasCanvas.parentElement;
+    setCell(Math.max(4, Math.min(40, Math.floor((wrap.clientWidth - 24) / state.parsed.atlasSize))));
+  });
+  function setCell(c) { state.cell = c; $('zoomLabel').textContent = c + 'px'; setupCanvasSize(); renderAtlas(); }
+  $('togglePadding').addEventListener('click', function () {
+    state.showPadding = !state.showPadding;
+    this.classList.toggle('active', state.showPadding);
+    renderAtlas();
+  });
+  $('toggleGrid').addEventListener('click', function () {
+    state.showGrid = !state.showGrid;
+    this.classList.toggle('active', state.showGrid);
+    renderAtlas();
+  });
+  $('paddingInput').addEventListener('change', function () {
+    var v = parseInt(this.value, 10);
+    if (!Number.isInteger(v) || v < 0 || v > 4) { addMessage('error', '补边必须是 0..4 的整数'); this.value = state.parsed.padding; return; }
+    // 重新解析应用新 padding，保留锁定与位置
+    var raw = JSON.parse(JSON.stringify(state.rawInput));
+    raw.padding = v;
+    raw.charts.forEach(function (c) {
+      c.locked = !!state.locked[c.id];
+      if (c.locked && state.placements[c.id]) c.placement = state.placements[c.id];
+      else delete c.placement;
+    });
+    loadInput(raw);
+  });
+  $('exportLayout').addEventListener('click', exportLayout);
+  $('exportUV').addEventListener('click', exportCornerUV);
+  $('exportOwnership').addEventListener('click', exportOwnership);
+  $('modalClose').addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (modal.classList.contains('open')) { if (e.key === 'Escape') closeModal(); return; }
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'r' || e.key === 'R') rotateSelected();
+    else if (e.key === 'l' || e.key === 'L') toggleLock();
+    else if (e.key === 'ArrowUp') { e.preventDefault(); nudge(0, -1); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(0, 1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(-1, 0); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); nudge(1, 0); }
+  });
+
+  // ---------- 内置样例 ----------
+  function loadSample(name) {
+    var obj = window.SAMPLES[name];
+    if (!obj) { toast('样例缺失'); return; }
+    $('paddingInput').value = obj.padding;
+    loadInput(obj);
+  }
+  $('sampleSmall').addEventListener('click', function () { loadSample('small'); });
+  $('sampleCapacity').addEventListener('click', function () { loadSample('capacity'); });
+  loadSample('small');
+
+  $('zoomLabel').textContent = state.cell + 'px';
+})();
+
+</script>

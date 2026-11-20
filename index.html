@@ -1,0 +1,143 @@
+<title>光照贴图掩膜排布器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="css/styles.css">
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>光照贴图掩膜排布器</h1>
+      <span class="sub">离散格 · 孔洞/断开 · 仅平移与 90° 旋转</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="group">
+      <label class="field">补边
+        <input type="number" id="paddingInput" min="0" max="4" step="1" value="2">
+      </label>
+      <div class="group" style="gap:6px">
+        <button id="sampleSmall" class="ghost">样例 small</button>
+        <button id="sampleCapacity" class="ghost">样例 capacity(64块)</button>
+      </div>
+      <input type="file" id="fileInput" accept=".json,application/json">
+      <button id="packBtn" class="primary">重排未锁定图块</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- 左：画布与统计 -->
+    <div class="canvas-col">
+      <section class="panel">
+        <div class="canvas-toolbar">
+          <button id="zoomOut" title="缩小">−</button>
+          <span class="zoom-label" id="zoomLabel">24px</span>
+          <button id="zoomIn" title="放大">+</button>
+          <button id="zoomFit">适应</button>
+          <button id="togglePadding" class="active">补边</button>
+          <button id="toggleGrid" class="active">网格</button>
+          <span class="spacer" style="flex:1"></span>
+          <div class="legend">
+            <span class="item"><span class="swatch occ"></span>实际占用</span>
+            <span class="item"><span class="swatch pad"></span>补边</span>
+            <span class="item"><span class="swatch empty"></span>空白</span>
+          </div>
+        </div>
+        <div class="canvas-wrap" style="padding:12px">
+          <canvas id="atlas"></canvas>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header>画布统计</header>
+        <section>
+          <div class="stats">
+            <div class="stat"><div class="k">已放置</div><div class="v" id="statPlaced">–</div></div>
+            <div class="stat"><div class="k">实际占用</div><div class="v" id="statOccupied">–</div></div>
+            <div class="stat"><div class="k">补边格</div><div class="v" id="statPadding">–</div></div>
+            <div class="stat"><div class="k">空白格</div><div class="v" id="statFree">–</div></div>
+            <div class="stat"><div class="k">利用率</div><div class="v" id="statUtil">–</div></div>
+            <div class="stat"><div class="k">冲突数</div><div class="v" id="statConflicts">–</div></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>消息与诊断</header>
+        <section><div class="messages" id="messages">
+          <div class="msg info"><div class="title">等待载入</div><div>选择输入 JSON，或点击下方内置样例。所有冲突会在此逐格列出。</div></div>
+        </div></section>
+      </section>
+    </div>
+
+    <!-- 右：检查器 -->
+    <aside class="inspector">
+      <section class="panel">
+        <header>图块（点击选择）</header>
+        <section>
+          <div class="chart-list" id="chartList">
+            <div class="empty-hint">尚未载入数据。</div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>选中图块操作</header>
+        <section>
+          <div class="row-actions" style="margin-bottom:10px">
+            <button id="rotateBtn" title="快捷键 R">旋转 90°</button>
+            <button id="lockBtn" title="快捷键 L">锁定/解锁</button>
+            <button id="clearBtn" class="danger">清除未锁定</button>
+          </div>
+          <div class="row-actions">
+            <button id="upBtn">↑</button>
+            <button id="downBtn">↓</button>
+            <button id="leftBtn">←</button>
+            <button id="rightBtn">→</button>
+            <span class="small" style="align-self:center">方向键微调 1 格</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>原网格与变换后 UV</header>
+        <section>
+          <div id="chartDetail"><div class="empty-hint">在画布或上方列表点击图块。</div></div>
+          <div id="meshSection" hidden>
+            <hr class="sep">
+            <div class="small" style="margin-bottom:6px">原网格（含三角形）</div>
+            <div class="mesh-canvas-wrap" style="margin-bottom:10px"><canvas class="mesh" id="meshOriginal"></canvas></div>
+            <div class="small" style="margin-bottom:6px">变换后（占用+补边+三角形）</div>
+            <div class="mesh-canvas-wrap"><canvas class="mesh" id="meshTransformed"></canvas></div>
+            <div class="mesh-note" id="meshNote"></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <header>导出</header>
+        <section>
+          <div class="row-actions">
+            <button id="exportLayout" class="primary">布局 JSON</button>
+            <button id="exportUV">逐角 UV</button>
+            <button id="exportOwnership">归属图 PNG+色表</button>
+          </div>
+          <p class="small" style="margin:10px 0 0">若浏览器拦截下载，模态框中提供完整文本与复制按钮。</p>
+        </section>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="modal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <header>
+      <h2 id="modalTitle">导出</h2>
+      <button id="modalClose" class="ghost">✕</button>
+    </header>
+    <div class="body" id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="js/packer.js"></script>
+<script src="js/sample-data.js"></script>
+<script src="js/app.js"></script>
