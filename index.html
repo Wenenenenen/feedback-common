@@ -1,0 +1,3527 @@
+<!doctype html>
+<html lang="zh-CN">
+<title>种子割像台</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ------------------------------------------------------------------
+ * 设计记号：仪表台式样，冷灰纸面 + 深青动作色 + 朱红/钴蓝两类种子
+ * 布局：顶部工具条 + 三视图工作台 + 右侧读数栏（窄屏改为上下堆叠）
+ * ------------------------------------------------------------------ */
+:root {
+  --bg: #eaeef0;
+  --bg-grid: rgba(23, 52, 58, 0.055);
+  --surface: #f9fbfb;
+  --surface-2: #eef2f3;
+  --surface-3: #e3e9ea;
+  --line: #d2dbdd;
+  --line-strong: #b3c1c4;
+  --ink: #13211f;
+  --ink-2: #46585b;
+  --ink-3: #566a6d;
+  --accent: #0d6b62;
+  --accent-ink: #0b5a52;
+  --accent-contrast: #ffffff;
+  --accent-soft: #d8eae7;
+  --accent-ring: rgba(13, 107, 98, 0.32);
+  --fg-seed: #b93c19;
+  --fg-seed-soft: rgba(221, 77, 39, 0.16);
+  --bg-seed: #2f6bc4;
+  --bg-seed-soft: rgba(47, 107, 196, 0.15);
+  --warn: #8a5204;
+  --warn-soft: #f6e8cf;
+  --danger: #a93027;
+  --danger-soft: #f6dedb;
+  --ok: #1c7250;
+  --ok-soft: #d9ece3;
+  --shadow: 0 1px 2px rgba(16, 35, 38, 0.06), 0 8px 22px -18px rgba(16, 35, 38, 0.45);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --font-display: "Archivo", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1618;
+    --bg-grid: rgba(180, 220, 222, 0.045);
+    --surface: #161f22;
+    --surface-2: #1a2529;
+    --surface-3: #202d31;
+    --line: #29383c;
+    --line-strong: #3d4f54;
+    --ink: #e6eeee;
+    --ink-2: #a6b7ba;
+    --ink-3: #7c9094;
+    --accent: #57c7b7;
+    --accent-ink: #7fd8cb;
+    --accent-contrast: #06221f;
+    --accent-soft: #183b37;
+    --accent-ring: rgba(87, 199, 183, 0.4);
+    --fg-seed: #ff7a55;
+    --fg-seed-soft: rgba(255, 122, 85, 0.22);
+    --bg-seed: #6aa4ff;
+    --bg-seed-soft: rgba(106, 164, 255, 0.2);
+    --warn: #e2a850;
+    --warn-soft: #3a2c15;
+    --danger: #ff8a7e;
+    --danger-soft: #3d201e;
+    --ok: #62c994;
+    --ok-soft: #17352a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -18px rgba(0, 0, 0, 0.8);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e1618;
+  --bg-grid: rgba(180, 220, 222, 0.045);
+  --surface: #161f22;
+  --surface-2: #1a2529;
+  --surface-3: #202d31;
+  --line: #29383c;
+  --line-strong: #3d4f54;
+  --ink: #e6eeee;
+  --ink-2: #a6b7ba;
+  --ink-3: #7c9094;
+  --accent: #57c7b7;
+  --accent-ink: #7fd8cb;
+  --accent-contrast: #06221f;
+  --accent-soft: #183b37;
+  --accent-ring: rgba(87, 199, 183, 0.4);
+  --fg-seed: #ff7a55;
+  --fg-seed-soft: rgba(255, 122, 85, 0.22);
+  --bg-seed: #6aa4ff;
+  --bg-seed-soft: rgba(106, 164, 255, 0.2);
+  --warn: #e2a850;
+  --warn-soft: #3a2c15;
+  --danger: #ff8a7e;
+  --danger-soft: #3d201e;
+  --ok: #62c994;
+  --ok-soft: #17352a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -18px rgba(0, 0, 0, 0.8);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px) 0 0 / 100% 24px,
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+button, input, select { font: inherit; color: inherit; }
+
+button { cursor: pointer; }
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+sub { font-size: 0.72em; }
+
+/* ---------- 顶部工具条 ---------- */
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  position: relative;
+  z-index: 5;
+}
+
+.topbar-inner {
+  max-width: 1520px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-block: 12px;
+  flex-wrap: wrap;
+}
+
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  flex: none;
+}
+
+.brand-text h1 { font-size: 17px; line-height: 1.15; letter-spacing: 0.01em; }
+.brand-text p {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.sample-group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.sample-label {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-right: 2px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  transition: border-color 120ms, color 120ms, background 120ms;
+}
+.chip:hover { border-color: var(--line-strong); color: var(--ink); }
+.chip:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+
+.top-divider { width: 1px; height: 20px; background: var(--line); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  transition: background 120ms, border-color 120ms, color 120ms;
+  user-select: none;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-quiet { background: transparent; border-color: var(--line); }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+.btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+.btn-cancel { border-color: var(--danger); color: var(--danger); background: transparent; }
+.btn-cancel:hover { background: var(--danger-soft); }
+
+.icon-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.icon-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+
+/* ---------- 工作台 ---------- */
+
+.page {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding-block: 20px 28px;
+}
+
+.bench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+.workspace { min-width: 0; }
+
+.views {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.panel {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 11px 7px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+  min-width: 0;
+}
+
+.panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.seed-key {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+.seed-key.both {
+  background: linear-gradient(135deg, var(--fg-seed) 0 50%, var(--bg-seed) 50% 100%);
+}
+
+.panel-meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 1px 1px, var(--line) 0.75px, transparent 0.8px) 0 0 / 12px 12px;
+  overflow: hidden;
+}
+
+/* 透明合成：棋盘格底 */
+.canvas-wrap.checker {
+  background-color: var(--surface-2);
+  background-image:
+    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%),
+    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.canvas-wrap canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+}
+
+#canvasOriginal { cursor: crosshair; touch-action: none; }
+#canvasMask { cursor: crosshair; }
+#canvasComposite { cursor: crosshair; }
+
+.empty-state {
+  position: absolute;
+  inset: 12px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+}
+.empty-state p { margin: 0; font-size: 12.5px; max-width: 26ch; }
+.empty-state .hint { color: var(--ink-3); font-size: 11px; margin-top: 5px; font-family: var(--font-mono); }
+
+.drop-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ---------- 提示条 ---------- */
+
+.notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+  border: 1px solid var(--line-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.notice[data-level="info"] { border-left-color: var(--accent); }
+.notice[data-level="warn"] { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn-soft) 55%, var(--surface)); }
+.notice[data-level="error"] { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger-soft) 55%, var(--surface)); color: var(--ink); }
+.notice[data-level="ok"] { border-left-color: var(--ok); }
+.notice p { margin: 0; }
+.notice .notice-body { min-width: 0; flex: 1; }
+.notice .run-row { flex-wrap: wrap; }
+.notice .run-row .btn { flex: 0 0 auto; }
+.notice b { color: var(--ink); font-weight: 600; }
+.notice .notice-close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  flex: none;
+}
+.notice .notice-close:hover { color: var(--ink); background: var(--surface-2); }
+
+/* ---------- 像素 / 边 检查器 ---------- */
+
+.inspector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.card-head h2 { font-size: 12.5px; letter-spacing: 0.02em; }
+
+.coord-chip {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 62%;
+}
+
+.card-body { padding: 10px 12px 12px; min-height: 74px; }
+.empty-line { margin: 0; color: var(--ink-3); font-size: 12px; line-height: 1.6; }
+
+.cost-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+.color-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+}
+.cost-coords { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); }
+.cost-hex { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+.label-pill {
+  font-size: 10.5px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.label-pill.fg { color: var(--fg-seed); border-color: color-mix(in srgb, var(--fg-seed) 45%, var(--line)); background: var(--fg-seed-soft); }
+.label-pill.bg { color: var(--bg-seed); border-color: color-mix(in srgb, var(--bg-seed) 45%, var(--line)); background: var(--bg-seed-soft); }
+
+.cost-bars { display: grid; gap: 7px; }
+.cost-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) 84px; gap: 8px; align-items: center; }
+.cost-name { font-size: 11.5px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.marker { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.marker.fg { background: var(--fg-seed); }
+.marker.bg { background: var(--bg-seed); }
+.cost-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.cost-fill { height: 100%; border-radius: 999px; }
+.cost-fill.fg { background: var(--fg-seed); }
+.cost-fill.bg { background: var(--bg-seed); }
+.cost-val { font-family: var(--font-mono); font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.cost-foot { margin: 9px 0 0; font-size: 11.5px; color: var(--ink-3); }
+.cost-foot b { color: var(--ink-2); font-weight: 600; }
+
+.edge-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.edge-node { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); }
+.edge-dash { color: var(--ink-3); }
+.edge-weight {
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.edge-caption { font-size: 11px; color: var(--ink-3); letter-spacing: 0.02em; }
+.edge-formula {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  overflow-wrap: anywhere;
+}
+.edge-foot { margin: 7px 0 0; font-size: 11.5px; color: var(--ink-3); }
+.edge-foot b { color: var(--ink-2); font-weight: 600; }
+
+/* ---------- 右侧读数栏 ---------- */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rail-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 12px 13px 13px;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.rail-head h2 {
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+.status-pill .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ink-3);
+  flex: none;
+}
+.status-pill[data-state="ok"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); background: var(--ok-soft); }
+.status-pill[data-state="ok"] .dot { background: var(--ok); }
+.status-pill[data-state="busy"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
+.status-pill[data-state="busy"] .dot { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+.status-pill[data-state="warn"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: var(--warn-soft); }
+.status-pill[data-state="warn"] .dot { background: var(--warn); }
+.status-pill[data-state="error"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-soft); }
+.status-pill[data-state="error"] .dot { background: var(--danger); }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) {
+  .status-pill[data-state="busy"] .dot { animation: none; }
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  padding: 8px 8px 8px 9px;
+  font-size: 12px;
+  text-align: left;
+  position: relative;
+  transition: border-color 120ms, background 120ms, color 120ms;
+  min-width: 0;
+}
+.tool:hover { border-color: var(--line-strong); color: var(--ink); }
+.tool[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+.tool:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+.tool kbd {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 3px;
+  background: var(--surface);
+  line-height: 1.5;
+  flex: none;
+}
+.tool-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.tool-dot.fg { background: var(--fg-seed); }
+.tool-dot.bg { background: var(--bg-seed); }
+.tool-dot.erase {
+  background: transparent;
+  border: 1.5px solid var(--ink-3);
+  position: relative;
+}
+.tool-dot.erase::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: var(--surface);
+  transform: rotate(45deg);
+}
+.tool-dot.probe {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  border-radius: 1px;
+}
+
+.brush-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  margin-top: 11px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.brush-row output { min-width: 42px; text-align: right; color: var(--ink); }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
+  cursor: pointer;
+}
+input[type="range"]:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 3px; border-radius: 4px; }
+
+.seed-counts {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.link-btn {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+  font-family: var(--font-body);
+}
+.link-btn:hover { color: var(--danger); }
+
+.value-big {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.range-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+
+.run-row { display: flex; gap: 7px; margin-top: 12px; }
+.run-row .btn { flex: 1; }
+
+.run-meta {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  min-height: 1.5em;
+}
+
+.fresh-tag {
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  border-radius: 999px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.fresh-tag[data-state="ok"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); background: var(--ok-soft); }
+.fresh-tag[data-state="busy"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); }
+.fresh-tag[data-state="warn"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: var(--warn-soft); }
+
+.ledger {
+  margin: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.ledger-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  padding: 6px 9px;
+}
+.ledger dt { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.ledger dd { margin: 0; font-size: 12px; color: var(--ink); text-align: right; overflow-wrap: anywhere; }
+.ledger-row.total { background: var(--surface-2); }
+.ledger-row.total dt { color: var(--ink); font-weight: 600; font-size: 12px; }
+.ledger-row.total dd { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.ledger-sub { margin-top: 7px; background: transparent; }
+.ledger-sub .ledger-row { background: transparent; padding: 3px 9px; }
+.ledger-sub .ledger-row dd { font-size: 11px; color: var(--ink-2); }
+.ledger-sub { border-style: dashed; }
+
+.means {
+  margin-top: 9px;
+  display: grid;
+  gap: 5px;
+}
+.mean-row {
+  display: grid;
+  grid-template-columns: 12px 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.mean-row .mono { font-size: 11px; color: var(--ink-2); text-align: right; overflow-wrap: anywhere; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line-strong); display: inline-block; }
+
+.detail { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.detail summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--ink-3);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.detail summary::-webkit-details-marker { display: none; }
+.detail summary::before { content: "+"; font-family: var(--font-mono); width: 10px; }
+.detail[open] summary::before { content: "−"; }
+.detail summary:hover { color: var(--ink-2); }
+.detail-body { font-size: 11px; color: var(--ink-2); line-height: 1.65; padding-top: 6px; }
+.detail-body p { margin: 0 0 6px; }
+.detail-body dl { margin: 0; display: grid; gap: 2px; }
+.detail-body .kv { display: flex; justify-content: space-between; gap: 10px; }
+.detail-body .kv span:last-child { font-family: var(--font-mono); text-align: right; overflow-wrap: anywhere; }
+
+.export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.fineprint { margin: 9px 0 0; font-size: 10.5px; color: var(--ink-3); line-height: 1.6; }
+
+/* ---------- 页脚 ---------- */
+
+.page-foot {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.7;
+  max-width: 90ch;
+}
+.page-foot p { margin: 0 0 4px; }
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 1180px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 900px) {
+  .views { grid-template-columns: minmax(0, 1fr); }
+  .canvas-wrap { min-height: 120px; }
+  .inspector { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .topbar-inner { gap: 10px; padding-block: 10px; }
+  .top-actions { justify-content: flex-start; margin-left: 0; width: 100%; }
+  .sample-group { flex-wrap: wrap; }
+  .rail { grid-template-columns: minmax(0, 1fr); }
+  .page { padding-block: 14px 22px; }
+  .brand-text h1 { font-size: 16px; }
+  .canvas-wrap { padding: 9px; }
+  .empty-state { inset: 9px; }
+}
+
+@media (max-width: 400px) {
+  .cost-row { grid-template-columns: 64px minmax(0, 1fr) 74px; }
+  .tool kbd { display: none; }
+}
+
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect x="2.5" y="2.5" width="27" height="27" rx="5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M9 6.5h6v5h4v-5h4v11h-5v6H9V6.5Z" fill="var(--fg-seed)"/>
+        <path d="M9 17.5h9v5h5v3H9v-8Z" fill="var(--bg-seed)" opacity=".9"/>
+        <path d="M6.5 17.5h-4M29.5 17.5h-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".5"/>
+      </svg>
+      <div class="brand-text">
+        <h1>种子割像台</h1>
+        <p>二元图割 · 前景提取</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="sample-group" role="group" aria-label="内置示例">
+        <span class="sample-label">示例</span>
+        <button type="button" class="chip" data-sample="tiny">微小</button>
+        <button type="button" class="chip" data-sample="islands">双岛</button>
+        <button type="button" class="chip" data-sample="constant">常色</button>
+        <button type="button" class="chip" data-sample="conflict">冲突</button>
+      </div>
+      <span class="top-divider" aria-hidden="true"></span>
+      <label class="btn btn-quiet">
+        打开 PNG
+        <input type="file" id="fileImage" accept="image/png,.png" hidden>
+      </label>
+      <label class="btn btn-quiet">
+        导入种子
+        <input type="file" id="fileConfig" accept="application/json,.json" hidden>
+      </label>
+      <button type="button" class="icon-btn" id="themeBtn" title="跟随系统主题" aria-label="切换主题">
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 3.8a6.2 6.2 0 0 1 0 12.4V3.8Z" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="bench">
+    <section class="workspace" aria-label="图像工作区">
+      <div class="views" id="views">
+        <figure class="panel">
+          <figcaption class="panel-head">
+            <span class="panel-title"><span class="seed-key both" aria-hidden="true"></span>原图 · 种子</span>
+            <span class="panel-meta" id="metaOriginal">—</span>
+          </figcaption>
+          <div class="canvas-wrap" id="wrapOriginal">
+            <canvas id="canvasOriginal" aria-label="原图与种子标注"></canvas>
+            <div class="empty-state" id="emptyOriginal" hidden>
+              <p>打开一张 8 位 RGB PNG，或在顶部选一个示例。</p>
+              <p class="hint">边长不超过 256 像素</p>
+            </div>
+          </div>
+        </figure>
+        <figure class="panel">
+          <figcaption class="panel-head">
+            <span class="panel-title">掩膜</span>
+            <span class="panel-meta" id="metaMask">—</span>
+          </figcaption>
+          <div class="canvas-wrap mask-wrap" id="wrapMask">
+            <canvas id="canvasMask" aria-label="二值掩膜"></canvas>
+            <div class="empty-state" id="emptyMask" hidden>
+              <p>掩膜等待当前计算。</p>
+            </div>
+          </div>
+        </figure>
+        <figure class="panel">
+          <figcaption class="panel-head">
+            <span class="panel-title">透明合成</span>
+            <span class="panel-meta" id="metaComposite">—</span>
+          </figcaption>
+          <div class="canvas-wrap checker" id="wrapComposite">
+            <canvas id="canvasComposite" aria-label="透明合成预览"></canvas>
+            <div class="empty-state" id="emptyComposite" hidden>
+              <p>合成等待当前计算。</p>
+            </div>
+          </div>
+        </figure>
+        <div class="drop-hint" id="dropHint" hidden>松开以打开 PNG</div>
+      </div>
+
+      <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+
+      <div class="inspector">
+        <section class="card" aria-labelledby="pixelHead">
+          <div class="card-head">
+            <h2 id="pixelHead">像素代价</h2>
+            <span class="coord-chip" id="hoverChip">悬停查看坐标</span>
+          </div>
+          <div class="card-body" id="pixelBody">
+            <p class="empty-line">点击一个像素，查看它对前景、背景两类均值的颜色代价 D。</p>
+          </div>
+        </section>
+        <section class="card" aria-labelledby="edgeHead">
+          <div class="card-head">
+            <h2 id="edgeHead">边权</h2>
+            <span class="coord-chip" id="edgeChip">—</span>
+          </div>
+          <div class="card-body" id="edgeBody">
+            <p class="empty-line">接着点击它的上下左右相邻像素，查看这条边的权重 w<sub>pq</sub>。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <aside class="rail" aria-label="控制与能量">
+      <section class="rail-block">
+        <div class="rail-head">
+          <h2>标注工具</h2>
+          <span class="status-pill" id="statusPill"><span class="dot" aria-hidden="true"></span><span id="statusText">等待图片</span></span>
+        </div>
+        <div class="tool-grid" role="group" aria-label="种子工具">
+          <button type="button" class="tool" data-tool="fg" aria-pressed="true">
+            <span class="tool-dot fg" aria-hidden="true"></span>前景种子<kbd>1</kbd>
+          </button>
+          <button type="button" class="tool" data-tool="bg" aria-pressed="false">
+            <span class="tool-dot bg" aria-hidden="true"></span>背景种子<kbd>2</kbd>
+          </button>
+          <button type="button" class="tool" data-tool="erase" aria-pressed="false">
+            <span class="tool-dot erase" aria-hidden="true"></span>擦除种子<kbd>3</kbd>
+          </button>
+          <button type="button" class="tool" data-tool="probe" aria-pressed="false">
+            <span class="tool-dot probe" aria-hidden="true"></span>查看像素<kbd>4</kbd>
+          </button>
+        </div>
+        <div class="brush-row">
+          <label for="brush">笔刷</label>
+          <input type="range" id="brush" min="1" max="8" step="1" value="2">
+          <output id="brushOut" class="mono">2 px</output>
+        </div>
+        <p class="seed-counts" id="seedCounts">前景 0 · 背景 0</p>
+      </section>
+
+      <section class="rail-block">
+        <div class="rail-head">
+          <h2>平滑强度 λ</h2>
+          <output id="lambdaOut" class="mono value-big">1.00</output>
+        </div>
+        <input type="range" id="lambda" min="0" max="20" step="0.05" value="1" aria-label="平滑强度 lambda">
+        <div class="range-ends"><span>0 只看颜色</span><span>20 强平滑</span></div>
+        <div class="run-row">
+          <button type="button" class="btn btn-primary" id="runBtn">重新计算</button>
+          <button type="button" class="btn btn-cancel" id="cancelBtn" hidden>取消</button>
+        </div>
+        <p class="run-meta mono" id="runMeta">—</p>
+      </section>
+
+      <section class="rail-block">
+        <div class="rail-head">
+          <h2>最终能量</h2>
+          <span class="fresh-tag" id="freshTag">无结果</span>
+        </div>
+        <dl class="ledger">
+          <div class="ledger-row"><dt>颜色项 Σ D</dt><dd id="sumUnary" class="mono">—</dd></div>
+          <div class="ledger-row"><dt>边界项 Σ w</dt><dd id="sumBoundary" class="mono">—</dd></div>
+          <div class="ledger-row total"><dt>总能量 E</dt><dd id="sumTotal" class="mono">—</dd></div>
+        </dl>
+        <dl class="ledger ledger-sub">
+          <div class="ledger-row"><dt>β</dt><dd id="betaOut" class="mono">—</dd></div>
+          <div class="ledger-row"><dt>割容量 = 最大流</dt><dd id="flowOut" class="mono">—</dd></div>
+          <div class="ledger-row"><dt>前景连通域</dt><dd id="compOut" class="mono">—</dd></div>
+        </dl>
+        <div class="means" id="means">
+          <div class="mean-row"><span class="swatch" id="swatchFg"></span><span class="mean-label">m₁ 前景</span><span class="mono" id="meanFg">—</span></div>
+          <div class="mean-row"><span class="swatch" id="swatchBg"></span><span class="mean-label">m₀ 背景</span><span class="mono" id="meanBg">—</span></div>
+        </div>
+        <details class="detail">
+          <summary>硬约束与求解详情</summary>
+          <div class="detail-body" id="detailBody">
+            <p>种子以终端容量接入，容量取严格大于所有有限项总和的 K，任何最优割都不会切开种子。</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="rail-block">
+        <div class="rail-head"><h2>导出</h2></div>
+        <div class="export-grid">
+          <button type="button" class="btn" id="exportMask" disabled>掩膜 PNG</button>
+          <button type="button" class="btn" id="exportRgba" disabled>透明 PNG</button>
+          <button type="button" class="btn" id="exportConfig">种子 JSON</button>
+          <button type="button" class="btn" id="copyConfig">复制 JSON</button>
+        </div>
+        <p class="fineprint">掩膜为 0/255 灰度；透明 PNG 保留原 RGB，使用二值 Alpha；种子 JSON 可再次导入。</p>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="page-foot">
+    <p>能量定义：E = Σ<sub>p</sub> D<sub>p</sub>(l<sub>p</sub>) + Σ<sub>pq</sub> w<sub>pq</sub>[l<sub>p</sub>≠l<sub>q</sub>]，D<sub>p</sub>(l)=‖c<sub>p</sub>−m<sub>l</sub>‖²，w<sub>pq</sub>=λ·exp(−β‖c<sub>p</sub>−c<sub>q</sub>‖²)，β=1/(2·邻边颜色平方差均值)。颜色按字节 /255 直接计算，不做伽马变换。</p>
+    <p>二元最小割在本页内以自带最大流求解（迭代 Dinic），不调用现成分割库。种子为硬约束，多个分离前景区域会各自保留。</p>
+  </footer>
+</main>
+
+<script>
+<!-- engine.js · 图割引擎与 Worker 源码 -->
+/*
+ * 种子引导二元图割引擎（纯计算，不依赖 DOM）
+ *
+ * 能量定义（samples/seed-cut-matte-cases.zip 内 README.txt）：
+ *   颜色按字节 /255 直接参与运算，不做伽马变换。
+ *   D_p(l) = || c_p - m_l ||²                     每个像素对两类种子均值的颜色代价
+ *   beta   = 1 / (2 * 全部右/下邻边颜色平方差均值)；均值为 0 时 beta = 0
+ *   w_pq   = lambda * exp(-beta * || c_p - c_q ||²)
+ *   E(l)   = Σ_p D_p(l_p) + Σ_{pq} w_pq * [l_p ≠ l_q]
+ *
+ * 二元亚模能量由 s-t 最小割精确最小化。种子为硬约束：终端容量取
+ * K = 全部有限项之和 + 1，严格大于任何有限割，因此最优割不会切开种子。
+ * 最大流使用自带的迭代 Dinic，不调用任何现成分割 / 最大流接口。
+ */
+(function (root) {
+  'use strict';
+
+  /*
+   * 该函数会被 toString() 后放进 Blob Worker 执行，因此必须完全自成一体：
+   * 所有常量与辅助函数都定义在其内部，不引用外部闭包。
+   */
+  function matteWorkerEntry(self) {
+    'use strict';
+
+    var RESIDUAL_EPS = 1e-12;
+
+    function toIndexArray(value, N, name) {
+      if (value == null) return new Uint32Array(0);
+      if (!(value instanceof Uint32Array) && !(value instanceof Int32Array) && !Array.isArray(value)) {
+        throw new Error(name + ' 格式不正确');
+      }
+      var out = new Uint32Array(value.length);
+      for (var i = 0; i < value.length; i++) {
+        var v = value[i];
+        if (!Number.isInteger(v) || v < 0 || v >= N) {
+          throw new Error(name + ' 超出图片范围');
+        }
+        out[i] = v;
+      }
+      return out;
+    }
+
+    function solveJob(job, progress) {
+      var t0 = Date.now();
+      var w = job.w | 0;
+      var h = job.h | 0;
+      if (!(w >= 1 && w <= 256 && h >= 1 && h <= 256)) {
+        throw new Error('图片尺寸必须在 1..256 之间');
+      }
+      var N = w * h;
+      var rgb = job.rgb;
+      if (!rgb || rgb.length !== N * 3) {
+        throw new Error('RGB 数据长度与尺寸不一致');
+      }
+      if (!(rgb instanceof Uint8Array)) rgb = new Uint8Array(rgb);
+
+      var lambda = Number(job.lambda);
+      if (!isFinite(lambda) || lambda < 0 || lambda > 20) {
+        throw new Error('lambda 必须在 0 到 20 之间');
+      }
+
+      var fgRaw = toIndexArray(job.fg, N, '前景种子');
+      var bgRaw = toIndexArray(job.bg, N, '背景种子');
+      if (fgRaw.length === 0) throw new Error('缺少前景种子：请至少画一个前景种子');
+      if (bgRaw.length === 0) throw new Error('缺少背景种子：请至少画一个背景种子');
+
+      var isFg = new Uint8Array(N);
+      var isBg = new Uint8Array(N);
+      var i, k;
+      for (i = 0; i < fgRaw.length; i++) isFg[fgRaw[i]] = 1;
+      for (i = 0; i < bgRaw.length; i++) isBg[bgRaw[i]] = 1;
+      var fgCount = 0;
+      var bgCount = 0;
+      for (i = 0; i < N; i++) {
+        if (isFg[i] && isBg[i]) {
+          throw new Error('种子冲突：像素 (' + (i % w) + ', ' + ((i / w) | 0) + ') 同时被标为前景和背景');
+        }
+        if (isFg[i]) fgCount++;
+        if (isBg[i]) bgCount++;
+      }
+
+      // ---- 两类种子的颜色均值 ----
+      var m1 = new Float64Array(3);
+      var m0 = new Float64Array(3);
+      for (i = 0; i < N; i++) {
+        if (!isFg[i] && !isBg[i]) continue;
+        var o = i * 3;
+        if (isFg[i]) { m1[0] += rgb[o]; m1[1] += rgb[o + 1]; m1[2] += rgb[o + 2]; }
+        if (isBg[i]) { m0[0] += rgb[o]; m0[1] += rgb[o + 1]; m0[2] += rgb[o + 2]; }
+      }
+      m1[0] /= fgCount * 255; m1[1] /= fgCount * 255; m1[2] /= fgCount * 255;
+      m0[0] /= bgCount * 255; m0[1] /= bgCount * 255; m0[2] /= bgCount * 255;
+
+      // ---- 一元项 D0 / D1 ----
+      var D0 = new Float64Array(N);
+      var D1 = new Float64Array(N);
+      for (i = 0; i < N; i++) {
+        o = i * 3;
+        var r = rgb[o] / 255, g = rgb[o + 1] / 255, b = rgb[o + 2] / 255;
+        var a0 = r - m0[0], b0 = g - m0[1], c0 = b - m0[2];
+        var a1 = r - m1[0], b1 = g - m1[1], c1 = b - m1[2];
+        D0[i] = a0 * a0 + b0 * b0 + c0 * c0;
+        D1[i] = a1 * a1 + b1 * b1 + c1 * c1;
+      }
+
+      // ---- 右 / 下无向四邻边，各取一次 ----
+      var edgeCount = (w - 1) * h + (h - 1) * w;
+      var eA = new Int32Array(edgeCount);
+      var eB = new Int32Array(edgeCount);
+      var eDiff = new Float64Array(edgeCount);
+      var sumDiff = 0;
+      var e = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var p = y * w + x;
+          var op = p * 3;
+          if (x + 1 < w) {
+            var q = p + 1;
+            var oq = q * 3;
+            var dr = (rgb[op] - rgb[oq]) / 255;
+            var dg = (rgb[op + 1] - rgb[oq + 1]) / 255;
+            var db = (rgb[op + 2] - rgb[oq + 2]) / 255;
+            var d = dr * dr + dg * dg + db * db;
+            eA[e] = p; eB[e] = q; eDiff[e] = d; sumDiff += d; e++;
+          }
+          if (y + 1 < h) {
+            var q2 = p + w;
+            var oq2 = q2 * 3;
+            var dr2 = (rgb[op] - rgb[oq2]) / 255;
+            var dg2 = (rgb[op + 1] - rgb[oq2 + 1]) / 255;
+            var db2 = (rgb[op + 2] - rgb[oq2 + 2]) / 255;
+            var d2 = dr2 * dr2 + dg2 * dg2 + db2 * db2;
+            eA[e] = p; eB[e] = q2; eDiff[e] = d2; sumDiff += d2; e++;
+          }
+        }
+      }
+      var meanDiff = edgeCount > 0 ? sumDiff / edgeCount : 0;
+      var beta = meanDiff === 0 ? 0 : 1 / (2 * meanDiff);
+
+      var weights = new Float64Array(edgeCount);
+      var finite = 0;
+      for (i = 0; i < edgeCount; i++) {
+        var wt = lambda * Math.exp(-beta * eDiff[i]);
+        weights[i] = wt;
+        finite += wt;
+      }
+      for (i = 0; i < N; i++) finite += D0[i] + D1[i];
+      var K = finite + 1;
+
+      if (progress) progress({ phase: 'build' });
+
+      // ---- 构图：残留网络，每条 addPair 生成一对方向相反的残留边 ----
+      var SRC = N;
+      var SNK = N + 1;
+      var nodeCount = N + 2;
+      var arcCapacity = 2 * edgeCount + 4 * N + 2 * (fgCount + bgCount);
+      var head = new Int32Array(nodeCount).fill(-1);
+      var to = new Int32Array(arcCapacity);
+      var next = new Int32Array(arcCapacity);
+      var cap = new Float64Array(arcCapacity);
+      var arcCount = 0;
+
+      function addPair(u, v, cuv, cvu) {
+        to[arcCount] = v; cap[arcCount] = cuv; next[arcCount] = head[u]; head[u] = arcCount; arcCount++;
+        to[arcCount] = u; cap[arcCount] = cvu; next[arcCount] = head[v]; head[v] = arcCount; arcCount++;
+      }
+      for (i = 0; i < N; i++) {
+        if (D0[i] > 0) addPair(SRC, i, D0[i], 0);
+        if (D1[i] > 0) addPair(i, SNK, D1[i], 0);
+      }
+      for (i = 0; i < N; i++) {
+        if (isFg[i]) addPair(SRC, i, K, 0);
+        if (isBg[i]) addPair(i, SNK, K, 0);
+      }
+      for (i = 0; i < edgeCount; i++) {
+        if (weights[i] > 0) addPair(eA[i], eB[i], weights[i], weights[i]);
+      }
+
+      // ---- Dinic 最大流（迭代） ----
+      var level = new Int32Array(nodeCount);
+      var iter = new Int32Array(nodeCount);
+      var queue = new Int32Array(nodeCount);
+      var pathNode = new Int32Array(nodeCount);
+      var pathArc = new Int32Array(nodeCount);
+      var maxFlow = 0;
+      var phases = 0;
+      var augmentations = 0;
+
+      function bfs() {
+        level.fill(-1);
+        var qh = 0, qt = 0;
+        level[SRC] = 0;
+        queue[qt++] = SRC;
+        while (qh < qt) {
+          var u = queue[qh++];
+          var lu = level[u] + 1;
+          for (var a = head[u]; a !== -1; a = next[a]) {
+            var v = to[a];
+            if (cap[a] > RESIDUAL_EPS && level[v] < 0) {
+              level[v] = lu;
+              if (v === SNK) return true;
+              queue[qt++] = v;
+            }
+          }
+        }
+        return level[SNK] >= 0;
+      }
+
+      function augmentOnce() {
+        var len = 0;
+        var u = SRC;
+        for (;;) {
+          if (u === SNK) {
+            var f = Infinity;
+            var cutAt = -1;
+            for (var j = 0; j < len; j++) {
+              var a = pathArc[j];
+              if (cap[a] < f) { f = cap[a]; cutAt = j; }
+            }
+            for (j = 0; j < len; j++) {
+              a = pathArc[j];
+              cap[a] -= f;
+              cap[a ^ 1] += f;
+            }
+            iter[pathNode[cutAt]] = pathArc[cutAt];
+            return f;
+          }
+          var ai = iter[u];
+          while (ai !== -1) {
+            if (cap[ai] > RESIDUAL_EPS && level[to[ai]] === level[u] + 1) break;
+            ai = next[ai];
+          }
+          iter[u] = ai;
+          if (ai === -1) {
+            level[u] = -1;
+            if (len === 0) return 0;
+            len--;
+            u = pathNode[len];
+            iter[u] = next[iter[u]];
+            continue;
+          }
+          pathNode[len] = u;
+          pathArc[len] = ai;
+          len++;
+          u = to[ai];
+        }
+      }
+
+      while (bfs()) {
+        phases++;
+        iter.set(head);
+        for (;;) {
+          var f = augmentOnce();
+          if (!(f > 0)) break;
+          maxFlow += f;
+          augmentations++;
+        }
+        if (progress) progress({ phase: 'flow', phases: phases, augmentations: augmentations });
+      }
+
+      // ---- 源点残留可达集合 = 前景 ----
+      var reach = new Uint8Array(nodeCount);
+      var qh = 0, qt = 0;
+      reach[SRC] = 1;
+      queue[qt++] = SRC;
+      while (qh < qt) {
+        var uu = queue[qh++];
+        for (var aa = head[uu]; aa !== -1; aa = next[aa]) {
+          if (cap[aa] > RESIDUAL_EPS && !reach[to[aa]]) {
+            reach[to[aa]] = 1;
+            queue[qt++] = to[aa];
+          }
+        }
+      }
+      var labels = new Uint8Array(N);
+      for (i = 0; i < N; i++) labels[i] = reach[i] ? 1 : 0;
+
+      // 硬约束自检：最优割绝不能切开种子
+      for (i = 0; i < N; i++) {
+        if (isFg[i] && !labels[i]) throw new Error('内部错误：前景种子未被保留');
+        if (isBg[i] && labels[i]) throw new Error('内部错误：背景种子未被保留');
+      }
+
+      // ---- 按标签重算两项能量 ----
+      var unary = 0;
+      var boundary = 0;
+      for (i = 0; i < N; i++) unary += labels[i] ? D1[i] : D0[i];
+      for (i = 0; i < edgeCount; i++) {
+        if (labels[eA[i]] !== labels[eB[i]]) boundary += weights[i];
+      }
+
+      // ---- 前景连通域计数（4 邻接，允许分离区域） ----
+      var seen = new Uint8Array(N);
+      var components = 0;
+      var stack = new Int32Array(N);
+      for (i = 0; i < N; i++) {
+        if (!labels[i] || seen[i]) continue;
+        components++;
+        var sp = 0;
+        stack[sp++] = i;
+        seen[i] = 1;
+        while (sp > 0) {
+          var v2 = stack[--sp];
+          var vx = v2 % w;
+          var vy = (v2 / w) | 0;
+          if (vx > 0) { var n1 = v2 - 1; if (labels[n1] && !seen[n1]) { seen[n1] = 1; stack[sp++] = n1; } }
+          if (vx + 1 < w) { var n2 = v2 + 1; if (labels[n2] && !seen[n2]) { seen[n2] = 1; stack[sp++] = n2; } }
+          if (vy > 0) { var n3 = v2 - w; if (labels[n3] && !seen[n3]) { seen[n3] = 1; stack[sp++] = n3; } }
+          if (vy + 1 < h) { var n4 = v2 + w; if (labels[n4] && !seen[n4]) { seen[n4] = 1; stack[sp++] = n4; } }
+        }
+      }
+
+      if (progress) progress({ phase: 'done' });
+
+      return {
+        labels: labels,
+        beta: beta,
+        meanDiff: meanDiff,
+        m0: [m0[0], m0[1], m0[2]],
+        m1: [m1[0], m1[1], m1[2]],
+        lambda: lambda,
+        fgCount: fgCount,
+        bgCount: bgCount,
+        unary: unary,
+        boundary: boundary,
+        total: unary + boundary,
+        maxFlow: maxFlow,
+        finiteUpper: finite,
+        seedCapacity: K,
+        fgComponents: components,
+        phases: phases,
+        augmentations: augmentations,
+        ms: Date.now() - t0
+      };
+    }
+
+    // 供主线程回退路径使用；在 Worker 中同样只是一个附加属性。
+    self.matteSolveJob = solveJob;
+
+    self.onmessage = function (ev) {
+      var job = ev.data;
+      if (!job || job.type !== 'solve') return;
+      var started = Date.now();
+      try {
+        var out = solveJob(job, function (p) {
+          self.postMessage({
+            type: 'progress',
+            id: job.id,
+            phase: p.phase,
+            phases: p.phases || 0,
+            elapsed: Date.now() - started
+          });
+        });
+        out.type = 'result';
+        out.id = job.id;
+        out.wallMs = Date.now() - started;
+        self.postMessage(out, [out.labels.buffer]);
+      } catch (err) {
+        self.postMessage({
+          type: 'error',
+          id: job.id,
+          message: err && err.message ? err.message : String(err)
+        });
+      }
+    };
+  }
+
+  var workerSource = '(' + matteWorkerEntry.toString() + ')(self);';
+
+  root.MatteEngine = {
+    workerSource: workerSource,
+    entry: matteWorkerEntry,
+  };
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { workerSource: workerSource, entry: matteWorkerEntry };
+  }
+})(typeof self !== 'undefined' ? self : globalThis);
+
+</script>
+<script>
+<!-- png.js · PNG 解码 / 编码 -->
+/*
+ * PNG 解码 / 编码（8 位，非隔行）
+ *
+ * 解码使用浏览器内置 DecompressionStream，不依赖任何图像库。
+ * 输入要求 8 位 RGB（颜色类型 2），另外兼容灰度 0 与调色板 3，
+ * 统一转换为 RGB；含 Alpha 的 PNG（4/6）与 16 位色深会明确拒绝。
+ */
+(function (root) {
+  'use strict';
+
+  var SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+
+  function readU32(b, o) {
+    return ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+  }
+
+  function writeU32(b, o, v) {
+    b[o] = (v >>> 24) & 255;
+    b[o + 1] = (v >>> 16) & 255;
+    b[o + 2] = (v >>> 8) & 255;
+    b[o + 3] = v & 255;
+  }
+
+  var CRC_TABLE = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes, start, end) {
+    var c = 0xffffffff;
+    for (var i = start; i < end; i++) c = CRC_TABLE[(c ^ bytes[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  async function inflateZlib(bytes) {
+    if (typeof DecompressionStream !== 'function') {
+      throw new Error('当前浏览器不支持解压数据（DecompressionStream）');
+    }
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function deflateZlib(bytes) {
+    if (typeof CompressionStream !== 'function') {
+      throw new Error('当前浏览器不支持压缩数据（CompressionStream）');
+    }
+    var stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  function paeth(a, b, c) {
+    var p = a + b - c;
+    var pa = Math.abs(p - a);
+    var pb = Math.abs(p - b);
+    var pc = Math.abs(p - c);
+    if (pa <= pb && pa <= pc) return a;
+    return pb <= pc ? b : c;
+  }
+
+  async function decode(input) {
+    var b = input instanceof Uint8Array ? input : new Uint8Array(input);
+    if (b.length < 8) throw new Error('不是有效的 PNG 文件');
+    for (var s = 0; s < 8; s++) {
+      if (b[s] !== SIGNATURE[s]) throw new Error('不是有效的 PNG 文件');
+    }
+    var pos = 8;
+    var width = 0, height = 0, bitDepth = 0, colorType = -1, interlace = 0;
+    var haveHeader = false;
+    var palette = null;
+    var hasTransparency = false;
+    var idatParts = [];
+    var idatLength = 0;
+    var sawEnd = false;
+
+    while (pos + 8 <= b.length) {
+      var length = readU32(b, pos);
+      var type = String.fromCharCode(b[pos + 4], b[pos + 5], b[pos + 6], b[pos + 7]);
+      var dataStart = pos + 8;
+      if (dataStart + length + 4 > b.length) throw new Error('PNG 数据块被截断');
+      var dataEnd = dataStart + length;
+
+      if (type === 'IHDR') {
+        if (length !== 13) throw new Error('PNG 头信息损坏');
+        width = readU32(b, dataStart);
+        height = readU32(b, dataStart + 4);
+        bitDepth = b[dataStart + 8];
+        colorType = b[dataStart + 9];
+        var compression = b[dataStart + 10];
+        var filterMethod = b[dataStart + 11];
+        interlace = b[dataStart + 12];
+        if (compression !== 0 || filterMethod !== 0) {
+          throw new Error('PNG 使用了不支持的压缩或滤波方式');
+        }
+        haveHeader = true;
+      } else if (type === 'PLTE') {
+        if (length % 3 !== 0) throw new Error('PNG 调色板损坏');
+        palette = b.subarray(dataStart, dataEnd);
+      } else if (type === 'tRNS') {
+        hasTransparency = true;
+      } else if (type === 'IDAT') {
+        idatParts.push(b.subarray(dataStart, dataEnd));
+        idatLength += length;
+      } else if (type === 'IEND') {
+        sawEnd = true;
+        break;
+      }
+      pos = dataEnd + 4;
+    }
+
+    if (!haveHeader) throw new Error('PNG 缺少头信息');
+    if (width <= 0 || height <= 0) throw new Error('PNG 尺寸无效');
+    if (!sawEnd && idatLength === 0) throw new Error('PNG 缺少像素数据');
+    if (interlace !== 0) {
+      throw new Error('不支持隔行扫描（Adam7）PNG，请另存为非隔行 PNG');
+    }
+    if (bitDepth !== 8) throw new Error('仅支持 8 位色深的 PNG（当前为 ' + bitDepth + ' 位）');
+    if (colorType === 4 || colorType === 6) {
+      throw new Error('PNG 含透明通道；请使用 8 位 RGB（无 Alpha）PNG');
+    }
+    if (hasTransparency) {
+      throw new Error('PNG 带透明色信息；请使用 8 位 RGB（无 Alpha）PNG');
+    }
+    if (colorType !== 0 && colorType !== 2 && colorType !== 3) {
+      throw new Error('不支持的 PNG 颜色类型（' + colorType + '）');
+    }
+    if (colorType === 3 && !palette) throw new Error('调色板 PNG 缺少 PLTE 数据');
+    if (width > 256 || height > 256) {
+      throw new Error('图片为 ' + width + '×' + height + '，超过 256 像素的边长上限');
+    }
+    if (idatParts.length === 0) throw new Error('PNG 缺少像素数据');
+
+    var idat = new Uint8Array(idatLength);
+    var offset = 0;
+    for (var p = 0; p < idatParts.length; p++) {
+      idat.set(idatParts[p], offset);
+      offset += idatParts[p].length;
+    }
+    var raw = await inflateZlib(idat);
+
+    var channels = colorType === 2 ? 3 : 1;
+    var stride = width * channels;
+    var expected = (stride + 1) * height;
+    if (raw.length < expected) throw new Error('PNG 像素数据长度不足');
+
+    var pixels = new Uint8Array(stride * height);
+    var prev = new Uint8Array(stride);
+    var cur = new Uint8Array(stride);
+    var rp = 0;
+    for (var y = 0; y < height; y++) {
+      var filter = raw[rp++];
+      if (filter > 4) throw new Error('PNG 行滤波类型无效');
+      cur.set(raw.subarray(rp, rp + stride));
+      rp += stride;
+      for (var i = 0; i < stride; i++) {
+        var a = i >= channels ? cur[i - channels] : 0;
+        var bb = prev[i];
+        var c = i >= channels ? prev[i - channels] : 0;
+        var v = cur[i];
+        if (filter === 1) v = (v + a) & 255;
+        else if (filter === 2) v = (v + bb) & 255;
+        else if (filter === 3) v = (v + ((a + bb) >> 1)) & 255;
+        else if (filter === 4) v = (v + paeth(a, bb, c)) & 255;
+        cur[i] = v;
+      }
+      pixels.set(cur, y * stride);
+      var tmp = prev;
+      prev = cur;
+      cur = tmp;
+    }
+
+    var N = width * height;
+    var rgb = new Uint8Array(N * 3);
+    if (colorType === 2) {
+      rgb.set(pixels);
+    } else if (colorType === 0) {
+      for (var g = 0; g < N; g++) {
+        var gv = pixels[g];
+        rgb[g * 3] = gv;
+        rgb[g * 3 + 1] = gv;
+        rgb[g * 3 + 2] = gv;
+      }
+    } else {
+      var paletteSize = palette.length / 3;
+      for (var q = 0; q < N; q++) {
+        var idx = pixels[q];
+        if (idx >= paletteSize) throw new Error('PNG 调色板索引越界');
+        rgb[q * 3] = palette[idx * 3];
+        rgb[q * 3 + 1] = palette[idx * 3 + 1];
+        rgb[q * 3 + 2] = palette[idx * 3 + 2];
+      }
+    }
+
+    return { width: width, height: height, rgb: rgb, colorType: colorType };
+  }
+
+  function chunk(type, data) {
+    var out = new Uint8Array(12 + data.length);
+    writeU32(out, 0, data.length);
+    out[4] = type.charCodeAt(0);
+    out[5] = type.charCodeAt(1);
+    out[6] = type.charCodeAt(2);
+    out[7] = type.charCodeAt(3);
+    out.set(data, 8);
+    writeU32(out, 8 + data.length, crc32(out, 4, 8 + data.length));
+    return out;
+  }
+
+  async function encode(width, height, colorType, pixels) {
+    var channels = colorType === 6 ? 4 : 1;
+    if (pixels.length !== width * height * channels) throw new Error('像素数据长度不正确');
+    var stride = width * channels;
+    var raw = new Uint8Array((stride + 1) * height);
+    for (var y = 0; y < height; y++) {
+      raw[y * (stride + 1)] = 0;
+      raw.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+    }
+    var compressed = await deflateZlib(raw);
+
+    var ihdr = new Uint8Array(13);
+    writeU32(ihdr, 0, width);
+    writeU32(ihdr, 4, height);
+    ihdr[8] = 8;
+    ihdr[9] = colorType;
+    ihdr[10] = 0;
+    ihdr[11] = 0;
+    ihdr[12] = 0;
+
+    var chunks = [
+      new Uint8Array(SIGNATURE),
+      chunk('IHDR', ihdr),
+      chunk('IDAT', compressed),
+      chunk('IEND', new Uint8Array(0))
+    ];
+    var total = 0;
+    for (var i = 0; i < chunks.length; i++) total += chunks[i].length;
+    var out = new Uint8Array(total);
+    var off = 0;
+    for (i = 0; i < chunks.length; i++) {
+      out.set(chunks[i], off);
+      off += chunks[i].length;
+    }
+    return out;
+  }
+
+  root.MattePng = { decode: decode, encode: encode };
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { decode: decode, encode: encode };
+  }
+})(typeof self !== 'undefined' ? self : globalThis);
+
+</script>
+<script>
+<!-- config.js · 种子配置校验 -->
+/*
+ * 种子配置的校验与序列化（纯函数，便于测试）
+ *
+ * 兼容 samples 目录中的配置格式：
+ *   { "foreground": [[x, y], ...], "background": [[x, y], ...], "lambda": 1.2 }
+ * 导出时额外写入尺寸、均值与能量；导入时这些附加字段只用于一致性检查，
+ * 真正的种子与参数以 foreground / background / lambda 为准。
+ */
+(function (root) {
+  'use strict';
+
+  var MAX_SIDE = 256;
+
+  function isPlainObject(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
+
+  function describeEntry(entry) {
+    try {
+      return JSON.stringify(entry);
+    } catch (e) {
+      return String(entry);
+    }
+  }
+
+  function parseSeedList(raw, name, width, height) {
+    if (!Array.isArray(raw)) {
+      throw new Error('配置中的 ' + name + ' 必须是 [x, y] 坐标数组');
+    }
+    var seen = Object.create(null);
+    var list = [];
+    var duplicates = 0;
+    for (var i = 0; i < raw.length; i++) {
+      var entry = raw[i];
+      if (!Array.isArray(entry) || entry.length !== 2 ||
+          !Number.isInteger(entry[0]) || !Number.isInteger(entry[1])) {
+        throw new Error('配置中的 ' + name + ' 第 ' + (i + 1) + ' 项 ' + describeEntry(entry) + ' 不是 [x, y] 整数对');
+      }
+      var x = entry[0];
+      var y = entry[1];
+      if (x < 0 || y < 0 || x >= width || y >= height) {
+        throw new Error(
+          '配置中的 ' + name + ' 第 ' + (i + 1) + ' 项 (' + x + ', ' + y + ') 超出图片范围 ' + width + '×' + height
+        );
+      }
+      var key = y * width + x;
+      if (seen[key]) {
+        duplicates++;
+        continue;
+      }
+      seen[key] = true;
+      list.push([x, y]);
+    }
+    return { list: list, seen: seen, duplicates: duplicates };
+  }
+
+  /*
+   * 校验配置并返回规范化的结果。
+   * image: { width, height }（可选，用于一致性检查与边界检查）
+   * 冲突（同一像素同时属于两类）会抛错，由调用方明确展示。
+   */
+  function validateSeedConfig(raw, image) {
+    if (!isPlainObject(raw)) {
+      throw new Error('配置文件必须是一个 JSON 对象');
+    }
+    if (!Object.prototype.hasOwnProperty.call(raw, 'foreground') ||
+        !Object.prototype.hasOwnProperty.call(raw, 'background')) {
+      throw new Error('配置缺少 foreground 或 background 字段');
+    }
+
+    var width = image && image.width ? image.width : MAX_SIDE;
+    var height = image && image.height ? image.height : MAX_SIDE;
+    if (!(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0)) {
+      throw new Error('当前图片尺寸无效，无法导入种子配置');
+    }
+
+    var declared = null;
+    if (isPlainObject(raw.image)) {
+      declared = { width: raw.image.width, height: raw.image.height };
+    } else if (raw.width != null || raw.height != null) {
+      declared = { width: raw.width, height: raw.height };
+    }
+    if (declared && declared.width != null && declared.height != null) {
+      if (!Number.isInteger(declared.width) || !Number.isInteger(declared.height)) {
+        throw new Error('配置中的图片尺寸无效');
+      }
+      var imageKnown = image && image.width && image.height;
+      if (imageKnown && (declared.width !== width || declared.height !== height)) {
+        throw new Error(
+          '配置的图片尺寸 ' + declared.width + '×' + declared.height +
+          ' 与当前图片 ' + width + '×' + height + ' 不一致'
+        );
+      }
+    }
+
+    var fg = parseSeedList(raw.foreground, 'foreground', width, height);
+    var bg = parseSeedList(raw.background, 'background', width, height);
+
+    var conflict = null;
+    for (var key in fg.seen) {
+      if (bg.seen[key]) {
+        var idx = Number(key);
+        conflict = [idx % width, Math.floor(idx / width)];
+        break;
+      }
+    }
+    if (conflict) {
+      throw new Error('种子冲突：像素 (' + conflict[0] + ', ' + conflict[1] + ') 同时出现在 foreground 与 background 中');
+    }
+
+    var lambda = 1;
+    var lambdaDefaulted = false;
+    if (raw.lambda == null) {
+      lambdaDefaulted = true;
+    } else {
+      lambda = raw.lambda;
+      if (typeof lambda !== 'number' || !isFinite(lambda)) {
+        throw new Error('lambda 必须是数字');
+      }
+      if (lambda < 0 || lambda > 20) {
+        throw new Error('lambda 必须在 0 到 20 之间（当前为 ' + lambda + '）');
+      }
+    }
+
+    return {
+      foreground: fg.list,
+      background: bg.list,
+      lambda: lambda,
+      lambdaDefaulted: lambdaDefaulted,
+      duplicates: fg.duplicates + bg.duplicates,
+      size: { width: width, height: height }
+    };
+  }
+
+  /*
+   * 生成可重新导入的种子配置。result 为当前最新的求解结果时才写入
+   * 均值与能量；过期结果一律不写，避免把旧数据当成当前数据。
+   */
+  function buildSeedConfig(options) {
+    var fg = options.foreground || [];
+    var bg = options.background || [];
+    var out = {
+      format: 'seed-cut-matte/v1',
+      foreground: fg.map(function (p) { return [p[0], p[1]]; }),
+      background: bg.map(function (p) { return [p[0], p[1]]; }),
+      lambda: options.lambda
+    };
+    if (options.image) {
+      out.image = {
+        width: options.image.width,
+        height: options.image.height,
+        name: options.image.name || null
+      };
+    }
+    if (options.result) {
+      var r = options.result;
+      out.model = {
+        beta: r.beta,
+        meanForeground255: r.m1.map(function (v) { return v * 255; }),
+        meanBackground255: r.m0.map(function (v) { return v * 255; }),
+        unaryTerm: r.unary,
+        boundaryTerm: r.boundary,
+        totalEnergy: r.total,
+        maxFlow: r.maxFlow,
+        hardSeedCapacity: r.seedCapacity
+      };
+    } else {
+      out.model = null;
+    }
+    return out;
+  }
+
+  root.MatteConfig = {
+    validateSeedConfig: validateSeedConfig,
+    buildSeedConfig: buildSeedConfig
+  };
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      validateSeedConfig: validateSeedConfig,
+      buildSeedConfig: buildSeedConfig
+    };
+  }
+})(typeof self !== 'undefined' ? self : globalThis);
+
+</script>
+<script>
+<!-- samples.js · 内置示例 -->
+/*
+ * 内置示例：来自 samples/seed-cut-matte-cases.zip，便于直接试用。
+ * 图片为 8 位 RGB PNG 的 base64 副本。
+ */
+(function (root) {
+  'use strict';
+
+  root.MatteSamples = {
+    tiny: {
+      label: '微小样例',
+      meta: '4×3',
+      name: 'tiny.png',
+      png:
+        'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAMklEQVR4nAEnANj/ABQeKFoeN6AeRuYeVQAUWmRaWnOgWoLmWpEAFJagWpavoJa+5pbN9RMP01sMmfoAAAAASUVORK5CYII=',
+      foreground: [[3, 1]],
+      background: [[0, 1]],
+      lambda: 0.7
+    },
+    islands: {
+      label: '地面双岛',
+      meta: '128×96',
+      name: 'islands.png',
+      png:
+        'iVBORw0KGgoAAAANSUhEUgAAAIAAAABgCAIAAABaGO0eAAABzUlEQVR4nO3awW3DMBBEUTekJC4hHahEVZLactDFgINAIpe7Q84H9jIXU55nURTgx7YfH/vxuR9f+/HcD2JyfJRfgXkEAADvCAAA3hEAALwjAAB4RwAA8I4AAOAdAQDAOwIAgHcEAADvCIAHwM/3dmV0elkE4GLv71Pey/QAzdW73RDxACHVv45CTdMAhLe//I4UBjCo+uV3pBiAhPbPEWlNCyCt/XMUWhMCSG7/nKG9JK8LwO3HmBBASfvnhAPcWl0CoLD98F9iw+oAhAE0X0AlQHn75/QDdF4AAJYA5b2/TsKx5/8BAAAAMgHKG38fAAAAAAAAAAAAAADWfxMurxuA+sYDAXq+Uee6AHS92/e8gQPwR7y1Ys9CAPQeivoXAqDxC8Yu1AjQtmOOm6giqiIAAAAw+swwbkRKBECr0wyA64e2caNTIgBanSYBPNf6b+iUANta/44GAICmT0luX6E1LYDMU6lIa3IAOYcindYUAYY+EsprmgZgxCNBoaaZAAJ3JJ2a5gPo3JHKe1kE4O4NodPLagBEAEQjAAB4RwAA8I4AAOAdAQDAOwIAgHcEAADvCAAA3hEAALwjAAB4RwAA8I4AAOAdAQDAO/4CsUVKsMTU5DMAAAAASUVORK5CYII=',
+      foreground: [[40, 45], [95, 40]],
+      background: [[2, 2], [75, 75]],
+      lambda: 1.2
+    },
+    constant: {
+      label: '常色图',
+      meta: '17×13',
+      name: 'constant.png',
+      png:
+        'iVBORw0KGgoAAAANSUhEUgAAABEAAAANCAIAAADAGxJNAAAAE0lEQVR4nGOIIh0wjOoZ1UNHPQDTrekXzBLd+AAAAABJRU5ErkJggg==',
+      foreground: [[8, 6]],
+      background: [[0, 0]],
+      lambda: 0
+    },
+    conflict: {
+      label: '冲突配置',
+      meta: '同行同列冲突',
+      name: 'tiny.png',
+      png:
+        'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAMklEQVR4nAEnANj/ABQeKFoeN6AeRuYeVQAUWmRaWnOgWoLmWpEAFJagWpavoJa+5pbN9RMP01sMmfoAAAAASUVORK5CYII=',
+      foreground: [[1, 1]],
+      background: [[1, 1]],
+      lambda: 1
+    }
+  };
+})(typeof self !== 'undefined' ? self : globalThis);
+
+</script>
+<script>
+<!-- app.js · 界面与交互 -->
+(function () {
+  'use strict';
+
+  var ENGINE = window.MatteEngine;
+  var PNG = window.MattePng;
+  var CONFIG = window.MatteConfig;
+  var SAMPLES = window.MatteSamples;
+
+  var PIXEL_SCALE = 4;
+  var DEBOUNCE_MS = 300;
+  var THEME_KEY = 'seedcut.theme.v1';
+
+  // ---------------------------------------------------------------- 状态
+
+  var state = {
+    image: null,          // { width, height, rgb, name, seq }
+    imageSeq: 0,
+    seeds: new Uint8Array(0), // 0 无 / 1 前景 / 2 背景
+    fgCount: 0,
+    bgCount: 0,
+    tool: 'fg',
+    brush: 2,
+    lambda: 1,
+    hover: -1,
+    picks: [],
+    result: null,
+    job: null,
+    jobSeq: 0,
+    dirty: false,
+    computing: false,
+    hadResult: false,
+    seedVersion: 0,
+    noticeKind: '',
+    resultSeq: 0,
+    blockedReason: '',
+    costs: null
+  };
+
+  var els = {};
+  var runTimer = null;
+  var dragging = null;
+  var renderQueued = false;
+  var maskCacheKey = null;
+
+  function $(id) { return document.getElementById(id); }
+
+  function boot() {
+    [
+      'views', 'wrapOriginal', 'wrapMask', 'wrapComposite', 'dropHint',
+      'canvasOriginal', 'canvasMask', 'canvasComposite',
+      'emptyOriginal', 'emptyMask', 'emptyComposite',
+      'metaOriginal', 'metaMask', 'metaComposite',
+      'notice', 'pixelBody', 'hoverChip', 'edgeBody', 'edgeChip',
+      'statusPill', 'statusText', 'seedCounts', 'brush', 'brushOut',
+      'lambda', 'lambdaOut', 'runBtn', 'cancelBtn', 'runMeta',
+      'sumUnary', 'sumBoundary', 'sumTotal', 'betaOut', 'flowOut', 'compOut',
+      'freshTag', 'swatchFg', 'swatchBg', 'meanFg', 'meanBg', 'detailBody',
+      'exportMask', 'exportRgba', 'exportConfig', 'copyConfig',
+      'fileImage', 'fileConfig', 'themeBtn'
+    ].forEach(function (id) { els[id] = $(id); });
+
+    bindUI();
+    initTheme();
+    setTool('fg');
+    updateBrushOut();
+    updateLambdaOut();
+    updateSeedCounts();
+    updateFreshnessUI();
+    renderPixelCard();
+    renderEdgeCard();
+    updateEmptyStates();
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(function () { fitAll(); }).observe(els.views);
+    }
+    window.addEventListener('resize', fitAll);
+    setStatus('idle', '等待图片');
+    setNotice('info', '打开一张 8 位 RGB PNG（边长 ≤ 256），或点击顶部示例开始。',
+      [{ label: '载入「微小样例」', onClick: function () { loadSample('tiny'); } }]);
+  }
+
+  // ---------------------------------------------------------------- 通用
+
+  function fmt(v, digits) {
+    if (v == null || !isFinite(v)) return '—';
+    var d = digits == null ? 6 : digits;
+    if (v !== 0 && Math.abs(v) < Math.pow(10, -d)) return v.toExponential(3);
+    return v.toFixed(d);
+  }
+
+  function fmtBytes(m) {
+    if (!m) return '—';
+    return Math.round(m[0] * 255) + ', ' + Math.round(m[1] * 255) + ', ' + Math.round(m[2] * 255);
+  }
+
+  function hex2(v) {
+    var s = v.toString(16).toUpperCase();
+    return s.length < 2 ? '0' + s : s;
+  }
+
+  function rgbHex(rgb, i) {
+    return '#' + hex2(rgb[i * 3]) + hex2(rgb[i * 3 + 1]) + hex2(rgb[i * 3 + 2]);
+  }
+
+  function cssRgb(m) {
+    return 'rgb(' + Math.round(m[0] * 255) + ',' + Math.round(m[1] * 255) + ',' + Math.round(m[2] * 255) + ')';
+  }
+
+  function hexFromMean(m) {
+    return '#' + hex2(Math.round(m[0] * 255)) + hex2(Math.round(m[1] * 255)) + hex2(Math.round(m[2] * 255));
+  }
+
+  function coordsOf(i) {
+    if (i == null || i < 0 || !state.image) return '—';
+    var w = state.image.width;
+    return '(' + (i % w) + ', ' + Math.floor(i / w) + ')';
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function seedHash() {
+    var s = state.seeds;
+    var h = 2166136261 >>> 0;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s[i];
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h.toString(36);
+  }
+
+  // 签名 = 图片 + 种子 + λ。种子哈希在改动时增量维护，避免每次悬停都扫全图。
+  var sigCache = { key: '', value: '' };
+
+  function signature() {
+    var lambdaKey = Number(state.lambda).toFixed(4);
+    var key = state.imageSeq + ':' + state.seedVersion + ':' + lambdaKey;
+    if (sigCache.key !== key) {
+      sigCache.key = key;
+      sigCache.value = state.imageSeq + ':' + seedHash() + ':' + lambdaKey;
+    }
+    return sigCache.value;
+  }
+
+  function setStatus(kind, text) {
+    els.statusPill.setAttribute('data-state', kind === 'idle' ? '' : kind);
+    els.statusText.textContent = text;
+  }
+
+  function setNotice(level, html, actions, kind) {
+    state.noticeKind = kind || '';
+    var n = els.notice;
+    n.innerHTML = '';
+    n.setAttribute('data-level', level);
+    n.hidden = false;
+    var body = document.createElement('div');
+    body.className = 'notice-body';
+    var p = document.createElement('p');
+    p.innerHTML = html;
+    body.appendChild(p);
+    if (actions && actions.length) {
+      var row = document.createElement('div');
+      row.className = 'run-row';
+      row.style.marginTop = '8px';
+      actions.slice(0, 2).forEach(function (a) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn';
+        b.textContent = a.label;
+        b.addEventListener('click', a.onClick);
+        row.appendChild(b);
+      });
+      body.appendChild(row);
+    }
+    n.appendChild(body);
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'notice-close';
+    close.setAttribute('aria-label', '关闭提示');
+    close.textContent = '×';
+    close.addEventListener('click', function () { n.hidden = true; });
+    n.appendChild(close);
+  }
+
+  function hideNotice() { els.notice.hidden = true; state.noticeKind = ''; }
+
+  // ---------------------------------------------------------------- 主题
+
+  function initTheme() {
+    var saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (e) { saved = null; }
+    if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+    updateThemeTitle(saved);
+    els.themeBtn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : current === 'light' ? null : 'dark';
+      if (next) document.documentElement.setAttribute('data-theme', next);
+      else document.documentElement.removeAttribute('data-theme');
+      try {
+        if (next) localStorage.setItem(THEME_KEY, next);
+        else localStorage.removeItem(THEME_KEY);
+      } catch (e) { /* 忽略存储失败 */ }
+      updateThemeTitle(next);
+    });
+  }
+
+  function updateThemeTitle(v) {
+    els.themeBtn.title = v === 'dark' ? '深色主题（点击切换为浅色）' :
+      v === 'light' ? '浅色主题（点击切换为跟随系统）' : '跟随系统主题（点击切换为深色）';
+  }
+
+  // ---------------------------------------------------------------- 绑定
+
+  function bindUI() {
+    document.querySelectorAll('[data-tool]').forEach(function (btn) {
+      btn.addEventListener('click', function () { setTool(btn.getAttribute('data-tool')); });
+    });
+    document.querySelectorAll('[data-sample]').forEach(function (btn) {
+      btn.addEventListener('click', function () { loadSample(btn.getAttribute('data-sample')); });
+    });
+
+    els.brush.addEventListener('input', function () {
+      state.brush = Number(els.brush.value);
+      updateBrushOut();
+    });
+
+    els.lambda.addEventListener('input', function () {
+      state.lambda = Number(els.lambda.value);
+      updateLambdaOut();
+      markDirty();
+      scheduleRun();
+    });
+
+    els.runBtn.addEventListener('click', function () { runNow(); });
+    els.cancelBtn.addEventListener('click', function () { cancelJob(true); });
+
+    els.fileImage.addEventListener('change', function (ev) {
+      var file = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (file) readImageFile(file);
+    });
+    els.fileConfig.addEventListener('change', function (ev) {
+      var file = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (file) readConfigFile(file);
+    });
+
+    els.exportMask.addEventListener('click', exportMaskPng);
+    els.exportRgba.addEventListener('click', exportRgbaPng);
+    els.exportConfig.addEventListener('click', exportSeedJson);
+    els.copyConfig.addEventListener('click', copySeedJson);
+
+    els.seedCounts.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.id === 'clearSeeds') clearSeeds();
+    });
+
+    bindCanvas(els.canvasOriginal, true);
+    bindCanvas(els.canvasMask, false);
+    bindCanvas(els.canvasComposite, false);
+    bindDropZone(els.views);
+
+    document.addEventListener('keydown', function (ev) {
+      var t = ev.target;
+      var tag = (t && t.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      if (ev.key === '1') setTool('fg');
+      else if (ev.key === '2') setTool('bg');
+      else if (ev.key === '3') setTool('erase');
+      else if (ev.key === '4') setTool('probe');
+      else if (ev.key === 'Escape' && state.job) { ev.preventDefault(); cancelJob(true); }
+    });
+  }
+
+  function updateBrushOut() { els.brushOut.textContent = state.brush + ' px'; }
+  function updateLambdaOut() { els.lambdaOut.textContent = Number(state.lambda).toFixed(2); }
+
+  function setTool(tool) {
+    if (tool !== 'fg' && tool !== 'bg' && tool !== 'erase' && tool !== 'probe') return;
+    state.tool = tool;
+    document.querySelectorAll('[data-tool]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-tool') === tool ? 'true' : 'false');
+    });
+  }
+
+  function bindDropZone(el) {
+    var depth = 0;
+    ['dragenter', 'dragover'].forEach(function (t) {
+      el.addEventListener(t, function (ev) {
+        ev.preventDefault();
+        if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
+        if (t === 'dragenter') depth++;
+        els.dropHint.hidden = false;
+      });
+    });
+    el.addEventListener('dragleave', function () {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) els.dropHint.hidden = true;
+    });
+    el.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      depth = 0;
+      els.dropHint.hidden = true;
+      var files = ev.dataTransfer && ev.dataTransfer.files;
+      if (!files || !files.length) return;
+      var file = files[0];
+      if (/\.json$/i.test(file.name) || /json/i.test(file.type)) readConfigFile(file);
+      else readImageFile(file);
+    });
+  }
+
+  function readImageFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      loadImageBytes(new Uint8Array(reader.result), file.name);
+    };
+    reader.onerror = function () {
+      setStatus('error', '读取失败');
+      setNotice('error', '读取文件失败：' + escapeHtml(file.name));
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function readConfigFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var raw;
+      try {
+        raw = JSON.parse(String(reader.result));
+      } catch (e) {
+        setStatus('error', '配置解析失败');
+        setNotice('error', '<b>种子配置不是有效 JSON。</b> ' + escapeHtml(e && e.message ? e.message : String(e)));
+        return;
+      }
+      applySeedConfig(raw, file.name);
+    };
+    reader.onerror = function () {
+      setNotice('error', '读取配置失败：' + escapeHtml(file.name));
+    };
+    reader.readAsText(file);
+  }
+
+  /*
+   * 三块画布联动：在原图上可画笔刷，三块画布都可以点击选择像素。
+   * canPaint 为 false 时只做选择，不修改种子。
+   */
+  function bindCanvas(canvas, canPaint) {
+    canvas.addEventListener('contextmenu', function (ev) {
+      if (state.image) ev.preventDefault();
+    });
+
+    canvas.addEventListener('pointerdown', function (ev) {
+      if (!state.image) return;
+      var idx = pixelFromEvent(canvas, ev);
+      if (idx < 0) return;
+      if (!canPaint || state.tool === 'probe' || ev.button === 2) {
+        selectPixel(idx);
+        return;
+      }
+      ev.preventDefault();
+      try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* 忽略 */ }
+      dragging = { canvas: canvas, changed: false, overwritten: 0 };
+      if (paintAt(idx)) dragging.changed = true;
+    });
+
+    canvas.addEventListener('pointermove', function (ev) {
+      if (!state.image) return;
+      var idx = pixelFromEvent(canvas, ev);
+      if (idx < 0) return;
+      if (dragging && dragging.canvas === canvas) {
+        if (paintAt(idx)) dragging.changed = true;
+      } else if (!dragging) {
+        setHover(idx);
+      }
+    });
+
+    canvas.addEventListener('pointerup', function (ev) {
+      if (!dragging || dragging.canvas !== canvas) return;
+      try { canvas.releasePointerCapture(ev.pointerId); } catch (e) { /* 忽略 */ }
+      var changed = dragging.changed;
+      dragging = null;
+      if (changed) {
+        markDirty();
+        scheduleRun();
+      }
+    });
+
+    canvas.addEventListener('pointercancel', function () {
+      if (dragging) {
+        var changed = dragging.changed;
+        dragging = null;
+        if (changed) {
+          markDirty();
+          scheduleRun();
+        }
+      }
+    });
+
+    canvas.addEventListener('pointerleave', function () {
+      if (!dragging) setHover(-1);
+    });
+  }
+
+  function paintAt(idx) {
+    var img = state.image;
+    if (!img) return false;
+    var w = img.width, h = img.height;
+    var half = Math.floor(state.brush / 2);
+    var x0 = idx % w;
+    var y0 = Math.floor(idx / w);
+    var value = state.tool === 'erase' ? 0 : state.tool === 'fg' ? 1 : 2;
+    if (state.tool === 'probe') return false;
+    var changed = false;
+    var overwritten = 0;
+    for (var dy = -half; dy < -half + state.brush; dy++) {
+      for (var dx = -half; dx < -half + state.brush; dx++) {
+        var x = x0 + dx;
+        var y = y0 + dy;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        var i = y * w + x;
+        var prev = state.seeds[i];
+        if (prev === value) continue;
+        // 画上另一类种子时，直接改类，而不是留下一个冲突像素：
+        // 同一个像素无法同时作为两类的硬约束。
+        if (value !== 0 && prev !== 0) overwritten++;
+        state.seeds[i] = value;
+        changed = true;
+      }
+    }
+    if (changed) {
+      refreshSeedState();
+      noteSeedChange();
+      requestRender();
+      if (overwritten && dragging && !dragging.notifiedOverwrite) {
+        dragging.notifiedOverwrite = true;
+        setNotice('info', '已把 ' + overwritten + ' 个相反类别的种子改为当前类别。同一个像素不能同时是前景与背景。');
+      }
+    }
+    return changed;
+  }
+
+  function clearSeeds() {
+    if (!state.image || !state.seeds.length) return;
+    state.seeds.fill(0);
+    refreshSeedState();
+    markDirty();
+    scheduleRun(0);
+    setNotice('info', '种子已清空。用「前景种子」和「背景种子」各标一些像素后再计算。');
+    setStatus('idle', '待标注');
+  }
+
+  function selectPixel(idx) {
+    if (!state.image) return;
+    var picks = state.picks;
+    if (!picks.length || picks[picks.length - 1] !== idx) {
+      picks.push(idx);
+      if (picks.length > 2) picks.shift();
+    }
+    renderPixelCard();
+    renderEdgeCard();
+    requestRender();
+  }
+
+  function setHover(idx) {
+    if (state.hover === idx) return;
+    state.hover = idx;
+    els.hoverChip.textContent = idx >= 0 && state.image ? '悬停 ' + coordsOf(idx) : '悬停查看坐标';
+    renderPixelCard();
+  }
+
+  function pixelFromEvent(canvas, ev) {
+    if (!state.image) return -1;
+    var rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return -1;
+    var x = Math.floor((ev.clientX - rect.left) / rect.width * state.image.width);
+    var y = Math.floor((ev.clientY - rect.top) / rect.height * state.image.height);
+    if (x < 0 || y < 0 || x >= state.image.width || y >= state.image.height) return -1;
+    return y * state.image.width + x;
+  }
+
+  // ---------------------------------------------------------------- 图片
+
+  function loadImageBytes(bytes, name) {
+    PNG.decode(bytes).then(function (img) {
+      setImage(img.width, img.height, img.rgb, name || '未命名.png');
+    }).catch(function (err) {
+      setStatus('error', '图片无法打开');
+      setNotice('error', '<b>无法打开图片。</b> ' + escapeHtml(err && err.message ? err.message : String(err)));
+    });
+  }
+
+  function setImage(width, height, rgb, name) {
+    cancelJob(false);
+    state.imageSeq++;
+    state.image = { width: width, height: height, rgb: rgb, name: name, seq: state.imageSeq };
+    state.seeds = new Uint8Array(width * height);
+    state.seedVersion++;
+    state.result = null;
+    state.dirty = false;
+    state.hadResult = false;
+    state.blockedReason = '';
+    state.picks = [];
+    state.hover = -1;
+    state.costs = null;
+    maskCacheKey = null;
+    refreshSeedState();
+
+    els.metaOriginal.textContent = name + ' · ' + width + '×' + height;
+    els.metaMask.textContent = width + '×' + height;
+    els.metaComposite.textContent = width + '×' + height;
+    [els.canvasOriginal, els.canvasMask, els.canvasComposite].forEach(function (c) {
+      c.width = width * PIXEL_SCALE;
+      c.height = height * PIXEL_SCALE;
+    });
+    els.hoverChip.textContent = '悬停查看坐标';
+    els.edgeChip.textContent = '—';
+
+    fitAll();
+    requestRender();
+    updateSeedCounts();
+    updateFreshnessUI();
+    renderPixelCard();
+    renderEdgeCard();
+    setStatus('idle', '待标注');
+    setNotice('info', '已载入 <b>' + escapeHtml(name) + '</b>（' + width + '×' + height +
+      '）。用「前景种子」和「背景种子」各标一些像素。');
+  }
+
+  function loadSample(key) {
+    var s = SAMPLES[key];
+    if (!s) return;
+    var bytes;
+    try {
+      bytes = base64ToBytes(s.png);
+    } catch (e) {
+      setNotice('error', '内置示例数据损坏。');
+      return;
+    }
+    PNG.decode(bytes).then(function (img) {
+      setImage(img.width, img.height, img.rgb, s.name);
+      state.lambda = s.lambda;
+      els.lambda.value = String(s.lambda);
+      updateLambdaOut();
+
+      if (key === 'conflict') {
+        // 冲突配置走与「导入种子」完全相同的校验路径，明确拒绝。
+        applySeedConfig({
+          foreground: s.foreground,
+          background: s.background,
+          lambda: s.lambda
+        }, 'conflict.json');
+        setNotice('error', '<b>示例「冲突配置」被拒绝。</b> 像素 (1, 1) 同时出现在前景种子和背景种子中。' +
+          '种子是硬约束，冲突会让约束不可满足，因此整份配置不会生效。请为像素 (1, 1) 只保留一类种子后重新导入。',
+          [{ label: '了解，开始标注', onClick: function () { hideNotice(); setStatus('idle', '待标注'); } }]);
+        setStatus('error', '配置冲突');
+        return;
+      }
+
+      applySeedPoints(s.foreground, s.background);
+      if (key === 'constant') {
+        setNotice('info', '<b>示例「常色图」</b>：整幅同色。全部邻边颜色平方差为 0，按定义 β = 0，边权都等于 λ = 0；' +
+          '两类种子均值也相同，颜色项 D₀ = D₁。最优割不唯一，结果由种子位置决定。');
+      } else if (key === 'islands') {
+        setNotice('info', '<b>示例「双岛」</b>：两个分离的前景区域。二元割不要求前景连通，两座岛都会被保留。');
+      } else {
+        setNotice('info', '<b>示例「微小样例」</b>：与包内 tiny.json 一致，能量可与 tiny-expected.json 对照。');
+      }
+      scheduleRun(0);
+    }).catch(function (err) {
+      setNotice('error', '内置示例无法解码：' + escapeHtml(err && err.message ? err.message : String(err)));
+    });
+  }
+
+  function base64ToBytes(b64) {
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function applySeedPoints(fg, bg) {
+    if (!state.image) return;
+    var w = state.image.width, h = state.image.height;
+    state.seeds.fill(0);
+    var outOfRange = [];
+    function put(list, value) {
+      (list || []).forEach(function (p) {
+        if (!Array.isArray(p) || p.length !== 2 || !Number.isInteger(p[0]) || !Number.isInteger(p[1])) {
+          outOfRange.push(p);
+          return;
+        }
+        var x = p[0], y = p[1];
+        if (x < 0 || y < 0 || x >= w || y >= h) {
+          outOfRange.push(p);
+          return;
+        }
+        state.seeds[y * w + x] = value;
+      });
+    }
+    put(fg, 1);
+    put(bg, 2);
+    refreshSeedState();
+    markDirty();
+    requestRender();
+    if (outOfRange.length) {
+      setNotice('warn', '有 ' + outOfRange.length + ' 个种子坐标超出图片范围，已忽略。');
+    }
+  }
+
+  function applySeedConfig(raw, fileName) {
+    var parsed;
+    try {
+      parsed = CONFIG.validateSeedConfig(raw, state.image
+        ? { width: state.image.width, height: state.image.height }
+        : null);
+    } catch (err) {
+      setStatus('error', '配置被拒绝');
+      setNotice('error', '<b>种子配置被拒绝。</b> ' + escapeHtml(err && err.message ? err.message : String(err)));
+      return false;
+    }
+    if (!state.image) {
+      setNotice('warn', '配置有效（' + parsed.foreground.length + ' 个前景种子、' + parsed.background.length +
+        ' 个背景种子），但还没有图片。先打开对应尺寸的 PNG，再导入这份配置。');
+      return false;
+    }
+    state.seeds.fill(0);
+    applySeedPoints(parsed.foreground, parsed.background);
+    state.lambda = parsed.lambda;
+    els.lambda.value = String(parsed.lambda);
+    updateLambdaOut();
+    markDirty();
+    requestRender();
+    var notes = [];
+    if (parsed.lambdaDefaulted) notes.push('配置未写 λ，按 1 处理');
+    if (parsed.duplicates) notes.push('忽略重复坐标 ' + parsed.duplicates + ' 个');
+    setNotice('ok', '已从 ' + escapeHtml(fileName || '配置') + ' 导入 ' + parsed.foreground.length +
+      ' 个前景种子、' + parsed.background.length + ' 个背景种子' +
+      (notes.length ? '（' + notes.join('；') + '）' : '') + '。');
+    scheduleRun(0);
+    return true;
+  }
+
+  // ---------------------------------------------------------------- 种子与代价
+
+  function refreshSeedState() {
+    var s = state.seeds;
+    var fg = 0, bg = 0;
+    for (var i = 0; i < s.length; i++) {
+      if (s[i] === 1) fg++;
+      else if (s[i] === 2) bg++;
+    }
+    state.fgCount = fg;
+    state.bgCount = bg;
+    state.seedVersion++;
+    state.costs = null;
+    if (fg > 0 && bg > 0 &&
+        (state.blockedReason === '缺少前景种子' || state.blockedReason === '缺少背景种子')) {
+      state.blockedReason = '';
+    }
+    updateSeedCounts();
+  }
+
+  function updateSeedCounts() {
+    if (!state.image) {
+      els.seedCounts.innerHTML = '<span>载入图片后可标注种子</span>';
+      return;
+    }
+    els.seedCounts.innerHTML =
+      '<span style="color:var(--fg-seed)">前景 ' + state.fgCount + '</span>' +
+      '<span style="color:var(--bg-seed)">背景 ' + state.bgCount + '</span>' +
+      '<button type="button" class="link-btn" id="clearSeeds">清空种子</button>';
+  }
+
+  function ensureCosts() {
+    if (!state.image) return null;
+    if (state.costs) return state.costs;
+    var w = state.image.width, h = state.image.height;
+    var rgb = state.image.rgb;
+    var N = w * h;
+    var m1 = [0, 0, 0], m0 = [0, 0, 0];
+    var s = state.seeds;
+    var n1 = 0, n0 = 0;
+    var i, o;
+    for (i = 0; i < N; i++) {
+      var v = s[i];
+      if (!v) continue;
+      o = i * 3;
+      if (v === 1) { m1[0] += rgb[o]; m1[1] += rgb[o + 1]; m1[2] += rgb[o + 2]; n1++; }
+      else if (v === 2) { m0[0] += rgb[o]; m0[1] += rgb[o + 1]; m0[2] += rgb[o + 2]; n0++; }
+    }
+    var D0 = new Float64Array(N);
+    var D1 = new Float64Array(N);
+    var hasBoth = n1 > 0 && n0 > 0;
+    if (hasBoth) {
+      m1 = [m1[0] / n1 / 255, m1[1] / n1 / 255, m1[2] / n1 / 255];
+      m0 = [m0[0] / n0 / 255, m0[1] / n0 / 255, m0[2] / n0 / 255];
+      for (i = 0; i < N; i++) {
+        o = i * 3;
+        var r = rgb[o] / 255, g = rgb[o + 1] / 255, b = rgb[o + 2] / 255;
+        var a0 = r - m0[0], b0 = g - m0[1], c0 = b - m0[2];
+        var a1 = r - m1[0], b1 = g - m1[1], c1 = b - m1[2];
+        D0[i] = a0 * a0 + b0 * b0 + c0 * c0;
+        D1[i] = a1 * a1 + b1 * b1 + c1 * c1;
+      }
+    }
+    var sum = 0, count = 0;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var p = y * w + x;
+        var op = p * 3;
+        if (x + 1 < w) {
+          var q = p + 1, oq = q * 3;
+          var dr = (rgb[op] - rgb[oq]) / 255, dg = (rgb[op + 1] - rgb[oq + 1]) / 255, db = (rgb[op + 2] - rgb[oq + 2]) / 255;
+          sum += dr * dr + dg * dg + db * db; count++;
+        }
+        if (y + 1 < h) {
+          var q2 = p + w, oq2 = q2 * 3;
+          var dr2 = (rgb[op] - rgb[oq2]) / 255, dg2 = (rgb[op + 1] - rgb[oq2 + 1]) / 255, db2 = (rgb[op + 2] - rgb[oq2 + 2]) / 255;
+          sum += dr2 * dr2 + dg2 * dg2 + db2 * db2; count++;
+        }
+      }
+    }
+    var meanDiff = count ? sum / count : 0;
+    state.costs = {
+      m0: m0, m1: m1, n0: n0, n1: n1, hasBoth: hasBoth,
+      D0: D0, D1: D1,
+      meanDiff: meanDiff,
+      beta: meanDiff === 0 ? 0 : 1 / (2 * meanDiff)
+    };
+    return state.costs;
+  }
+
+  function edgeWeight(p, q, costs) {
+    var rgb = state.image.rgb;
+    var op = p * 3, oq = q * 3;
+    var dr = (rgb[op] - rgb[oq]) / 255;
+    var dg = (rgb[op + 1] - rgb[oq + 1]) / 255;
+    var db = (rgb[op + 2] - rgb[oq + 2]) / 255;
+    var d = dr * dr + dg * dg + db * db;
+    return { d: d, w: Number(state.lambda) * Math.exp(-costs.beta * d) };
+  }
+
+  // ---------------------------------------------------------------- 求解
+
+  // 任何会影响当前结果的改动都从这里走：立即清掉旧结果并取消在跑的计算，
+  // 保证界面上不会再显示与当前种子 / 参数不符的结果。
+  function noteSeedChange() {
+    if (state.result || state.job || !state.dirty) markDirty();
+  }
+
+  function markDirty() {
+    state.dirty = true;
+    if (state.job) cancelJob(false);
+    state.result = null;
+    maskCacheKey = null;
+    updateFreshnessUI();
+    requestRender();
+    renderPixelCard();
+    renderEdgeCard();
+  }
+
+  function scheduleRun(delay) {
+    if (runTimer) clearTimeout(runTimer);
+    runTimer = setTimeout(function () {
+      runTimer = null;
+      runNow();
+    }, delay == null ? DEBOUNCE_MS : delay);
+  }
+
+  function runNow() {
+    if (runTimer) { clearTimeout(runTimer); runTimer = null; }
+    if (!state.image) {
+      setNotice('warn', '先打开一张图片。');
+      return;
+    }
+    if (!validateBeforeRun()) {
+      updateFreshnessUI();
+      return;
+    }
+    if (isCurrentResult()) {
+      // 参数和种子都没变：保留现有结果，不重复计算。
+      updateFreshnessUI();
+      setStatus('ok', '结果已是最新');
+      return;
+    }
+    startSolve();
+  }
+
+  function validateBeforeRun() {
+    state.blockedReason = '';
+    if (state.fgCount === 0) {
+      state.blockedReason = '缺少前景种子';
+      setStatus('warn', '缺少前景种子');
+      setNotice('warn', '<b>缺少前景种子。</b> 用「前景种子」工具至少标一个像素（快捷键 1）。' +
+        '前景种子是硬约束，不能省略。');
+      return false;
+    }
+    if (state.bgCount === 0) {
+      state.blockedReason = '缺少背景种子';
+      setStatus('warn', '缺少背景种子');
+      setNotice('warn', '<b>缺少背景种子。</b> 用「背景种子」工具至少标一个像素（快捷键 2）。' +
+        '背景种子是硬约束，不能省略。');
+      return false;
+    }
+    var lam = Number(state.lambda);
+    if (!isFinite(lam) || lam < 0 || lam > 20) {
+      state.blockedReason = 'λ 超出范围';
+      setStatus('error', 'λ 超出范围');
+      setNotice('error', '平滑强度 λ 必须在 0 到 20 之间。');
+      return false;
+    }
+    updateFreshnessUI();
+    return true;
+  }
+
+  function startSolve() {
+    if (state.job) cancelJob(false);
+    var sig = signature();
+    var id = ++state.jobSeq;
+    var fg = [], bg = [];
+    for (var i = 0; i < state.seeds.length; i++) {
+      if (state.seeds[i] === 1) fg.push(i);
+      else if (state.seeds[i] === 2) bg.push(i);
+    }
+    var job = {
+      type: 'solve',
+      id: id,
+      w: state.image.width,
+      h: state.image.height,
+      rgb: state.image.rgb.slice(),
+      fg: new Uint32Array(fg),
+      bg: new Uint32Array(bg),
+      lambda: Number(state.lambda)
+    };
+
+    var worker = null;
+    try {
+      worker = new Worker(getWorkerUrl());
+    } catch (err) {
+      worker = null;
+    }
+    if (!worker) {
+      runOnMainThread(job, sig);
+      return;
+    }
+
+    state.job = { id: id, worker: worker, sig: sig, startedAt: Date.now() };
+    state.computing = true;
+    state.dirty = false;
+    els.cancelBtn.hidden = false;
+    els.runBtn.disabled = true;
+    els.runMeta.textContent = '计算中…';
+    setStatus('busy', '计算中');
+    updateFreshnessUI();
+    updateEmptyStates();
+
+    worker.onmessage = function (ev) {
+      var msg = ev.data;
+      if (!state.job || state.job.id !== id) return;
+      if (msg.type === 'progress') {
+        els.runMeta.textContent = '计算中 · ' + (msg.phases || 0) + ' 相 · ' +
+          Math.round(Date.now() - state.job.startedAt) + ' ms';
+        return;
+      }
+      if (msg.type === 'result') finishSolve(id, msg, sig);
+      else if (msg.type === 'error') failSolve(id, msg.message);
+    };
+    worker.onerror = function (ev) {
+      failSolve(id, ev && ev.message ? ev.message : '计算线程异常');
+    };
+
+    try {
+      worker.postMessage(job, [job.rgb.buffer]);
+    } catch (err) {
+      failSolve(id, err && err.message ? err.message : String(err));
+    }
+  }
+
+  /*
+   * 回退路径：环境无法创建 Blob Worker 时在主线程同步求解。
+   * 这条路径会短暂阻塞界面，所以先让出一帧把「计算中」画出来。
+   */
+  var mainThreadHost = null;
+  function runOnMainThread(job, sig) {
+    if (!mainThreadHost) {
+      mainThreadHost = {};
+      ENGINE.entry(mainThreadHost);
+    }
+    state.job = { id: job.id, worker: null, sig: sig, startedAt: Date.now(), fallback: true };
+    state.computing = true;
+    state.dirty = false;
+    els.cancelBtn.hidden = true;
+    els.runBtn.disabled = true;
+    els.runMeta.textContent = '计算中（兼容模式）…';
+    setStatus('busy', '计算中');
+    updateFreshnessUI();
+    updateEmptyStates();
+    setNotice('info', '当前环境不支持后台计算线程，正在主线程求解，界面会短暂无响应。');
+    setTimeout(function () {
+      if (!state.job || state.job.id !== job.id) return;
+      try {
+        var out = mainThreadHost.matteSolveJob(job);
+        out.type = 'result';
+        out.id = job.id;
+        out.wallMs = Date.now() - state.job.startedAt;
+        finishSolve(job.id, out, sig);
+      } catch (err) {
+        failSolve(job.id, err && err.message ? err.message : String(err));
+      }
+    }, 30);
+  }
+
+  var workerUrl = null;
+  function getWorkerUrl() {
+    if (!workerUrl) {
+      workerUrl = URL.createObjectURL(new Blob([ENGINE.workerSource], { type: 'text/javascript' }));
+    }
+    return workerUrl;
+  }
+
+  function failSolve(id, message) {
+    if (!state.job || state.job.id !== id) return;
+    teardownJob();
+    setStatus('error', '计算失败');
+    els.runMeta.textContent = '计算失败';
+    setNotice('error', '<b>计算没有完成。</b> ' + escapeHtml(message || '未知错误'));
+    updateFreshnessUI();
+    requestRender();
+  }
+
+  function finishSolve(id, msg, sig) {
+    if (!state.job || state.job.id !== id) return;
+    var expected = signature();
+    teardownJob();
+    if (sig !== expected) {
+      // 结果来自旧参数：丢弃，绝不当作当前结果。
+      state.dirty = true;
+      updateFreshnessUI();
+      requestRender();
+      setStatus('warn', '参数已变更');
+      return;
+    }
+    state.dirty = false;
+    state.hadResult = true;
+    state.resultSeq++;
+    state.blockedReason = '';
+    state.result = {
+      labels: new Uint8Array(msg.labels),
+      beta: msg.beta,
+      meanDiff: msg.meanDiff,
+      m0: msg.m0,
+      m1: msg.m1,
+      lambda: msg.lambda,
+      unary: msg.unary,
+      boundary: msg.boundary,
+      total: msg.total,
+      maxFlow: msg.maxFlow,
+      finiteUpper: msg.finiteUpper,
+      seedCapacity: msg.seedCapacity,
+      fgComponents: msg.fgComponents,
+      fgCount: msg.fgCount,
+      bgCount: msg.bgCount,
+      phases: msg.phases,
+      augmentations: msg.augmentations,
+      ms: msg.wallMs || msg.ms,
+      sig: sig
+    };
+    maskCacheKey = null;
+    updateFreshnessUI();
+    requestRender();
+    renderPixelCard();
+    renderEdgeCard();
+    setStatus('ok', '结果已更新');
+    reportDegenerateCases();
+  }
+
+  function reportDegenerateCases() {
+    var r = state.result;
+    if (!r) return;
+    var sameMean = Math.abs(r.m1[0] - r.m0[0]) < 1e-12 &&
+      Math.abs(r.m1[1] - r.m0[1]) < 1e-12 &&
+      Math.abs(r.m1[2] - r.m0[2]) < 1e-12;
+    if (r.meanDiff === 0) {
+      setNotice('info', '<b>常色图处理：</b>全部邻边的颜色平方差均值为 0，按定义取 β = 0，所有边权等于 λ。' +
+        (sameMean ? '两类种子均值也相同，颜色项 D₀ = D₁，最优割不唯一，当前显示其中任意一个最优割。'
+          : '两类种子均值不同，颜色项仍然决定归属。'), null, 'result');
+    } else if (sameMean) {
+      setNotice('warn', '<b>两类种子颜色均值相同。</b> 颜色项对两类没有区分力，割的位置只由边界项决定。', null, 'result');
+    } else if (r.fgComponents > 1) {
+      setNotice('ok', '<b>已保留 ' + r.fgComponents + ' 个分离的前景区域。</b> 二元割允许前景不连通，种子不会被合并或丢弃。', null, 'result');
+    } else if (state.noticeKind === 'result') {
+      // 只收起上一次自动生成的结果说明，不覆盖导入、缺种子等用户需要看的提示。
+      hideNotice();
+    }
+  }
+
+  function teardownJob() {
+    var job = state.job;
+    state.job = null;
+    state.computing = false;
+    if (job && job.worker) {
+      try { job.worker.terminate(); } catch (e) { /* 忽略 */ }
+    }
+    els.cancelBtn.hidden = true;
+    els.runBtn.disabled = false;
+  }
+
+  function cancelJob(showNotice) {
+    if (!state.job) return;
+    teardownJob();
+    state.dirty = true;
+    updateFreshnessUI();
+    requestRender();
+    if (showNotice) {
+      setStatus('warn', '计算已取消');
+      setNotice('warn', '计算已取消，没有更新结果。可调整种子或参数后重新计算。');
+    }
+  }
+
+  // ---------------------------------------------------------------- 渲染
+
+  function updateEmptyStates() {
+    var hasImage = !!state.image;
+    var hasResult = isCurrentResult();
+    els.emptyOriginal.hidden = hasImage;
+    els.emptyMask.hidden = hasImage && hasResult;
+    els.emptyComposite.hidden = hasImage && hasResult;
+    if (!hasResult) {
+      var msg = !hasImage ? '等待图片。'
+        : state.computing ? '正在计算当前参数…'
+          : state.blockedReason ? state.blockedReason + '，暂无当前结果。'
+            : state.dirty ? (state.hadResult ? '参数已更改，旧结果已清除，等待重新计算。' : '等待第一次计算。')
+              : '等待计算。';
+      els.emptyMask.querySelector('p').textContent = msg;
+      els.emptyComposite.querySelector('p').textContent = msg;
+      els.canvasMask.style.visibility = 'hidden';
+      els.canvasComposite.style.visibility = 'hidden';
+    } else {
+      els.canvasMask.style.visibility = 'visible';
+      els.canvasComposite.style.visibility = 'visible';
+    }
+  }
+
+  // 结果是否与当前「图片 + 种子 + λ」一致。只有一致的结果才能当作当前结果。
+  function isCurrentResult() {
+    return !!(state.result && state.result.sig === signature());
+  }
+
+  function updateFreshnessUI() {
+    updateEmptyStates();
+    updateEnergyUI();
+    // 结果有效性只由签名决定：签名相同就说明它确实是当前参数的结果，
+    // 即使同一参数正在重算，也可以继续展示。
+    var fresh = isCurrentResult();
+    els.exportMask.disabled = !fresh;
+    els.exportRgba.disabled = !fresh;
+    els.exportConfig.disabled = !state.image;
+    if (fresh) {
+      els.freshTag.textContent = state.computing ? '当前结果 · 重算中' : '当前结果';
+      els.freshTag.setAttribute('data-state', 'ok');
+    } else if (state.computing) {
+      els.freshTag.textContent = '计算中';
+      els.freshTag.setAttribute('data-state', 'busy');
+    } else if (state.blockedReason) {
+      els.freshTag.textContent = state.blockedReason;
+      els.freshTag.setAttribute('data-state', 'warn');
+    } else if (state.image && (state.dirty || state.hadResult)) {
+      els.freshTag.textContent = '结果已过期';
+      els.freshTag.setAttribute('data-state', 'warn');
+    } else if (state.image) {
+      els.freshTag.textContent = state.fgCount && state.bgCount ? '待计算' : '待标注';
+      els.freshTag.setAttribute('data-state', '');
+    } else {
+      els.freshTag.textContent = '无结果';
+      els.freshTag.setAttribute('data-state', '');
+    }
+  }
+
+  function updateEnergyUI() {
+    var r = state.result;
+    var costs = state.costs;
+    if (r) {
+      els.sumUnary.textContent = fmt(r.unary, 6);
+      els.sumBoundary.textContent = fmt(r.boundary, 6);
+      els.sumTotal.textContent = fmt(r.total, 6);
+      els.betaOut.textContent = fmt(r.beta, 6);
+      els.flowOut.textContent = fmt(r.maxFlow, 6);
+      els.compOut.textContent = String(r.fgComponents);
+      els.swatchFg.style.background = cssRgb(r.m1);
+      els.swatchBg.style.background = cssRgb(r.m0);
+      els.meanFg.textContent = fmtBytes(r.m1) + ' · ' + hexFromMean(r.m1);
+      els.meanBg.textContent = fmtBytes(r.m0) + ' · ' + hexFromMean(r.m0);
+      var diff = Math.abs(r.maxFlow - r.total);
+      els.detailBody.innerHTML =
+        '<p>最大流等于最小割容量；按标签重算的总能量与割容量一致（本图差值 ' + diff.toExponential(2) + '）。</p>' +
+        '<dl>' +
+        '<div class="kv"><span>全部有限项之和</span><span>' + fmt(r.finiteUpper, 6) + '</span></div>' +
+        '<div class="kv"><span>种子硬约束容量 K</span><span>' + fmt(r.seedCapacity, 6) + '</span></div>' +
+        '<div class="kv"><span>求解用 λ</span><span>' + fmt(r.lambda, 2) + '</span></div>' +
+        '<div class="kv"><span>前景 / 背景种子</span><span>' + r.fgCount + ' / ' + r.bgCount + '</span></div>' +
+        '<div class="kv"><span>Dinic 相数 / 增广次数</span><span>' + r.phases + ' / ' + r.augmentations + '</span></div>' +
+        '<div class="kv"><span>求解耗时</span><span>' + Math.round(r.ms) + ' ms</span></div>' +
+        '</dl>' +
+        '<p>K 严格大于全部有限项之和，切开种子必然贵于任何可行割，所以种子一定保留。</p>';
+      els.runMeta.textContent = '上次 ' + Math.round(r.ms) + ' ms · ' + r.phases + ' 相 · ' +
+        r.augmentations + ' 次增广';
+    } else {
+      els.sumUnary.textContent = '—';
+      els.sumBoundary.textContent = '—';
+      els.sumTotal.textContent = '—';
+      els.betaOut.textContent = costs ? fmt(costs.beta, 6) : '—';
+      els.flowOut.textContent = '—';
+      els.compOut.textContent = '—';
+      els.swatchFg.style.background = costs && costs.n1 ? cssRgb(costs.m1) : 'transparent';
+      els.swatchBg.style.background = costs && costs.n0 ? cssRgb(costs.m0) : 'transparent';
+      els.meanFg.textContent = costs && costs.n1 ? fmtBytes(costs.m1) + ' · ' + hexFromMean(costs.m1) : '—';
+      els.meanBg.textContent = costs && costs.n0 ? fmtBytes(costs.m0) + ' · ' + hexFromMean(costs.m0) : '—';
+      if (!state.computing) {
+        els.detailBody.innerHTML = '<p>完成一次计算后，这里会列出割容量、最大流、种子硬约束容量与求解统计。</p>';
+        if (state.image) {
+          els.runMeta.textContent = state.dirty ? '参数已更改，旧结果已清除' : '—';
+        } else {
+          els.runMeta.textContent = '—';
+        }
+      }
+    }
+  }
+
+  function requestRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () {
+      renderQueued = false;
+      renderOriginal();
+      renderResults();
+    });
+  }
+
+  function themeColor(name, fallback) {
+    var v = '';
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { v = ''; }
+    return v || fallback;
+  }
+
+  function renderOriginal() {
+    var img = state.image;
+    if (!img) return;
+    var w = img.width, h = img.height, S = PIXEL_SCALE;
+    var seedOverlayFg = themeColor('--fg-seed', '#b93c19') + 'cc';
+    var seedOverlayBg = themeColor('--bg-seed', '#2f6bc4') + 'cc';
+    var canvas = els.canvasOriginal;
+    var ctx = canvas.getContext('2d');
+    var off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    var octx = off.getContext('2d');
+    var id = octx.createImageData(w, h);
+    for (var i = 0; i < w * h; i++) {
+      id.data[i * 4] = img.rgb[i * 3];
+      id.data[i * 4 + 1] = img.rgb[i * 3 + 1];
+      id.data[i * 4 + 2] = img.rgb[i * 3 + 2];
+      id.data[i * 4 + 3] = 255;
+    }
+    octx.putImageData(id, 0, 0);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+
+    var seeds = state.seeds;
+    for (var p = 0; p < w * h; p++) {
+      var v = seeds[p];
+      if (!v) continue;
+      var x = (p % w) * S, y = Math.floor(p / w) * S;
+      ctx.fillStyle = v === 1 ? seedOverlayFg : seedOverlayBg;
+      ctx.fillRect(x, y, S, S);
+    }
+
+    for (var k = 0; k < state.picks.length; k++) {
+      var pi = state.picks[k];
+      var px = (pi % w) * S, py = Math.floor(pi / w) * S;
+      var active = k === state.picks.length - 1;
+      ctx.strokeStyle = active ? 'rgba(10, 20, 20, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+      var lw = Math.max(1, S * 0.24);
+      ctx.lineWidth = lw;
+      ctx.strokeRect(px + lw / 2, py + lw / 2, S - lw, S - lw);
+      if (active) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = Math.max(1, S * 0.12);
+        ctx.strokeRect(px + S * 0.2, py + S * 0.2, S * 0.6, S * 0.6);
+      }
+    }
+    if (state.hover >= 0) {
+      var hx = (state.hover % w) * S, hy = Math.floor(state.hover / w) * S;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(hx + 0.5, hy + 0.5, S - 1, S - 1);
+    }
+  }
+
+  function renderResults() {
+    var img = state.image;
+    var r = isCurrentResult() ? state.result : null;
+    updateEmptyStates();
+    if (!img || !r) return;
+    var w = img.width, h = img.height, N = w * h;
+
+    var key = state.imageSeq + ':' + state.resultSeq;
+    var rebuild = key !== maskCacheKey;
+    if (rebuild) {
+      maskCacheKey = key;
+      drawMaskAndComposite(img, r);
+    }
+    drawPicksOn(els.canvasMask, 'rgba(255, 214, 64, 0.95)');
+    drawPicksOn(els.canvasComposite, 'rgba(255, 214, 64, 0.95)');
+  }
+
+  function drawMaskAndComposite(img, r) {
+    var w = img.width, h = img.height, N = w * h;
+
+    var maskOff = document.createElement('canvas');
+    maskOff.width = w; maskOff.height = h;
+    var mctx = maskOff.getContext('2d');
+    var mid = mctx.createImageData(w, h);
+    for (var i = 0; i < N; i++) {
+      var v = r.labels[i] ? 255 : 0;
+      mid.data[i * 4] = v;
+      mid.data[i * 4 + 1] = v;
+      mid.data[i * 4 + 2] = v;
+      mid.data[i * 4 + 3] = 255;
+    }
+    mctx.putImageData(mid, 0, 0);
+    var maskCtx = els.canvasMask.getContext('2d');
+    maskCtx.imageSmoothingEnabled = false;
+    maskCtx.clearRect(0, 0, els.canvasMask.width, els.canvasMask.height);
+    maskCtx.drawImage(maskOff, 0, 0, els.canvasMask.width, els.canvasMask.height);
+
+    var compOff = document.createElement('canvas');
+    compOff.width = w; compOff.height = h;
+    var cctx = compOff.getContext('2d');
+    var cid = cctx.createImageData(w, h);
+    for (i = 0; i < N; i++) {
+      cid.data[i * 4] = img.rgb[i * 3];
+      cid.data[i * 4 + 1] = img.rgb[i * 3 + 1];
+      cid.data[i * 4 + 2] = img.rgb[i * 3 + 2];
+      cid.data[i * 4 + 3] = r.labels[i] ? 255 : 0;
+    }
+    cctx.putImageData(cid, 0, 0);
+    var compCtx = els.canvasComposite.getContext('2d');
+    compCtx.imageSmoothingEnabled = false;
+    compCtx.clearRect(0, 0, els.canvasComposite.width, els.canvasComposite.height);
+    compCtx.drawImage(compOff, 0, 0, els.canvasComposite.width, els.canvasComposite.height);
+  }
+
+  function drawPicksOn(canvas, color) {
+    var img = state.image;
+    if (!img) return;
+    var ctx = canvas.getContext('2d');
+    var S = PIXEL_SCALE, w = img.width;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1.5, S * 0.24);
+    state.picks.forEach(function (pi) {
+      var x = (pi % w) * S, y = Math.floor(pi / w) * S;
+      ctx.strokeRect(x + ctx.lineWidth / 2, y + ctx.lineWidth / 2,
+        S - ctx.lineWidth, S - ctx.lineWidth);
+    });
+    ctx.restore();
+  }
+
+  function fitAll() {
+    var img = state.image;
+    if (!img) return;
+    [[els.wrapOriginal, els.canvasOriginal],
+      [els.wrapMask, els.canvasMask],
+      [els.wrapComposite, els.canvasComposite]].forEach(function (pair) {
+      var wrap = pair[0], canvas = pair[1];
+      var style = getComputedStyle(wrap);
+      var padX = parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0');
+      var padY = parseFloat(style.paddingTop || '0') + parseFloat(style.paddingBottom || '0');
+      var availW = Math.max(40, wrap.clientWidth - padX);
+      var availH = Math.max(40, Math.min(window.innerHeight * 0.5, 520) - padY);
+      var scale = Math.min(availW / img.width, availH / img.height);
+      if (!isFinite(scale) || scale <= 0) scale = 1;
+      canvas.style.width = Math.max(1, Math.floor(img.width * scale)) + 'px';
+      canvas.style.height = Math.max(1, Math.floor(img.height * scale)) + 'px';
+    });
+  }
+
+  // ---------------------------------------------------------------- 检查器
+
+  function renderPixelCard() {
+    var body = els.pixelBody;
+    var empty = '<p class="empty-line">点击一个像素，查看它对前景、背景两类均值的颜色代价 D。</p>';
+    if (!state.image) { body.innerHTML = empty; return; }
+    var pick = state.picks.length ? state.picks[state.picks.length - 1] : state.hover;
+    if (pick == null || pick < 0) { body.innerHTML = empty; return; }
+
+    var costs = ensureCosts();
+    var rgb = state.image.rgb;
+    var isPick = state.picks.length > 0;
+    var seed = state.seeds[pick];
+    var label = isCurrentResult() ? state.result.labels[pick] : -1;
+
+    var badge = '';
+    if (seed === 1) badge = '<span class="label-pill fg">前景种子</span>';
+    else if (seed === 2) badge = '<span class="label-pill bg">背景种子</span>';
+    else if (label === 1) badge = '<span class="label-pill fg">判为前景</span>';
+    else if (label === 0) badge = '<span class="label-pill bg">判为背景</span>';
+
+    var html = '<div class="cost-top">' +
+      '<span class="color-chip" style="background:' + rgbHex(rgb, pick) + '"></span>' +
+      '<span class="cost-coords">' + (isPick ? '选中 ' : '悬停 ') + coordsOf(pick) + '</span>' +
+      '<span class="cost-hex">' + rgbHex(rgb, pick) + ' · ' +
+        rgb[pick * 3] + ',' + rgb[pick * 3 + 1] + ',' + rgb[pick * 3 + 2] + '</span>' +
+      badge + '</div>';
+
+    if (!costs.hasBoth) {
+      var miss = [];
+      if (!costs.n1) miss.push('前景');
+      if (!costs.n0) miss.push('背景');
+      html += '<p class="empty-line">缺少' + miss.join('与') + '种子，还无法计算两类均值与颜色代价。</p>';
+      body.innerHTML = html;
+      return;
+    }
+
+    var d0 = costs.D0[pick], d1 = costs.D1[pick];
+    var maxD = Math.max(d0, d1, 1e-12);
+    html += '<div class="cost-bars">' +
+      '<div class="cost-row"><span class="cost-name"><span class="marker fg"></span>D 前景</span>' +
+      '<span class="cost-track"><span class="cost-fill fg" style="width:' + pctBar(d1, maxD) + '"></span></span>' +
+      '<span class="cost-val">' + fmt(d1, 6) + '</span></div>' +
+      '<div class="cost-row"><span class="cost-name"><span class="marker bg"></span>D 背景</span>' +
+      '<span class="cost-track"><span class="cost-fill bg" style="width:' + pctBar(d0, maxD) + '"></span></span>' +
+      '<span class="cost-val">' + fmt(d0, 6) + '</span></div>' +
+      '</div><p class="cost-foot">';
+    if (label === 1) {
+      html += '当前结果判为<b>前景</b>，颜色项取 <b>' + fmt(d1, 6) + '</b>。';
+    } else if (label === 0) {
+      html += '当前结果判为<b>背景</b>，颜色项取 <b>' + fmt(d0, 6) + '</b>。';
+    } else {
+      html += '结果尚未更新，上面是按当前种子均值算出的两类代价。';
+    }
+    html += ' 均值 m₁ = ' + fmtBytes(costs.m1) + '，m₀ = ' + fmtBytes(costs.m0) + '。</p>';
+    body.innerHTML = html;
+  }
+
+  function pctBar(v, maxV) {
+    if (!(v > 0)) return '0%';
+    return (Math.min(1, v / maxV) * 100).toFixed(1) + '%';
+  }
+
+  function renderEdgeCard() {
+    var body = els.edgeBody;
+    var empty = '<p class="empty-line">接着点击它的上下左右相邻像素，查看这条边的权重 w<sub>pq</sub>。</p>';
+    if (!state.image || state.picks.length < 2) {
+      els.edgeChip.textContent = '—';
+      body.innerHTML = empty;
+      return;
+    }
+    var a = state.picks[state.picks.length - 2];
+    var b = state.picks[state.picks.length - 1];
+    var w = state.image.width;
+    var ax = a % w, ay = Math.floor(a / w), bx = b % w, by = Math.floor(b / w);
+    var same = a === b;
+    var adjacent = !same &&
+      ((ax === bx && Math.abs(ay - by) === 1) || (ay === by && Math.abs(ax - bx) === 1));
+    els.edgeChip.textContent = coordsOf(a) + (same ? '' : ' ↔ ' + coordsOf(b));
+    if (same) {
+      body.innerHTML = '<p class="empty-line">两次点击落在同一个像素。请再点一个相邻像素。</p>';
+      return;
+    }
+    if (!adjacent) {
+      var dist = Math.abs(ax - bx) + Math.abs(ay - by);
+      body.innerHTML = '<p class="empty-line">这两个像素不相邻（曼哈顿距离 ' + dist +
+        '）。边权只定义在上下左右四邻边上，请选择相邻像素。</p>';
+      return;
+    }
+
+    var costs = ensureCosts();
+    var ew = edgeWeight(a, b, costs);
+    var cutHtml;
+    if (isCurrentResult()) {
+      var la = state.result.labels[a], lb = state.result.labels[b];
+      cutHtml = '<p class="edge-foot">当前结果两端为 <b>' + (la ? '前景' : '背景') + '</b> / <b>' +
+        (lb ? '前景' : '背景') + '</b>：' +
+        (la !== lb ? '这条边被切开，权重计入边界项。' : '两端标签相同，这条边不计入边界项。') + '</p>';
+    } else {
+      cutHtml = '<p class="edge-foot">结果尚未更新；重量按当前 λ 与整图 β 直接算出。</p>';
+    }
+    body.innerHTML =
+      '<div class="edge-flow">' +
+      '<span class="edge-node"><span class="marker" style="background:' + rgbHex(state.image.rgb, a) + '"></span>' + coordsOf(a) + '</span>' +
+      '<span class="edge-dash">—</span>' +
+      '<span class="edge-node"><span class="marker" style="background:' + rgbHex(state.image.rgb, b) + '"></span>' + coordsOf(b) + '</span>' +
+      '</div>' +
+      '<div class="edge-weight mono">w = ' + fmt(ew.w, 6) + '</div>' +
+      '<div class="edge-caption">这条边的权重</div>' +
+      '<p class="edge-formula">w = λ·exp(−β·d)<br>= ' + fmt(Number(state.lambda), 2) + ' × exp(−' +
+        fmt(costs.beta, 6) + ' × ' + fmt(ew.d, 6) + ')</p>' +
+      cutHtml +
+      '<p class="edge-foot">d = ‖c<sub>p</sub>−c<sub>q</sub>‖² = ' + fmt(ew.d, 6) +
+      '；β 由整幅图全部右/下邻边决定，与种子无关。</p>';
+  }
+
+  // ---------------------------------------------------------------- 导出
+
+  function seedCoords(kind) {
+    var out = [];
+    if (!state.image) return out;
+    var w = state.image.width;
+    for (var i = 0; i < state.seeds.length; i++) {
+      if (state.seeds[i] === kind) out.push([i % w, Math.floor(i / w)]);
+    }
+    return out;
+  }
+
+  function currentConfig(includeModel) {
+    return CONFIG.buildSeedConfig({
+      foreground: seedCoords(1),
+      background: seedCoords(2),
+      lambda: Number(state.lambda),
+      image: { width: state.image.width, height: state.image.height, name: state.image.name },
+      result: includeModel && isCurrentResult() ? state.result : null
+    });
+  }
+
+  function download(bytes, filename, mime) {
+    var blob = bytes instanceof Blob ? bytes : new Blob([bytes], { type: mime || 'application/octet-stream' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  function fileBase() {
+    var name = state.image && state.image.name ? state.image.name : 'matte';
+    return name.replace(/\.png$/i, '').replace(/[^\w\u4e00-\u9fa5.-]+/g, '_') || 'matte';
+  }
+
+  function exportMaskPng() {
+    var r = isCurrentResult() ? state.result : null;
+    if (!r || !state.image) return;
+    var N = state.image.width * state.image.height;
+    var pixels = new Uint8Array(N);
+    for (var i = 0; i < N; i++) pixels[i] = r.labels[i] ? 255 : 0;
+    els.exportMask.disabled = true;
+    PNG.encode(state.image.width, state.image.height, 0, pixels).then(function (bytes) {
+      download(bytes, fileBase() + '-mask.png');
+      setNotice('ok', '已导出掩膜 PNG：0/255 灰度，' + state.image.width + '×' + state.image.height + '。');
+    }).catch(function (err) {
+      setNotice('error', '导出掩膜失败：' + escapeHtml(err && err.message ? err.message : String(err)));
+    }).then(function () { els.exportMask.disabled = !state.result; });
+  }
+
+  function exportRgbaPng() {
+    var r = isCurrentResult() ? state.result : null;
+    if (!r || !state.image) return;
+    var img = state.image;
+    var N = img.width * img.height;
+    var pixels = new Uint8Array(N * 4);
+    for (var i = 0; i < N; i++) {
+      pixels[i * 4] = img.rgb[i * 3];
+      pixels[i * 4 + 1] = img.rgb[i * 3 + 1];
+      pixels[i * 4 + 2] = img.rgb[i * 3 + 2];
+      pixels[i * 4 + 3] = r.labels[i] ? 255 : 0;
+    }
+    els.exportRgba.disabled = true;
+    PNG.encode(img.width, img.height, 6, pixels).then(function (bytes) {
+      download(bytes, fileBase() + '-rgba.png');
+      setNotice('ok', '已导出 RGBA PNG：保留原 RGB，Alpha 为 0/255 二值。');
+    }).catch(function (err) {
+      setNotice('error', '导出透明 PNG 失败：' + escapeHtml(err && err.message ? err.message : String(err)));
+    }).then(function () { els.exportRgba.disabled = !state.result; });
+  }
+
+  function exportSeedJson() {
+    if (!state.image) return;
+    var cfg = currentConfig(true);
+    download(new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' }),
+      fileBase() + '-seeds.json');
+    setNotice('ok', '已导出种子配置' + (cfg.model ? '（含当前结果的均值与能量）' : '（无当前结果，未写入能量）') + '。');
+  }
+
+  function copySeedJson() {
+    if (!state.image) return;
+    var text = JSON.stringify(currentConfig(true), null, 2);
+    var done = function () { setNotice('ok', '种子配置 JSON 已复制到剪贴板。'); };
+    var fallback = function () {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      if (ok) done();
+      else setNotice('warn', '复制失败。可以改用「种子 JSON」按钮导出文件。');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+</body>
+</html>

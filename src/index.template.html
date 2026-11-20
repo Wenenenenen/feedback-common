@@ -1,0 +1,224 @@
+<title>种子割像台</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/*__STYLES__*/
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect x="2.5" y="2.5" width="27" height="27" rx="5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M9 6.5h6v5h4v-5h4v11h-5v6H9V6.5Z" fill="var(--fg-seed)"/>
+        <path d="M9 17.5h9v5h5v3H9v-8Z" fill="var(--bg-seed)" opacity=".9"/>
+        <path d="M6.5 17.5h-4M29.5 17.5h-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".5"/>
+      </svg>
+      <div class="brand-text">
+        <h1>种子割像台</h1>
+        <p>二元图割 · 前景提取</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="sample-group" role="group" aria-label="内置示例">
+        <span class="sample-label">示例</span>
+        <button type="button" class="chip" data-sample="tiny">微小</button>
+        <button type="button" class="chip" data-sample="islands">双岛</button>
+        <button type="button" class="chip" data-sample="constant">常色</button>
+        <button type="button" class="chip" data-sample="conflict">冲突</button>
+      </div>
+      <span class="top-divider" aria-hidden="true"></span>
+      <label class="btn btn-quiet">
+        打开 PNG
+        <input type="file" id="fileImage" accept="image/png,.png" hidden>
+      </label>
+      <label class="btn btn-quiet">
+        导入种子
+        <input type="file" id="fileConfig" accept="application/json,.json" hidden>
+      </label>
+      <button type="button" class="icon-btn" id="themeBtn" title="跟随系统主题" aria-label="切换主题">
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 3.8a6.2 6.2 0 0 1 0 12.4V3.8Z" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <div class="bench">
+    <section class="workspace" aria-label="图像工作区">
+      <div class="views" id="views">
+        <figure class="panel">
+          <figcaption class="panel-head">
+            <span class="panel-title"><span class="seed-key both" aria-hidden="true"></span>原图 · 种子</span>
+            <span class="panel-meta" id="metaOriginal">—</span>
+          </figcaption>
+          <div class="canvas-wrap" id="wrapOriginal">
+            <canvas id="canvasOriginal" aria-label="原图与种子标注"></canvas>
+            <div class="empty-state" id="emptyOriginal" hidden>
+              <p>打开一张 8 位 RGB PNG，或在顶部选一个示例。</p>
+              <p class="hint">边长不超过 256 像素</p>
+            </div>
+          </div>
+        </figure>
+        <figure class="panel">
+          <figcaption class="panel-head">
+            <span class="panel-title">掩膜</span>
+            <span class="panel-meta" id="metaMask">—</span>
+          </figcaption>
+          <div class="canvas-wrap mask-wrap" id="wrapMask">
+            <canvas id="canvasMask" aria-label="二值掩膜"></canvas>
+            <div class="empty-state" id="emptyMask" hidden>
+              <p>掩膜等待当前计算。</p>
+            </div>
+          </div>
+        </figure>
+        <figure class="panel">
+          <figcaption class="panel-head">
+            <span class="panel-title">透明合成</span>
+            <span class="panel-meta" id="metaComposite">—</span>
+          </figcaption>
+          <div class="canvas-wrap checker" id="wrapComposite">
+            <canvas id="canvasComposite" aria-label="透明合成预览"></canvas>
+            <div class="empty-state" id="emptyComposite" hidden>
+              <p>合成等待当前计算。</p>
+            </div>
+          </div>
+        </figure>
+        <div class="drop-hint" id="dropHint" hidden>松开以打开 PNG</div>
+      </div>
+
+      <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+
+      <div class="inspector">
+        <section class="card" aria-labelledby="pixelHead">
+          <div class="card-head">
+            <h2 id="pixelHead">像素代价</h2>
+            <span class="coord-chip" id="hoverChip">悬停查看坐标</span>
+          </div>
+          <div class="card-body" id="pixelBody">
+            <p class="empty-line">点击一个像素，查看它对前景、背景两类均值的颜色代价 D。</p>
+          </div>
+        </section>
+        <section class="card" aria-labelledby="edgeHead">
+          <div class="card-head">
+            <h2 id="edgeHead">边权</h2>
+            <span class="coord-chip" id="edgeChip">—</span>
+          </div>
+          <div class="card-body" id="edgeBody">
+            <p class="empty-line">接着点击它的上下左右相邻像素，查看这条边的权重 w<sub>pq</sub>。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <aside class="rail" aria-label="控制与能量">
+      <section class="rail-block">
+        <div class="rail-head">
+          <h2>标注工具</h2>
+          <span class="status-pill" id="statusPill"><span class="dot" aria-hidden="true"></span><span id="statusText">等待图片</span></span>
+        </div>
+        <div class="tool-grid" role="group" aria-label="种子工具">
+          <button type="button" class="tool" data-tool="fg" aria-pressed="true">
+            <span class="tool-dot fg" aria-hidden="true"></span>前景种子<kbd>1</kbd>
+          </button>
+          <button type="button" class="tool" data-tool="bg" aria-pressed="false">
+            <span class="tool-dot bg" aria-hidden="true"></span>背景种子<kbd>2</kbd>
+          </button>
+          <button type="button" class="tool" data-tool="erase" aria-pressed="false">
+            <span class="tool-dot erase" aria-hidden="true"></span>擦除种子<kbd>3</kbd>
+          </button>
+          <button type="button" class="tool" data-tool="probe" aria-pressed="false">
+            <span class="tool-dot probe" aria-hidden="true"></span>查看像素<kbd>4</kbd>
+          </button>
+        </div>
+        <div class="brush-row">
+          <label for="brush">笔刷</label>
+          <input type="range" id="brush" min="1" max="8" step="1" value="2">
+          <output id="brushOut" class="mono">2 px</output>
+        </div>
+        <p class="seed-counts" id="seedCounts">前景 0 · 背景 0</p>
+      </section>
+
+      <section class="rail-block">
+        <div class="rail-head">
+          <h2>平滑强度 λ</h2>
+          <output id="lambdaOut" class="mono value-big">1.00</output>
+        </div>
+        <input type="range" id="lambda" min="0" max="20" step="0.05" value="1" aria-label="平滑强度 lambda">
+        <div class="range-ends"><span>0 只看颜色</span><span>20 强平滑</span></div>
+        <div class="run-row">
+          <button type="button" class="btn btn-primary" id="runBtn">重新计算</button>
+          <button type="button" class="btn btn-cancel" id="cancelBtn" hidden>取消</button>
+        </div>
+        <p class="run-meta mono" id="runMeta">—</p>
+      </section>
+
+      <section class="rail-block">
+        <div class="rail-head">
+          <h2>最终能量</h2>
+          <span class="fresh-tag" id="freshTag">无结果</span>
+        </div>
+        <dl class="ledger">
+          <div class="ledger-row"><dt>颜色项 Σ D</dt><dd id="sumUnary" class="mono">—</dd></div>
+          <div class="ledger-row"><dt>边界项 Σ w</dt><dd id="sumBoundary" class="mono">—</dd></div>
+          <div class="ledger-row total"><dt>总能量 E</dt><dd id="sumTotal" class="mono">—</dd></div>
+        </dl>
+        <dl class="ledger ledger-sub">
+          <div class="ledger-row"><dt>β</dt><dd id="betaOut" class="mono">—</dd></div>
+          <div class="ledger-row"><dt>割容量 = 最大流</dt><dd id="flowOut" class="mono">—</dd></div>
+          <div class="ledger-row"><dt>前景连通域</dt><dd id="compOut" class="mono">—</dd></div>
+        </dl>
+        <div class="means" id="means">
+          <div class="mean-row"><span class="swatch" id="swatchFg"></span><span class="mean-label">m₁ 前景</span><span class="mono" id="meanFg">—</span></div>
+          <div class="mean-row"><span class="swatch" id="swatchBg"></span><span class="mean-label">m₀ 背景</span><span class="mono" id="meanBg">—</span></div>
+        </div>
+        <details class="detail">
+          <summary>硬约束与求解详情</summary>
+          <div class="detail-body" id="detailBody">
+            <p>种子以终端容量接入，容量取严格大于所有有限项总和的 K，任何最优割都不会切开种子。</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="rail-block">
+        <div class="rail-head"><h2>导出</h2></div>
+        <div class="export-grid">
+          <button type="button" class="btn" id="exportMask" disabled>掩膜 PNG</button>
+          <button type="button" class="btn" id="exportRgba" disabled>透明 PNG</button>
+          <button type="button" class="btn" id="exportConfig">种子 JSON</button>
+          <button type="button" class="btn" id="copyConfig">复制 JSON</button>
+        </div>
+        <p class="fineprint">掩膜为 0/255 灰度；透明 PNG 保留原 RGB，使用二值 Alpha；种子 JSON 可再次导入。</p>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="page-foot">
+    <p>能量定义：E = Σ<sub>p</sub> D<sub>p</sub>(l<sub>p</sub>) + Σ<sub>pq</sub> w<sub>pq</sub>[l<sub>p</sub>≠l<sub>q</sub>]，D<sub>p</sub>(l)=‖c<sub>p</sub>−m<sub>l</sub>‖²，w<sub>pq</sub>=λ·exp(−β‖c<sub>p</sub>−c<sub>q</sub>‖²)，β=1/(2·邻边颜色平方差均值)。颜色按字节 /255 直接计算，不做伽马变换。</p>
+    <p>二元最小割在本页内以自带最大流求解（迭代 Dinic），不调用现成分割库。种子为硬约束，多个分离前景区域会各自保留。</p>
+  </footer>
+</main>
+
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+/*__PNG__*/
+</script>
+<script>
+/*__CONFIG__*/
+</script>
+<script>
+/*__SAMPLES__*/
+</script>
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "seed-cut-matte",
+  "version": "1.0.0",
+  "private": true,
+  "description": "种子引导的二元图割前景提取（单页，无依赖）",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tests/run-tests.js"
+  }
+}
