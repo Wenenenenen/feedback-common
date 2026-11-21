@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>斜边 MTF 工作台</title>
+<style>
+/* layout: top control strip; work grid = image canvas | curve stack; report below */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; /* MTF / fitted line */
+  --series-2: #eb6834; /* ESF */
+  --series-3: #1baf7a; /* LSF */
+  --series-4: #eda100; /* inlier edge points */
+  --good: #0ca30c;
+  --warn: #b97900;
+  --critical: #d03b3b;
+  --reject: #e34948;
+  --roi-stroke: #2a78d6;
+  --shadow: 0 1px 2px rgba(11,11,11,0.06), 0 4px 14px rgba(11,11,11,0.05);
+  --radius: 10px;
+  --font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --good: #0ca30c;
+    --warn: #fab219;
+    --critical: #e66767;
+    --reject: #e66767;
+    --roi-stroke: #3987e5;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --critical: #e66767;
+  --reject: #e66767;
+  --roi-stroke: #3987e5;
+  --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+header.app {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 4px;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+header.app h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; white-space: nowrap; }
+.spacer { flex: 1; }
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 7px 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--series-1); border-color: transparent; color: #fff; }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.danger { color: var(--critical); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.hint { color: var(--muted); font-size: 12px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 9px; font-size: 12px; color: var(--ink-2);
+  background: var(--surface);
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.ok { background: var(--good); }
+.dot.bad { background: var(--critical); }
+
+main { padding: 14px 4px 40px; }
+.work-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 980px) { .work-grid { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.card h2 {
+  font-size: 13px; font-weight: 650; margin: 0 0 10px;
+  color: var(--ink-2); letter-spacing: .3px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.card h2 .spacer { flex: 1; }
+
+.canvas-wrap { position: relative; overflow: auto; border-radius: 8px; background: var(--surface-2); }
+#imgCanvas { display: block; image-rendering: pixelated; max-width: 100%; }
+.overlay-svg { position: absolute; inset: 0; pointer-events: none; }
+.overlay-svg .roi-rect { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.overlay-svg .roi-rect.selected { stroke-width: 2.5; }
+.overlay-svg .roi-label {
+  font: 600 11px var(--font); fill: #fff;
+  paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: 3px;
+}
+.overlay-svg .edge-line { stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.overlay-svg .pt { stroke: var(--surface); stroke-width: .8; vector-effect: non-scaling-stroke; }
+.overlay-svg .pt.reject { fill: var(--reject); }
+.overlay-svg .pt.inlier { fill: var(--series-4); }
+.overlay-svg.interactive { pointer-events: auto; }
+.overlay-svg .roi-hit { fill: transparent; cursor: move; }
+.overlay-svg .roi-hit.selected { cursor: move; }
+.overlay-svg.interactive .roi-hit { pointer-events: none; }
+
+.import-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.drop {
+  border: 1.5px dashed var(--axis); border-radius: var(--radius);
+  padding: 26px 18px; text-align: center; color: var(--ink-2);
+  background: var(--surface-2);
+}
+.drop.dragover { border-color: var(--series-1); background: color-mix(in srgb, var(--series-1) 10%, var(--surface-2)); }
+.drop strong { color: var(--ink); }
+.file-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer;
+}
+.file-label input { display: none; }
+.error-banner {
+  border: 1px solid color-mix(in srgb, var(--critical) 45%, var(--border));
+  background: color-mix(in srgb, var(--critical) 12%, var(--surface));
+  color: var(--ink); border-radius: 8px; padding: 9px 12px; margin-top: 10px;
+  font-size: 13px;
+}
+
+.curve-stack { display: grid; gap: 14px; }
+.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart-svg text { fill: var(--muted); font-size: 10.5px; font-family: var(--font); }
+.chart-svg .grid-line { stroke: var(--grid); stroke-width: 1; }
+.chart-svg .axis-line { stroke: var(--axis); stroke-width: 1.2; }
+.chart-svg .series-line { fill: none; stroke-width: 2; }
+.chart-svg .crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-svg .hover-dot { stroke: var(--surface); stroke-width: 1.5; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 16px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+.tip {
+  position: fixed; z-index: 50; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow);
+  padding: 7px 10px; font-size: 12px; min-width: 130px;
+}
+.tip .row { display: flex; justify-content: space-between; gap: 12px; }
+.tip .row b { font-variant-numeric: tabular-nums; }
+.tip .k { color: var(--muted); }
+
+table.report { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.table-wrap { overflow-x: auto; }
+table.report th, table.report td {
+  padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+table.report th { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+table.report th:first-child, table.report td:first-child { text-align: left; }
+table.report tbody tr { cursor: pointer; }
+table.report tbody tr:hover { background: var(--surface-2); }
+table.report tbody tr.selected { background: color-mix(in srgb, var(--series-1) 12%, var(--surface)); }
+table.report td.num, table.report th.num { font-variant-numeric: tabular-nums; }
+.status-ok { color: var(--good); font-weight: 600; }
+.status-bad { color: var(--critical); font-weight: 600; }
+.reason-cell { white-space: normal; min-width: 220px; text-align: left; color: var(--ink-2); }
+.roi-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px;
+  background: var(--surface); font-size: 12.5px;
+}
+.roi-chip.active { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
+.roi-chip button { border: none; background: none; color: var(--critical); padding: 0 0 0 4px; font-size: 14px; line-height: 1; }
+.roi-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.metric-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.metric {
+  background: var(--surface-2); border-radius: 8px; padding: 9px 11px; min-width: 0;
+}
+.metric .label { font-size: 11px; color: var(--muted); }
+.metric .value { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.metric .value.na { color: var(--muted); font-size: 15px; }
+.empty-note { color: var(--muted); padding: 18px 4px; text-align: center; }
+.footer-note { color: var(--muted); font-size: 11.5px; margin-top: 14px; line-height: 1.7; }
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--ink); color: var(--page);
+  padding: 9px 16px; border-radius: 999px; font-size: 13px; z-index: 60;
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+.toast.show { opacity: .94; }
+input[type="number"], select {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 6px 8px; width: 78px;
+}
+.draw-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>斜边 MTF 工作台</h1>
+  <span class="pill" id="imgPill" hidden><span class="dot ok"></span><span id="imgMeta"></span></span>
+  <span class="pill" id="roiCountPill" hidden>测区 <b id="roiCount">0</b>/16</span>
+  <span class="spacer"></span>
+  <button class="btn ghost" id="themeBtn" type="button" title="切换明暗主题">◐ 主题</button>
+  <button class="btn" id="sampleBtn" type="button">载入内置样例</button>
+  <button class="btn" id="exportBtn" type="button" disabled>导出 CSV</button>
+</header>
+
+<main>
+  <section class="card" id="importCard">
+    <h2>数据导入
+      <span class="spacer"></span>
+      <span class="hint">线性 16 位灰度（逐行小端），单边 ≤ 1536；配尺寸 JSON：{"w","h","rois":[[x,y,w,h],…]}，rois 可省略</span>
+    </h2>
+    <div class="drop" id="dropZone">
+      <div style="margin-bottom:12px"><strong>拖入 .u16 / .bin 与 .json</strong>，或分别选择文件</div>
+      <div class="import-row" style="justify-content:center">
+        <label class="file-label">选择图像 <input type="file" id="imgFile" accept=".u16,.bin,.raw,application/octet-stream"></label>
+        <label class="file-label">选择尺寸 JSON <input type="file" id="jsonFile" accept=".json,application/json"></label>
+        <button class="btn primary" id="analyzeBtn" type="button" disabled>分析测区</button>
+      </div>
+      <div id="fileName" class="hint" style="margin-top:10px"></div>
+      <div class="error-banner" id="importError" hidden></div>
+    </div>
+  </section>
+
+  <div class="work-grid" style="margin-top:14px">
+    <section class="card" id="imageCard" hidden>
+      <h2>图像与测区
+        <span class="spacer"></span>
+        <span class="draw-tools">
+          <label class="roi-chip">绘制宽 <input type="number" id="drawW" value="91" min="8" max="1536" step="1"></label>
+          <label class="roi-chip">绘制高 <input type="number" id="drawH" value="81" min="8" max="1536" step="1"></label>
+          <button class="btn" id="drawBtn" type="button">✚ 绘制测区</button>
+          <button class="btn danger" id="deleteBtn" type="button" disabled>删除所选</button>
+        </span>
+      </h2>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="imgCanvas"></canvas>
+        <svg class="overlay-svg" id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="legend" style="margin-top:10px">
+        <span class="key"><span class="swatch" style="border-color:var(--series-1)"></span>拟合主直边</span>
+        <span class="key"><span class="swatch" style="border-color:var(--series-4)"></span>参与拟合点</span>
+        <span class="key"><span class="swatch" style="border-color:var(--reject)"></span>剔除点（缺口/异常）</span>
+        <span class="hint">拖动测区内部可移动；点击测区选择；Delete 删除</span>
+      </div>
+    </section>
+
+    <div class="curve-stack">
+      <section class="card" id="detailCard" hidden>
+        <h2>测区 <span id="detailTitle">—</span>
+          <span class="spacer"></span>
+          <span class="pill" id="detailStatus"></span>
+        </h2>
+        <div class="metric-row">
+          <div class="metric"><div class="label">MTF50（周期/像素）</div><div class="value na" id="m50">不可测</div></div>
+          <div class="metric"><div class="label">MTF10（周期/像素）</div><div class="value na" id="m10">不可测</div></div>
+          <div class="metric"><div class="label">边缘斜率</div><div class="value na" id="slopeV">—</div></div>
+        </div>
+        <div class="error-banner" id="detailReason" hidden></div>
+        <div class="legend" style="margin-bottom:6px">
+          <span class="key"><span class="swatch" style="border-color:var(--series-2)"></span>ESF</span>
+          <span class="key"><span class="swatch" style="border-color:var(--series-3)"></span>LSF</span>
+          <span class="key"><span class="swatch" style="border-color:var(--series-1)"></span>MTF</span>
+          <span class="hint">移动鼠标点读样值</span>
+        </div>
+        <div id="chartEsf"></div>
+        <div id="chartLsf" style="margin-top:8px"></div>
+        <div id="chartMtf" style="margin-top:8px"></div>
+      </section>
+      <section class="card" id="placeholderCard">
+        <div class="empty-note">导入图像并分析后，这里显示所选测区的 ESF / LSF / MTF 曲线与点读数值。</div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" id="reportCard" style="margin-top:14px" hidden>
+    <h2>测区报告
+      <span class="spacer"></span>
+      <span class="hint">点击一行回到图上对应测区</span>
+    </h2>
+    <div class="table-wrap">
+      <table class="report" id="reportTable">
+        <thead><tr>
+          <th>测区</th><th class="num">x</th><th class="num">y</th><th class="num">宽</th><th class="num">高</th>
+          <th>方向</th><th>极性</th><th class="num">斜率</th>
+          <th class="num">MTF50</th><th class="num">MTF10</th><th>状态</th><th class="reason-cell">无效原因</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="footer-note">
+      口径（与包内 约定.txt 一致）：斜率为较小轴分量/较大轴分量，合法区间 0.03–0.5，法线指向亮侧；
+      按有符号法向距离在 [-12,12) 以 0.25 px 分箱，内部连续缺箱至多两个并线性补值，首尾或更长缺箱判无效；
+      中心差分求 LSF、去两端后乘汉宁窗；DFT 步长 0.005 周期/像素、范围 0–0.5，直流归一化，
+      差分补偿 ω/sin(ω)（ω=2πf×0.25，直流取 1）；MTF50/MTF10 取首次下穿的相邻样点线性插值，未下穿标不可测。
+    </p>
+  </section>
+</main>
+
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast"></div>
+
+<script src="mtf-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
