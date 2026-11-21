@@ -1,0 +1,160 @@
+<header class="app-header">
+  <div>
+    <h1>LoG 斑点测量台</h1>
+    <div class="sub">尺度归一化高斯拉普拉斯 · 物理间距各向异性 · 三维亚像素细化</div>
+  </div>
+  <div class="header-actions">
+    <button class="ghost small" id="themeToggle" type="button">切换主题</button>
+    <button class="small" id="loadSampleBtn" type="button">载入内置样例</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ============ 控制栏 ============ -->
+  <div>
+    <section class="panel">
+      <h2>数据导入</h2>
+      <div class="control-group">
+        <div class="file-row">
+          <label class="field-label hint" for="imgFile">灰度图 · 小端 float32 逐行（单边 ≤ 384 px）</label>
+          <div class="file-pick">
+            <input type="file" id="imgFile" accept=".f32,.raw,application/octet-stream">
+          </div>
+          <span class="file-name" id="imgFileName">未选择</span>
+        </div>
+        <div class="file-row">
+          <label class="field-label hint" for="maskFile">有效掩膜 · uint8 逐行（可选，非零为有效）</label>
+          <div class="file-pick">
+            <input type="file" id="maskFile" accept=".u8,.raw,application/octet-stream">
+          </div>
+          <span class="file-name" id="maskFileName">未选择（默认全图有效）</span>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="inW">宽 w（像素）</label>
+            <input type="number" id="inW" min="1" max="384" step="1" placeholder="129">
+          </div>
+          <div class="field">
+            <label for="inH">高 h（像素）</label>
+            <input type="number" id="inH" min="1" max="384" step="1" placeholder="97">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="inDx">水平间距 dx</label>
+            <input type="number" id="inDx" min="0" step="0.001" placeholder="0.6">
+          </div>
+          <div class="field">
+            <label for="inDy">垂直间距 dy</label>
+            <input type="number" id="inDy" min="0" step="0.001" placeholder="1.1">
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label hint" for="jsonFile">参数侧车（可选，与 image.json 同构的 w/h/dx/dy/sigma0/ratio/levels/threshold）</label>
+          <div class="file-pick">
+            <input type="file" id="jsonFile" accept=".json,application/json">
+          </div>
+          <span class="file-name" id="jsonFileName">未选择</span>
+        </div>
+        <div class="field">
+          <label class="hint" style="color:var(--fg-dim)">间距单位任意但需一致；物理原点在左上像素中心，x 沿列、y 沿行。</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>尺度与阈值</h2>
+      <div class="control-group">
+        <div class="field">
+          <label for="inSigma0">起始尺度 σ₀ <span class="val" id="sigma0Val"></span></label>
+          <input type="number" id="inSigma0" min="0.01" step="0.05">
+        </div>
+        <div class="field">
+          <label for="inLevels">尺度数 L <span class="val" id="levelsVal"></span></label>
+          <input type="range" id="inLevels" min="3" max="16" step="1">
+        </div>
+        <div class="field">
+          <label for="inRatio">比例 ratio <span class="val" id="ratioVal"></span></label>
+          <input type="number" id="inRatio" min="1.01" max="3" step="0.01">
+        </div>
+        <div class="field">
+          <label for="inBrightThr">亮斑阈值（正响应）<span class="val" id="brightThrVal"></span></label>
+          <input type="range" id="inBrightThr" min="0" max="2" step="0.005">
+        </div>
+        <div class="field">
+          <label for="inDarkThr">暗斑阈值（负响应取反）<span class="val" id="darkThrVal"></span></label>
+          <input type="range" id="inDarkThr" min="0" max="2" step="0.005">
+        </div>
+        <button class="primary" id="runBtn" type="button" disabled>运行检测</button>
+        <div class="status-line" id="statusLine"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>输出</h2>
+      <div class="control-group">
+        <button id="exportBtn" type="button" disabled>导出 CSV</button>
+        <button id="copyBtn" type="button" disabled>复制 CSV 到剪贴板</button>
+        <span class="hint">CSV 含亮暗类型、像素与物理位置、尺度层与物理 σ、响应及细化状态，UTF-8 带 BOM。</span>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 视图与结果 ============ -->
+  <div class="viewer-col">
+    <section class="panel">
+      <div class="viewer-toolbar">
+        <div class="seg" id="viewSeg">
+          <button type="button" data-view="image" class="active">原图</button>
+          <button type="button" data-view="response">响应图</button>
+        </div>
+        <div class="field" style="flex:1; min-width:200px;">
+          <label for="levelSlider">查看尺度层 <span class="val" id="levelLabel"></span></label>
+          <input type="range" id="levelSlider" min="0" max="1" step="1" disabled>
+        </div>
+        <label class="hint" style="display:flex; align-items:center; gap:5px;">
+          <input type="checkbox" id="showSpots" checked> 斑点
+        </label>
+        <label class="hint" style="display:flex; align-items:center; gap:5px;">
+          <input type="checkbox" id="showMask" checked> 有效区
+        </label>
+      </div>
+      <div class="canvas-wrap" style="margin-top:12px;">
+        <canvas id="view"></canvas>
+      </div>
+      <div class="legend" style="margin-top:10px;">
+        <span><i class="sw" style="background:var(--bright)"></i>亮斑（正 LoG）</span>
+        <span><i class="sw" style="background:var(--dark)"></i>暗斑（负 LoG）</span>
+        <span><i class="sw" style="background:repeating-linear-gradient(45deg,#888 0 3px,transparent 3px 6px)"></i>掩膜外无效区</span>
+        <span id="respLegend" class="hidden">响应配色：暖色正 / 冷色负 / 灰为无效</span>
+      </div>
+    </section>
+
+    <section class="panel" id="resultPanel" hidden>
+      <h2 style="display:flex; justify-content:space-between; align-items:center;">
+        <span>检出斑点</span>
+        <span class="count-chip" id="countChip"></span>
+      </h2>
+      <div class="table-wrap">
+        <table id="spotTable">
+          <thead>
+            <tr>
+              <th>#</th><th>类型</th><th>层 k</th><th>σ（物理）</th>
+              <th>物理 x</th><th>物理 y</th><th>响应</th><th>细化</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="detailPanel" hidden>
+      <h2>斑点详情</h2>
+      <div class="detail-grid" id="detailStats"></div>
+      <h3 style="margin-top:16px;">邻近尺度层响应（−1 / 当前 / +1）</h3>
+      <div class="scale-bars" id="scaleBars"></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>

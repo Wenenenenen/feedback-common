@@ -1,0 +1,686 @@
+<script>
+"use strict";
+/* ============================================================
+ * application state
+ * ============================================================ */
+const state = {
+  width: null,
+  height: null,
+  dx: null,
+  dy: null,
+  image: null,       // Float64Array
+  mask: null,        // Uint8Array
+  imageName: "",
+  maskName: "",
+  params: null,      // detection params of last run
+  volume: null,
+  peaks: [],
+  selected: -1,
+  view: "image",
+  level: 0,
+  showSpots: true,
+  showMask: true,
+  imgMin: 0,
+  imgMax: 1,
+  respAbsMax: 1,
+};
+
+const $ = (id) => document.getElementById(id);
+const toastEl = $("toast");
+let toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
+}
+function setStatus(msg, isErr) {
+  const el = $("statusLine");
+  el.textContent = msg || "";
+  el.classList.toggle("err", !!isErr);
+}
+
+/* ============================================================
+ * theme
+ * ============================================================ */
+$("themeToggle").addEventListener("click", () => {
+  const root = document.documentElement;
+  const darkNow =
+    root.dataset.theme === "dark" ||
+    (!root.dataset.theme &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  root.dataset.theme = darkNow ? "light" : "dark";
+  if (state.view === "response" || state.image) renderCanvas();
+});
+
+/* ============================================================
+ * numeric inputs / sliders
+ * ============================================================ */
+const defaults = {
+  w: 129, h: 97, dx: 0.6, dy: 1.1,
+  sigma0: 1.5, levels: 9, ratio: 1.25,
+  brightThr: 0.12, darkThr: 0.12,
+};
+function setDefaults() {
+  $("inW").value = defaults.w;
+  $("inH").value = defaults.h;
+  $("inDx").value = defaults.dx;
+  $("inDy").value = defaults.dy;
+  $("inSigma0").value = defaults.sigma0;
+  $("inLevels").value = defaults.levels;
+  $("inRatio").value = defaults.ratio;
+  $("inBrightThr").value = defaults.brightThr;
+  $("inDarkThr").value = defaults.darkThr;
+  syncReadouts();
+}
+function syncReadouts() {
+  $("sigma0Val").textContent = Number($("inSigma0").value).toFixed(2);
+  $("levelsVal").textContent = $("inLevels").value;
+  $("ratioVal").textContent = Number($("inRatio").value).toFixed(2);
+  $("brightThrVal").textContent = Number($("inBrightThr").value).toFixed(3);
+  $("darkThrVal").textContent = Number($("inDarkThr").value).toFixed(3);
+}
+["inSigma0", "inLevels", "inRatio", "inBrightThr", "inDarkThr"].forEach((id) =>
+  $(id).addEventListener("input", syncReadouts)
+);
+setDefaults();
+
+/* ============================================================
+ * file loading
+ * ============================================================ */
+async function readFileBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(fr.error);
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+$("imgFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const buf = await readFileBuffer(file);
+    const w = parseInt($("inW").value, 10);
+    const h = parseInt($("inH").value, 10);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1) {
+      throw new Error("请先填写有效的宽 w 和高 h。");
+    }
+    if (w > 384 || h > 384) {
+      throw new Error("单边不能超过 384 像素。");
+    }
+    if (buf.byteLength !== w * h * 4) {
+      throw new Error(
+        `文件大小 ${buf.byteLength} 字节与 w×h×4 = ${w * h * 4} 不符。`
+      );
+    }
+    const dv = new DataView(buf);
+    const n = w * h;
+    const image = new Float64Array(n);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const v = dv.getFloat32(i * 4, true);
+      if (!Number.isFinite(v)) throw new Error("图像含非有限数值（NaN/Inf）。");
+      image[i] = v;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    state.width = w;
+    state.height = h;
+    state.image = image;
+    state.imageName = file.name;
+    state.imgMin = lo;
+    state.imgMax = hi;
+    state.mask = new Uint8Array(n).fill(1);
+    state.maskName = "";
+    $("imgFileName").textContent = `${file.name} · ${w}×${h}`;
+    $("maskFileName").textContent = "未选择（默认全图有效）";
+    $("maskFile").value = "";
+    resetResults();
+    $("runBtn").disabled = false;
+    setStatus(`已载入 ${file.name}，值域 [${lo.toFixed(4)}, ${hi.toFixed(4)}]。`);
+    renderCanvas();
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+$("maskFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    if (!state.image) throw new Error("请先载入灰度图。");
+    const buf = await readFileBuffer(file);
+    const n = state.width * state.height;
+    if (buf.byteLength !== n) {
+      throw new Error(`掩膜大小应为 ${n} 字节，实际 ${buf.byteLength}。`);
+    }
+    const u8 = new Uint8Array(buf);
+    const mask = new Uint8Array(n);
+    for (let i = 0; i < n; i++) mask[i] = u8[i] ? 1 : 0;
+    state.mask = mask;
+    state.maskName = file.name;
+    $("maskFileName").textContent =
+      `${file.name} · 有效像素 ${mask.reduce((a, b) => a + b, 0)}/${n}`;
+    resetResults();
+    renderCanvas();
+    setStatus("掩膜已载入，需重新运行检测。");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+});
+
+$("jsonFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const meta = JSON.parse(text);
+    const num = (v) => (Number.isFinite(v) ? v : null);
+    if (num(meta.w)) $("inW").value = meta.w;
+    if (num(meta.h)) $("inH").value = meta.h;
+    if (num(meta.dx)) $("inDx").value = meta.dx;
+    if (num(meta.dy)) $("inDy").value = meta.dy;
+    if (num(meta.sigma0)) $("inSigma0").value = meta.sigma0;
+    if (Number.isInteger(meta.levels)) $("inLevels").value = meta.levels;
+    if (num(meta.ratio)) $("inRatio").value = meta.ratio;
+    if (num(meta.threshold)) {
+      $("inBrightThr").value = meta.threshold;
+      $("inDarkThr").value = meta.threshold;
+    }
+    syncReadouts();
+    $("jsonFileName").textContent = `${file.name} 已应用`;
+    setStatus("参数侧车已填入表单。");
+  } catch (err) {
+    $("jsonFileName").textContent = "未选择";
+    setStatus("参数侧车解析失败：" + err.message, true);
+  }
+});
+
+function resetResults() {
+  state.volume = null;
+  state.peaks = [];
+  state.selected = -1;
+  state.params = null;
+  $("exportBtn").disabled = true;
+  $("copyBtn").disabled = true;
+  $("resultPanel").hidden = true;
+  $("detailPanel").hidden = true;
+  $("levelSlider").disabled = true;
+}
+
+/* ============================================================
+ * detection
+ * ============================================================ */
+function readParams() {
+  const w = parseInt($("inW").value, 10);
+  const h = parseInt($("inH").value, 10);
+  const dx = Number($("inDx").value);
+  const dy = Number($("inDy").value);
+  const sigma0 = Number($("inSigma0").value);
+  const levels = parseInt($("inLevels").value, 10);
+  const ratio = Number($("inRatio").value);
+  const brightThreshold = Number($("inBrightThr").value);
+  const darkThreshold = Number($("inDarkThr").value);
+  if (![w, h].every((v) => Number.isInteger(v) && v >= 1 && v <= 384)) {
+    throw new Error("宽高需为 1–384 的整数。");
+  }
+  if (!(dx > 0 && dy > 0)) throw new Error("物理间距必须为正数。");
+  if (!(sigma0 > 0)) throw new Error("起始尺度 σ₀ 必须为正数。");
+  if (!(ratio > 1)) throw new Error("比例 ratio 必须大于 1。");
+  if (!(levels >= 3 && levels <= 16)) throw new Error("尺度数需在 3–16 之间。");
+  return {
+    width: w, height: h, dx, dy, sigma0, ratio, levels,
+    brightThreshold, darkThreshold,
+  };
+}
+
+$("runBtn").addEventListener("click", () => {
+  if (!state.image) {
+    setStatus("请先载入灰度图。", true);
+    return;
+  }
+  let params;
+  try {
+    params = readParams();
+  } catch (err) {
+    setStatus(err.message, true);
+    return;
+  }
+  setStatus("计算中…");
+  $("runBtn").disabled = true;
+  // defer so the status text paints before the heavy synchronous pass
+  setTimeout(() => {
+    try {
+      const t0 = performance.now();
+      const { volume, peaks } = LogCore.run({
+        ...params,
+        image: state.image,
+        mask: state.mask || new Uint8Array(params.width * params.height).fill(1),
+      });
+      const elapsed = performance.now() - t0;
+      state.volume = volume;
+      state.peaks = peaks;
+      state.params = params;
+      state.level = Math.min(state.level, params.levels - 1);
+      $("levelSlider").max = params.levels - 1;
+      $("levelSlider").value = state.level;
+      $("levelSlider").disabled = false;
+      updateLevelLabel();
+      // symmetric colour scale from the strongest absolute response
+      let amax = 1e-12;
+      for (const resp of volume.responses) {
+        for (let i = 0; i < resp.length; i++) {
+          const a = Math.abs(resp[i]);
+          if (a > amax) amax = a;
+        }
+      }
+      state.respAbsMax = amax;
+      $("exportBtn").disabled = peaks.length === 0;
+      $("copyBtn").disabled = peaks.length === 0;
+      populateTable();
+      renderCanvas();
+      const nb = peaks.filter((p) => p.kind === "bright").length;
+      const nd = peaks.length - nb;
+      setStatus(
+        `完成：${peaks.length} 个斑点（亮 ${nb} / 暗 ${nd}），用时 ${elapsed.toFixed(0)} ms。`
+      );
+    } catch (err) {
+      setStatus("检测失败：" + err.message, true);
+    } finally {
+      $("runBtn").disabled = false;
+    }
+  }, 30);
+});
+
+/* ============================================================
+ * canvas rendering
+ * ============================================================ */
+const canvas = $("view");
+const ctx = canvas.getContext("2d");
+
+function updateLevelLabel() {
+  if (!state.volume) return;
+  const k = state.level;
+  $("levelLabel").textContent =
+    `k=${k} · σ=${state.volume.sigmas[k].toFixed(3)}`;
+}
+$("levelSlider").addEventListener("input", (e) => {
+  state.level = parseInt(e.target.value, 10);
+  updateLevelLabel();
+  renderCanvas();
+});
+$("viewSeg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  state.view = btn.dataset.view;
+  [...$("viewSeg").children].forEach((b) =>
+    b.classList.toggle("active", b === btn)
+  );
+  $("respLegend").classList.toggle("hidden", state.view !== "response");
+  renderCanvas();
+});
+$("showSpots").addEventListener("change", (e) => {
+  state.showSpots = e.target.checked;
+  renderCanvas();
+});
+$("showMask").addEventListener("change", (e) => {
+  state.showMask = e.target.checked;
+  renderCanvas();
+});
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function renderCanvas() {
+  if (!state.image) return;
+  const w = state.width, h = state.height;
+  const scale = Math.max(1, Math.floor(384 / Math.max(w, h)));
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+
+  if (state.view === "image" || !state.volume) {
+    const lo = state.imgMin, span = Math.max(1e-12, state.imgMax - lo);
+    for (let i = 0; i < w * h; i++) {
+      const t = (state.image[i] - lo) / span;
+      const g = Math.round(255 * t);
+      data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = g;
+      data[i * 4 + 3] = 255;
+    }
+  } else {
+    const resp = state.volume.responses[state.level];
+    const valid = state.volume.valids[state.level];
+    const amax = state.respAbsMax;
+    for (let i = 0; i < w * h; i++) {
+      const o = i * 4;
+      if (!valid[i]) {
+        data[o] = data[o + 1] = data[o + 2] = 120;
+        data[o + 3] = 255;
+        continue;
+      }
+      const t = Math.max(-1, Math.min(1, resp[i] / amax));
+      const [r, g, b] = divergingColor(t);
+      data[o] = r; data[o + 1] = g; data[o + 2] = b;
+      data[o + 3] = 255;
+    }
+  }
+  // draw 1:1 then upscale with nearest neighbour
+  const off = document.createElement("canvas");
+  off.width = w; off.height = h;
+  off.getContext("2d").putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+
+  if (state.showMask && state.mask) drawMaskHatch(scale);
+  if (state.showSpots && state.volume) drawSpots(scale);
+}
+
+// positive LoG (bright blobs) -> amber/warm; negative (dark blobs) -> blue/cool
+function divergingColor(t) {
+  // Neutral warm grey at 0; sqrt curve lifts weak responses above the floor.
+  const a = Math.sqrt(Math.max(-1, Math.min(1, Math.abs(t))));
+  if (t >= 0) {
+    const r = Math.round(232 + (176 - 232) * a);
+    const g = Math.round(225 + (74 - 225) * a);
+    const b = Math.round(214 + (22 - 214) * a);
+    return [r, g, b];
+  }
+  // steel blue: blue stays high, red/green fall
+  const r = Math.round(214 + (38 - 214) * a);
+  const g = Math.round(222 + (101 - 222) * a);
+  const b = Math.round(228 + (210 - 228) * a);
+  return [r, g, b];
+}
+
+function drawMaskHatch(scale) {
+  const w = state.width, h = state.height;
+  ctx.save();
+  ctx.fillStyle = "rgba(120,120,120,0.42)";
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (!state.mask[r * w + c]) ctx.fillRect(c * scale, r * scale, scale, scale);
+    }
+  }
+  ctx.restore();
+}
+
+function drawSpots(scale) {
+  const p = state.params;
+  ctx.save();
+  ctx.lineWidth = Math.max(1.2, scale * 0.7);
+  ctx.font = `${Math.max(10, 5 * scale)}px ${cssVar("--mono")}`;
+  state.peaks.forEach((spot, idx) => {
+    const col = spot.refined ? spot.refinedCol : spot.col;
+    const row = spot.refined ? spot.refinedRow : spot.row;
+    const sigma = spot.refined ? spot.refinedSigma : spot.sigma;
+    const color = spot.kind === "bright" ? cssVar("--bright") : cssVar("--dark");
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    // ellipse: physical sigma in each axis mapped back to pixels
+    const rx = sigma / p.dx * scale;
+    const ry = sigma / p.dy * scale;
+    ctx.beginPath();
+    ctx.ellipse((col + 0.5) * scale, (row + 0.5) * scale, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // centre cross
+    const cx = (col + 0.5) * scale, cy = (row + 0.5) * scale;
+    const cs = Math.max(2, scale);
+    ctx.beginPath();
+    ctx.moveTo(cx - cs, cy); ctx.lineTo(cx + cs, cy);
+    ctx.moveTo(cx, cy - cs); ctx.lineTo(cx, cy + cs);
+    ctx.stroke();
+    if (idx === state.selected) {
+      ctx.strokeStyle = cssVar("--accent");
+      ctx.lineWidth = Math.max(1, scale * 0.4);
+      ctx.strokeRect(
+        (spot.col - 1.5) * scale, (spot.row - 1.5) * scale,
+        3 * scale, 3 * scale
+      );
+    }
+  });
+  ctx.restore();
+}
+
+/* click on canvas selects the nearest spot within its ellipse */
+canvas.addEventListener("click", (e) => {
+  if (!state.volume || state.peaks.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+  const scale = canvas.width / state.width;
+  const col = px / scale - 0.5;
+  const row = py / scale - 0.5;
+  const p = state.params;
+  let best = -1, bestD = Infinity;
+  state.peaks.forEach((spot, idx) => {
+    const sc = spot.refined ? spot.refinedCol : spot.col;
+    const sr = spot.refined ? spot.refinedRow : spot.row;
+    const sig = spot.refined ? spot.refinedSigma : spot.sigma;
+    const ex = ((col - sc) * p.dx) / sig;
+    const ey = ((row - sr) * p.dy) / sig;
+    const d = ex * ex + ey * ey;
+    if (d <= 1 && d < bestD) { bestD = d; best = idx; }
+  });
+  if (best >= 0) selectSpot(best);
+});
+
+/* ============================================================
+ * results table + detail
+ * ============================================================ */
+function populateTable() {
+  const tbody = $("spotTable").querySelector("tbody");
+  tbody.innerHTML = "";
+  state.peaks.forEach((spot, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${idx + 1}</td>` +
+      `<td><span class="pill ${spot.kind}">${spot.kind === "bright" ? "亮" : "暗"}</span></td>` +
+      `<td class="mono">${spot.level}</td>` +
+      `<td class="mono">${(spot.refined ? spot.refinedSigma : spot.sigma).toFixed(3)}</td>` +
+      `<td class="mono">${(spot.refined ? spot.refinedX : spot.x).toFixed(3)}</td>` +
+      `<td class="mono">${(spot.refined ? spot.refinedY : spot.y).toFixed(3)}</td>` +
+      `<td class="mono">${(spot.refined ? spot.refinedResponse : spot.response).toFixed(4)}</td>` +
+      `<td><span class="pill ${spot.refined ? "ok" : "no"}">${spot.refined ? "成功" : "未细化"}</span></td>`;
+    tr.addEventListener("click", () => selectSpot(idx));
+    tbody.appendChild(tr);
+  });
+  $("resultPanel").hidden = false;
+  const nb = state.peaks.filter((p) => p.kind === "bright").length;
+  $("countChip").textContent =
+    `${state.peaks.length} 个 · 亮 ${nb} · 暗 ${state.peaks.length - nb}`;
+}
+
+function selectSpot(idx) {
+  state.selected = idx;
+  const spot = state.peaks[idx];
+  [...$("spotTable").querySelectorAll("tbody tr")].forEach((tr, i) =>
+    tr.classList.toggle("selected", i === idx)
+  );
+  // jump the level slider to the spot's peak level
+  state.level = spot.level;
+  $("levelSlider").value = spot.level;
+  updateLevelLabel();
+  renderCanvas();
+  renderDetail(spot, idx);
+  $("detailPanel").hidden = false;
+  $("detailPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function renderDetail(spot, idx) {
+  const p = state.params;
+  const stats = [
+    ["编号", `#${idx + 1}`],
+    ["类型", spot.kind === "bright" ? "亮斑（正响应）" : "暗斑（负响应）"],
+    ["细化状态", spot.refined ? "成功（负定且 |位移| ≤ 1）" : "未接受（非负定或越界）"],
+    ["峰值层 k", `${spot.level} / ${p.levels - 1}`],
+    ["像素位置 (列, 行)", `(${spot.col}, ${spot.row})`],
+    ["物理中心 (x, y)", spot.refined
+      ? `(${spot.refinedX.toFixed(3)}, ${spot.refinedY.toFixed(3)})`
+      : `(${spot.x.toFixed(3)}, ${spot.y.toFixed(3)})`],
+    ["尺度 σ（物理单位）", spot.refined
+      ? spot.refinedSigma.toFixed(4) : spot.sigma.toFixed(4)],
+    ["细化层坐标", spot.refined ? spot.refinedLevel.toFixed(4) : "—"],
+    ["整数中心响应", spot.response.toFixed(5)],
+    ["细化点响应", spot.refined ? spot.refinedResponse.toFixed(5) : "—"],
+    ["位移 (Δ层, Δ行, Δ列)", spot.refined
+      ? `(${spot.deltaLevel.toFixed(3)}, ${spot.deltaRow.toFixed(3)}, ${spot.deltaCol.toFixed(3)})`
+      : "—"],
+  ];
+  $("detailStats").innerHTML = stats
+    .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`)
+    .join("");
+
+  // responses across nearby levels, evaluated at the integer peak cell
+  const bars = [];
+  const k = spot.level;
+  for (let kk = Math.max(0, k - 1); kk <= Math.min(p.levels - 1, k + 1); kk++) {
+    const v = state.volume.responses[kk][spot.row * p.width + spot.col];
+    const valid = state.volume.valids[kk][spot.row * p.width + spot.col];
+    bars.push({ level: kk, v, valid, isPeak: kk === k });
+  }
+  const maxAbs = Math.max(...bars.map((b) => Math.abs(b.v)), 1e-12);
+  $("scaleBars").innerHTML = bars
+    .map((b) => {
+      const pct = Math.round((Math.abs(b.v) / maxAbs) * 100);
+      const cls = "bar " + (b.isPeak ? "peak" + (spot.kind === "dark" ? " darkkind" : "") : "");
+      const tag = b.isPeak
+        ? "当前"
+        : b.level < spot.level ? "−1 层" : "+1 层";
+      return `<div class="scale-row">
+        <span>${b.level}</span>
+        <div class="${cls}"><i style="width:${b.valid ? pct : 0}%"></i></div>
+        <span>${tag} · ${b.valid ? b.v.toFixed(4) : "无效"}</span>
+      </div>`;
+    })
+    .join("");
+}
+
+/* ============================================================
+ * CSV export
+ * ============================================================ */
+function buildCsv() {
+  const p = state.params;
+  const header = [
+    "id", "type", "level", "col_px", "row_px",
+    "x_physical", "y_physical", "sigma_physical",
+    "response", "refined",
+    "refined_level", "refined_col", "refined_row",
+    "refined_x_physical", "refined_y_physical",
+    "refined_sigma_physical", "refined_response",
+    "delta_level", "delta_row", "delta_col",
+  ];
+  const rows = state.peaks.map((s, i) => [
+    i + 1,
+    s.kind,
+    s.level,
+    s.col,
+    s.row,
+    s.x.toFixed(6),
+    s.y.toFixed(6),
+    s.sigma.toFixed(6),
+    s.response.toFixed(6),
+    s.refined ? 1 : 0,
+    s.refined ? s.refinedLevel.toFixed(6) : "",
+    s.refined ? s.refinedCol.toFixed(6) : "",
+    s.refined ? s.refinedRow.toFixed(6) : "",
+    s.refined ? s.refinedX.toFixed(6) : "",
+    s.refined ? s.refinedY.toFixed(6) : "",
+    s.refined ? s.refinedSigma.toFixed(6) : "",
+    s.refined ? s.refinedResponse.toFixed(6) : "",
+    s.refined ? s.deltaLevel.toFixed(6) : "",
+    s.refined ? s.deltaRow.toFixed(6) : "",
+    s.refined ? s.deltaCol.toFixed(6) : "",
+  ]);
+  return [header, ...rows].map((r) => r.join(",")).join("\r\n");
+}
+
+function downloadCsv() {
+  const csv = buildCsv();
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `log-spots-${state.width}x${state.height}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast("CSV 已生成下载。");
+}
+$("exportBtn").addEventListener("click", downloadCsv);
+
+$("copyBtn").addEventListener("click", async () => {
+  const csv = buildCsv();
+  try {
+    await navigator.clipboard.writeText(csv);
+    toast("CSV 已复制到剪贴板。");
+  } catch (err) {
+    const ta = document.createElement("textarea");
+    ta.value = csv;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      toast("CSV 已复制到剪贴板。");
+    } catch (err2) {
+      toast("复制失败，请改用导出按钮。");
+    }
+    ta.remove();
+  }
+});
+
+/* ============================================================
+ * built-in sample (matches samples/physical-log-spots-cases.zip)
+ * ============================================================ */
+$("loadSampleBtn").addEventListener("click", async () => {
+  try {
+    setStatus("载入内置样例…");
+    const buf = await SAMPLE_ASSETS.getImage();
+    const mbuf = await SAMPLE_ASSETS.getMask();
+    const meta = SAMPLE_ASSETS.meta;
+    const w = meta.w, h = meta.h, n = w * h;
+    const dv = new DataView(buf);
+    const image = new Float64Array(n);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const v = dv.getFloat32(i * 4, true);
+      image[i] = v;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    const mu8 = new Uint8Array(mbuf);
+    const mask = new Uint8Array(n);
+    for (let i = 0; i < n; i++) mask[i] = mu8[i] ? 1 : 0;
+    state.width = w; state.height = h;
+    state.image = image; state.mask = mask;
+    state.imageName = "spots.f32（内置样例）";
+    state.maskName = "mask.u8（内置样例）";
+    state.imgMin = lo; state.imgMax = hi;
+    $("inW").value = w; $("inH").value = h;
+    $("inDx").value = meta.dx; $("inDy").value = meta.dy;
+    $("inSigma0").value = meta.sigma0;
+    $("inLevels").value = meta.levels;
+    $("inRatio").value = meta.ratio;
+    $("inBrightThr").value = meta.threshold;
+    $("inDarkThr").value = meta.threshold;
+    syncReadouts();
+    $("imgFileName").textContent = `spots.f32 · ${w}×${h}（内置）`;
+    $("maskFileName").textContent =
+      `mask.u8 · 有效 ${mask.reduce((a, b) => a + b, 0)}/${n}（内置）`;
+    resetResults();
+    $("runBtn").disabled = false;
+    setStatus("内置样例已载入，点击“运行检测”。");
+    renderCanvas();
+  } catch (err) {
+    setStatus("样例载入失败：" + err.message, true);
+  }
+});
+
+/* first paint */
+renderCanvas();
+</script>
