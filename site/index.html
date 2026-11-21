@@ -1,0 +1,159 @@
+<title>接力回放导播台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+
+<div class="app">
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="title">
+      <h1>接力回放导播台</h1>
+      <span class="sub">逐拍选镜 · 必拍入安全框 · 漏拍计权重 · 硬切间距约束 · 全局最低成本</span>
+    </div>
+    <span id="statusPill" class="pill">未求解</span>
+    <div class="actions">
+      <button id="themeBtn" class="theme-toggle" type="button" title="切换明暗主题">◐ 主题</button>
+      <button id="exportBtn" type="button">导出镜头单</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <!-- 左栏：数据与参数 -->
+    <div class="stack">
+      <section class="panel">
+        <h2>输入数据</h2>
+        <div class="stack">
+          <div>
+            <label>样例（samples/replay-shot-director.json）</label>
+            <div class="row2">
+              <button id="loadSampleBtn" type="button">完整样例</button>
+              <button id="loadFailBtn" type="button">失败用例</button>
+            </div>
+          </div>
+          <div>
+            <label class="file-label" for="fileInput">打开本地 JSON 文件</label>
+            <input id="fileInput" type="file" accept=".json,application/json">
+          </div>
+          <details>
+            <summary class="hint" style="cursor:pointer">直接粘贴 JSON</summary>
+            <textarea id="jsonInput" rows="7" style="margin-top:8px; font-family:var(--font-mono); font-size:11.5px" placeholder='{"shots":{...},"beats":[...]}'></textarea>
+            <button id="applyJsonBtn" type="button" style="margin-top:8px; width:100%">应用粘贴的 JSON</button>
+          </details>
+          <div id="dataWarnings" class="small" style="color:var(--follow)"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>参数</h2>
+        <div class="stack">
+          <div class="row3">
+            <div>
+              <label>安全框内缩 inset</label>
+              <input id="insetInput" type="number" min="0" step="any">
+            </div>
+            <div>
+              <label>硬切代价 cutCost</label>
+              <input id="cutCostInput" type="number" step="any">
+            </div>
+            <div>
+              <label>硬切间距 cutGap</label>
+              <input id="cutGapInput" type="number" min="0.0001" step="any">
+            </div>
+          </div>
+          <button id="reoptBtn" class="primary" type="button">重新计算最优排镜</button>
+          <button id="clearLocksBtn" type="button">清除全部锁定</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>镜头与跟拍边</h2>
+        <div id="shotList" class="stack"></div>
+        <div id="followList" class="small" style="margin-top:10px"></div>
+      </section>
+
+      <section class="panel">
+        <h2>规则说明</h2>
+        <ul class="rule-list">
+          <li>必拍矩形须完整落入镜头安全框（四边内缩 inset，贴边算入镜），否则该镜头本拍不可用。</li>
+          <li>可选矩形漏拍累加其权重；保持同镜头切换代价为 0。</li>
+          <li>有有向跟拍边时用边代价，否则计一次硬切 cutCost。</li>
+          <li>相邻硬切的拍号差必须 ≥ cutGap；数据中拍索引为 0 基，界面拍号为 1 基。</li>
+          <li>同价时取镜头编号（按声明顺序）序列字典序最小。</li>
+        </ul>
+      </section>
+    </div>
+
+    <!-- 右栏：场地、时间轴、明细 -->
+    <div class="stack">
+      <section class="panel">
+        <h2 id="fieldTitle">场地取景</h2>
+        <div id="failureBanner" hidden></div>
+        <div class="field-wrap" style="margin-top:10px">
+          <svg id="fieldSvg" class="field-svg" role="img" aria-label="场地与取景框示意"></svg>
+        </div>
+        <div class="field-legend" id="fieldLegend"></div>
+
+        <div class="player">
+          <button id="playBtn" type="button">▶ 播放</button>
+          <button id="prevBtn" type="button">‹ 上一拍</button>
+          <button id="nextBtn" type="button">下一拍 ›</button>
+          <span class="beat-readout" id="beatReadout">拍 — / —</span>
+          <span class="spacer"></span>
+          <label style="margin:0">速度
+            <select id="speedSelect" style="width:auto">
+              <option value="1400">慢</option>
+              <option value="900" selected>正常</option>
+              <option value="450">快</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>时间轴（点击选拍，用下方镜头卡锁定）</h2>
+        <div class="timeline-scroll">
+          <div class="tl-ruler" id="tlRuler"></div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 id="beatPanelTitle">本拍信息</h2>
+        <div id="beatPanel" class="stack"></div>
+      </section>
+
+      <section class="panel">
+        <h2>汇总</h2>
+        <div class="summary-tiles" id="summaryTiles"></div>
+      </section>
+
+      <section class="panel">
+        <h2>镜头单与代价明细</h2>
+        <div class="table-scroll">
+          <table id="detailTable">
+            <thead>
+              <tr>
+                <th>拍号</th>
+                <th>镜头</th>
+                <th>切换</th>
+                <th class="num">漏拍代价</th>
+                <th class="num">切换代价</th>
+                <th class="num">本拍合计</th>
+                <th class="num">累计</th>
+                <th>漏拍目标</th>
+              </tr>
+            </thead>
+            <tbody id="detailBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toast" class="toast" role="status"></div>
+
+<script src="solver.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
