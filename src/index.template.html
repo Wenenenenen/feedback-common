@@ -1,0 +1,355 @@
+<title>MVR1 闭环校验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+<!--STYLES-->
+</style>
+
+<a class="skip" href="#workbench">跳到主视图</a>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+        <rect x="14" y="3" width="7" height="7" rx="1" stroke-dasharray="2 2"></rect>
+        <rect x="3" y="14" width="7" height="7" rx="1" stroke-dasharray="2 2"></rect>
+        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+      </svg>
+    </div>
+    <div>
+      <h1>MVR1 闭环校验台</h1>
+      <div class="sub">Inter-frame codec bench · 8×8 blocks · half-pel search</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="badge" id="src-badge"><span class="dot"></span><span id="src-badge-text">未载入序列</span></span>
+    <button class="btn" id="btn-import-seq" type="button">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3M3 13h10"></path></svg>
+      导入 PGM 序列
+    </button>
+    <input id="seq-input" type="file" accept=".pgm,image/x-portable-graymap" multiple hidden>
+    <button class="btn" id="btn-import-stream" type="button">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3M3 13h10"></path></svg>
+      打开码流
+    </button>
+    <input id="stream-input" type="file" accept=".mvr1,application/octet-stream" hidden>
+    <button class="btn btn-primary" id="btn-encode" type="button">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"></path></svg>
+      重新编码
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- ------------------------------------------------------------ controls -->
+  <section class="card" aria-labelledby="controls-title">
+    <h2 class="sr-only" id="controls-title">编码参数</h2>
+    <div class="controls">
+      <div class="ctl">
+        <label for="sel-seq">序列</label>
+        <select id="sel-seq"></select>
+      </div>
+      <div class="ctl">
+        <label for="in-key">关键帧间隔</label>
+        <div class="numrow">
+          <input id="in-key" type="number" min="1" max="48" step="1" value="6" inputmode="numeric">
+          <input id="in-key-range" type="range" min="1" max="48" step="1" value="6" aria-label="关键帧间隔滑块">
+        </div>
+        <div class="note" id="key-note"></div>
+      </div>
+      <div class="ctl">
+        <label for="in-q">量化步长</label>
+        <div class="numrow">
+          <input id="in-q" type="number" min="1" max="255" step="1" value="8" inputmode="numeric">
+          <input id="in-q-range" type="range" min="1" max="64" step="1" value="8" aria-label="量化步长滑块">
+        </div>
+        <div class="note" id="q-note"></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="progress-wrap">
+        <div class="label"><span id="encode-state">就绪</span><span id="encode-pct" class="mono"></span></div>
+        <div class="progress"><i id="encode-bar"></i></div>
+      </div>
+      <div class="bs-actions">
+        <button class="btn" id="btn-export" type="button">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 4l3-3 3 3M3 11v3h10v-3"></path></svg>
+          导出码流
+        </button>
+        <button class="btn" id="btn-demo" type="button" title="把分步流程演示一遍">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 3l8 5-8 5z"></path></svg>
+          样例演示
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- workbench -->
+  <div class="workbench" id="workbench">
+    <section class="card stage" aria-label="帧视图">
+      <div class="stage-bar">
+        <div class="tabs" role="group" aria-label="显示图层">
+          <button class="tab" data-view="orig" aria-pressed="true" type="button">原图</button>
+          <button class="tab" data-view="pred" aria-pressed="false" type="button">预测</button>
+          <button class="tab" data-view="rec" aria-pressed="false" type="button">重建</button>
+          <button class="tab" data-view="err" aria-pressed="false" type="button">误差</button>
+          <button class="tab" data-view="side" aria-pressed="false" type="button">对照</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="toggles">
+          <button class="toggle" id="tg-blocks" aria-pressed="true" type="button"><span class="sw"></span>块栅格</button>
+          <button class="toggle" id="tg-vectors" aria-pressed="true" type="button"><span class="sw"></span>运动矢量</button>
+          <button class="toggle" id="tg-padding" aria-pressed="false" type="button"><span class="sw"></span>补边</button>
+        </div>
+      </div>
+
+      <div class="viewer-scroll" id="viewer">
+        <div class="viewer-empty" id="viewer-empty">
+          <strong>还没有载入序列</strong>
+          从上方选择样例序列，或导入按帧号命名的 P5 灰度 PGM 文件（最多 48 帧、192×128）。
+        </div>
+        <div class="viewer-empty" id="viewer-missing" hidden>
+          <strong id="missing-title">该帧不在文件里</strong>
+          <span id="missing-text"></span>
+        </div>
+        <div class="canvas-fit" id="canvas-fit" hidden>
+          <canvas id="view-canvas"></canvas>
+          <svg id="view-overlay" aria-hidden="true"></svg>
+        </div>
+      </div>
+
+      <div class="stage-status" id="stage-status">
+        <span class="seg"><span class="chip chip-p" id="st-type">—</span><span id="st-type-note"></span></span>
+        <span class="seg">帧 <b id="st-frame">—</b></span>
+        <span class="seg">块 <b id="st-block">—</b></span>
+        <span class="seg">矢量 <b id="st-mv">—</b></span>
+        <span class="seg">PSNR <b id="st-psnr">—</b></span>
+        <span class="seg" id="st-extra"></span>
+        <div class="spacer" style="flex:1 1 auto"></div>
+        <div class="err-scale" id="err-scale" hidden>
+          <span>重建更亮</span>
+          <span class="ramp" aria-hidden="true"></span>
+          <span>重建更暗</span>
+          <span class="cap">±32 灰阶满量程 · 灰=无误差</span>
+        </div>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-top">
+          <div class="readout">
+            <span class="chip chip-p" id="tl-chip">—</span>
+            <span>帧 <b id="tl-frame">—</b> / <span id="tl-total">—</span></span>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn btn-sm btn-icon" id="btn-prev" type="button" aria-label="上一帧">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3L5 8l5 5"></path></svg>
+          </button>
+          <button class="btn btn-sm btn-icon" id="btn-next" type="button" aria-label="下一帧">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3l5 5-5 5"></path></svg>
+          </button>
+        </div>
+        <div class="ticks" id="ticks" role="group" aria-label="帧列表"></div>
+        <div class="timeline-range"><input id="frame-range" type="range" min="0" max="0" step="1" value="0" aria-label="当前帧"></div>
+        <div class="frame-marks"><span>0</span><span id="tm-mid"></span><span id="tm-end"></span></div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------ inspector -->
+    <aside class="card inspector" aria-label="块检查器">
+      <div class="card-head"><h2>块检查器</h2><span class="hint">点画面选块</span></div>
+      <div class="inspector-body">
+        <div class="insp-section" id="sec-block">
+          <h3>当前块 <span id="blk-of"></span></h3>
+          <div id="block-empty" class="insp-empty">选择一帧后，点画面上任意一块查看它的运动矢量与残差。</div>
+          <div id="block-body" hidden>
+            <div class="block-head">
+              <div class="where" id="blk-where">—</div>
+              <span class="chip chip-p" id="blk-kind">—</span>
+            </div>
+            <div class="vec-readout" id="vec-readout">
+              <div class="vec-cell"><div class="label">矢量 dx,dy</div><div class="v" id="blk-mv">—</div></div>
+              <div class="vec-cell"><div class="label">SAD</div><div class="v" id="blk-sad">—</div></div>
+              <div class="vec-cell"><div class="label">非零系数</div><div class="v" id="blk-nz">—</div></div>
+            </div>
+            <div class="mini-row">
+              <div class="mini"><canvas id="mini-orig" width="8" height="8"></canvas><div class="cap"><span>原图</span><b id="mini-orig-v"></b></div></div>
+              <div class="mini"><canvas id="mini-pred" width="8" height="8"></canvas><div class="cap"><span>预测</span><b id="mini-pred-v"></b></div></div>
+              <div class="mini"><canvas id="mini-err" width="8" height="8"></canvas><div class="cap"><span>误差</span><b id="mini-err-v"></b></div></div>
+            </div>
+            <div class="block-head" style="margin-top:12px"><div class="where" style="font-size:11px;color:var(--ink-3)">残差系数 8×8，行优先</div><span class="mono" style="font-size:10.5px;color:var(--ink-3)" id="blk-bytes"></span></div>
+            <div class="coef-wrap"><table class="coef-grid" id="coef-grid"><tbody></tbody></table></div>
+          </div>
+        </div>
+
+        <div class="insp-section" id="sec-ref">
+          <h3>参考窗口 <span id="ref-of">7×7 块 · 双线性</span></h3>
+          <div id="ref-empty" class="insp-empty">P 帧块会显示上一帧解码图里配合矢量使用的采样窗口。</div>
+          <div class="ref-wrap" id="ref-body" hidden>
+            <canvas id="ref-canvas" width="21" height="21"></canvas>
+            <div class="ref-notes">
+              <div>参考取<strong>上一帧解码后</strong>的补边平面，而非原始帧。</div>
+              <div class="mono" id="ref-math"></div>
+              <div class="mono" id="ref-samp"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="insp-section" id="sec-frame">
+          <h3>本帧概况 <span id="fr-of"></span></h3>
+          <div class="kv" id="frame-kv">
+            <dt>编码类型</dt><dd id="kv-type">—</dd>
+            <dt>载荷字节</dt><dd id="kv-payload">—</dd>
+            <dt>运动补偿块</dt><dd id="kv-pblocks">—</dd>
+            <dt>块最大误差</dt><dd id="kv-maxerr">—</dd>
+            <dt>相对原图 PSNR</dt><dd id="kv-psnr">—</dd>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ------------------------------------------------------- drift charts -->
+  <div class="charts-row">
+    <section class="card chart-card" aria-labelledby="chart-err-title">
+      <div class="chart-head">
+        <div>
+          <h2 id="chart-err-title">逐帧与原始序列的误差</h2>
+          <div class="sub">灰阶为 255 时满量程；闭环编码的误差会在关键帧处回落。</div>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="sw" style="background:var(--s-rec)"></span>重建 MSE（闭环）</span>
+        <span class="item"><span class="sw" style="background:var(--s-pred)"></span>预测 MSE</span>
+        <span class="item" id="leg-openloop" hidden><span class="sw" style="background:var(--s-vec)"></span>改用原始帧作参考</span>
+      </div>
+      <div class="chart-body" id="chart-err-body">
+        <canvas id="chart-err" role="img" aria-label="逐帧误差曲线"></canvas>
+        <div class="chart-tip" id="tip-err" hidden></div>
+      </div>
+      <details class="chart-table"><summary>数据表</summary>
+        <div class="table-scroll"><table class="data" id="table-err"></table></div>
+      </details>
+    </section>
+
+    <section class="card chart-card" aria-labelledby="chart-drift-title">
+      <div class="chart-head">
+        <div>
+          <h2 id="chart-drift-title">累积漂移</h2>
+          <div class="sub">从最近一个 I 帧起，重建与「理想参考」的偏离量（灰度级）。</div>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="sw" style="background:var(--s-rec)"></span>MAE 累积</span>
+        <span class="item"><span class="sw" style="background:var(--s-pred)"></span>本帧增量</span>
+      </div>
+      <div class="chart-body" id="chart-drift-body">
+        <canvas id="chart-drift" role="img" aria-label="累积漂移曲线"></canvas>
+        <div class="chart-tip" id="tip-drift" hidden></div>
+      </div>
+      <details class="chart-table"><summary>数据表</summary>
+        <div class="table-scroll"><table class="data" id="table-drift"></table></div>
+      </details>
+    </section>
+  </div>
+
+  <!-- ---------------------------------------------------------- diagnosis -->
+  <section class="card diag-card" aria-labelledby="diag-title">
+    <div class="card-head">
+      <h2 id="diag-title">闭环诊断</h2>
+      <span class="hint" id="diag-hint">I 帧数、帧间误差累积与整块补边情况</span>
+    </div>
+    <div class="diag-body" id="diag-body">
+      <div class="stat"><div class="label">关键帧</div><div class="value" id="d-i">—</div><div class="note" id="d-i-note"></div></div>
+      <div class="stat"><div class="label">平均重建 PSNR</div><div class="value" id="d-psnr">—</div><div class="note" id="d-psnr-note"></div></div>
+      <div class="stat"><div class="label">漂移峰值</div><div class="value" id="d-drift">—</div><div class="note" id="d-drift-note"></div></div>
+      <div class="diag-note" id="d-note">
+        <span class="mark"></span>
+        <div id="d-note-text">编码完成后这里会说明：为什么不是整块尺寸的画面最容易出问题，以及当前参数下闭环是否收敛。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- bitstream -->
+  <section class="card bitstream" aria-labelledby="bs-title">
+    <div class="card-head">
+      <h2 id="bs-title">码流与校验</h2>
+      <div class="bs-actions">
+        <span class="badge" id="bs-badge"><span class="dot"></span><span id="bs-badge-text">尚未编码</span></span>
+        <button class="btn btn-sm" id="btn-verify" type="button">独立解码校验</button>
+      </div>
+    </div>
+    <div class="bs-grid">
+      <div class="bs-left">
+        <div class="kv" id="hdr-kv">
+          <dt>标识 / 版本</dt><dd>MVR1</dd>
+          <dt>尺寸</dt><dd id="hdr-size">—</dd>
+          <dt>帧数</dt><dd id="hdr-frames">—</dd>
+          <dt>关键帧间隔</dt><dd id="hdr-key">—</dd>
+          <dt>量化步长</dt><dd id="hdr-q">—</dd>
+          <dt>总字节</dt><dd id="hdr-bytes">—</dd>
+        </div>
+        <div class="faults" id="fault-actions">
+          <div class="label">故障注入</div>
+          <div class="row">
+            <button class="btn btn-sm" data-fault="truncate-mid" type="button">截断帧载荷</button>
+            <button class="btn btn-sm" data-fault="truncate-tail" type="button">截断文件尾</button>
+            <button class="btn btn-sm" data-fault="bad-vector" type="button">非法运动矢量</button>
+            <button class="btn btn-sm" data-fault="bad-run" type="button">越界零游程</button>
+            <button class="btn btn-sm" data-fault="bad-magic" type="button">破坏标识</button>
+            <button class="btn btn-sm" data-fault="trailing" type="button">尾部多余字节</button>
+          </div>
+        </div>
+        <div class="bs-actions">
+          <button class="btn btn-sm" id="btn-restore" type="button">恢复正确码流</button>
+        </div>
+      </div>
+      <div class="bs-right">
+        <div>
+          <div class="layout-bar" id="layout-bar" role="group" aria-label="码流布局"></div>
+          <div class="layout-legend">
+            <span class="item"><span class="sw" style="background:var(--ink-3)"></span>固定头 14 B</span>
+            <span class="item"><span class="sw" style="background:var(--i)"></span>I 帧</span>
+            <span class="item"><span class="sw" style="background:var(--p)"></span>P 帧</span>
+            <span class="item"><span class="sw" style="background:var(--crit)"></span>问题位置</span>
+          </div>
+        </div>
+        <div class="verify-line" id="verify-line"><span class="dot"></span><span id="verify-text">编码后自动在页面内独立解码核对。</span></div>
+        <div>
+          <div class="label" style="margin-bottom:6px">解码问题</div>
+          <div class="issues" id="issues"><div class="empty-note">暂无问题。</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <details class="spec">
+    <summary>MVR1 码流约定与解码规则</summary>
+    <div class="spec-body">
+      <p>固定头为 ASCII <code>MVR1</code> 及小端 u16 宽、高、帧数、关键帧间隔、量化步长。逐帧为 u8 类型（0 为 I、1 为 P）、小端 u32 载荷字节数与载荷。编号从 0 起，间隔整数倍为 I，其余为 P。</p>
+      <ul>
+        <li>只存 8×8 栅格块；宽高补到 8 的倍数，右、下复制末列与末行，解码预览裁回原尺寸。</li>
+        <li>I 块参考值 128；P 块开头是 i8 dx、dy，半像素单位，每轴搜索 −8…8。</li>
+        <li>P 参考取<strong>上一帧解码后</strong>的全补边平面，坐标按 <code>x+dx/2, y+dy/2</code> 双线性采样，整数邻点先夹紧，结果半数向上取整。</li>
+        <li>块匹配用补边后的整块 SAD；平局按 |dx|+|dy|、dy、dx 递增取小。</li>
+        <li>残差按步长量化、四舍五入、半数远离 0；每段先写 u8 零游程，到块尾即结束，否则接 1 个 i16 非零值，直到 64 项。</li>
+        <li>解码为预测 + 反量化残差，夹紧 0…255；末帧后无额外数据。</li>
+      </ul>
+    </div>
+  </details>
+</main>
+
+<footer class="page-foot">
+  <span>校验台在本页内完成编码、解码与损坏定位，码流可导出为 <span class="mono">.mvr1</span>。</span>
+  <span class="mono">MVR1 · 8-bit P5 · ≤48 frames · ≤192×128</span>
+</footer>
+
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+<!--MVR1_JS-->
+</script>
+<script>
+<!--SAMPLES_JS-->
+</script>
+<script>
+<!--APP_JS-->
+</script>
