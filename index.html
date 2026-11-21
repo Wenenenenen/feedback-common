@@ -1,0 +1,938 @@
+<title>冲印标记定位台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* ---------------------------------------------------------------
+     设计令牌：工业检测台。冷灰底 + 琥珀强调色，等宽数字。
+     --------------------------------------------------------------- */
+  :root {
+    --bg: #eef0ec;
+    --surface: #fbfcf9;
+    --surface-2: #e6e9e2;
+    --surface-3: #dde1d8;
+    --line: #ccd2c8;
+    --line-strong: #9aa598;
+    --ink: #151a17;
+    --muted: #58635a;
+    --accent: #a24c05;
+    --accent-soft: #f2e2cf;
+    --accent-ink: #fffaf3;
+    --match: #0b6f63;
+    --match-soft: #d3ece7;
+    --miss: #ad2146;
+    --miss-soft: #f6dce2;
+    --shadow: 0 1px 0 rgba(21, 26, 23, .05), 0 18px 40px -32px rgba(21, 26, 23, .6);
+    --radius: 10px;
+    --font-display: "Barlow Semi Condensed", "IBM Plex Sans", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1211;
+      --surface: #171b19;
+      --surface-2: #202622;
+      --surface-3: #272e29;
+      --line: #303832;
+      --line-strong: #4b584f;
+      --ink: #e7ebe5;
+      --muted: #9aa79d;
+      --accent: #f0a457;
+      --accent-soft: #3a2a18;
+      --accent-ink: #1b1206;
+      --match: #63d6c4;
+      --match-soft: #173c36;
+      --miss: #ff90a7;
+      --miss-soft: #3d1c26;
+      --shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 18px 40px -30px rgba(0, 0, 0, .9);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1211;
+    --surface: #171b19;
+    --surface-2: #202622;
+    --surface-3: #272e29;
+    --line: #303832;
+    --line-strong: #4b584f;
+    --ink: #e7ebe5;
+    --muted: #9aa79d;
+    --accent: #f0a457;
+    --accent-soft: #3a2a18;
+    --accent-ink: #1b1206;
+    --match: #63d6c4;
+    --match-soft: #173c36;
+    --miss: #ff90a7;
+    --miss-soft: #3d1c26;
+    --shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 18px 40px -30px rgba(0, 0, 0, .9);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--bg);
+  }
+  .wrap {
+    max-width: 1480px;
+    margin-inline: auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 48px;
+  }
+
+  /* ---------- 页头 ---------- */
+  .top {
+    padding-block: 26px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 28px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 20px;
+  }
+  .top-main { min-width: 0; flex: 1 1 380px; }
+  .kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .kicker::before {
+    content: "";
+    width: 18px;
+    height: 2px;
+    background: var(--accent);
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.75rem, 1.1rem + 2.2vw, 2.6rem);
+    line-height: 1.02;
+    letter-spacing: -0.005em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede {
+    margin: 8px 0 0;
+    max-width: 60ch;
+    color: var(--muted);
+    font-size: .92rem;
+  }
+  .top-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    letter-spacing: .02em;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 999px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+  .chip .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--match);
+  }
+  .chip.warn .dot { background: var(--accent); }
+
+  /* ---------- 布局 ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 312px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  @media (min-width: 1200px) {
+    .layout { grid-template-columns: 312px minmax(0, 1fr) 384px; }
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 16px 11px;
+    border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2, .section-label {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    font-weight: 500;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+  .panel-head .meta {
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    color: var(--muted);
+  }
+
+  /* ---------- 控件列 ---------- */
+  .controls { display: flex; flex-direction: column; }
+  .group {
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .group:first-of-type { border-top: 0; }
+  .group > .section-label { margin-bottom: 1px; }
+
+  .drop {
+    display: block;
+    position: relative;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface-2);
+    padding: 11px 12px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    text-align: left;
+  }
+  .drop:hover, .drop:focus-within { border-color: var(--accent); background: var(--surface-3); }
+  .drop.dragover { border-color: var(--accent); background: var(--accent-soft); }
+  .drop-title {
+    display: block;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: .01em;
+  }
+  .drop-meta {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    color: var(--muted);
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+  .drop-act {
+    display: block;
+    font-size: .74rem;
+    color: var(--accent);
+    margin-top: 5px;
+  }
+  .drop input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .canvas-frame {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background:
+      repeating-conic-gradient(var(--surface-2) 0 25%, var(--surface-3) 0 50%) 0 0 / 16px 16px;
+    padding: 7px;
+    display: flex;
+    justify-content: center;
+  }
+  canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    border-radius: 4px;
+  }
+  .anchor-note {
+    font-size: .76rem;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .anchor-note b { color: var(--ink); font-weight: 500; }
+  .anchor-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .anchor-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-family: var(--font-mono);
+    font-size: .66rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  input[type="number"] {
+    width: 100%;
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="number"]:focus-visible,
+  input[type="range"]:focus-visible,
+  button:focus-visible,
+  input[type="checkbox"]:focus-visible,
+  .drop:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    margin: 0;
+  }
+  input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: .8rem;
+  }
+  .field-head label { color: var(--ink); }
+  .field-head output {
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    color: var(--accent);
+  }
+  .field-head .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .74rem;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .hint {
+    margin: 0;
+    font-size: .72rem;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: .82rem;
+    cursor: pointer;
+  }
+  .check-row span { line-height: 1.35; }
+  .check-row small { display: block; color: var(--muted); font-size: .72rem; }
+
+  .btn {
+    appearance: none;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    padding: 9px 14px;
+    font-family: var(--font-body);
+    font-size: .86rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--surface-2);
+    color: var(--ink);
+    border-color: var(--line);
+    white-space: nowrap;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .btn:hover { background: var(--surface-3); border-color: var(--line-strong); }
+  .btn.primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    font-weight: 600;
+    letter-spacing: .01em;
+  }
+  .btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+  .btn.ghost { background: transparent; }
+
+  .message {
+    margin: 0 16px 14px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: .78rem;
+    line-height: 1.45;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+  .message[hidden] { display: none !important; }
+  .message.error { border-color: var(--miss); color: var(--miss); background: var(--miss-soft); }
+  .message.ok { border-color: var(--match); color: var(--match); background: var(--match-soft); }
+
+  /* ---------- 舞台 ---------- */
+  .stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .stage-panel { padding: 14px; display: flex; flex-direction: column; gap: 11px; }
+  .stage-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 14px;
+  }
+  .stage-bar h2 {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: .005em;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: .72rem;
+    color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .swatch.match { background: var(--match); }
+  .swatch.miss { background: var(--miss); }
+  .swatch.other { background: transparent; border: 1.5px solid var(--line-strong); }
+  .scene-frame {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-2);
+    padding: 8px;
+    display: flex;
+    justify-content: center;
+  }
+  .scene-frame canvas { width: 100%; max-width: 720px; }
+  .tpl-frame canvas { max-width: 100%; }
+  .canvas-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: .85rem;
+    pointer-events: none;
+  }
+
+  .progress {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    color: var(--muted);
+  }
+  .progress[hidden] { display: none !important; }
+  .progress-track {
+    grid-column: 1 / -1;
+    height: 4px;
+    background: var(--surface-3);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width .18s ease-out;
+  }
+  .stats-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+  .stats-line b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- 结果列 ---------- */
+  .results { display: flex; flex-direction: column; min-width: 0; }
+  .result-list { padding: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 560px; overflow-y: auto; }
+  .result {
+    display: block;
+    width: 100%;
+    text-align: left;
+    appearance: none;
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid transparent;
+    border-left: 3px solid transparent;
+    border-radius: 7px;
+    padding: 9px 10px;
+    font: inherit;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .result:hover { background: var(--surface-2); }
+  .result[aria-pressed="true"] {
+    background: var(--surface-2);
+    border-color: var(--line);
+    border-left-color: var(--accent);
+  }
+  .result-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .rank {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: .64rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-radius: 4px;
+    padding: 3px 5px;
+  }
+  .result[aria-pressed="false"] .rank { background: var(--surface-3); color: var(--muted); }
+  .coords {
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .coords .sep { color: var(--muted); margin: 0 1px; }
+  .badge {
+    margin-left: auto;
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: .62rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .badge.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .result-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px 8px;
+    margin-top: 6px;
+  }
+  .result-metrics div { min-width: 0; }
+  .result-metrics em {
+    display: block;
+    font-style: normal;
+    font-family: var(--font-mono);
+    font-size: .6rem;
+    letter-spacing: .06em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .result-metrics b {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cov-track {
+    position: relative;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    margin-top: 7px;
+    overflow: hidden;
+  }
+  .cov-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--match);
+  }
+  .cov-mark {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 1px;
+    background: var(--muted);
+    opacity: .8;
+  }
+  .result-empty {
+    padding: 26px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: .84rem;
+    line-height: 1.6;
+  }
+  .result-empty strong { display: block; color: var(--ink); font-weight: 500; margin-bottom: 2px; }
+  .sel-detail {
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
+    font-size: .78rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .sel-detail b { color: var(--ink); font-weight: 500; font-family: var(--font-mono); font-size: .76rem; }
+  .sel-detail .m-match { color: var(--match); font-weight: 500; }
+  .sel-detail .m-miss { color: var(--miss); font-weight: 500; }
+  .results-foot {
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .dirty-note { font-size: .72rem; color: var(--accent); }
+
+  /* ---------- 导出 ---------- */
+  .export {
+    margin-top: 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+  .export[hidden] { display: none !important; }
+  .export-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 16px 11px;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .export pre {
+    margin: 0;
+    padding: 14px 16px;
+    max-height: 340px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    line-height: 1.55;
+    color: var(--ink);
+    background: transparent;
+    white-space: pre;
+  }
+
+  /* ---------- 说明 ---------- */
+  .notes {
+    margin-top: 18px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 0;
+  }
+  .notes summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    list-style: none;
+  }
+  .notes summary::-webkit-details-marker { display: none; }
+  .notes summary::before { content: "▸ "; color: var(--accent); }
+  .notes[open] summary::before { content: "▾ "; }
+  .notes-body {
+    padding: 0 16px 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px 24px;
+    font-size: .8rem;
+    color: var(--muted);
+  }
+  .notes-body h3 {
+    font-family: var(--font-display);
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 3px;
+  }
+  .notes-body p { margin: 0; line-height: 1.5; }
+  .notes-body code {
+    font-family: var(--font-mono);
+    font-size: .92em;
+    color: var(--ink);
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 1px 3px;
+  }
+  .notes-steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+  .notes-steps li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 26px;
+    line-height: 1.45;
+  }
+  .notes-steps li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    color: var(--accent);
+  }
+  .notes-steps b { color: var(--ink); font-weight: 500; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="top-main">
+      <span class="kicker">机器视觉 · 有向轮廓检索</span>
+      <h1>冲印标记定位台</h1>
+      <p class="lede">导入八位灰度模板与场景，一次找出多处转向、镜像、缩放的冲印标记；被夹具遮挡的轮廓按覆盖率计分，而不是逐像素比对。</p>
+    </div>
+    <div class="top-meta">
+      <span class="chip" id="engineChip"><span class="dot"></span><span id="engineText">轮廓引擎就绪</span></span>
+      <span class="chip"><span id="sampleChip">内置样例</span></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ============ 控件 ============ -->
+    <section class="panel controls" aria-label="搜索设置">
+      <div class="panel-head">
+        <h2>搜索设置</h2>
+        <span class="meta">P5 · 8-bit</span>
+      </div>
+
+      <div class="group">
+        <span class="section-label">图像</span>
+        <label class="drop" id="tplDrop" for="tplFile">
+          <input type="file" id="tplFile" accept=".pgm,.pnm,.pbm">
+          <span class="drop-title">模板 PGM</span>
+          <span class="drop-meta" id="tplName">尚未载入 · 单边 ≤ 128 px</span>
+          <span class="drop-act">选择文件或将 PGM 拖到这里</span>
+        </label>
+        <label class="drop" id="sceneDrop" for="sceneFile">
+          <input type="file" id="sceneFile" accept=".pgm,.pnm,.pbm">
+          <span class="drop-title">场景 PGM</span>
+          <span class="drop-meta" id="sceneName">尚未载入 · 单边 ≤ 384 px</span>
+          <span class="drop-act">选择文件或将 PGM 拖到这里</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn" id="sampleBtn" type="button">载入样例</button>
+          <button class="btn ghost" id="clearBtn" type="button">清空结果</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="section-label">模板锚点</span>
+        <div class="canvas-frame tpl-frame">
+          <canvas id="tplCanvas" width="180" height="180" aria-label="模板预览，点击设置锚点"></canvas>
+        </div>
+        <p class="anchor-note">点按模板图设置锚点，也可拖动十字。锚点是姿态原点，位置、角度都相对它报告。</p>
+        <div class="anchor-fields">
+          <label>锚点 X <input id="anchorX" type="number" step="0.5" inputmode="decimal"></label>
+          <label>锚点 Y <input id="anchorY" type="number" step="0.5" inputmode="decimal"></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="section-label">边缘强度</span>
+        <div class="field">
+          <div class="field-head">
+            <label for="edgeValue">Sobel 幅值阈值</label>
+            <label class="switch" for="edgeAuto"><input type="checkbox" id="edgeAuto" checked> 自动</label>
+          </div>
+          <input id="edgeValue" type="number" min="0" max="4000" step="1" inputmode="numeric">
+          <p class="hint" id="edgeHint">自动取模板边点梯度中位数 × 0.72，压掉低对比度杂边。</p>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="section-label">尺度与角度</span>
+        <div class="field">
+          <div class="field-head"><label for="minScale">最小尺度</label><output id="minScaleOut"></output></div>
+          <input id="minScale" type="range" min="0.3" max="2" step="0.05" value="0.75">
+        </div>
+        <div class="field">
+          <div class="field-head"><label for="maxScale">最大尺度</label><output id="maxScaleOut"></output></div>
+          <input id="maxScale" type="range" min="0.3" max="2" step="0.05" value="1.4">
+        </div>
+        <div class="field">
+          <div class="field-head"><label for="scaleStep">尺度步长</label><output id="scaleStepOut"></output></div>
+          <input id="scaleStep" type="range" min="0.02" max="0.3" step="0.01" value="0.1">
+        </div>
+        <div class="field">
+          <div class="field-head"><label for="angleStep">角度步长</label><output id="angleStepOut"></output></div>
+          <input id="angleStep" type="range" min="2" max="30" step="1" value="12">
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="section-label">判定</span>
+        <div class="field">
+          <div class="field-head"><label for="minCoverage">最低轮廓覆盖率</label><output id="minCoverageOut"></output></div>
+          <input id="minCoverage" type="range" min="0" max="1" step="0.01" value="0.62">
+          <p class="hint">分母是全部模板边点，包含投影出界与遮挡住的点。</p>
+        </div>
+        <label class="check-row">
+          <input type="checkbox" id="mirrorSearch" checked>
+          <span>搜索镜像 <small>把模板水平翻转后再匹配</small></span>
+        </label>
+      </div>
+
+      <div class="group">
+        <button class="btn primary" id="runBtn" type="button">定位标记</button>
+        <p class="message" id="message" role="status" hidden></p>
+      </div>
+    </section>
+
+    <!-- ============ 舞台 ============ -->
+    <section class="stage" aria-label="场景与叠加">
+      <div class="panel stage-panel">
+        <div class="stage-bar">
+          <h2>场景叠加</h2>
+          <div class="legend">
+            <span><i class="swatch match"></i>匹配边点</span>
+            <span><i class="swatch miss"></i>失配 / 遮挡</span>
+            <span><i class="swatch other"></i>其他候选</span>
+          </div>
+        </div>
+        <div class="scene-frame">
+          <canvas id="sceneCanvas" width="704" height="584" aria-label="场景预览与轮廓叠加"></canvas>
+          <div class="canvas-empty" id="sceneEmpty">载入场景后在此显示匹配结果</div>
+        </div>
+        <div class="progress" id="progress" hidden>
+          <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+          <span id="progressText">准备</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="stats-line" id="stats">
+          <span>等待载入图像</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 结果 ============ -->
+    <section class="panel results" aria-label="检测结果">
+      <div class="panel-head">
+        <h2>检测结果</h2>
+        <span class="meta" id="resultCount">—</span>
+      </div>
+      <div class="result-list" id="resultList" aria-live="polite"></div>
+      <div class="result-empty" id="resultEmpty">
+        <strong>尚无结果</strong>
+        载入模板与场景后点「定位标记」。结果按覆盖率降序、配对距离均值升序排列。
+      </div>
+      <div class="sel-detail" id="selDetail" hidden></div>
+      <div class="results-foot">
+        <p class="dirty-note" id="dirtyNote" hidden>参数已更改，重新定位才会反映当前设置。</p>
+        <button class="btn" id="exportBtn" type="button" disabled>导出姿态 JSON</button>
+      </div>
+    </section>
+  </main>
+
+  <section class="export" id="exportPanel" hidden aria-label="姿态 JSON 导出">
+    <div class="export-head">
+      <h2 class="section-label">姿态 JSON · 已按覆盖率排序</h2>
+      <div class="btn-row" style="flex: 0 0 auto;">
+        <button class="btn primary" id="copyBtn" type="button">复制 JSON</button>
+        <button class="btn ghost" id="closeExport" type="button">收起</button>
+      </div>
+    </div>
+    <pre id="exportCode" tabindex="0"></pre>
+    <p class="hint" id="copyHint" style="padding: 0 16px 14px;" hidden>已复制到剪贴板</p>
+  </section>
+
+  <details class="notes">
+    <summary>算法与约定</summary>
+    <div class="notes-body">
+      <div>
+        <h3>姿态定义</h3>
+        <p>以锚点为原点：先水平镜像（可选），再缩放，最后在 x 向右、y 向下的坐标中顺时针旋转并平移。角度单位为度，范围 −180°…180°。</p>
+      </div>
+      <div>
+        <h3>配对规则</h3>
+        <p>模板边点与场景边点配对需距离 <code>≤ 2.5 px</code> 且法向夹角 <code>≤ 45°</code>。法向取 Sobel 梯度方向、指向亮侧。每个模板点取满足条件的最近场景点。</p>
+      </div>
+      <div>
+        <h3>覆盖率</h3>
+        <p>覆盖率 = 配对成功点数 ÷ 全部模板边点。分母包含投影出图像外的点与被遮挡点，所以遮挡只降低分数，不会让比较基准缩小。</p>
+      </div>
+      <div>
+        <h3>四步流程</h3>
+        <ol class="notes-steps">
+          <li><b>方向霍夫投票</b>：按法向分箱，在 (镜像, 尺度, 角度) 组合上为平移投票，保留峰值。</li>
+          <li><b>精确配对评分</b>：每个候选逐点做距离与法向双条件配对，得到覆盖率与均距。</li>
+          <li><b>姿态细化</b>：只用已配对点做阻尼 Gauss–Newton，更新平移、角度、尺度。</li>
+          <li><b>证据去重</b>：位置/姿态近邻只报一次；若两姿态配对到同一批场景边点，保留证据更强的一个。</li>
+        </ol>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script src="js/locator.js"></script>
+<script src="js/sample-data.js"></script>
+<script src="js/app.js"></script>
