@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>气泡轨迹核对台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>气泡轨迹核对台</h1>
+  <div class="header-actions">
+    <input type="file" id="fileInput" multiple accept=".zip,.json,.u16,.png" hidden>
+    <button id="btnImport">导入帧图 / ZIP</button>
+    <button id="btnSample">载入样例</button>
+    <button id="btnExport" disabled>导出 JSON</button>
+  </div>
+</header>
+
+<section id="paramsBar">
+  <label>D <input id="pD" type="number" value="8" min="0" step="1"></label>
+  <label>入场费 <input id="pBirth" type="number" value="40" step="1"></label>
+  <label>退场费 <input id="pDeath" type="number" value="40" step="1"></label>
+  <label>分合费 <input id="pSplitMerge" type="number" value="3" step="1"></label>
+  <label>跳帧费 <input id="pGap" type="number" value="5" step="1"></label>
+  <label>宽 <input id="pW" type="number" value="48" min="1" max="256"></label>
+  <label>高 <input id="pH" type="number" value="32" min="1" max="256"></label>
+  <button id="btnRecalc" disabled>重新计算</button>
+  <span id="totalBox"></span>
+</section>
+
+<div id="messages"></div>
+
+<main>
+  <section id="framePane">
+    <div class="pane-title">
+      <span>帧图</span>
+      <button id="btnPrev">◀</button>
+      <span id="frameLabel">—</span>
+      <button id="btnNext">▶</button>
+      <input id="frameSlider" type="range" min="0" max="0" value="0">
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="frameCanvas" width="512" height="512"></canvas>
+      <div id="frameTip" class="tip" hidden></div>
+    </div>
+    <div id="objInfo" class="info-line">未选择对象</div>
+  </section>
+
+  <section id="graphPane">
+    <div class="pane-title">
+      <span>轨迹图</span>
+      <label class="chk"><input type="checkbox" id="chkCands"> 显示未选候选</label>
+    </div>
+    <div id="graphWrap"><svg id="graphSvg"></svg></div>
+  </section>
+</main>
+
+<section id="candPane">
+  <div class="pane-title">
+    <span>候选事件</span>
+    <select id="candFilter">
+      <option value="all">全部</option>
+      <option value="selected">已选</option>
+      <option value="unselected">未选</option>
+      <option value="locked">已锁定</option>
+      <option value="excluded">已排除</option>
+      <option value="group">当前争用组</option>
+    </select>
+    <span id="candCount"></span>
+  </div>
+  <div id="candDetail" class="detail" hidden></div>
+  <div class="table-wrap">
+    <table id="candTable">
+      <thead><tr>
+        <th>#</th><th>类型</th><th>源</th><th>目标</th><th>距离</th><th>面积差</th><th>费用</th><th>状态</th><th>操作</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+:root {
+  --bg: #14171c;
+  --panel: #1c2129;
+  --panel2: #232a34;
+  --border: #333c48;
+  --text: #dbe2ea;
+  --dim: #8b96a5;
+  --accent: #4da3ff;
+  --good: #3fb950;
+  --warn: #d29922;
+  --bad: #f0506e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+h1 { font-size: 17px; margin: 0; }
+button {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+.header-actions button { margin-left: 8px; }
+
+#paramsBar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+#paramsBar label { color: var(--dim); font-size: 13px; }
+#paramsBar input {
+  width: 64px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px;
+}
+#totalBox { margin-left: auto; font-weight: 600; }
+
+#messages { padding: 0 16px; }
+.msg {
+  margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; font-size: 13px;
+  border: 1px solid var(--border); background: var(--panel2);
+}
+.msg.warn { border-color: var(--warn); color: var(--warn); }
+.msg.error { border-color: var(--bad); color: var(--bad); }
+.msg.ok { border-color: var(--good); color: var(--good); }
+.msg button { margin-left: 10px; font-size: 12px; padding: 2px 8px; }
+
+main {
+  display: grid; grid-template-columns: minmax(360px, 1fr) minmax(420px, 1.4fr);
+  gap: 12px; padding: 12px 16px;
+}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+#framePane, #graphPane, #candPane {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px;
+}
+.pane-title {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  font-weight: 600; font-size: 14px;
+}
+.pane-title .chk { font-weight: 400; font-size: 12px; color: var(--dim); }
+#frameSlider { flex: 1; }
+.canvas-wrap { position: relative; }
+#frameCanvas {
+  width: 100%; image-rendering: pixelated; background: #0b0d10;
+  border: 1px solid var(--border); border-radius: 4px; cursor: crosshair;
+}
+.tip {
+  position: absolute; pointer-events: none; background: rgba(10,12,16,0.92);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px;
+  font-size: 12px; white-space: nowrap; z-index: 5;
+}
+.info-line { margin-top: 6px; font-size: 13px; color: var(--dim); min-height: 20px; }
+
+#graphWrap { overflow: auto; max-height: 460px; }
+#graphSvg { display: block; }
+#graphSvg .node { cursor: pointer; }
+#graphSvg .edge { cursor: pointer; }
+
+#candPane { margin: 0 16px 16px; }
+#candPane select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 6px;
+}
+#candCount { color: var(--dim); font-size: 12px; font-weight: 400; }
+.table-wrap { overflow: auto; max-height: 340px; border: 1px solid var(--border); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel2); z-index: 1; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--panel2); }
+tbody tr.sel { background: rgba(77,163,255,0.12); }
+tbody tr.locked { color: var(--accent); }
+tbody tr.excluded { color: var(--dim); text-decoration: line-through; }
+td .mini { padding: 1px 6px; font-size: 11px; margin-right: 4px; }
+
+.detail {
+  margin-bottom: 8px; padding: 8px 12px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+}
+.detail h3 { margin: 0 0 6px; font-size: 13px; }
+.detail .kv { color: var(--dim); }
+.detail .conf-item { margin: 2px 0; }
+.badge {
+  display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px;
+  border: 1px solid var(--border); margin-right: 4px;
+}
+.badge.sel { color: var(--good); border-color: var(--good); }
+.badge.lock { color: var(--accent); border-color: var(--accent); }
+.badge.excl { color: var(--dim); }
+.badge.unsolved { color: var(--warn); border-color: var(--warn); }
