@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四键校谱台 · 停拍判定</title>
+<style>
+  :root {
+    --bg: #14161c; --panel: #1d2029; --line: #2c303d;
+    --text: #e6e8ee; --dim: #9aa0b0;
+    --perfect: #f5c542; --good: #4cc38a; --miss: #e5534b;
+    --break: #e08a3c; --pending: #8a90a0; --stop: rgba(229, 83, 75, .18);
+    --lane0: #5b8def; --lane1: #4cc38a; --lane2: #f5c542; --lane3: #e06aa7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  button, .filebtn {
+    background: #2a2f3d; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  button:hover, .filebtn:hover { background: #343a4b; }
+  button.primary { background: #3457a8; border-color: #4068c0; }
+  button.primary:hover { background: #3d63bd; }
+  label.field { color: var(--dim); font-size: 13px; display: flex; align-items: center; gap: 4px; }
+  input[type=number] {
+    width: 90px; background: #12141a; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px;
+  }
+  main { display: flex; gap: 12px; padding: 12px 16px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .side { flex: 1; min-width: 420px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .card h2 { font-size: 13px; margin: 0 0 8px; color: var(--dim); font-weight: 600; }
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+  .stats b { font-size: 18px; margin-right: 4px; }
+  .c-perfect { color: var(--perfect); } .c-good { color: var(--good); }
+  .c-miss { color: var(--miss); } .c-break { color: var(--break); }
+  .c-pending { color: var(--pending); }
+  .tablewrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { position: sticky; top: 0; background: #232735; color: var(--dim); font-weight: 600; }
+  th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
+  tbody tr:hover { background: #262a38; }
+  td.j { font-weight: 700; }
+  textarea {
+    width: 100%; height: 90px; background: #12141a; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; font: 11px/1.4 monospace;
+    padding: 6px; resize: vertical;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hint { color: var(--dim); font-size: 12px; }
+  kbd {
+    background: #2a2f3d; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 6px; font: 12px monospace;
+  }
+  .info { font-size: 12.5px; color: var(--dim); }
+  .info span { margin-right: 14px; }
+  #flash {
+    position: absolute; left: 0; right: 0; text-align: center;
+    font-size: 26px; font-weight: 800; pointer-events: none;
+    opacity: 0; transition: opacity .25s; text-shadow: 0 2px 8px rgba(0,0,0,.6);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>四键校谱台 · 停拍判定</h1>
+  <button id="btnPlay" class="primary">▶ 播放</button>
+  <button id="btnReplay">↺ 重玩</button>
+  <button id="btnMetro" class="on">🔔 节拍器：开</button>
+  <label class="field">校准值(µs) <input type="number" id="offset" step="1"></label>
+  <label class="filebtn">导入谱面<input type="file" id="fileChart" accept=".json" hidden></label>
+  <label class="filebtn">导入记录<input type="file" id="fileInputs" accept=".json" hidden></label>
+  <button id="btnExport">导出输入记录</button>
+</header>
+
+<main>
+  <div class="stage" style="position:relative">
+    <canvas id="cv" width="430" height="560"></canvas>
+    <div id="flash"></div>
+    <div class="hint" style="margin-top:6px">
+      按键 <kbd>D</kbd><kbd>F</kbd><kbd>J</kbd><kbd>K</kbd> 对应 1–4 轨 ·
+      <kbd>空格</kbd> 播放/暂停 · 长键按住到尾点附近松开
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>谱面信息</h2>
+      <div class="info" id="chartInfo"></div>
+    </div>
+    <div class="card">
+      <h2>判定统计</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="card">
+      <h2>逐音符判定（目标时间 / 误差 / 结果，误差精确到 0.1µs）</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>#</th><th>编号</th><th>轨</th><th>类型</th>
+            <th>目标时间(ms)</th><th>按下误差(ms)</th><th>松开误差(ms)</th><th>判定</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>输入记录（[歌曲微秒(校准前), 轨道, down/up]，可粘贴后导入）</h2>
+      <textarea id="taInputs" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button id="btnImportTa">从文本导入</button>
+        <button id="btnCopy">复制</button>
+        <span class="hint">试玩时自动记录；导出/导入均为 JSON 数组</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="judge.js"></script>
+<script>
+'use strict';
+/* 内置样例（与 samples/beat-stop-judge.json 一致；http 环境下会优先 fetch 该文件） */
+const DEFAULT_CHART = {"format":"tempo记录拍刻和每拍微秒数，stops记录拍刻和暂停微秒数。notes每条依次是编号、从0起的轨道、拍刻、可选的长键终止拍刻。inputs每条依次是校准前的歌曲微秒、轨道、键盘动作。","ppq":480,"tempo":[[0,500000],[480,400000]],"stops":[[480,200000]],"offsetUs":20000,"notes":[["a",0,480],["b",0,600],["h",1,720,960]],"inputs":[[770000,0,"down"],[775000,0,"up"],[820000,0,"down"],[825000,0,"up"],[920000,1,"down"],[1040000,1,"up"]],"expected":{"targets":{"a":700000,"b":800000,"h":[900000,1100000]},"results":{"a":"良好","b":"精准","h":"完成"}},"earlyReleaseUs":1039999,"fraction":{"ppq":480,"tempo":[[0,500000]],"stops":[],"offsetUs":0,"notes":[["f",0,1]],"inputs":[[31042,0,"down"]],"expectedResult":"良好"}};
+
+const $ = s => document.querySelector(s);
+const KEYS = ['KeyD', 'KeyF', 'KeyJ', 'KeyK'];
+const KEY_LABEL = ['D', 'F', 'J', 'K'];
+const LANE_COLORS = ['#5b8def', '#4cc38a', '#f5c542', '#e06aa7'];
+const RESULT_CLASS = { '精准': 'c-perfect', '良好': 'c-good', '完成': 'c-good',
+  '错过': 'c-miss', '断键': 'c-break', '待判定': 'c-pending' };
+
+let chart = DEFAULT_CHART;
+let prep = null;          // BeatJudge.prepare 结果
+let inputs = [];          // 输入记录（校准前微秒）
+let songUs = 0;           // 歌曲时钟（微秒）
+let playing = false;
+let started = false;      // 是否已开始过播放（决定实时/最终判定模式）
+let lastTs = null;
+let lastJudge = null;
+let prevResults = [];     // 上一帧各音符判定（用于检出变化做闪示）
+let tableSig = '';
+let metroOn = true;
+let actx = null, nextBeat = 0;
+let flashUntil = 0;
+const pressed = new Set();
+
+const cv = $('#cv'), ctx2d = cv.getContext('2d');
+const JUDGE_Y = 470, PX_PER_US = 0.00045, LANE_W = 90, LANE_X0 = 35;
+
+/* ---------- 谱面加载 ---------- */
+function loadChart(c) {
+  if (!c || !Number.isInteger(c.ppq) || c.ppq <= 0) { alert('谱面缺少有效的 ppq'); return; }
+  if (!Array.isArray(c.notes)) { alert('谱面缺少 notes'); return; }
+  if (c.notes.length > 2000) { alert('音符数超过 2000，无法加载'); return; }
+  for (const n of c.notes) {
+    if (!(n[1] >= 0 && n[1] < 4)) { alert('存在轨道越界(0–3)的音符：' + n[0]); return; }
+  }
+  chart = c;
+  prep = BJ_prepare();
+  resetPlay();
+  $('#offset').value = chart.offsetUs || 0;
+  renderInfo();
+  rejudge();
+}
+function BJ_prepare() { return BeatJudge.prepare(chart); }
+
+function resetPlay() {
+  inputs = [];
+  songUs = 0; playing = false; started = false;
+  nextBeat = 0; prevResults = []; tableSig = '';
+  updatePlayBtn();
+  syncInputsTa();
+}
+
+/* ---------- 判定与表格 ---------- */
+function rejudge() {
+  lastJudge = BeatJudge.judge(chart, inputs, started ? Math.round(songUs) : null);
+  renderStats();
+  renderTable();
+  detectFlash();
+}
+
+function fmtMs(us) { return us == null ? '—' : (us / 1000).toFixed(4); }
+function fmtErr(us) { return us == null ? '—' : (us >= 0 ? '+' : '') + (us / 1000).toFixed(4); }
+
+function renderStats() {
+  const s = lastJudge.summary;
+  const items = [['精准', '精准'], ['良好', '良好'], ['完成', '完成'],
+                 ['断键', '断键'], ['错过', '错过'], ['待判定', '待判定']];
+  $('#stats').innerHTML = items.map(([k, label]) =>
+    `<span class="${RESULT_CLASS[k]}"><b>${s[k] || 0}</b>${label}</span>`).join('');
+}
+
+function renderTable() {
+  // 内容没变就不重绘（试玩中每帧调用）
+  const sig = lastJudge.notes.map(n => n.result + (n.headErrUs|0) + (n.relErrUs|0)).join('|');
+  if (sig === tableSig) return;
+  tableSig = sig;
+  $('#tbody').innerHTML = lastJudge.notes.map(n => {
+    const target = n.hold ? fmtMs(n.headUs) + ' → ' + fmtMs(n.tailUs) : fmtMs(n.headUs);
+    const j = n.result + (n.detail ? `（${n.detail}）` : '');
+    const head = n.hold && n.headJudge ? `${fmtErr(n.headErrUs)} <span class="hint">${n.headJudge}</span>` : fmtErr(n.headErrUs);
+    return `<tr>
+      <td>${n.order + 1}</td><td>${esc(n.id)}</td><td>${n.lane + 1}</td>
+      <td>${n.hold ? '长键' : '单键'}</td>
+      <td>${target}</td><td>${head}</td><td>${n.hold ? fmtErr(n.relErrUs) : '—'}</td>
+      <td class="j ${RESULT_CLASS[n.result] || ''}">${j}</td>
+    </tr>`;
+  }).join('');
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function renderInfo() {
+  const t = chart.tempo.map(x => `${x[0]}刻:${x[1]}µs/拍`).join('，');
+  const st = (chart.stops || []).map(x => `${x[0]}刻停${x[1] / 1000}ms`).join('，') || '无';
+  $('#chartInfo').innerHTML =
+    `<span>ppq ${chart.ppq}</span><span>音符 ${chart.notes.length} 个</span>` +
+    `<span>时长 ${(prep.endUs / 1e6).toFixed(2)}s</span><span>校准 ${chart.offsetUs || 0}µs</span>` +
+    `<span>变速 ${t}</span><span>停拍 ${st}</span>`;
+}
+
+/* ---------- 判定闪示 ---------- */
+function detectFlash() {
+  const cur = lastJudge.notes.map(n => n.result);
+  for (let i = 0; i < cur.length; i++) {
+    if (cur[i] !== prevResults[i] && cur[i] !== '待判定') {
+      showFlash(cur[i], RESULT_CLASS[cur[i]]);
+    }
+  }
+  prevResults = cur;
+}
+function showFlash(text, cls) {
+  const el = $('#flash');
+  el.textContent = text;
+  el.className = cls || '';
+  el.style.top = (JUDGE_Y - 46) + 'px';
+  el.style.opacity = 1;
+  flashUntil = performance.now() + 500;
+}
+
+/* ---------- 播放 ---------- */
+function updatePlayBtn() { $('#btnPlay').textContent = playing ? '⏸ 暂停' : '▶ 播放'; }
+
+function ensureAudio() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+}
+
+function togglePlay() {
+  if (!playing) {
+    ensureAudio();
+    if (songUs >= prep.endUs + 500000) { songUs = 0; nextBeat = 0; } // 播完再按=从头
+    started = true;
+    playing = true;
+  } else {
+    playing = false;
+  }
+  updatePlayBtn();
+}
+
+function replay() {
+  inputs = []; songUs = 0; nextBeat = 0; prevResults = [];
+  started = true; playing = true;
+  ensureAudio(); updatePlayBtn(); syncInputsTa(); rejudge();
+}
+
+/* 合成节拍：按谱面节拍点（含变速、停拍造成的空档）发声 */
+function scheduleMetronome() {
+  if (!actx || !metroOn) return;
+  const ahead = songUs + 250000;
+  while (nextBeat < prep.beatsUs.length && prep.beatsUs[nextBeat] < songUs) nextBeat++;
+  while (nextBeat < prep.beatsUs.length && prep.beatsUs[nextBeat] <= ahead) {
+    const at = actx.currentTime + (prep.beatsUs[nextBeat] - songUs) / 1e6;
+    click(at, nextBeat % 4 === 0 ? 1560 : 1040);
+    nextBeat++;
+  }
+}
+function click(when, freq) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.12, when);
+  g.gain.exponentialRampToValueAtTime(0.001, when + 0.06);
+  o.connect(g).connect(actx.destination);
+  o.start(when); o.stop(when + 0.07);
+}
+
+/* ---------- 键盘 ---------- */
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) togglePlay(); return; }
+  const lane = KEYS.indexOf(e.code);
+  if (lane < 0) return;
+  if (e.repeat || pressed.has(e.code)) return; // 键盘自动重复只算一次按下
+  pressed.add(e.code);
+  if (playing) record(lane, 'down');
+});
+window.addEventListener('keyup', e => {
+  const lane = KEYS.indexOf(e.code);
+  if (lane < 0) return;
+  pressed.delete(e.code);
+  if (playing) record(lane, 'up');
+});
+function record(lane, action) {
+  inputs.push([Math.round(songUs), lane, action]);
+  syncInputsTa();
+  rejudge();
+}
+
+/* ---------- 导入导出 ---------- */
+function syncInputsTa() { $('#taInputs').value = JSON.stringify(inputs); }
+
+$('#btnExport').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(inputs, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inputs.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$('#btnCopy').addEventListener('click', () => {
+  $('#taInputs').select();
+  navigator.clipboard?.writeText($('#taInputs').value);
+});
+function importInputs(text) {
+  let arr;
+  try { arr = JSON.parse(text); } catch { alert('输入记录不是有效 JSON'); return; }
+  if (!Array.isArray(arr) || arr.some(r => !Array.isArray(r) || r.length < 3)) {
+    alert('格式应为 [[微秒, 轨道, "down"/"up"], ...]'); return;
+  }
+  inputs = arr.map(r => [Math.trunc(r[0]), r[1], String(r[2])]);
+  started = false; playing = false; songUs = 0; // 导入后按完整记录结算
+  updatePlayBtn(); syncInputsTa(); rejudge();
+}
+$('#btnImportTa').addEventListener('click', () => importInputs($('#taInputs').value));
+$('#fileInputs').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(importInputs);
+  e.target.value = '';
+});
+$('#fileChart').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { try { loadChart(JSON.parse(t)); } catch { alert('谱面不是有效 JSON'); } });
+  e.target.value = '';
+});
+$('#offset').addEventListener('change', e => {
+  chart.offsetUs = Math.trunc(Number(e.target.value) || 0);
+  renderInfo(); rejudge();
+});
+$('#btnPlay').addEventListener('click', togglePlay);
+$('#btnReplay').addEventListener('click', replay);
+$('#btnMetro').addEventListener('click', () => {
+  metroOn = !metroOn;
+  $('#btnMetro').textContent = metroOn ? '🔔 节拍器：开' : '🔕 节拍器：关';
+});
+
+/* ---------- 绘制 ---------- */
+function yOf(us) { return JUDGE_Y - (us - songUs) * PX_PER_US; }
+
+function draw() {
+  const W = cv.width, H = cv.height;
+  ctx2d.clearRect(0, 0, W, H);
+  ctx2d.fillStyle = '#181b23';
+  ctx2d.fillRect(0, 0, W, H);
+
+  // 轨道
+  for (let l = 0; l < 4; l++) {
+    const x = LANE_X0 + l * LANE_W;
+    ctx2d.fillStyle = l % 2 ? '#1b1f29' : '#181b23';
+    ctx2d.fillRect(x, 0, LANE_W, H);
+    ctx2d.strokeStyle = '#2c303d';
+    ctx2d.strokeRect(x + 0.5, 0, LANE_W, H);
+    if (pressed.has(KEYS[l])) {
+      ctx2d.fillStyle = 'rgba(255,255,255,.06)';
+      ctx2d.fillRect(x, 0, LANE_W, H);
+    }
+  }
+
+  // 节拍线
+  ctx2d.strokeStyle = 'rgba(255,255,255,.07)';
+  for (const b of prep.beatsUs) {
+    const y = yOf(b);
+    if (y < -2 || y > H + 2) continue;
+    ctx2d.beginPath(); ctx2d.moveTo(LANE_X0, y); ctx2d.lineTo(LANE_X0 + 4 * LANE_W, y); ctx2d.stroke();
+  }
+
+  // 停拍区间（红色横带 + 标注）
+  for (const s of prep.stopsUs) {
+    const y1 = yOf(s.startUs), y2 = yOf(s.startUs + s.durUs);
+    if (y2 > H || y1 < 0) { /* 部分可见也画 */ }
+    ctx2d.fillStyle = 'rgba(229,83,75,.18)';
+    ctx2d.fillRect(LANE_X0, y2, 4 * LANE_W, Math.max(2, y1 - y2));
+    ctx2d.fillStyle = '#e5534b';
+    ctx2d.font = '11px sans-serif';
+    ctx2d.fillText(`停拍 ${s.durUs / 1000}ms @${s.tick}刻`, LANE_X0 + 4, y2 + 12);
+  }
+
+  // 音符
+  for (const n of prep.notes) {
+    const x = LANE_X0 + n.lane * LANE_W + 8, w = LANE_W - 16;
+    const r = lastJudge ? lastJudge.notes[n.order].result : null;
+    const color = r === '精准' ? '#f5c542' : r === '良好' || r === '完成' ? '#4cc38a'
+      : r === '错过' ? '#5a2f2c' : r === '断键' ? '#e08a3c' : LANE_COLORS[n.lane];
+    const yh = yOf(n.headUs);
+    if (n.hold) {
+      const yt = yOf(n.tailUs);
+      if (yt < H && yh > 0) {
+        ctx2d.fillStyle = color + '55';
+        ctx2d.fillRect(x + w / 2 - 5, yt, 10, yh - yt);
+      }
+    }
+    if (yh > -14 && yh < H + 14) {
+      ctx2d.fillStyle = color;
+      ctx2d.beginPath();
+      ctx2d.roundRect(x, yh - 8, w, 16, 5);
+      ctx2d.fill();
+      ctx2d.fillStyle = 'rgba(0,0,0,.55)';
+      ctx2d.font = '10px sans-serif';
+      ctx2d.fillText(String(n.id), x + 5, yh + 3.5);
+    }
+  }
+
+  // 判定线
+  ctx2d.strokeStyle = '#e6e8ee';
+  ctx2d.lineWidth = 2;
+  ctx2d.beginPath(); ctx2d.moveTo(LANE_X0, JUDGE_Y); ctx2d.lineTo(LANE_X0 + 4 * LANE_W, JUDGE_Y); ctx2d.stroke();
+  ctx2d.lineWidth = 1;
+
+  // 键位标签
+  ctx2d.font = 'bold 13px sans-serif';
+  ctx2d.textAlign = 'center';
+  for (let l = 0; l < 4; l++) {
+    ctx2d.fillStyle = pressed.has(KEYS[l]) ? '#fff' : '#9aa0b0';
+    ctx2d.fillText(KEY_LABEL[l], LANE_X0 + l * LANE_W + LANE_W / 2, H - 14);
+  }
+  ctx2d.textAlign = 'left';
+
+  // 时钟
+  ctx2d.fillStyle = '#9aa0b0';
+  ctx2d.font = '12px monospace';
+  ctx2d.fillText(`t=${(songUs / 1e6).toFixed(3)}s`, 6, 16);
+
+  if (flashUntil && performance.now() > flashUntil) {
+    $('#flash').style.opacity = 0; flashUntil = 0;
+  }
+}
+
+/* ---------- 主循环 ---------- */
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (lastTs == null) lastTs = ts;
+  const dt = ts - lastTs; lastTs = ts;
+  if (playing) {
+    songUs += dt * 1000;
+    if (songUs >= prep.endUs + 500000) { playing = false; updatePlayBtn(); }
+    scheduleMetronome();
+    rejudge(); // 结算随时间到来的错过/断键
+  }
+  draw();
+}
+
+/* ---------- 启动 ---------- */
+loadChart(DEFAULT_CHART);
+// http 环境下优先读取 samples 里的谱面
+fetch('samples/beat-stop-judge.json').then(r => r.ok ? r.json() : null).then(c => {
+  if (c) loadChart(c);
+}).catch(() => {});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
