@@ -9,9 +9,15 @@
 id_rsa*
 credentials*.json
 secrets*.json
-# 缓存目录
+# 缓存与构建
 .cache/
 __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+node_modules/
+dist/
+test-results/
+playwright-report/
+tests/e2e-out/
+.vitest/
