@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四色网点打样 · Rosette Press Proof</title>
+<style>
+  :root {
+    --bg: #1e2126; --panel: #262a31; --panel2: #2d323b; --line: #3a404b;
+    --fg: #e6e8eb; --dim: #9aa3af; --accent: #4f9cf9; --accent2: #7cc7ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  header { padding: 8px 14px; border-bottom: 1px solid var(--line);
+           display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 15px; margin: 0; }
+  header .hint { color: var(--dim); font-size: 12px; }
+  main { display: flex; height: calc(100vh - 42px); }
+  aside { width: 340px; min-width: 340px; overflow-y: auto; padding: 10px;
+          border-right: 1px solid var(--line); background: var(--panel); }
+  section.view { flex: 1; position: relative; overflow: hidden; background: #14161a; }
+  canvas#proof { position: absolute; left: 0; top: 0; image-rendering: pixelated; cursor: crosshair; }
+  canvas#overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+  fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 10px; padding: 8px 10px; }
+  legend { color: var(--accent2); font-size: 12px; padding: 0 4px; }
+  label { display: block; color: var(--dim); margin: 4px 0 2px; }
+  input[type=file] { width: 100%; font-size: 12px; color: var(--dim); }
+  input[type=number], select { background: var(--panel2); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; font-size: 12px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 5px;
+           padding: 5px 12px; cursor: pointer; font-size: 12px; }
+  button.ghost { background: var(--panel2); border: 1px solid var(--line); color: var(--fg); }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 6px; align-items: center; margin: 3px 0; }
+  .row > * { flex: 0 0 auto; }
+  .plate-head { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .plate-head b { flex: 1; }
+  .chip { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid #0006; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
+  .num { width: 64px; }
+  .status { font-size: 12px; color: var(--dim); white-space: pre-wrap; }
+  .status.err { color: #ff8a8a; }
+  #inspectGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+  .sub { border: 1px solid var(--line); border-radius: 4px; padding: 3px; text-align: center; }
+  .sub .sw { height: 18px; border-radius: 3px; border: 1px solid #0008; margin-bottom: 2px; }
+  .dots { display: flex; justify-content: center; gap: 3px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #444; border: 1px solid #0008; }
+  .dot.on.c { background: #07c; } .dot.on.m { background: #c0a; }
+  .dot.on.y { background: #dc0; } .dot.on.k { background: #111; }
+  .bigsw { height: 34px; border-radius: 4px; border: 1px solid #0008; margin-top: 4px; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+  .toolbar { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px;
+             background: #262a31cc; padding: 6px; border-radius: 6px; border: 1px solid var(--line); }
+  .toolbar button.active { outline: 2px solid var(--accent2); }
+  progress { width: 100%; height: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>四色网点打样</h1>
+  <span class="hint">8 位 CMYK 交错栅格 + 标定 JSON · 16 子样本/像素 · 子像素叠印</span>
+  <span class="hint" id="renderStat"></span>
+</header>
+<main>
+  <aside>
+    <fieldset>
+      <legend>数据导入</legend>
+      <label>标定 JSON（w / h / table[16] / n / plates）</label>
+      <input type="file" id="calFile" accept=".json,application/json">
+      <label>CMYK 交错栅格（w×h×4 字节，单边 ≤ 512）</label>
+      <input type="file" id="cmykFile">
+      <div class="row">
+        <select id="sampleSel">
+          <option value="flat">样例 flat（平网 C）</option>
+          <option value="blocks">样例 blocks（色块）</option>
+          <option value="solid">样例 solid（实地）</option>
+        </select>
+        <button id="loadSample" class="ghost">载入样例</button>
+      </div>
+      <div class="status" id="loadStatus">未载入数据。样例需通过 http 服务访问（如 python3 -m http.server），或用手动文件选择。</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>视图</legend>
+      <div class="row">
+        <select id="viewMode">
+          <option value="composite">合成（四版叠印）</option>
+          <option value="0">单版 C</option>
+          <option value="1">单版 M</option>
+          <option value="2">单版 Y</option>
+          <option value="3">单版 K</option>
+        </select>
+        <button id="fitBtn" class="ghost">适应窗口</button>
+      </div>
+      <label>光学混合指数 n：<span id="nVal" class="mono"></span></label>
+      <div class="row">
+        <input type="range" id="nSlider" min="1" max="4" step="0.05">
+        <input type="number" id="nNum" class="num" min="1" max="4" step="0.05">
+      </div>
+      <label>缩放：<span id="zoomVal" class="mono"></span>（滚轮缩放，检查模式拖拽平移）</label>
+      <div class="row">
+        <button id="zoomOut" class="ghost">−</button>
+        <button id="zoomIn" class="ghost">＋</button>
+        <label style="margin:0"><input type="checkbox" id="gridChk"> 像素网格</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>印版参数（角度° / 周期px / 套准位移px）</legend>
+      <div id="plates"></div>
+      <div class="row">
+        <button id="resetPlates" class="ghost">恢复标定值</button>
+        <span class="status" id="covStat"></span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>导出（sRGB 打样 PNG + 四版覆盖率 PNG）</legend>
+      <div class="row">
+        <button id="exportFull" disabled>导出整图</button>
+        <button id="exportRect" disabled>导出选区</button>
+      </div>
+      <div class="status" id="selStatus">选区：无（工具栏切换到「框选」后拖拽）</div>
+      <div class="status" id="exportStatus"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>像素检查（16 子样本）</legend>
+      <div class="status" id="inspectInfo">在「检查」模式下点击图像像素。</div>
+      <div id="inspectGrid"></div>
+      <div class="bigsw" id="pixelSw" style="display:none"></div>
+      <div class="mono" id="pixelHex"></div>
+    </fieldset>
+  </aside>
+
+  <section class="view" id="viewWrap">
+    <canvas id="proof"></canvas>
+    <canvas id="overlay"></canvas>
+    <div class="toolbar">
+      <button id="modeInspect" class="active">检查</button>
+      <button id="modeSelect">框选</button>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ==ENGINE BEGIN==
+// 网点判定与子像素叠印引擎（DOM 无关，可在 node 中单测）
+// 约定：
+//  - CMYK 逐行逐像素交错 4×8 位；色表按位 C=1,M=2,Y=4,K=8 索引 16 组线性 RGB。
+//  - 每像素 16 个子样本，位于 x+(i+0.5)/4, y+(j+0.5)/4（i 列 j 行，i,j∈0..3）。
+//  - 每版：p = 样本位置 − 版位移；像素中心为半整数，双线性插值覆盖率，源边界钳位。
+//  - u=(px·cosθ+py·sinθ)/period, v=(−px·sinθ+py·cosθ)/period，小数部分×8 向下取整。
+//  - 8×8 阈序按键 ((2i−7)²+(2j−7)², j, i) 升序，阈值 (排名+0.5)/64，覆盖率>阈值落墨。
+//  - 按子样本实际叠印组合查线性 RGB，逐通道在 1/n 次方域平均后取 n 次方。
+function buildThreshold() {
+  const order = [];
+  for (let k = 0; k < 64; k++) order.push(k);
+  const dist = k => { const i = k & 7, j = k >> 3; return (2*i-7)*(2*i-7) + (2*j-7)*(2*j-7); };
+  order.sort((a, b) => dist(a) - dist(b) || (a >> 3) - (b >> 3) || (a & 7) - (b & 7));
+  const T = new Float64Array(64);
+  order.forEach((k, r) => { T[k] = (r + 0.5) / 64; });
+  return T;
+}
+const THRESH = buildThreshold();
+
+function frac8(u) { // 小数部分×8 向下取整，钳到 0..7
+  const f = u - Math.floor(u);
+  let k = (f * 8) | 0;
+  return k > 7 ? 7 : k;
+}
+
+// 双线性覆盖率，像素中心在半整数，源边界钳位
+function bilinear(cmyk, W, H, pl, px, py) {
+  let gx = px - 0.5, gy = py - 0.5;
+  if (gx < 0) gx = 0; else if (gx > W - 1) gx = W - 1;
+  if (gy < 0) gy = 0; else if (gy > H - 1) gy = H - 1;
+  const x0 = Math.floor(gx), y0 = Math.floor(gy);
+  const x1 = x0 + 1 < W ? x0 + 1 : W - 1, y1 = y0 + 1 < H ? y0 + 1 : H - 1;
+  const fx = gx - x0, fy = gy - y0;
+  const i00 = (y0 * W + x0) * 4 + pl, i10 = (y0 * W + x1) * 4 + pl;
+  const i01 = (y1 * W + x0) * 4 + pl, i11 = (y1 * W + x1) * 4 + pl;
+  return (cmyk[i00] * (1 - fx) * (1 - fy) + cmyk[i10] * fx * (1 - fy) +
+          cmyk[i01] * (1 - fx) * fy + cmyk[i11] * fx * fy) / 255;
+}
+
+// 预处理每版常量
+function plateConsts(plates) {
+  return plates.map(p => {
+    const th = p.angle * Math.PI / 180;
+    return { cos: Math.cos(th), sin: Math.sin(th), inv: 1 / p.period, dx: p.dx, dy: p.dy };
+  });
+}
+
+// 单个子样本：返回 4 位落墨掩码；counts 非空时累加每版落墨计数
+function subsampleMask(cmyk, W, H, pc, sx, sy) {
+  let mask = 0;
+  for (let pl = 0; pl < 4; pl++) {
+    const c = pc[pl];
+    const px = sx - c.dx, py = sy - c.dy;
+    const cov = bilinear(cmyk, W, H, pl, px, py);
+    const u = (px * c.cos + py * c.sin) * c.inv;
+    const v = (-px * c.sin + py * c.cos) * c.inv;
+    if (cov > THRESH[frac8(v) * 8 + frac8(u)]) mask |= 1 << pl;
+  }
+  return mask;
+}
+
+// 逐块渲染。rect={x0,y0,w,h} 为图像像素坐标（相位沿用整图绝对坐标）。
+// 返回 {linear: Float64Array(w*h*3), counts: [Uint8Array×4](w*h, 0..16)}
+// shouldAbort() 返回 true 时抛 {aborted:true}；onProgress(0..1) 每块回调。
+async function renderRegion(src, rect, shouldAbort, onProgress) {
+  const { cmyk, W, H, table, n, plates, singlePlate } = src;
+  const pc = plateConsts(plates);
+  const inv = 1 / n;
+  const { x0, y0, w, h } = rect;
+  const linear = new Float64Array(w * h * 3);
+  const counts = [new Uint8Array(w * h), new Uint8Array(w * h),
+                  new Uint8Array(w * h), new Uint8Array(w * h)];
+  const single = singlePlate >= 0;
+  const singleBit = single ? (1 << singlePlate) : 0;
+  const CHUNK = 32; // 每次让出事件循环的行数
+  for (let y = 0; y < h; y++) {
+    if ((y & (CHUNK - 1)) === 0) {
+      if (shouldAbort && shouldAbort()) { const e = new Error("aborted"); e.aborted = true; throw e; }
+      if (onProgress) onProgress(y / h);
+      await new Promise(r => setTimeout(r, 0));
+    }
+    const gy = y0 + y;
+    for (let x = 0; x < w; x++) {
+      const gx = x0 + x;
+      let a0 = 0, a1 = 0, a2 = 0;
+      const pixBase = y * w + x;
+      for (let j = 0; j < 4; j++) {
+        const sy = gy + (j + 0.5) / 4;
+        for (let i = 0; i < 4; i++) {
+          const sx = gx + (i + 0.5) / 4;
+          let mask = subsampleMask(cmyk, W, H, pc, sx, sy);
+          for (let pl = 0; pl < 4; pl++) if (mask & (1 << pl)) counts[pl][pixBase]++;
+          if (single) mask &= singleBit;
+          const t = (mask & 15) * 3;
+          a0 += Math.pow(table[t], inv);
+          a1 += Math.pow(table[t + 1], inv);
+          a2 += Math.pow(table[t + 2], inv);
+        }
+      }
+      const o = pixBase * 3;
+      linear[o] = Math.pow(a0 / 16, n);
+      linear[o + 1] = Math.pow(a1 / 16, n);
+      linear[o + 2] = Math.pow(a2 / 16, n);
+    }
+  }
+  if (onProgress) onProgress(1);
+  return { linear, counts };
+}
+
+// 检查单个像素：16 子样本的落墨掩码与线性颜色，以及合成后的像素线性 RGB
+function inspectPixel(src, gx, gy) {
+  const { cmyk, W, H, table, n, plates } = src;
+  const pc = plateConsts(plates);
+  const inv = 1 / n;
+  const subs = [];
+  let a0 = 0, a1 = 0, a2 = 0;
+  for (let j = 0; j < 4; j++) {
+    for (let i = 0; i < 4; i++) {
+      const sx = gx + (i + 0.5) / 4, sy = gy + (j + 0.5) / 4;
+      const mask = subsampleMask(cmyk, W, H, pc, sx, sy);
+      const t = (mask & 15) * 3;
+      subs.push({ i, j, mask, rgb: [table[t], table[t + 1], table[t + 2]] });
+      a0 += Math.pow(table[t], inv);
+      a1 += Math.pow(table[t + 1], inv);
+      a2 += Math.pow(table[t + 2], inv);
+    }
+  }
+  return { subs, linear: [Math.pow(a0 / 16, n), Math.pow(a1 / 16, n), Math.pow(a2 / 16, n)] };
+}
+
+function linearToSrgb(c) {
+  c = c < 0 ? 0 : c > 1 ? 1 : c;
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+}
+// ==ENGINE END==
+
+if (typeof module !== "undefined") {
+  module.exports = { buildThreshold, renderRegion, inspectPixel, linearToSrgb, THRESH };
+}
+</script>
+
+<script>
+"use strict";
+/* ================= UI 层 ================= */
+const $ = id => document.getElementById(id);
+const PLATE_NAMES = ["C", "M", "Y", "K"];
+const PLATE_COLORS = ["#07c", "#c0a", "#dc0", "#111"];
+
+const state = {
+  W: 0, H: 0, cmyk: null,
+  calib: null,          // 原始标定 JSON
+  table: null,          // Float64Array(48)
+  plates: null,         // 当前参数 [{angle,period,dx,dy}×4]
+  n: 2,
+  viewMode: "composite",
+  selection: null,      // {x0,y0,x1,y1} 含端点的像素范围（图像坐标）
+  zoom: 4, tx: 20, ty: 20,
+  mouseMode: "inspect",
+  lastLinear: null, lastCounts: null, lastRect: null,
+  renderToken: 0, rendering: false,
+};
+
+/* ---------- 参数读取 ---------- */
+function currentSrc() {
+  return {
+    cmyk: state.cmyk, W: state.W, H: state.H,
+    table: state.table, n: state.n,
+    plates: state.plates.map(p => ({ ...p })),
+    singlePlate: state.viewMode === "composite" ? -1 : +state.viewMode,
+  };
+}
+
+/* ---------- 渲染调度：连续调整只渲染最后一组参数 ---------- */
+let renderQueued = false;
+function scheduleRender() {
+  if (!state.cmyk) return;
+  if (renderQueued) return;          // 已在队列里，参数以执行时为准
+  renderQueued = true;
+  setTimeout(() => { renderQueued = false; doRender(); }, 60); // 去抖
+}
+
+async function doRender() {
+  const token = ++state.renderToken;
+  state.rendering = true;
+  const src = currentSrc();
+  const rect = { x0: 0, y0: 0, w: state.W, h: state.H };
+  try {
+    const t0 = performance.now();
+    const res = await renderRegion(src, rect,
+      () => token !== state.renderToken,
+      p => { $("renderStat").textContent = `渲染中 ${(p * 100) | 0}%`; });
+    if (token !== state.renderToken) return; // 已被更新的参数取代
+    state.lastLinear = res.linear; state.lastCounts = res.counts; state.lastRect = rect;
+    drawProof(res.linear, rect);
+    drawOverlay();
+    updateCovStat(res.counts);
+    $("renderStat").textContent =
+      `${state.W}×${state.H} · ${(performance.now() - t0).toFixed(0)} ms`;
+    $("exportFull").disabled = false;
+    $("exportRect").disabled = !state.selection;
+  } catch (e) {
+    if (!e.aborted) { $("renderStat").textContent = "渲染出错：" + e.message; console.error(e); }
+  } finally {
+    state.rendering = false;
+  }
+}
+
+function updateCovStat(counts) {
+  const tot = state.W * state.H * 16;
+  $("covStat").textContent = "覆盖率 " + PLATE_NAMES.map((n, i) => {
+    let s = 0; for (let k = 0; k < counts[i].length; k++) s += counts[i][k];
+    return `${n} ${(100 * s / tot).toFixed(1)}%`;
+  }).join(" ");
+}
+
+/* ---------- 画布绘制 ---------- */
+const proof = $("proof"), overlay = $("overlay");
+function drawProof(linear, rect) {
+  const { w, h } = rect;
+  proof.width = w; proof.height = h;
+  const ctx = proof.getContext("2d");
+  const img = ctx.createImageData(w, h);
+  const d = img.data;
+  for (let k = 0, o = 0; k < linear.length; k += 3, o += 4) {
+    d[o] = Math.round(linearToSrgb(linear[k]) * 255);
+    d[o + 1] = Math.round(linearToSrgb(linear[k + 1]) * 255);
+    d[o + 2] = Math.round(linearToSrgb(linear[k + 2]) * 255);
+    d[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  applyTransform();
+}
+
+function applyTransform() {
+  const s = state.zoom;
+  for (const c of [proof, overlay]) {
+    c.style.transform = `translate(${state.tx}px, ${state.ty}px) scale(${s})`;
+    c.style.transformOrigin = "0 0";
+  }
+  overlay.width = state.W; overlay.height = state.H;
+  $("zoomVal").textContent = state.zoom.toFixed(2) + "×";
+}
+
+function drawOverlay() {
+  const ctx = overlay.getContext("2d");
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  // 像素网格
+  if ($("gridChk").checked && state.zoom >= 6) {
+    ctx.strokeStyle = "rgba(128,128,128,0.25)";
+    ctx.lineWidth = 1 / state.zoom;
+    ctx.beginPath();
+    for (let x = 0; x <= state.W; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, state.H); }
+    for (let y = 0; y <= state.H; y++) { ctx.moveTo(0, y); ctx.lineTo(state.W, y); }
+    ctx.stroke();
+  }
+  // 选区
+  if (state.selection) {
+    const s = state.selection;
+    ctx.strokeStyle = "#4f9cf9"; ctx.lineWidth = 1.5 / state.zoom;
+    ctx.setLineDash([4 / state.zoom, 3 / state.zoom]);
+    ctx.strokeRect(s.x0, s.y0, s.x1 - s.x0 + 1, s.y1 - s.y0 + 1);
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(79,156,249,0.12)";
+    ctx.fillRect(s.x0, s.y0, s.x1 - s.x0 + 1, s.y1 - s.y0 + 1);
+  }
+  // 检查像素标记
+  if (state.inspected) {
+    ctx.strokeStyle = "#ffcf40"; ctx.lineWidth = 1.5 / state.zoom;
+    ctx.strokeRect(state.inspected.x, state.inspected.y, 1, 1);
+  }
+}
+
+/* ---------- 坐标换算与交互 ---------- */
+function toImage(ev) {
+  const r = proof.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / state.zoom, y: (ev.clientY - r.top) / state.zoom };
+}
+
+let drag = null;
+proof.addEventListener("pointerdown", ev => {
+  if (!state.cmyk) return;
+  proof.setPointerCapture(ev.pointerId);
+  const p = toImage(ev);
+  drag = { sx: ev.clientX, sy: ev.clientY, p, moved: false,
+           tx: state.tx, ty: state.ty, sel: state.mouseMode === "select" };
+});
+proof.addEventListener("pointermove", ev => {
+  if (!drag) return;
+  const dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy;
+  if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+  if (drag.sel) {
+    const p = toImage(ev);
+    const x0 = Math.max(0, Math.min(state.W - 1, Math.floor(Math.min(drag.p.x, p.x))));
+    const y0 = Math.max(0, Math.min(state.H - 1, Math.floor(Math.min(drag.p.y, p.y))));
+    const x1 = Math.max(0, Math.min(state.W - 1, Math.floor(Math.max(drag.p.x, p.x))));
+    const y1 = Math.max(0, Math.min(state.H - 1, Math.floor(Math.max(drag.p.y, p.y))));
+    state.selection = { x0, y0, x1, y1 };
+    updateSelStatus(); drawOverlay();
+  } else if (drag.moved) {
+    state.tx = drag.tx + dx; state.ty = drag.ty + dy;
+    applyTransform();
+  }
+});
+proof.addEventListener("pointerup", ev => {
+  if (!drag) return;
+  const wasDrag = drag.moved, sel = drag.sel;
+  const p = toImage(ev);
+  drag = null;
+  if (sel) { $("exportRect").disabled = !state.selection || !state.cmyk; return; }
+  if (!wasDrag) { // 点击 → 检查像素
+    const gx = Math.floor(p.x), gy = Math.floor(p.y);
+    if (gx >= 0 && gy >= 0 && gx < state.W && gy < state.H) inspect(gx, gy);
+  }
+});
+
+$("viewWrap").addEventListener("wheel", ev => {
+  if (!state.cmyk) return;
+  ev.preventDefault();
+  const wrap = $("viewWrap").getBoundingClientRect();
+  const mx = ev.clientX - wrap.left, my = ev.clientY - wrap.top;
+  const old = state.zoom;
+  const nz = Math.min(64, Math.max(0.25, old * (ev.deltaY < 0 ? 1.25 : 0.8)));
+  state.tx = mx - (mx - state.tx) * nz / old;
+  state.ty = my - (my - state.ty) * nz / old;
+  state.zoom = nz;
+  applyTransform(); drawOverlay();
+}, { passive: false });
+
+function setMouseMode(m) {
+  state.mouseMode = m;
+  $("modeInspect").classList.toggle("active", m === "inspect");
+  $("modeSelect").classList.toggle("active", m === "select");
+}
+$("modeInspect").onclick = () => setMouseMode("inspect");
+$("modeSelect").onclick = () => setMouseMode("select");
+$("zoomIn").onclick = () => { state.zoom = Math.min(64, state.zoom * 1.5); applyTransform(); drawOverlay(); };
+$("zoomOut").onclick = () => { state.zoom = Math.max(0.25, state.zoom / 1.5); applyTransform(); drawOverlay(); };
+$("gridChk").onchange = drawOverlay;
+$("fitBtn").onclick = fitView;
+
+function fitView() {
+  if (!state.cmyk) return;
+  const wrap = $("viewWrap").getBoundingClientRect();
+  const s = Math.min((wrap.width - 40) / state.W, (wrap.height - 40) / state.H);
+  state.zoom = Math.max(0.25, Math.min(64, s));
+  state.tx = (wrap.width - state.W * state.zoom) / 2;
+  state.ty = (wrap.height - state.H * state.zoom) / 2;
+  applyTransform(); drawOverlay();
+}
+
+function updateSelStatus() {
+  const s = state.selection;
+  $("selStatus").textContent = s
+    ? `选区：(${s.x0}, ${s.y0}) – (${s.x1}, ${s.y1})，${s.x1 - s.x0 + 1}×${s.y1 - s.y0 + 1} px（导出沿用整图坐标与相位）`
+    : "选区：无（工具栏切换到「框选」后拖拽）";
+}
+
+/* ---------- 像素检查 ---------- */
+function inspect(gx, gy) {
+  state.inspected = { x: gx, y: gy };
+  const r = inspectPixel(currentSrc(), gx, gy);
+  $("inspectInfo").innerHTML = `像素 <b class="mono">(${gx}, ${gy})</b> · 子样本位置 x+(i+0.5)/4, y+(j+0.5)/4`;
+  const grid = $("inspectGrid");
+  grid.innerHTML = "";
+  for (const s of r.subs) {
+    const div = document.createElement("div");
+    div.className = "sub";
+    const css = `rgb(${s.rgb.map(c => Math.round(linearToSrgb(c) * 255)).join(",")})`;
+    div.innerHTML =
+      `<div class="sw" style="background:${css}"></div>` +
+      `<div class="dots">` + PLATE_NAMES.map((n, pl) =>
+        `<span class="dot ${s.mask & (1 << pl) ? "on " + n.toLowerCase() : ""}" title="${n}"></span>`
+      ).join("") + `</div>` +
+      `<div class="mono" style="color:var(--dim)">${s.mask.toString(2).padStart(4, "0")}</div>`;
+    grid.appendChild(div);
+  }
+  const px = r.linear.map(c => Math.round(linearToSrgb(c) * 255));
+  $("pixelSw").style.display = "block";
+  $("pixelSw").style.background = `rgb(${px.join(",")})`;
+  $("pixelHex").textContent =
+    `合成像素 sRGB #${px.map(v => v.toString(16).padStart(2, "0")).join("")}` +
+    ` · 线性 [${r.linear.map(v => v.toFixed(4)).join(", ")}]`;
+  drawOverlay();
+}
+
+/* ---------- 印版参数 UI ---------- */
+function buildPlateUI() {
+  const host = $("plates");
+  host.innerHTML = "";
+  PLATE_NAMES.forEach((name, pl) => {
+    const fs = document.createElement("div");
+    fs.innerHTML = `<div class="plate-head"><span class="chip" style="background:${PLATE_COLORS[pl]}"></span><b>${name} 版</b></div>`;
+    const grid = document.createElement("div");
+    grid.className = "grid2";
+    const fields = [
+      ["angle", "角度°", -90, 90, 0.05],
+      ["period", "周期", 1, 64, 0.25],
+      ["dx", "位移 x", -8, 8, 0.05],
+      ["dy", "位移 y", -8, 8, 0.05],
+    ];
+    for (const [key, label, min, max, step] of fields) {
+      const lab = document.createElement("label");
+      lab.textContent = label;
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.className = "num";
+      inp.min = min; inp.max = max; inp.step = step;
+      inp.value = state.plates[pl][key];
+      inp.oninput = () => {
+        const v = parseFloat(inp.value);
+        if (!isFinite(v)) return;
+        state.plates[pl][key] = v;
+        scheduleRender();
+      };
+      lab.appendChild(inp);
+      grid.appendChild(lab);
+    }
+    fs.appendChild(grid);
+    host.appendChild(fs);
+  });
+}
+
+$("resetPlates").onclick = () => {
+  state.plates = state.calib.plates.map(p => ({ ...p }));
+  state.n = state.calib.n;
+  $("nSlider").value = state.n; $("nNum").value = state.n;
+  $("nVal").textContent = state.n;
+  buildPlateUI();
+  scheduleRender();
+};
+
+/* ---------- n 与视图模式 ---------- */
+function bindN(a, b) {
+  a.oninput = () => {
+    const v = parseFloat(a.value);
+    if (!isFinite(v)) return;
+    state.n = v; b.value = v; $("nVal").textContent = v;
+    scheduleRender();
+  };
+}
+bindN($("nSlider"), $("nNum")); bindN($("nNum"), $("nSlider"));
+$("viewMode").onchange = () => { state.viewMode = $("viewMode").value; scheduleRender(); };
+
+/* ---------- 数据载入 ---------- */
+function setStatus(msg, err) {
+  const el = $("loadStatus");
+  el.textContent = msg;
+  el.classList.toggle("err", !!err);
+}
+
+function loadData(cal, cmykBuf, label) {
+  try {
+    const { w, h } = cal;
+    if (!Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 512 || h > 512)
+      throw new Error(`尺寸 ${w}×${h} 超出限制（单边须为 1–512）`);
+    const bytes = new Uint8Array(cmykBuf);
+    if (bytes.length !== w * h * 4)
+      throw new Error(`栅格大小 ${bytes.length} ≠ ${w}×${h}×4 = ${w * h * 4}`);
+    if (!Array.isArray(cal.table) || cal.table.length !== 16 ||
+        cal.table.some(r => !Array.isArray(r) || r.length !== 3))
+      throw new Error("标定 table 须为 16×3 线性 RGB");
+    if (!Array.isArray(cal.plates) || cal.plates.length !== 4)
+      throw new Error("标定 plates 须为 4 版");
+    state.W = w; state.H = h; state.cmyk = bytes;
+    state.calib = cal;
+    state.table = Float64Array.from(cal.table.flat());
+    state.plates = cal.plates.map(p => ({
+      angle: +p.angle || 0, period: +p.period > 0 ? +p.period : 8,
+      dx: +p.dx || 0, dy: +p.dy || 0,
+    }));
+    state.n = +cal.n > 0 ? +cal.n : 2;
+    state.selection = null; state.inspected = null;
+    $("nSlider").value = state.n; $("nNum").value = state.n; $("nVal").textContent = state.n;
+    buildPlateUI(); updateSelStatus();
+    setStatus(`已载入 ${label}：${w}×${h}，n=${state.n}，4 版`);
+    fitView();
+    scheduleRender();
+  } catch (e) {
+    setStatus("载入失败：" + e.message, true);
+  }
+}
+
+let pendingCal = null, pendingCmyk = null;
+$("calFile").onchange = async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  try { pendingCal = JSON.parse(await f.text()); tryPair(); }
+  catch (e) { setStatus("标定 JSON 解析失败：" + e.message, true); }
+};
+$("cmykFile").onchange = async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  pendingCmyk = await f.arrayBuffer(); tryPair();
+};
+function tryPair() {
+  if (pendingCal && pendingCmyk) {
+    loadData(pendingCal, pendingCmyk, "手动文件");
+    pendingCal = pendingCmyk = null;
+    $("calFile").value = ""; $("cmykFile").value = "";
+  } else {
+    setStatus(pendingCal ? "标定已读，待选栅格文件" : "栅格已读，待选标定 JSON");
+  }
+}
+
+$("loadSample").onclick = async () => {
+  const name = $("sampleSel").value;
+  setStatus("载入样例…");
+  try {
+    const [cal, buf] = await Promise.all([
+      fetch(`samples/plates.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+      fetch(`samples/${name}.cmyk`).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }),
+    ]);
+    loadData(cal, buf, `样例 ${name}`);
+  } catch (e) {
+    setStatus(`样例载入失败（${e.message}）。请通过 http 服务打开页面，或改用手动文件选择（samples/ 目录内有 plates.json 与 *.cmyk）。`, true);
+  }
+};
+
+/* ---------- 导出 ---------- */
+function pngBlobFromSrgb(linear, w, h) {
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(w, h);
+  const d = img.data;
+  for (let k = 0, o = 0; k < linear.length; k += 3, o += 4) {
+    d[o] = Math.round(linearToSrgb(linear[k]) * 255);
+    d[o + 1] = Math.round(linearToSrgb(linear[k + 1]) * 255);
+    d[o + 2] = Math.round(linearToSrgb(linear[k + 2]) * 255);
+    d[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return new Promise(r => cv.toBlob(r, "image/png"));
+}
+function pngBlobFromGray(gray, w, h) {
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(w, h);
+  const d = img.data;
+  for (let k = 0, o = 0; k < gray.length; k++, o += 4)
+    d[o] = d[o + 1] = d[o + 2] = gray[k], d[o + 3] = 255;
+  ctx.putImageData(img, 0, 0);
+  return new Promise(r => cv.toBlob(r, "image/png"));
+}
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+async function exportRegion(rect, tag) {
+  // 导出始终以点击时的最后一组参数重新渲染，裁区沿用整图绝对坐标（相位一致）
+  const src = currentSrc();
+  $("exportStatus").textContent = "导出渲染中…";
+  const token = ++state.renderToken; // 使后台预览渲染失效
+  try {
+    const res = await renderRegion(src, rect, null,
+      p => { $("exportStatus").textContent = `导出渲染中 ${(p * 100) | 0}%`; });
+    const { w, h } = rect;
+    const suffix = tag === "full" ? "full" : `x${rect.x0}_y${rect.y0}_${w}x${h}`;
+    download(await pngBlobFromSrgb(res.linear, w, h), `proof_${suffix}.png`);
+    for (let pl = 0; pl < 4; pl++) {
+      const gray = new Uint8Array(w * h);
+      for (let k = 0; k < gray.length; k++) gray[k] = Math.round(res.counts[pl][k] * 255 / 16);
+      download(await pngBlobFromGray(gray, w, h), `coverage_${PLATE_NAMES[pl]}_${suffix}.png`);
+      await new Promise(r => setTimeout(r, 250)); // 避免浏览器拦截连续下载
+    }
+    $("exportStatus").textContent = `已导出 proof_${suffix}.png 与 4 张覆盖率 PNG（参数即当前面板值）`;
+    // 若导出的是整图，顺带刷新预览缓存
+    if (tag === "full") {
+      state.lastLinear = res.linear; state.lastCounts = res.counts; state.lastRect = rect;
+      drawProof(res.linear, rect); drawOverlay(); updateCovStat(res.counts);
+    }
+  } catch (e) {
+    if (!e.aborted) $("exportStatus").textContent = "导出失败：" + e.message;
+  }
+  scheduleRender();
+}
+
+$("exportFull").onclick = () =>
+  exportRegion({ x0: 0, y0: 0, w: state.W, h: state.H }, "full");
+$("exportRect").onclick = () => {
+  const s = state.selection;
+  if (!s) return;
+  exportRegion({ x0: s.x0, y0: s.y0, w: s.x1 - s.x0 + 1, h: s.y1 - s.y0 + 1 }, "rect");
+};
+
+setMouseMode("inspect");
+</script>
+</body>
+</html>
