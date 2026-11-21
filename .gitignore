@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解压的不可信样例数据（来源：samples/gyro-rolling-cases.zip）
+samples/extracted/
+# 测试临时产物
+_dl_*.png

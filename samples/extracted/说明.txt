@@ -1,0 +1,1 @@
+像素中心为整数。相机x向右、y向下、z向前。gyro为秒及相机轴右手角速度rad/s，时间严格增序，线性插值，旋转增量作用在姿态右侧。raw行时刻为start+readout乘行序比例，down首行比例0，up末行比例0，分母height-1。probes为原图x、y及校正图投影x、y，partial中落在陀螺仪覆盖外的点应无效。

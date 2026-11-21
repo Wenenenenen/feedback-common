@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>滚动快门旋转校正台</title>
+<style>
+/* Layout: control rail + two-up canvas workbench.
+   Palette: instrument-panel neutrals with a signal cyan accent;
+   uncovered = amber, out-of-frame = magenta, both theme-aware. */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f4;
+  --fg: #16202b;
+  --fg-dim: #5b6875;
+  --line: #d3dae1;
+  --accent: #0e7490;
+  --accent-fg: #ffffff;
+  --uncovered: #b45309;
+  --uncovered-bg: rgba(245, 158, 11, 0.28);
+  --outside: #be185d;
+  --outside-bg: rgba(236, 72, 153, 0.26);
+  --checker-a: #e2e6ea;
+  --checker-b: #cfd6dd;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .07);
+  --radius: 12px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
+    "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141b;
+    --panel: #161e27;
+    --panel-2: #1e2833;
+    --fg: #e6edf3;
+    --fg-dim: #93a1af;
+    --line: #2c3946;
+    --accent: #22d3ee;
+    --accent-fg: #06262e;
+    --uncovered: #fbbf24;
+    --uncovered-bg: rgba(245, 158, 11, 0.22);
+    --outside: #f472b6;
+    --outside-bg: rgba(236, 72, 153, 0.2);
+    --checker-a: #1b242e;
+    --checker-b: #232e39;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e141b; --panel: #161e27; --panel-2: #1e2833;
+  --fg: #e6edf3; --fg-dim: #93a1af; --line: #2c3946;
+  --accent: #22d3ee; --accent-fg: #06262e;
+  --uncovered: #fbbf24; --uncovered-bg: rgba(245, 158, 11, .22);
+  --outside: #f472b6; --outside-bg: rgba(236, 72, 153, .2);
+  --checker-a: #1b242e; --checker-b: #232e39;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.app {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding-block: 18px 14px;
+}
+header.app h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+header.app .sub { color: var(--fg-dim); font-size: 12.5px; }
+.layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 28px;
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+.rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 14px; }
+@media (max-width: 900px) { .rail { position: static; } }
+.panel h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .9px;
+  color: var(--fg-dim); margin: 0 0 10px; font-weight: 650;
+}
+.field { display: grid; gap: 5px; margin-bottom: 10px; }
+.field label { font-size: 12.5px; color: var(--fg-dim); }
+.field input, .field select {
+  width: 100%; min-width: 0;
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font: inherit; font-family: var(--mono); font-size: 13px;
+}
+.field input:focus, .field select:focus {
+  outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent;
+}
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.filebtn {
+  display: block; text-align: center; cursor: pointer;
+  border: 1px dashed var(--line); border-radius: 8px;
+  padding: 12px 10px; color: var(--fg-dim); font-size: 13px;
+  background: var(--panel-2);
+}
+.filebtn:hover { border-color: var(--accent); color: var(--fg); }
+.filebtn input { display: none; }
+.fname { font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+  overflow-wrap: anywhere; margin-top: 6px; }
+button.primary, button.ghost {
+  font: inherit; border-radius: 8px; padding: 9px 14px; cursor: pointer;
+  border: 1px solid var(--line);
+}
+button.primary {
+  background: var(--accent); color: var(--accent-fg); border-color: transparent;
+  font-weight: 600; width: 100%;
+}
+button.primary:disabled { opacity: .45; cursor: not-allowed; }
+button.ghost { background: var(--panel-2); color: var(--fg); }
+button.ghost:disabled { opacity: .4; cursor: not-allowed; }
+.row-actions { display: flex; gap: 10px; }
+.row-actions > * { flex: 1; }
+.status {
+  font-size: 12.5px; border-radius: 8px; padding: 9px 11px;
+  border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--fg-dim);
+}
+.status.err { border-color: var(--outside); color: var(--outside); }
+.status.warn { border-color: var(--uncovered); color: var(--uncovered); }
+.status.ok { border-color: var(--accent); color: var(--accent); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--fg-dim); }
+.kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+.legend { display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; }
+.legend .item { display: flex; align-items: center; gap: 9px; color: var(--fg-dim); }
+.swatch { width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--line); flex: none; }
+.swatch.uncovered { background: var(--uncovered-bg); border-color: var(--uncovered); }
+.swatch.outside { background: var(--outside-bg); border-color: var(--outside); }
+.swatch.checker {
+  background:
+    conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%,
+      var(--checker-b) 0 75%, var(--checker-a) 0) 0 0 / 14px 14px;
+}
+.workbench { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.canvas-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+}
+@media (max-width: 720px) { .canvas-grid { grid-template-columns: 1fr; } }
+.canvas-card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.canvas-card h3 {
+  margin: 0; font-size: 13px; font-weight: 650;
+  display: flex; justify-content: space-between; gap: 8px; align-items: center;
+}
+.canvas-card h3 .meta { color: var(--fg-dim); font-weight: 400;
+  font-family: var(--mono); font-size: 11.5px; }
+.vp {
+  position: relative; overflow: auto; border-radius: 8px;
+  border: 1px solid var(--line);
+  background:
+    conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%,
+      var(--checker-b) 0 75%, var(--checker-a) 0) 0 0 / 16px 16px;
+  padding: 14px;
+}
+.vp canvas { display: block; image-rendering: pixelated; margin: 0 auto;
+  max-width: 100%; height: auto; cursor: crosshair; }
+.vp .overlay { position: absolute; inset: 0; pointer-events: none; }
+.probe {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px;
+}
+.probe h2 { margin: 0 0 8px; }
+.probe .empty { color: var(--fg-dim); font-size: 13px; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.pill.ok { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.pill.uncovered { background: var(--uncovered-bg); color: var(--uncovered); }
+.pill.outside { background: var(--outside-bg); color: var(--outside); }
+.hint { font-size: 12px; color: var(--fg-dim); margin: 0; }
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>滚动快门旋转校正台</h1>
+  <span class="sub">逐行曝光 · 陀螺仪姿态积分 · 仅补偿旋转 · 逆向重采样</span>
+</header>
+
+<div class="layout">
+  <aside class="rail">
+    <section class="panel">
+      <h2>输入</h2>
+      <label class="filebtn">
+        选择 8 位 RGB PNG（边长 2–640）
+        <input type="file" id="pngFile" accept="image/png">
+      </label>
+      <div class="fname" id="pngName">未选择图像</div>
+      <div style="height:10px"></div>
+      <label class="filebtn">
+        选择相机参数 JSON
+        <input type="file" id="jsonFile" accept=".json,application/json">
+      </label>
+      <div class="fname" id="jsonName">未选择参数</div>
+    </section>
+
+    <section class="panel">
+      <h2>相机参数</h2>
+      <div class="grid2">
+        <div class="field"><label>fx</label><input id="p-fx" inputmode="decimal"></div>
+        <div class="field"><label>fy</label><input id="p-fy" inputmode="decimal"></div>
+        <div class="field"><label>cx</label><input id="p-cx" inputmode="decimal"></div>
+        <div class="field"><label>cy</label><input id="p-cy" inputmode="decimal"></div>
+        <div class="field"><label>start (s)</label><input id="p-start" inputmode="decimal"></div>
+        <div class="field"><label>readout (s)</label><input id="p-readout" inputmode="decimal"></div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>读出方向</label>
+          <select id="p-direction">
+            <option value="down">down（上→下）</option>
+            <option value="up">up（下→上）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>参考时刻 t_ref (s)</label>
+          <input id="p-tref" inputmode="decimal">
+        </div>
+      </div>
+      <p class="hint">行时刻 = start + readout × 行序比例，分母 height−1；
+        down 首行比例 0，up 末行比例 0。</p>
+    </section>
+
+    <section class="panel">
+      <h2>操作</h2>
+      <div class="row-actions">
+        <button class="primary" id="runBtn" disabled>运行校正</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="row-actions">
+        <button class="ghost" id="exportBtn" disabled>导出 RGBA PNG</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="status" id="status">等待输入。</div>
+    </section>
+
+    <section class="panel">
+      <h2>图例</h2>
+      <div class="legend">
+        <div class="item"><span class="swatch uncovered"></span>陀螺仪未覆盖的行（透明）</div>
+        <div class="item"><span class="swatch outside"></span>重采样落在原图外（透明）</div>
+        <div class="item"><span class="swatch checker"></span>棋盘格表示透明背景</div>
+      </div>
+    </section>
+  </aside>
+
+  <main class="workbench">
+    <div class="canvas-grid">
+      <section class="canvas-card">
+        <h3>原图 <span class="meta" id="meta-raw"></span></h3>
+        <div class="vp"><canvas id="rawCanvas"></canvas></div>
+        <p class="hint">点击原图像素查看其行时刻与校正图浮点坐标。</p>
+      </section>
+      <section class="canvas-card">
+        <h3>校正图 <span class="meta" id="meta-rect"></span></h3>
+        <div class="vp"><canvas id="rectCanvas"></canvas></div>
+      </section>
+    </div>
+
+    <section class="probe" id="probePanel">
+      <h2>像素探针</h2>
+      <div class="empty" id="probeEmpty">在左图任一点单击，这里显示该像素的行时刻 t、覆盖状态，
+        以及它投影到校正图上的浮点坐标。</div>
+      <dl class="kv" id="probeData" hidden></dl>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* ===== inlined rectifier core (rectifier.js) ===== */
+const Rectifier = (function () {
+  function matIdentity() { return [1,0,0,0,1,0,0,0,1]; }
+  function matMul(a, b) {
+    const out = new Array(9);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+      out[i*3+j] = a[i*3]*b[j] + a[i*3+1]*b[3+j] + a[i*3+2]*b[6+j];
+    return out;
+  }
+  function matVec(a, v) {
+    return [a[0]*v[0]+a[1]*v[1]+a[2]*v[2],
+            a[3]*v[0]+a[4]*v[1]+a[5]*v[2],
+            a[6]*v[0]+a[7]*v[1]+a[8]*v[2]];
+  }
+  function matTranspose(a) {
+    return [a[0],a[3],a[6],a[1],a[4],a[7],a[2],a[5],a[8]];
+  }
+  function rodrigues(w, dt) {
+    const wn = Math.hypot(w[0], w[1], w[2]);
+    const theta = wn * dt;
+    if (Math.abs(theta) < 1e-15) {
+      const e0=w[0]*dt, e1=w[1]*dt, e2=w[2]*dt;
+      return [1,-e2,e1, e2,1,-e0, -e1,e0,1];
+    }
+    const k = [w[0]/wn, w[1]/wn, w[2]/wn];
+    const K = [0,-k[2],k[1], k[2],0,-k[0], -k[1],k[0],0];
+    const s = Math.sin(theta), c = Math.cos(theta), g = 1-c;
+    const out = matIdentity();
+    for (let i=0;i<3;i++) for (let j=0;j<3;j++) {
+      const K2ij = K[i*3]*K[j] + K[i*3+1]*K[3+j] + K[i*3+2]*K[6+j];
+      out[i*3+j] += s*K[i*3+j] + g*K2ij;
+    }
+    return out;
+  }
+  function createIntegrator(gyro) {
+    if (!Array.isArray(gyro) || gyro.length < 1)
+      throw new Error("gyro 至少需要一条采样");
+    const times = new Array(gyro.length), ws = new Array(gyro.length);
+    for (let i=0;i<gyro.length;i++) {
+      const s = gyro[i];
+      if (!Array.isArray(s) || s.length !== 4 ||
+          !s.every(v => Number.isFinite(v)))
+        throw new Error(`gyro[${i}] 必须是 4 个有限数 [t, wx, wy, wz]`);
+      times[i] = s[0]; ws[i] = [s[1],s[2],s[3]];
+      if (i > 0 && !(times[i] > times[i-1]))
+        throw new Error("gyro 时间必须严格递增");
+    }
+    function bracket(t) {
+      let lo=0, hi=times.length-1;
+      while (hi-lo > 1) { const mid=(lo+hi)>>1; if (times[mid]<=t) lo=mid; else hi=mid; }
+      return lo;
+    }
+    function wAt(t) {
+      if (t <= times[0]) return ws[0].slice();
+      if (t >= times[times.length-1]) return ws[ws.length-1].slice();
+      const i = bracket(t);
+      const u = (t-times[i])/(times[i+1]-times[i]);
+      return [ws[i][0]+(ws[i+1][0]-ws[i][0])*u,
+              ws[i][1]+(ws[i+1][1]-ws[i][1])*u,
+              ws[i][2]+(ws[i+1][2]-ws[i][2])*u];
+    }
+    function integrateInterval(i, ti, b) {
+      const span = b-ti;
+      if (span === 0) return matIdentity();
+      const wa = ws[i], wb = wAt(b);
+      if (wa[0]===wb[0] && wa[1]===wb[1] && wa[2]===wb[2])
+        return rodrigues(wa, span);
+      const wmid = [(wa[0]+wb[0])/2,(wa[1]+wb[1])/2,(wa[2]+wb[2])/2];
+      const wn = Math.hypot(wmid[0],wmid[1],wmid[2]);
+      const n = Math.max(1, Math.ceil((wn*span)/1e-4));
+      let R = matIdentity(); const h = span/n;
+      for (let k=0;k<n;k++) R = matMul(R, rodrigues(wAt(ti+h*(k+0.5)), h));
+      return R;
+    }
+    const prefix = [matIdentity()];
+    for (let i=1;i<times.length;i++)
+      prefix.push(matMul(prefix[i-1], integrateInterval(i-1, times[i-1], times[i])));
+    function rotation(t0, t1) {
+      if (t1 === t0) return matIdentity();
+      const sign = t1 > t0 ? 1 : -1;
+      const lo = Math.min(t0,t1), hi = Math.max(t0,t1);
+      let Rlo, Rhi;
+      if (lo <= times[0]) Rlo = matIdentity();
+      else { const i=bracket(lo); Rlo = matMul(prefix[i], integrateInterval(i, times[i], lo)); }
+      if (hi >= times[times.length-1]) Rhi = prefix[prefix.length-1];
+      else { const j=bracket(hi); Rhi = matMul(prefix[j], integrateInterval(j, times[j], hi)); }
+      const fwd = matMul(matTranspose(Rlo), Rhi);
+      return sign > 0 ? fwd : matTranspose(fwd);
+    }
+    return { times, tMin: times[0], tMax: times[times.length-1], wAt, rotation };
+  }
+  function rowTime(params, y, height) {
+    const ratio = y/(height-1);
+    const r = params.direction === "up" ? 1-ratio : ratio;
+    return params.start + params.readout*r;
+  }
+  function buildRowTable(params, integ, height, tRef) {
+    const refCovered = integ.tMin <= tRef && tRef <= integ.tMax;
+    const rows = new Array(height);
+    for (let y=0;y<height;y++) {
+      const t = rowTime(params, y, height);
+      const M = matTranspose(integ.rotation(tRef, t));
+      rows[y] = { t,
+        covered: refCovered && integ.tMin <= t && t <= integ.tMax,
+        a:M[0],b:M[1],c:M[2], d:M[3],e:M[4],f:M[5], g:M[6],h:M[7],i:M[8] };
+    }
+    return rows;
+  }
+  function rayToRaw(params, row, nx, ny) {
+    const rz = row.g*nx + row.h*ny + row.i, invZ = 1/rz;
+    return [params.fx*(row.a*nx+row.b*ny+row.c)*invZ + params.cx,
+            params.fy*(row.d*nx+row.e*ny+row.f)*invZ + params.cy];
+  }
+  function forwardPoint(params, integ, height, x, y, tRef) {
+    const t = rowTime(params, y, height);
+    const Q = integ.rotation(tRef, t);
+    const ray = [(x-params.cx)/params.fx, (y-params.cy)/params.fy, 1];
+    const r = matVec(Q, ray);
+    const covered = integ.tMin <= t && t <= integ.tMax &&
+      integ.tMin <= tRef && tRef <= integ.tMax;
+    return { x: params.fx*r[0]/r[2]+params.cx,
+             y: params.fy*r[1]/r[2]+params.cy, t, covered };
+  }
+  function inversePoint(params, integ, width, height, xp, yp, tRef, table) {
+    const nx = (xp-params.cx)/params.fx, ny = (yp-params.cy)/params.fy;
+    const rows = table || buildRowTable(params, integ, height, tRef);
+    function rawYAt(y) {
+      if (y >= 0 && y <= height-1 && Number.isInteger(y))
+        return rayToRaw(params, rows[y], nx, ny)[1];
+      const t = rowTime(params, y, height);
+      const r = matVec(matTranspose(integ.rotation(tRef, t)), [nx,ny,1]);
+      return params.fy*(r[1]/r[2]) + params.cy;
+    }
+    let lo=-height, hi=2*height;
+    const gLo=rawYAt(lo)-lo, gHi=rawYAt(hi)-hi;
+    if (!Number.isFinite(gLo) || !Number.isFinite(gHi) || gLo*gHi > 0) return null;
+    for (let k=0;k<80;k++) {
+      const mid=(lo+hi)*0.5;
+      if (rawYAt(mid)-mid > 0) lo=mid; else hi=mid;
+    }
+    const y=(lo+hi)*0.5;
+    const yi=Math.max(0, Math.min(height-1, Math.round(y)));
+    const xy = rayToRaw(params, rows[yi], nx, ny);
+    const eps=1e-9;
+    const inside = xy[0]>=-eps && xy[0]<=width-1+eps && y>=-eps && y<=height-1+eps;
+    return { x: xy[0], y, t: rows[yi].t, inside, covered: rows[yi].covered };
+  }
+  function sampleBilinear(src, width, height, fx, fy) {
+    fx = Math.max(0, Math.min(width-1, fx));
+    fy = Math.max(0, Math.min(height-1, fy));
+    const x0=Math.floor(fx), y0=Math.floor(fy);
+    const tx=fx-x0, ty=fy-y0;
+    const x1=Math.min(x0+1,width-1), y1=Math.min(y0+1,height-1);
+    const i00=(y0*width+x0)*4, i10=(y0*width+x1)*4;
+    const i01=(y1*width+x0)*4, i11=(y1*width+x1)*4;
+    const w00=(1-tx)*(1-ty), w10=tx*(1-ty), w01=(1-tx)*ty, w11=tx*ty;
+    return [src[i00]*w00+src[i10]*w10+src[i01]*w01+src[i11]*w11,
+            src[i00+1]*w00+src[i10+1]*w10+src[i01+1]*w01+src[i11+1]*w11,
+            src[i00+2]*w00+src[i10+2]*w10+src[i01+2]*w01+src[i11+2]*w11];
+  }
+  function rectifyImage(params, integ, src, width, height, tRef) {
+    const out = new Uint8ClampedArray(width*height*4);
+    const table = buildRowTable(params, integ, height, tRef);
+    let nUncovered=0, nOutside=0, nValid=0;
+    const eps=1e-9, fy0=params.fy, fx0=params.fx, cy0=params.cy, cx0=params.cx;
+    for (let yp=0; yp<height; yp++) {
+      const ny=(yp-cy0)/fy0;
+      for (let xp=0; xp<width; xp++) {
+        const o=(yp*width+xp)*4, nx=(xp-cx0)/fx0;
+        let lo=0, hi=height-1;
+        let rL=table[lo], rH=table[hi];
+        const gLo=fy0*(rL.d*nx+rL.e*ny+rL.f)/(rL.g*nx+rL.h*ny+rL.i)+cy0-lo;
+        const gHi=fy0*(rH.d*nx+rH.e*ny+rH.f)/(rH.g*nx+rH.h*ny+rH.i)+cy0-hi;
+        if (!Number.isFinite(gLo) || !Number.isFinite(gHi) || gLo*gHi > 0) {
+          out[o+3]=0; nOutside++; continue;
+        }
+        while (hi-lo > 1) {
+          const mid=(lo+hi)>>1, m=table[mid];
+          const gMid=fy0*(m.d*nx+m.e*ny+m.f)/(m.g*nx+m.h*ny+m.i)+cy0-mid;
+          if (gMid > 0) lo=mid; else hi=mid;
+        }
+        rL=table[lo]; rH=table[hi];
+        const zL=rL.g*nx+rL.h*ny+rL.i, zH=rH.g*nx+rH.h*ny+rH.i;
+        const xL=fx0*(rL.a*nx+rL.b*ny+rL.c)/zL+cx0;
+        const yL=fy0*(rL.d*nx+rL.e*ny+rL.f)/zL+cy0;
+        const xH=fx0*(rH.a*nx+rH.b*ny+rH.c)/zH+cx0;
+        const yH=fy0*(rH.d*nx+rH.e*ny+rH.f)/zH+cy0;
+        const g0=yL-lo, g1=yH-hi;
+        const frac = g0===g1 ? 0 : g0/(g0-g1);
+        const yRaw=lo+frac, xRaw=xL+(xH-xL)*frac;
+        if (!rL.covered) { out[o+3]=0; nUncovered++; continue; }
+        if (xRaw<-eps || xRaw>width-1+eps || yRaw<-eps || yRaw>height-1+eps) {
+          out[o+3]=0; nOutside++; continue;
+        }
+        const c=sampleBilinear(src,width,height,xRaw,yRaw);
+        out[o]=c[0]; out[o+1]=c[1]; out[o+2]=c[2]; out[o+3]=255; nValid++;
+      }
+    }
+    return { out, stats: { nValid, nUncovered, nOutside, total: width*height } };
+  }
+  return { createIntegrator, rowTime, buildRowTable, forwardPoint,
+    inversePoint, rectifyImage, matTranspose, matVec };
+})();
+
+/* ===== application ===== */
+const $ = (id) => document.getElementById(id);
+const state = {
+  image: null,       // { width, height, rgba: Uint8ClampedArray, name }
+  params: null,      // validated camera params object
+  jsonValid: false,  // false while the last JSON upload failed validation
+  jsonName: "",
+  result: null,      // { out, stats, table, integ, tRef }
+};
+
+const NUM_FIELDS = ["fx","fy","cx","cy","start","readout","t_ref"];
+const FIELD_ID = { fx:"p-fx", fy:"p-fy", cx:"p-cx", cy:"p-cy",
+  start:"p-start", readout:"p-readout", t_ref:"p-tref" };
+
+function setStatus(msg, kind) {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+function fillForm(p) {
+  for (const k of NUM_FIELDS) $(FIELD_ID[k]).value = p[k];
+  $("p-direction").value = p.direction;
+}
+
+function readForm() {
+  const p = {};
+  for (const k of NUM_FIELDS) {
+    const v = parseFloat($(FIELD_ID[k]).value);
+    if (!Number.isFinite(v)) throw new Error(`参数 ${k} 必须是有限数`);
+    p[k] = v;
+  }
+  p.direction = $("p-direction").value;
+  if (p.fx <= 0 || p.fy <= 0) throw new Error("fx、fy 必须为正数");
+  if (p.readout < 0) throw new Error("readout 不能为负");
+  if (p.direction !== "down" && p.direction !== "up")
+    throw new Error("direction 只能是 down 或 up");
+  return p;
+}
+
+function validateParams(raw) {
+  const required = ["fx","fy","cx","cy","start","readout","t_ref",
+    "direction","gyro"];
+  for (const k of required)
+    if (!(k in raw)) throw new Error(`JSON 缺少字段: ${k}`);
+  const p = {};
+  for (const k of NUM_FIELDS) {
+    if (typeof raw[k] !== "number" || !Number.isFinite(raw[k]))
+      throw new Error(`字段 ${k} 必须是有限数`);
+    p[k] = raw[k];
+  }
+  if (p.fx <= 0 || p.fy <= 0) throw new Error("fx、fy 必须为正数");
+  if (p.readout < 0) throw new Error("readout 不能为负");
+  if (raw.direction !== "down" && raw.direction !== "up")
+    throw new Error("direction 只能是 \"down\" 或 \"up\"");
+  p.direction = raw.direction;
+  if (!Array.isArray(raw.gyro) || raw.gyro.length === 0)
+    throw new Error("gyro 必须是非空数组");
+  let lastT = -Infinity;
+  p.gyro = raw.gyro.map((s, i) => {
+    if (!Array.isArray(s) || s.length !== 4 ||
+        !s.every((v) => typeof v === "number" && Number.isFinite(v)))
+      throw new Error(`gyro[${i}] 必须是 [t, wx, wy, wz] 四个有限数`);
+    if (s[0] <= lastT) throw new Error("gyro 时间必须严格递增");
+    lastT = s[0];
+    return s.slice();
+  });
+  return p;
+}
+
+$("pngFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const bitmap = await loadPng(file);
+    state.image = bitmap;
+    $("pngName").textContent = `${file.name} · ${bitmap.width}×${bitmap.height}`;
+    setStatus("图像已载入。", "ok");
+    maybeEnable();
+  } catch (err) {
+    setStatus("PNG 读取失败: " + err.message, "err");
+  }
+});
+
+async function loadPng(file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  // PNG signature + IHDR dimensions, before decoding.
+  const sig = [137,80,78,71,13,10,26,10];
+  for (let i=0;i<8;i++)
+    if (buf[i] !== sig[i]) throw new Error("不是有效的 PNG 文件");
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const width = view.getUint32(16), height = view.getUint32(20);
+  const bitDepth = buf[24], colorType = buf[25];
+  if (width < 2 || width > 640 || height < 2 || height > 640)
+    throw new Error(`边长必须在 2–640 之间（实际 ${width}×${height}）`);
+  if (bitDepth !== 8)
+    throw new Error(`仅支持 8 位图像（实际位深 ${bitDepth}）`);
+  if (colorType !== 2)
+    throw new Error(`仅支持 RGB（color type 2，实际 ${colorType}）`);
+  const img = await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); resolve(im); };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error("解码失败")); };
+    im.src = url;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, width, height).data;
+  return { width, height, rgba: data, name: file.name };
+}
+
+$("jsonFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    state.params = validateParams(raw);
+    state.jsonValid = true;
+    state.jsonName = file.name;
+    $("jsonName").textContent =
+      `${file.name} · ${state.params.gyro.length} 条 gyro 采样`;
+    fillForm(state.params);
+    setStatus("参数已载入并通过校验。", "ok");
+    maybeEnable();
+  } catch (err) {
+    state.params = null;
+    state.jsonValid = false;
+    maybeEnable();
+    setStatus("JSON 解析失败: " + err.message, "err");
+  }
+});
+
+function maybeEnable() {
+  $("runBtn").disabled = !(state.image && state.jsonValid);
+}
+
+// Live re-run when a form field changes (after the first successful run).
+for (const id of Object.values(FIELD_ID))
+  $(id).addEventListener("change", scheduleRerun);
+$("p-direction").addEventListener("change", scheduleRerun);
+let rerunTimer = null;
+function scheduleRerun() {
+  if (!state.image || !state.result) return;
+  clearTimeout(rerunTimer);
+  rerunTimer = setTimeout(runRectify, 120);
+}
+
+function runRectify() {
+  if (!state.image || !state.params) return;
+  try {
+    const params = readForm();
+    // Keep gyro from the validated JSON; the form edits scalar params only.
+    params.gyro = state.params.gyro;
+    const integ = Rectifier.createIntegrator(params.gyro);
+    const img = state.image;
+    const t0 = performance.now();
+    const { out, stats } = Rectifier.rectifyImage(
+      params, integ, img.rgba, img.width, img.height, params.t_ref);
+    const ms = (performance.now() - t0).toFixed(1);
+    const table = Rectifier.buildRowTable(params, integ, img.height, params.t_ref);
+    state.result = { out, stats, table, integ, params, tRef: params.t_ref };
+
+    drawRaw(img, table);
+    drawRect(out, img.width, img.height);
+    $("meta-raw").textContent = `${img.width}×${img.height} · ${img.name}`;
+    $("meta-rect").textContent =
+      `有效 ${stats.nValid} · 未覆盖 ${stats.nUncovered} · 图外 ${stats.nOutside}`;
+    $("exportBtn").disabled = false;
+
+    const refCovered = integ.tMin <= params.t_ref && params.t_ref <= integ.tMax;
+    if (!refCovered)
+      setStatus(`完成（${ms} ms）。警告: t_ref=${params.t_ref}s 落在 gyro 覆盖区间 ` +
+        `[${integ.tMin}, ${integ.tMax}] 之外，整图都会标记为未覆盖。`, "warn");
+    else if (stats.nUncovered > 0)
+      setStatus(`完成（${ms} ms）。${stats.nUncovered} 个像素的行时刻超出 gyro 覆盖，已透明标记。`, "warn");
+    else if (stats.nOutside > 0)
+      setStatus(`完成（${ms} ms）。${stats.nOutside} 个像素重采样落在原图外，已透明标记。`, "warn");
+    else
+      setStatus(`完成（${ms} ms），全部像素有效。`, "ok");
+    clearProbe();
+  } catch (err) {
+    setStatus("校正失败: " + err.message, "err");
+  }
+}
+$("runBtn").addEventListener("click", runRectify);
+
+/* ---------- rendering ---------- */
+function makeCanvas(w, h) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  return c;
+}
+
+function drawRaw(img, table) {
+  const canvas = $("rawCanvas");
+  canvas.width = img.width; canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  const id = new ImageData(
+    new Uint8ClampedArray(img.rgba), img.width, img.height);
+  ctx.putImageData(id, 0, 0);
+  // Mark uncovered rows with an amber hatch overlay.
+  ctx.save();
+  for (let y=0; y<img.height; y++) {
+    if (!table[y].covered) {
+      ctx.fillStyle = "rgba(245,158,11,0.32)";
+      ctx.fillRect(0, y, img.width, 1);
+    }
+  }
+  ctx.restore();
+  fitCanvasDisplay(canvas);
+}
+
+function drawRect(rgba, w, h) {
+  const canvas = $("rectCanvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+  fitCanvasDisplay(canvas);
+}
+
+function fitCanvasDisplay(canvas) {
+  const vp = canvas.parentElement;
+  const avail = vp.clientWidth - 28;
+  const scale = Math.min(4, Math.max(1, Math.floor(avail / canvas.width)));
+  canvas.style.width = canvas.width * scale + "px";
+  canvas.style.height = canvas.height * scale + "px";
+  canvas.dataset.scale = scale;
+}
+window.addEventListener("resize", () => {
+  fitCanvasDisplay($("rawCanvas"));
+  fitCanvasDisplay($("rectCanvas"));
+});
+
+/* ---------- pixel probe ---------- */
+const rawCanvas = $("rawCanvas");
+rawCanvas.addEventListener("click", (e) => {
+  if (!state.result) return;
+  const rect = rawCanvas.getBoundingClientRect();
+  const scaleX = rawCanvas.width / rect.width;
+  const scaleY = rawCanvas.height / rect.height;
+  const x = Math.floor((e.clientX - rect.left) * scaleX);
+  const y = Math.floor((e.clientY - rect.top) * scaleY);
+  if (x < 0 || y >= rawCanvas.height || y < 0 || x >= rawCanvas.width) return;
+  showProbe(x, y, e.clientX - rect.left, e.clientY - rect.top);
+});
+
+let probeMarker = null;
+function showProbe(px, py, cssX, cssY) {
+  const { params, integ, table, tRef } = state.result;
+  const h = state.image.height, w = state.image.width;
+  const fwd = Rectifier.forwardPoint(params, integ, h, px, py, tRef);
+  const inv = Rectifier.inversePoint(params, integ, w, h, fwd.x, fwd.y, tRef, table);
+
+  const dl = $("probeData");
+  $("probeEmpty").hidden = true;
+  dl.hidden = false;
+  const statusPill = !fwd.covered
+    ? '<span class="pill uncovered">陀螺仪未覆盖</span>'
+    : (inv && !inv.inside)
+      ? '<span class="pill outside">投影落在图外</span>'
+      : '<span class="pill ok">有效</span>';
+  const rows = [
+    ["原图整数像素", `(${px}, ${py})`],
+    ["行时刻 t", `${fmt(fwd.t)} s`],
+    ["读出方向", params.direction],
+    ["参考时刻 t_ref", `${fmt(tRef)} s`],
+    ["gyro 覆盖区间", `[${fmt(integ.tMin)}, ${fmt(integ.tMax)}] s`],
+    ["校正图浮点 x", fmt(fwd.x)],
+    ["校正图浮点 y", fmt(fwd.y)],
+    ["逆映射回原图", inv ? `(${fmt(inv.x)}, ${fmt(inv.y)})` : "无解"],
+    ["状态", statusPill],
+  ];
+  dl.innerHTML = rows.map(([k, v]) =>
+    `<dt>${k}</dt><dd>${v}</dd>`).join("");
+
+  // Marker on the raw canvas, positioned in CSS pixels.
+  if (probeMarker) probeMarker.remove();
+  const scale = parseFloat(rawCanvas.dataset.scale || "1");
+  probeMarker = document.createElement("div");
+  probeMarker.style.cssText =
+    `position:absolute;left:${(px+0.5)*scale}px;top:${(py+0.5)*scale}px;` +
+    `transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;` +
+    `border:2px solid var(--accent);background:transparent;pointer-events:none;` +
+    `box-shadow:0 0 0 1px var(--panel);`;
+  rawCanvas.parentElement.appendChild(probeMarker);
+}
+function clearProbe() {
+  if (probeMarker) { probeMarker.remove(); probeMarker = null; }
+  $("probeEmpty").hidden = false;
+  $("probeData").hidden = true;
+}
+function fmt(v) {
+  if (!Number.isFinite(v)) return String(v);
+  return Number(v.toFixed(9)).toString();
+}
+
+/* ---------- export ---------- */
+$("exportBtn").addEventListener("click", () => {
+  if (!state.result) return;
+  const { out } = state.result;
+  const w = state.image.width, h = state.image.height;
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").putImageData(new ImageData(out, w, h), 0, 0);
+  c.toBlob((blob) => {
+    if (!blob) { setStatus("PNG 编码失败。", "err"); return; }
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = (state.image.name || "image").replace(/\.png$/i, "") +
+      "-rectified.png";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus("已导出原尺寸 RGBA PNG（无效区域为透明像素）。", "ok");
+  }, "image/png");
+});
+</script>
+</body>
+</html>
