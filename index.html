@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模板分轨器 — 按参考音色拆分混音</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1c2129; --panel2: #232a35; --border: #323b48;
+    --text: #dbe2ec; --dim: #8b96a5; --accent: #4fc3f7; --ok: #7bc96f; --bad: #e57373;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  header { padding: 18px 24px 10px; }
+  header h1 { font-size: 20px; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--dim); font-size: 13px; }
+  main { padding: 0 24px 40px; max-width: 1180px; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+            padding: 16px 18px; margin-top: 16px; }
+  section h2 { font-size: 15px; margin: 0 0 12px; color: var(--accent); }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+           border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #2563eb; }
+  input[type=text] { background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+                     border-radius: 6px; padding: 5px 8px; font-size: 13px; width: 120px; }
+  select { background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+           border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--dim); font-size: 12px; }
+  .file-label { display: inline-block; }
+  .file-label input[type=file] { display: none; }
+  .file-label span { display: inline-block; background: var(--panel2); border: 1px dashed var(--border);
+                     border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .file-label span:hover { border-color: var(--accent); }
+
+  .ref-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+              padding: 12px; margin-top: 10px; }
+  .ref-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .color-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  canvas.wave { width: 100%; height: 72px; display: block; background: #10141a;
+                border-radius: 6px; cursor: crosshair; touch-action: none; }
+  canvas.tpl { width: 100%; height: 56px; display: block; background: #10141a;
+               border-radius: 6px; margin-top: 6px; }
+
+  #progress-wrap { display: none; margin-top: 10px; }
+  #progress-bar-bg { background: #10141a; border-radius: 4px; height: 10px; overflow: hidden; }
+  #progress-bar { background: var(--accent); height: 100%; width: 0%; transition: width .1s; }
+
+  #spec-scroll { overflow-x: auto; background: #10141a; border-radius: 6px; position: relative; }
+  #spec-wrap { position: relative; display: inline-block; }
+  #spec-canvas, #spec-overlay { display: block; image-rendering: pixelated; }
+  #spec-overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #spec-canvas { cursor: crosshair; }
+
+  .share-bars { margin-top: 8px; }
+  .share-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 12px; }
+  .share-row .name { width: 110px; text-align: right; color: var(--dim); overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap; }
+  .share-row .bar-bg { flex: 1; background: #10141a; border-radius: 3px; height: 12px; overflow: hidden; }
+  .share-row .bar { height: 100%; }
+  .share-row .pct { width: 56px; font-variant-numeric: tabular-nums; }
+
+  .track-list { display: flex; flex-direction: column; gap: 6px; }
+  .track-row { display: flex; align-items: center; gap: 10px; background: var(--panel2);
+               border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+  .track-row .tname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #verify-ok { color: var(--ok); } #verify-bad { color: var(--bad); }
+  #msg { margin-top: 10px; font-size: 13px; min-height: 1.4em; }
+  #msg.err { color: var(--bad); }
+  #msg.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>模板分轨器</h1>
+  <p>导入混音与 2–4 条单乐器参考（16 kHz / 16 位 / 单声道 PCM WAV，混音 ≤ 30 秒）。
+     从参考区间提取非负频谱模板，逐帧拟合各音色占比，共享谐波按占比拆分；用混音相位重建，分轨 + 剩余声精确还原混音。</p>
+</header>
+<main>
+  <section>
+    <h2>1. 导入音频</h2>
+    <div class="row">
+      <label class="file-label"><input type="file" id="mix-file" accept=".wav"><span>选择混音 WAV</span></label>
+      <span id="mix-info" class="muted">未加载</span>
+      <button id="mix-play" disabled>▶ 试听混音</button>
+    </div>
+    <div id="refs"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="add-ref">＋ 添加参考</button>
+      <span class="muted">在参考波形上拖拽选择模板区间（默认整段），双击重置。</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 分离参数与运行</h2>
+    <div class="row">
+      <label>FFT 点数
+        <select id="opt-n"><option>256</option><option selected>512</option><option>1024</option></select>
+      </label>
+      <label>步长
+        <select id="opt-hop"><option>64</option><option selected>128</option><option>256</option></select>
+      </label>
+      <label>拟合迭代
+        <select id="opt-iters"><option>30</option><option selected>60</option><option>120</option></select>
+      </label>
+      <button id="run" class="primary" disabled>提取模板并分离</button>
+    </div>
+    <div id="progress-wrap">
+      <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+      <div id="progress-text" class="muted"></div>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section id="result-section" style="display:none">
+    <h2>3. 结果</h2>
+    <div id="verify" class="muted"></div>
+    <h3 style="font-size:13px;margin:14px 0 6px">混音频谱图（点击格子查看该时频点的分轨分配）</h3>
+    <div id="spec-scroll"><div id="spec-wrap">
+      <canvas id="spec-canvas"></canvas><canvas id="spec-overlay"></canvas>
+    </div></div>
+    <div id="cell-info" class="muted" style="margin-top:6px">尚未选择时频点。</div>
+    <div id="cell-shares" class="share-bars"></div>
+    <h3 style="font-size:13px;margin:14px 0 6px">试听与导出（浮点 WAV）</h3>
+    <div class="track-list" id="tracks"></div>
+  </section>
+</main>
+
+<script src="js/separator.js"></script>
+<script>
+'use strict';
+const SR = 16000, MAX_MIX_SEC = 30;
+const COLORS = ['#4fc3f7', '#ffb74d', '#aed581', '#f48fb1'];
+const RESIDUAL_COLOR = '#9e9e9e';
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  mix: null,            // { samples, name }
+  refs: [],             // { samples, name, color, sel: [t0,t1] 秒, template }
+  spec: null, templates: null, fit: null, result: null, N: 512, hop: 128,
+};
+
+// ------------------------------------------------------------ 工具
+function msg(text, kind) { const el = $('msg'); el.textContent = text || ''; el.className = kind || ''; }
+function fmtSec(s) { return s.toFixed(2) + ' s'; }
+
+function readWavFile(file) {
+  return file.arrayBuffer().then(buf => {
+    const w = Separator.decodeWav(buf);
+    if (w.sampleRate !== SR) throw new Error(`${file.name}：采样率 ${w.sampleRate}，需要 16000 Hz`);
+    if (w.channels !== 1) throw new Error(`${file.name}：需要单声道`);
+    if (!(w.format === 1 && w.bits === 16)) throw new Error(`${file.name}：需要 16 位 PCM`);
+    return w.samples;
+  });
+}
+
+let audioCtx = null, currentSrc = null;
+function playSamples(samples) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR });
+  if (currentSrc) { try { currentSrc.stop(); } catch (e) {} currentSrc = null; }
+  const buf = audioCtx.createBuffer(1, samples.length, SR);
+  buf.getChannelData(0).set(samples);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.connect(audioCtx.destination); src.start();
+  currentSrc = src;
+}
+function stopPlayback() { if (currentSrc) { try { currentSrc.stop(); } catch (e) {} currentSrc = null; } }
+
+function downloadWav(samples, filename) {
+  const buf = Separator.encodeWavFloat32(samples, SR);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// ------------------------------------------------------------ 波形与选区
+function drawWave(canvas, samples, sel, color) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  // 选区底色
+  if (sel) {
+    const x0 = sel[0] / (samples.length / SR) * w, x1 = sel[1] / (samples.length / SR) * w;
+    ctx.fillStyle = 'rgba(79,195,247,0.10)';
+    ctx.fillRect(x0, 0, x1 - x0, h);
+  }
+  ctx.strokeStyle = color || '#7aa2c4';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const n = samples.length;
+  for (let x = 0; x < w; x++) {
+    const i0 = Math.floor(x / w * n), i1 = Math.max(i0 + 1, Math.floor((x + 1) / w * n));
+    let mn = 1, mx = -1;
+    for (let i = i0; i < i1; i++) { const v = samples[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    const mid = h / 2, amp = h / 2 - 1;
+    ctx.moveTo(x + 0.5, mid - mx * amp);
+    ctx.lineTo(x + 0.5, mid - mn * amp + 0.5);
+  }
+  ctx.stroke();
+  if (sel) {
+    const x0 = sel[0] / (samples.length / SR) * w, x1 = sel[1] / (samples.length / SR) * w;
+    ctx.strokeStyle = 'rgba(79,195,247,0.8)';
+    ctx.strokeRect(x0 + 0.5, 0.5, x1 - x0 - 1, h - 1);
+  }
+}
+
+function drawTemplate(canvas, tpl, color) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  if (!tpl) return;
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  for (let x = 0; x < w; x++) {
+    const f = Math.floor(x / w * tpl.length);
+    const v = tpl[f];
+    const y = h - 1 - v * (h - 4);
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+// ------------------------------------------------------------ 参考槽位
+function addRefSlot() {
+  if (state.refs.length >= 4) return;
+  const idx = state.refs.length;
+  const ref = { samples: null, name: '参考 ' + (idx + 1), fileName: '', color: COLORS[idx], sel: null, template: null };
+  state.refs.push(ref);
+
+  const card = document.createElement('div');
+  card.className = 'ref-card';
+  card.innerHTML = `
+    <div class="ref-head">
+      <span class="color-dot" style="background:${ref.color}"></span>
+      <input type="text" value="${ref.name}">
+      <label class="file-label"><input type="file" accept=".wav"><span>选择参考 WAV</span></label>
+      <span class="muted info">未加载</span>
+      <button class="play" disabled>▶</button>
+      <button class="remove">删除</button>
+      <span class="muted sel-info"></span>
+    </div>
+    <canvas class="wave"></canvas>
+    <canvas class="tpl"></canvas>`;
+  $('refs').appendChild(card);
+
+  const [nameInput, fileInput, infoEl, playBtn, removeBtn, selInfo] = [
+    card.querySelector('input[type=text]'), card.querySelector('input[type=file]'),
+    card.querySelector('.info'), card.querySelector('.play'),
+    card.querySelector('.remove'), card.querySelector('.sel-info')];
+  const waveCanvas = card.querySelector('.wave');
+  const tplCanvas = card.querySelector('.tpl');
+
+  nameInput.addEventListener('input', () => { ref.name = nameInput.value || ref.name; });
+  removeBtn.addEventListener('click', () => {
+    state.refs.splice(state.refs.indexOf(ref), 1);
+    card.remove();
+    state.refs.forEach((r, i) => { r.color = COLORS[i]; });
+    document.querySelectorAll('.ref-card .color-dot').forEach((d, i) => d.style.background = COLORS[i]);
+    refreshRunButton();
+  });
+  playBtn.addEventListener('click', () => ref.samples && playSamples(ref.samples));
+
+  fileInput.addEventListener('change', async () => {
+    const f = fileInput.files[0];
+    if (!f) return;
+    try {
+      ref.samples = await readWavFile(f);
+      ref.fileName = f.name.replace(/\.wav$/i, '');
+      if (!nameInput.dataset.touched) { ref.name = ref.fileName; nameInput.value = ref.name; }
+      ref.sel = [0, ref.samples.length / SR];
+      ref.template = null;
+      infoEl.textContent = `${f.name} · ${fmtSec(ref.samples.length / SR)}`;
+      playBtn.disabled = false;
+      drawWave(waveCanvas, ref.samples, ref.sel, ref.color);
+      drawTemplate(tplCanvas, null, ref.color);
+      updateSelInfo();
+      refreshRunButton();
+      msg('');
+    } catch (e) { msg(e.message, 'err'); }
+  });
+  nameInput.addEventListener('input', () => nameInput.dataset.touched = '1');
+
+  function updateSelInfo() {
+    selInfo.textContent = ref.sel ? `模板区间 ${fmtSec(ref.sel[0])} – ${fmtSec(ref.sel[1])}` : '';
+  }
+
+  // 拖拽选区
+  let dragStart = null;
+  waveCanvas.addEventListener('pointerdown', (e) => {
+    if (!ref.samples) return;
+    dragStart = e.offsetX / waveCanvas.clientWidth * (ref.samples.length / SR);
+    waveCanvas.setPointerCapture(e.pointerId);
+  });
+  waveCanvas.addEventListener('pointermove', (e) => {
+    if (dragStart === null || !ref.samples) return;
+    const cur = e.offsetX / waveCanvas.clientWidth * (ref.samples.length / SR);
+    ref.sel = [Math.min(dragStart, cur), Math.max(dragStart, cur)];
+    drawWave(waveCanvas, ref.samples, ref.sel, ref.color);
+    updateSelInfo();
+  });
+  waveCanvas.addEventListener('pointerup', () => {
+    if (dragStart === null) return;
+    dragStart = null;
+    ref.template = null;
+    drawTemplate(tplCanvas, null, ref.color);
+  });
+  waveCanvas.addEventListener('dblclick', () => {
+    if (!ref.samples) return;
+    ref.sel = [0, ref.samples.length / SR];
+    ref.template = null;
+    drawWave(waveCanvas, ref.samples, ref.sel, ref.color);
+    drawTemplate(tplCanvas, null, ref.color);
+    updateSelInfo();
+  });
+
+  refreshRunButton();
+}
+
+function refreshRunButton() {
+  const ready = state.mix && state.refs.filter(r => r.samples).length >= 2;
+  $('run').disabled = !ready;
+}
+
+// ------------------------------------------------------------ 混音加载
+$('mix-file').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const samples = await readWavFile(f);
+    if (samples.length > MAX_MIX_SEC * SR) throw new Error(`混音超过 ${MAX_MIX_SEC} 秒上限`);
+    state.mix = { samples, name: f.name.replace(/\.wav$/i, '') };
+    $('mix-info').textContent = `${f.name} · ${fmtSec(samples.length / SR)} · ${samples.length} 采样`;
+    $('mix-play').disabled = false;
+    refreshRunButton();
+    msg('');
+  } catch (err) { msg(err.message, 'err'); }
+});
+$('mix-play').addEventListener('click', () => state.mix && playSamples(state.mix.samples));
+$('add-ref').addEventListener('click', addRefSlot);
+
+// ------------------------------------------------------------ 分离流程
+const tick = () => new Promise(r => setTimeout(r, 0));
+function progress(p, text) {
+  $('progress-wrap').style.display = 'block';
+  $('progress-bar').style.width = (p * 100).toFixed(1) + '%';
+  $('progress-text').textContent = text;
+}
+
+$('run').addEventListener('click', async () => {
+  $('run').disabled = true;
+  stopPlayback();
+  try {
+    const N = state.N = parseInt($('opt-n').value, 10);
+    const hop = state.hop = parseInt($('opt-hop').value, 10);
+    const iters = parseInt($('opt-iters').value, 10);
+    if (hop > N / 2) throw new Error(`步长 ${hop} 过大：Hann 窗要求步长 ≤ FFT 点数的一半`);
+    const refs = state.refs.filter(r => r.samples);
+    if (refs.length < 2) throw new Error('至少需要 2 条参考');
+
+    progress(0.02, 'STFT 分析混音…'); await tick();
+    const spec = state.spec = Separator.stft(state.mix.samples, N, hop);
+
+    progress(0.08, '提取参考模板…'); await tick();
+    state.templates = refs.map(r => {
+      r.template = Separator.extractTemplate(r.samples, SR, N, hop, r.sel[0], r.sel[1]);
+      return r.template;
+    });
+    document.querySelectorAll('.ref-card').forEach((card, i) => {
+      const r = state.refs[i];
+      if (r && r.template) drawTemplate(card.querySelector('.tpl'), r.template, r.color);
+    });
+
+    progress(0.12, '逐帧拟合模板占比 (NNLS)…');
+    const fit = state.fit = Separator.createFit(spec, state.templates);
+    const CH = 250;
+    for (let t0 = 0; t0 < spec.nFrames; t0 += CH) {
+      Separator.fitFrames(fit, spec, state.templates, t0, Math.min(t0 + CH, spec.nFrames), iters);
+      progress(0.12 + 0.5 * Math.min(t0 + CH, spec.nFrames) / spec.nFrames,
+        `逐帧拟合模板占比… ${Math.min(t0 + CH, spec.nFrames)}/${spec.nFrames} 帧`);
+      await tick();
+    }
+
+    progress(0.65, '软掩蔽分配与重建…');
+    const rec = Separator.createReconstructor(spec, state.templates, state.mix.samples.length, N, hop);
+    for (let t0 = 0; t0 < spec.nFrames; t0 += CH) {
+      Separator.reconstructRange(rec, spec, state.templates, fit.H, t0, Math.min(t0 + CH, spec.nFrames));
+      progress(0.65 + 0.3 * Math.min(t0 + CH, spec.nFrames) / spec.nFrames,
+        `软掩蔽分配与重建… ${Math.min(t0 + CH, spec.nFrames)}/${spec.nFrames} 帧`);
+      await tick();
+    }
+
+    progress(0.97, '校验还原…'); await tick();
+    state.result = Separator.finalizeReconstruction(rec, state.mix.samples);
+    progress(1, '完成');
+    showResults(refs);
+    msg('分离完成。', 'ok');
+  } catch (err) {
+    msg(err.message, 'err');
+  } finally {
+    $('run').disabled = false;
+  }
+});
+
+// ------------------------------------------------------------ 结果展示
+function showResults(refs) {
+  $('result-section').style.display = 'block';
+  const r = state.result;
+  const lenOK = r.stems.every(s => s.length === state.mix.samples.length) &&
+                r.residual.length === state.mix.samples.length;
+  $('verify').innerHTML =
+    `还原校验：分轨与剩余声长度 = ${r.length}（${lenOK ? '与混音一致' : '不一致！'}），` +
+    `加和最大误差 = <span style="color:${r.maxErr < 1e-4 ? 'var(--ok)' : 'var(--bad)'}">${r.maxErr.toExponential(2)}</span>`;
+  renderSpectrogram();
+  buildTrackList(refs);
+  $('cell-info').textContent = '尚未选择时频点。';
+  $('cell-shares').innerHTML = '';
+}
+
+function renderSpectrogram() {
+  const spec = state.spec;
+  const canvas = $('spec-canvas'), overlay = $('spec-overlay');
+  const W = spec.nFrames, H = spec.nBins;
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = W + 'px'; canvas.style.height = '260px';
+  overlay.width = W; overlay.height = H;
+  overlay.style.width = W + 'px'; overlay.style.height = '260px';
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  let max = 0;
+  for (let i = 0; i < spec.mag.length; i++) if (spec.mag[i] > max) max = spec.mag[i];
+  const inv = 1 / Math.log10(1 + 255);
+  for (let t = 0; t < W; t++) {
+    for (let f = 0; f < H; f++) {
+      const v = spec.mag[t * H + f] / max;
+      const db = Math.log10(1 + 255 * v) * inv; // 0..1 压缩
+      const [r, g, b] = colormap(db);
+      const y = H - 1 - f;
+      const o = (y * W + t) * 4;
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function colormap(v) {
+  // 黑 → 紫 → 红 → 橙 → 黄白
+  const stops = [[0, 0, 0], [80, 24, 96], [180, 40, 90], [230, 110, 40], [255, 220, 120]];
+  const x = Math.min(Math.max(v, 0), 1) * (stops.length - 1);
+  const i = Math.min(Math.floor(x), stops.length - 2);
+  const t = x - i;
+  return [0, 1, 2].map(c => Math.round(stops[i][c] + (stops[i + 1][c] - stops[i][c]) * t));
+}
+
+$('spec-canvas').addEventListener('click', (e) => {
+  if (!state.result) return;
+  const spec = state.spec;
+  const rect = $('spec-canvas').getBoundingClientRect();
+  const t = Math.max(0, Math.min(spec.nFrames - 1,
+    Math.floor((e.clientX - rect.left) / rect.width * spec.nFrames)));
+  const f = Math.max(0, Math.min(spec.nBins - 1,
+    spec.nBins - 1 - Math.floor((e.clientY - rect.top) / rect.height * spec.nBins)));
+  // 十字线
+  const ov = $('spec-overlay').getContext('2d');
+  ov.clearRect(0, 0, spec.nFrames, spec.nBins);
+  ov.strokeStyle = 'rgba(255,255,255,0.85)';
+  ov.lineWidth = 1;
+  ov.beginPath(); ov.moveTo(t + 0.5, 0); ov.lineTo(t + 0.5, spec.nBins); ov.stroke();
+  ov.beginPath(); ov.moveTo(0, spec.nBins - 1 - f + 0.5); ov.lineTo(spec.nFrames, spec.nBins - 1 - f + 0.5); ov.stroke();
+
+  const refs = state.refs.filter(r => r.samples);
+  const cell = Separator.sharesAt(spec, state.templates, state.fit.H, t, f);
+  const timeSec = (t * spec.hop - spec.padLeft) / SR;
+  const freq = f * SR / spec.N;
+  $('cell-info').textContent =
+    `帧 ${t}（t ≈ ${timeSec.toFixed(3)} s）· 频点 ${f}（${freq.toFixed(1)} Hz）· ` +
+    `实测幅度 ${cell.mag.toFixed(3)} · 模板重建 ${cell.model.toFixed(3)} · 未解释 ${cell.residual.toFixed(3)}`;
+  const rows = refs.map((r, k) => ({ name: r.name, color: r.color, share: cell.shares[k] }));
+  rows.push({ name: '剩余声', color: RESIDUAL_COLOR, share: cell.shares[refs.length] });
+  $('cell-shares').innerHTML = rows.map(r => `
+    <div class="share-row">
+      <span class="name">${r.name}</span>
+      <span class="bar-bg"><span class="bar" style="display:block;width:${(r.share * 100).toFixed(1)}%;background:${r.color}"></span></span>
+      <span class="pct">${(r.share * 100).toFixed(1)}%</span>
+    </div>`).join('');
+});
+
+function buildTrackList(refs) {
+  const r = state.result;
+  const el = $('tracks');
+  el.innerHTML = '';
+  const tracks = [
+    { name: '混音（原始）', color: '#e0e0e0', samples: state.mix.samples, file: state.mix.name },
+    ...refs.map((ref, k) => ({
+      name: ref.name, color: ref.color, samples: r.stems[k],
+      file: `${state.mix.name}_stem_${ref.name}`,
+    })),
+    { name: '剩余声', color: RESIDUAL_COLOR, samples: r.residual, file: `${state.mix.name}_residual` },
+  ];
+  for (const tr of tracks) {
+    const row = document.createElement('div');
+    row.className = 'track-row';
+    row.innerHTML = `
+      <span class="color-dot" style="background:${tr.color}"></span>
+      <span class="tname">${tr.name}</span>
+      <span class="muted">${fmtSec(tr.samples.length / SR)}</span>
+      <button class="tplay">▶ 独奏</button>
+      <button class="texport">导出浮点 WAV</button>`;
+    row.querySelector('.tplay').addEventListener('click', () => playSamples(tr.samples));
+    row.querySelector('.texport').addEventListener('click', () => downloadWav(tr.samples, tr.file + '.wav'));
+    el.appendChild(row);
+  }
+  const stopRow = document.createElement('div');
+  stopRow.innerHTML = '<button id="stop-all">■ 停止播放</button>';
+  stopRow.querySelector('button').addEventListener('click', stopPlayback);
+  el.appendChild(stopRow);
+}
+
+// ------------------------------------------------------------ 初始化
+addRefSlot();
+addRefSlot();
+</script>
+</body>
+</html>
