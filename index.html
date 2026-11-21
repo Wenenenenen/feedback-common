@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分块 TIFF 裁区检查</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="21" height="21" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <rect x="1.5" y="1.5" width="9" height="9" rx="2" fill="currentColor" opacity=".22"/>
+        <rect x="13.5" y="9.5" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.5 2"/>
+        <path d="M10.5 10.5h3v3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-title">分块 TIFF 裁区检查</span>
+        <span class="brand-sub">稀疏金字塔 · 只读所需图块</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <label class="btn btn-file">
+        <input id="file-input" type="file" accept=".tif,.tiff,.zip" multiple hidden>
+        打开 TIFF / ZIP
+      </label>
+      <button id="sample-btn" class="btn btn-primary" type="button">载入样例包</button>
+      <select id="sample-select" class="select select-sample" aria-label="样例文件"></select>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main class="workspace">
+    <section class="panel panel-preview" aria-label="预览">
+      <div class="panel-head">
+        <h2>显示方向预览</h2>
+        <div class="head-tools">
+          <span id="zoom-level" class="pill pill-muted">全图</span>
+          <button id="zoom-out" class="btn btn-ghost btn-sm" type="button" title="缩小">−</button>
+          <button id="zoom-in" class="btn btn-ghost btn-sm" type="button" title="放大">＋</button>
+          <button id="zoom-fit" class="btn btn-ghost btn-sm" type="button" title="显示整幅图像">整幅</button>
+        </div>
+      </div>
+      <div class="preview-wrap">
+        <div id="preview-stage" class="preview-stage" tabindex="0">
+          <canvas id="overview-canvas" class="overview-canvas" aria-label="图像缩略图"></canvas>
+          <div id="roi-box" class="roi-box" hidden>
+            <span class="roi-handle" data-handle="nw"></span>
+            <span class="roi-handle" data-handle="ne"></span>
+            <span class="roi-handle" data-handle="sw"></span>
+            <span class="roi-handle" data-handle="se"></span>
+            <span class="roi-label" id="roi-label"></span>
+          </div>
+          <div id="preview-empty" class="preview-empty">
+            <p>载入 TIFF 或样例包开始</p>
+            <p class="muted">拖动预览选择裁区，或直接输入坐标</p>
+          </div>
+        </div>
+      </div>
+      <div class="preview-foot">
+        <div class="legend">
+          <span class="legend-item"><i class="sw sw-data"></i>存在块（仅地址，未解码）</span>
+          <span class="legend-item"><i class="sw sw-missing"></i>缺块</span>
+          <span class="legend-item"><i class="sw sw-invalid"></i>单项为 0</span>
+          <span class="legend-item"><i class="sw sw-oob"></i>越界</span>
+          <span class="legend-item"><i class="sw sw-roi"></i>已解码裁区</span>
+        </div>
+        <span id="overview-progress" class="pill pill-muted" hidden></span>
+      </div>
+      <div class="preview-foot preview-foot-2">
+        <div id="orientation-note" class="orientation-note"></div>
+        <div id="viewport-readout" class="orientation-note"></div>
+      </div>
+    </section>
+
+    <aside class="panel panel-controls" aria-label="裁区与目录">
+      <div class="panel-head">
+        <h2>目录层级</h2>
+      </div>
+      <div id="directory-list" class="directory-list"></div>
+
+      <div class="panel-head panel-head-sub">
+        <h2>裁区（显示坐标）</h2>
+        <div class="head-tools">
+          <button id="roi-max" class="btn btn-ghost btn-sm" type="button" title="最大 1024×1024">1024²</button>
+          <button id="roi-view" class="btn btn-ghost btn-sm" type="button" title="把预览缩放到裁区">定位裁区</button>
+          <button id="roi-reset" class="btn btn-ghost btn-sm" type="button">复位</button>
+        </div>
+      </div>
+      <div class="roi-grid">
+        <label>X<input id="roi-x" type="number" min="0" step="1" value="0"></label>
+        <label>Y<input id="roi-y" type="number" min="0" step="1" value="0"></label>
+        <label>宽<input id="roi-w" type="number" min="1" max="1024" step="1" value="256"></label>
+        <label>高<input id="roi-h" type="number" min="1" max="1024" step="1" value="256"></label>
+      </div>
+      <div class="roi-actions">
+        <button id="roi-apply" class="btn btn-primary btn-block" type="button">读取裁区</button>
+        <p id="roi-hint" class="hint"></p>
+      </div>
+
+      <div class="panel-head panel-head-sub">
+        <h2>导出</h2>
+      </div>
+      <div class="export-actions">
+        <button id="export-png" class="btn btn-block" type="button" disabled>导出 16 位裁区 PNG</button>
+        <button id="export-mask" class="btn btn-block" type="button" disabled>导出有效掩膜 PNG</button>
+      </div>
+    </aside>
+  </main>
+
+  <section class="results">
+    <div class="results-col results-inspect">
+      <div class="panel-head">
+        <h2>像素检查</h2>
+        <span id="cursor-pos" class="pill pill-muted">—</span>
+      </div>
+      <div class="roi-view-wrap">
+        <canvas id="roi-canvas" class="roi-canvas" tabindex="0" aria-label="裁区像素视图"></canvas>
+        <p id="roi-view-empty" class="roi-view-empty muted">读取裁区后显示像素</p>
+      </div>
+      <div class="pixel-table-wrap">
+        <table class="pixel-table" id="pixel-table">
+          <thead><tr><th>通道</th><th>16 位值</th><th>8 位预览</th><th>状态</th></tr></thead>
+          <tbody id="pixel-rows"><tr><td colspan="4" class="muted">把光标移到裁区上</td></tr></tbody>
+        </table>
+      </div>
+      <div id="pixel-tiles" class="pixel-tiles"></div>
+    </div>
+
+    <div class="results-col results-tiles">
+      <div class="panel-head">
+        <h2>命中的图块</h2>
+        <span id="tile-summary" class="pill pill-muted">—</span>
+      </div>
+      <div id="tile-list" class="tile-list"><p class="muted">读取裁区后列出</p></div>
+    </div>
+
+    <div class="results-col results-stats">
+      <div class="panel-head">
+        <h2>解压与读取</h2>
+      </div>
+      <div id="stats-grid" class="stats-grid">
+        <div class="stat"><span class="stat-v" id="stat-decodes">0</span><span class="stat-l">本次解压块数</span></div>
+        <div class="stat"><span class="stat-v" id="stat-total-decodes">0</span><span class="stat-l">累计解压次数</span></div>
+        <div class="stat"><span class="stat-v" id="stat-cache">0 / 32</span><span class="stat-l">已解码块缓存</span></div>
+        <div class="stat"><span class="stat-v" id="stat-bytes">0 B</span><span class="stat-l">图块字节读取</span></div>
+        <div class="stat"><span class="stat-v" id="stat-meta">0 B</span><span class="stat-l">目录 / 元数据读取</span></div>
+        <div class="stat"><span class="stat-v" id="stat-reads">0</span><span class="stat-l">读取请求数</span></div>
+      </div>
+      <div id="issues" class="issues"></div>
+    </div>
+  </section>
+
+  <details class="dir-detail" id="dir-detail">
+    <summary>目录与图块审计</summary>
+    <div id="dir-detail-body" class="dir-detail-body"><p class="muted">载入文件后显示</p></div>
+  </details>
+</div>
+
+<script src="vendor/fflate.js"></script>
+<script src="js/samples-inline.js"></script>
+<script src="js/tiff.js"></script>
+<script src="js/png.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
