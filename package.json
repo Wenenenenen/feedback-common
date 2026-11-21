@@ -1,0 +1,12 @@
+{
+  "name": "rail-switch-yard",
+  "version": "1.0.0",
+  "description": "铁路编组场网页调度游戏：道岔锁定、步首占用检查与逐步仿真",
+  "private": true,
+  "scripts": {
+    "test": "node tests/engine.test.js",
+    "test:e2e": "node tests/e2e.test.js",
+    "serve": "python3 -m http.server 8000"
+  },
+  "license": "MIT"
+}

@@ -15,3 +15,5 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试截图（临时产物）
+tests/*.png
