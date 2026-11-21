@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>盲音频水印 · 验证</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>盲音频素材水印</h1>
+      <div class="sub">只凭待查声音与口令，重新同步并读出编号</div>
+    </div>
+    <nav class="tabs">
+      <a href="index.html">写入水印</a>
+      <a href="verify.html" class="active">盲验编号</a>
+    </nav>
+  </header>
+
+  <section class="card">
+    <h2><span class="step">1</span>选择待查 WAV</h2>
+    <div class="drop" id="drop">
+      <p id="dropText">可使用从中间剪出的片段（建议 ≥6 秒），支持调音量、加底噪、立体声下混后的文件</p>
+    </div>
+    <input type="file" id="fileInput" accept=".wav,audio/wav,audio/x-wav">
+    <div class="meta" id="metaBox"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span>输入嵌入时使用的口令</h2>
+    <label class="field" style="margin-bottom:0;">
+      <span>口令</span>
+      <input type="password" id="passphrase" placeholder="不提供编号；编号由声音中读出并经校验" autocomplete="off">
+      <div class="hint" id="passHint">口令错误将无法通过校验，报告未检出。</div>
+    </label>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>盲验结果</h2>
+    <button class="primary" id="runBtn">开始盲验</button>
+    <div id="resultBox" style="margin-top:18px;">
+      <p class="muted">验证页只收待查 WAV 和口令，不需要原始音频。</p>
+    </div>
+  </section>
+
+  <p class="footer-note">
+    检测流程：立体声下混 → 遍历 chip 对齐网格做能量归一化相关并折叠 → m 序列差分模板锁定同步 →
+    对全部块相位尝试解码，由 48 位载荷中的口令派生 CRC 唯一裁决。等比例音量调整在归一化相关中抵消，
+    周期扩频码使任意起点的剪片都能重新同步。全部运算在浏览器本地完成。
+  </p>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/wav-codec.js"></script>
+<script src="js/watermark.js"></script>
+<script src="js/app-common.js"></script>
+<script src="js/verify.js"></script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>盲音频水印 · 写入</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>盲音频素材水印</h1>
+      <div class="sub">把 8 位编号写进声音本身 · 剪辑、调音量后仍可盲验</div>
+    </div>
+    <nav class="tabs">
+      <a href="index.html" class="active">写入水印</a>
+      <a href="verify.html">盲验编号</a>
+    </nav>
+  </header>
+
+  <section class="card">
+    <h2><span class="step">1</span>选择原始 WAV</h2>
+    <div class="drop" id="drop">
+      <p id="dropText">把 16kHz / 16-bit / 单声道或双声道 PCM WAV 拖到这里，或 <strong>点击选择文件</strong></p>
+    </div>
+    <input type="file" id="fileInput" accept=".wav,audio/wav,audio/x-wav">
+    <div class="meta" id="metaBox"></div>
+    <p class="hint">支持 4–30 秒；嵌入不改变声道数、采样点数与采样率。</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span>填写编号与口令</h2>
+    <div class="row">
+      <label class="field">
+        <span>8 位十六进制素材编号</span>
+        <input type="text" id="assetId" maxlength="8" placeholder="例如 1A2B3C4D" autocomplete="off" spellcheck="false">
+        <div class="hint" id="idHint">示例：1A2B3C4D</div>
+      </label>
+      <label class="field">
+        <span>口令（派生扩频密钥与校验和）</span>
+        <input type="password" id="passphrase" placeholder="嵌入与验证需使用同一口令" autocomplete="off">
+        <div class="hint" id="passHint">同一口令才能在验证页读出编号</div>
+      </label>
+    </div>
+    <label class="field" style="margin-bottom:0;">
+      <span class="range-head"><span>嵌入强度 α（水印样本幅度）</span><span class="val" id="alphaVal">0.010</span></span>
+      <input type="range" id="alpha" min="0.002" max="0.05" step="0.001" value="0.01">
+      <div class="hint">越强越抗噪但越容易被听出；默认 0.010（约 -40 dBFS），可在下方差异试听中评估。</div>
+    </label>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>嵌入并试听</h2>
+    <button class="primary" id="runBtn">嵌入水印</button>
+    <div id="players" style="margin-top:18px;"></div>
+    <div id="downloadWrap"></div>
+  </section>
+
+  <p class="footer-note">
+    实现要点：周期性 chip（256 样本）直接序列扩频 + 15 位 m 序列同步头 + 48 位载荷（32 位编号 + 16 位口令派生 CRC），
+    全链路相邻符号差分编码以免疫整体反相。全部运算在浏览器本地完成，文件与口令不会上传。
+  </p>
+</div>
+<div class="toast" id="toast"></div>
+<script src="js/wav-codec.js"></script>
+<script src="js/watermark.js"></script>
+<script src="js/app-common.js"></script>
+<script src="js/embed.js"></script>
+</body>
+</html>
