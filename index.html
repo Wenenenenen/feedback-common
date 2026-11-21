@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>游戏音频处理图演算台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <h1>游戏音频处理图演算台</h1>
+  <div class="toolbar">
+    <label>预设
+      <select id="preset"></select>
+    </label>
+    <label>每批样本数
+      <select id="blockSize">
+        <option>1</option><option>32</option><option>64</option>
+        <option selected>128</option><option>256</option><option>512</option>
+        <option>1024</option><option>4096</option>
+      </select>
+    </label>
+    <button id="btnSelfCheck" title="用多种批大小渲染并逐位比较">一致性自检</button>
+    <button id="btnPlay" class="primary" disabled>▶ 试听</button>
+    <button id="btnStop" disabled>■ 停止</button>
+    <button id="btnExport" disabled>导出 float32 WAV</button>
+  </div>
+</header>
+
+<div id="errorBanner" class="hidden"></div>
+<div id="statusBar"></div>
+
+<main>
+  <section class="col-left">
+    <div class="panel">
+      <h2>图描述 JSON</h2>
+      <textarea id="jsonEditor" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="btnApply" class="primary">应用 JSON</button>
+        <span class="hint">≤64 节点 / ≤128 边 / 48kHz 单声道 / ≤10 秒</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>图设置</h2>
+      <div class="row">
+        <label>渲染帧数 <input id="framesInput" type="number" min="1" max="480000" step="1"></label>
+        <label>输出节点 <select id="outputSelect"></select></label>
+      </div>
+    </div>
+
+    <div class="panel" id="latencyPanel">
+      <h2>延迟节点（latency）</h2>
+      <div id="latencyEditors" class="kv-list"></div>
+    </div>
+
+    <div class="panel" id="feedbackPanel">
+      <h2>反馈边（正整数 delay）</h2>
+      <div id="feedbackEditors" class="kv-list"></div>
+    </div>
+
+    <div class="panel" id="gainPanel">
+      <h2>增益关键帧（gain）</h2>
+      <div id="gainEditors"></div>
+    </div>
+  </section>
+
+  <section class="col-right">
+    <div class="panel">
+      <h2>图结构 <span class="hint">实线=普通边（标注插入的补偿），虚线=反馈边</span></h2>
+      <div id="vizWrap"><svg id="viz" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    </div>
+
+    <div class="panel">
+      <h2>路径延迟对齐 <span id="totalLatency" class="hint"></span></h2>
+      <div class="tables">
+        <table id="nodeTimeTable"></table>
+        <table id="compTable"></table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>输出波形 <span class="hint">点击波形可定位探针样本</span></h2>
+      <canvas id="wave" height="150"></canvas>
+    </div>
+
+    <div class="panel">
+      <h2>节点探针</h2>
+      <div class="row">
+        <label>节点 <select id="probeNode"></select></label>
+        <label>样本 <input id="probeT" type="number" min="0" step="1" value="0"></label>
+        <span class="hint">显示该样本 ±8 范围内，此节点每条输入边的贡献与输出</span>
+      </div>
+      <div id="probeTableWrap"><table id="probeTable"></table></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  渲染器按样本顺序精确求值，反馈边只读历史输出（初态为 0），因此切换每批样本数结果逐位一致。
+  普通边必须无环；反馈需显式给出正整数 delay。
+</footer>
+
+<script src="js/graph-engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
