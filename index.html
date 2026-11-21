@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>线阵相机 暗场/平场校正</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1d2026; --panel2: #23262e; --line: #33363f;
+    --fg: #d8dbe2; --dim: #8b90a0; --accent: #4f9cf0; --bad: #d0342c; --ok: #3a7d44;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 "PingFang SC", "Microsoft YaHei", sans-serif; }
+  header { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  #layout { display: flex; align-items: flex-start; }
+  #side { width: 340px; flex: none; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  #main { flex: 1; padding: 10px; min-width: 0; }
+  fieldset { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 0; padding: 8px 10px 10px; }
+  legend { color: var(--accent); font-size: 12px; padding: 0 4px; }
+  label { color: var(--dim); font-size: 12px; }
+  input[type=number], input[type=text] { background: var(--panel2); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 4px; padding: 3px 6px; width: 72px; font: inherit; }
+  input[type=file] { font-size: 12px; color: var(--dim); max-width: 100%; }
+  button { background: var(--panel2); border: 1px solid var(--line); color: var(--fg); border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; font: inherit; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+  table.frames { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+  table.frames td, table.frames th { border-bottom: 1px solid var(--line); padding: 2px 4px; text-align: left; }
+  table.frames input { width: 64px; padding: 1px 4px; }
+  .fname { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cnt { font-size: 12px; color: var(--dim); }
+  .cnt.bad { color: var(--bad); }
+  #msg { font-size: 12px; min-height: 18px; padding: 2px 4px; }
+  #msg.err { color: #ff8a80; } #msg.ok { color: #9ccc9c; }
+  #views { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .view { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .view h3 { margin: 0 0 6px; font-size: 13px; font-weight: normal; color: var(--dim); display: flex; justify-content: space-between; align-items: center; }
+  .view canvas { width: 100%; image-rendering: pixelated; background: #000; cursor: crosshair; display: block; }
+  .legend { font-size: 11px; color: var(--dim); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
+  select { background: var(--panel2); border: 1px solid var(--line); color: var(--fg); border-radius: 4px; font: inherit; padding: 2px 4px; }
+  #inspector { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 10px; }
+  #inspector h3 { margin: 0 0 6px; font-size: 13px; }
+  #inspector .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 16px; font-size: 13px; margin-bottom: 8px; }
+  #inspector .k { color: var(--dim); }
+  table.samples { border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+  table.samples td, table.samples th { border: 1px solid var(--line); padding: 2px 8px; text-align: right; }
+  table.samples th { color: var(--dim); font-weight: normal; }
+  tr.excluded td { color: var(--dim); text-decoration: line-through; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 12px; }
+  .hint { font-size: 11px; color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>线阵扫描相机 · 暗场/平场校正</h1>
+  <span class="sub">16 位线性灰度 · 小端 uint16 按行存放 · 单边 ≤ 1024</span>
+</header>
+<div id="layout">
+  <div id="side">
+    <fieldset>
+      <legend>① 尺寸与记录</legend>
+      <div class="row">
+        <label>宽 <input type="number" id="inW" min="1" max="1024"></label>
+        <label>高 <input type="number" id="inH" min="1" max="1024"></label>
+      </div>
+      <div class="row">
+        <input type="file" id="fileMeta" accept=".json">
+        <span class="hint">可选：导入拍摄记录 JSON，自动填尺寸、阈值与各帧曝光/照度（按文件名匹配）</span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>② 暗场帧（3–12 张）</legend>
+      <input type="file" id="fileDarks" multiple accept=".u16,.raw">
+      <span class="cnt" id="cntDarks"></span>
+      <table class="frames" id="tblDarks"></table>
+    </fieldset>
+
+    <fieldset>
+      <legend>③ 平场帧（3–12 张）</legend>
+      <input type="file" id="fileFlats" multiple accept=".u16,.raw">
+      <span class="cnt" id="cntFlats"></span>
+      <table class="frames" id="tblFlats"></table>
+    </fieldset>
+
+    <fieldset>
+      <legend>④ 待校正图</legend>
+      <input type="file" id="fileShot" accept=".u16,.raw">
+      <div class="row"><label>曝光时长 <input type="number" id="shotT" step="any"></label><span id="shotName" class="cnt"></span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑤ 阈值与选项</legend>
+      <div class="row">
+        <label>clip <input type="number" id="thClip" value="65535"></label>
+        <label>darkMax <input type="number" id="thDarkMax" step="any" value="12"></label>
+      </div>
+      <div class="row">
+        <label>gainMin <input type="number" id="thGainMin" step="any" value="0.5"></label>
+        <label>gainMax <input type="number" id="thGainMax" step="any" value="1.6"></label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="optRepair" checked> 坏点补值（5×5 窗口 ≥3 个有效邻居取中位数，不足则保留无效）</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="btnCompute">计算校准</button>
+        <button id="btnRejudge" disabled>按新阈值重新判定</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑥ 校准文件</legend>
+      <div class="row">
+        <button id="btnExportCalib" disabled>导出校准</button>
+        <input type="file" id="fileCalib" accept=".json">
+      </div>
+      <div class="hint">导入的校准可用于同尺寸新图，无需训练帧；阈值仍可改判。</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑦ 导出结果</legend>
+      <div class="row">
+        <button id="btnExportF32" disabled>校正值 float32</button>
+        <button id="btnExportQual" disabled>质量码 8 位图</button>
+      </div>
+      <div class="hint">小端 float32 原值；质量 0/3 处为 NaN；拍摄饱和单独标记为质量码 3。</div>
+    </fieldset>
+    <div id="msg"></div>
+  </div>
+
+  <div id="main">
+    <div id="views">
+      <div class="view"><h3>校正前（原图）</h3><canvas id="cvRaw"></canvas></div>
+      <div class="view"><h3>校正后</h3><canvas id="cvCorr"></canvas></div>
+      <div class="view"><h3>校准图
+        <select id="selCalibMap">
+          <option value="gain">增益 gain</option>
+          <option value="bias">暗电平 bias</option>
+          <option value="slope">暗斜率 slope</option>
+        </select></h3>
+        <canvas id="cvCalib"></canvas>
+        <div class="legend"><span><span class="sw" style="background:#c0c0c0"></span>有效</span><span><span class="sw" style="background:#d0342c"></span>判坏</span></div>
+      </div>
+      <div class="view"><h3>质量图</h3><canvas id="cvQual"></canvas>
+        <div class="legend">
+          <span><span class="sw" style="background:#3a7d44"></span>1 直接校正</span>
+          <span><span class="sw" style="background:#e6a817"></span>2 坏点补值</span>
+          <span><span class="sw" style="background:#d0342c"></span>3 拍摄饱和</span>
+          <span><span class="sw" style="background:#202024"></span>0 无可用值</span>
+        </div>
+      </div>
+    </div>
+    <div id="inspector"><h3>像素检查</h3><div class="hint">点击任意视图查看参与拟合的样本。</div></div>
+  </div>
+</div>
+<script src="calib-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
