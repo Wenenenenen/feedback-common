@@ -1,0 +1,176 @@
+<meta charset="utf-8">
+<title>对白排版台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=M+PLUS+1+Code:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&display=swap">
+<link rel="stylesheet" href="styles.css">
+
+<header class="masthead">
+  <div class="brand">
+    <span class="seal" aria-hidden="true">校</span>
+    <div class="brand-copy">
+      <p class="eyebrow">Dialogue proof · 翻译稿校对</p>
+      <h1>对白排版台</h1>
+      <p class="lede">把译文按约定字素宽度排进窄对白框，逐项检查揭示节奏，再导出每行与每项的时间。</p>
+    </div>
+  </div>
+  <dl class="stats">
+    <div class="stat"><dt>页数</dt><dd id="statPages">4</dd></div>
+    <div class="stat"><dt>列宽</dt><dd><span id="statCols">8</span><small>列</small></dd></div>
+    <div class="stat"><dt>每项</dt><dd><span id="statInterval">100</span><small>ms</small></dd></div>
+    <div class="stat"><dt>本页时长</dt><dd id="statDuration">0.7<small>s</small></dd></div>
+  </dl>
+</header>
+
+<ul class="legend" aria-label="排版规则">
+  <li><span class="rule-key">计宽</span>ASCII 字素 1 列，其余字素与图标 2 列</li>
+  <li><span class="rule-key">禁则</span>， 。 ！ ？ ）不落行首 · （不落行尾</li>
+  <li><span class="rule-key">断点</span>取最靠右的合法处，英数整组优先</li>
+  <li><span class="rule-key">兜底</span>没有合法断点时在最远处换行，并在行号旁标红</li>
+</ul>
+
+<main class="bench">
+  <section class="stage" aria-labelledby="stageTitle">
+    <h2 class="visually-hidden" id="stageTitle">对白框预览与播放</h2>
+
+    <div class="stage-head">
+      <div class="ptabs" id="pageTabs" role="tablist" aria-label="页面"></div>
+      <label class="switch" for="guideToggle">
+        <input type="checkbox" id="guideToggle" checked>
+        <span class="switch-track" aria-hidden="true"><i></i></span>
+        <span>列线</span>
+      </label>
+    </div>
+
+    <div class="scene" id="scene">
+      <span class="scene-tag left" id="tagLeft">P.01 · 8 COL</span>
+      <span class="scene-tag right" id="tagRight">0 ITEMS</span>
+      <div class="frame guides" id="frame">
+        <div class="ruler-wrap"><div class="ruler" id="ruler" aria-hidden="true"></div></div>
+        <div class="gutter" id="gutter" aria-hidden="true"></div>
+        <div class="box" id="box">
+          <div class="box-in" id="boxIn" aria-hidden="true"></div>
+          <span class="next-mark" id="nextMark" aria-hidden="true"></span>
+        </div>
+      </div>
+    </div>
+    <p class="scene-note">点任意字素把播放头移过去 · 拖动宽度会立即重排，已播到的位置保持不变</p>
+
+    <div class="transport">
+      <button class="btn primary" id="playBtn" type="button">
+        <svg class="ico" id="playIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.1v9.8L12.9 8z"/></svg>
+        <span id="playLabel">播放</span>
+      </button>
+      <button class="btn" id="stepBackBtn" type="button" title="回退一项（←）">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.2" y="3.4" width="1.7" height="9.2" rx=".5"/><path d="M11.6 3.2v9.6L5.5 8z"/></svg>
+        <span class="btn-label">回退</span>
+      </button>
+      <button class="btn" id="stepBtn" type="button" title="前进一项（→）">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.4 3.2v9.6L10.5 8z"/><rect x="11.1" y="3.4" width="1.7" height="9.2" rx=".5"/></svg>
+        <span class="btn-label">逐项</span>
+      </button>
+      <button class="btn" id="endBtn" type="button" title="整页显示">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.4 3.4 7.8 8l-5.4 4.6z"/><path d="M8.4 3.4 13.8 8l-5.4 4.6z"/></svg>
+        <span class="btn-label">到整页</span>
+      </button>
+      <button class="btn" id="replayBtn" type="button" title="从第一项重播">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 2.9v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 7.2a5.3 5.3 0 1 1 1.5 4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span class="btn-label">重播</span>
+      </button>
+      <span class="spacer"></span>
+      <div class="pager">
+        <button class="icon-btn" id="prevPage" type="button" title="上一页" aria-label="上一页">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.2 5.2 8l4.8 4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="pager-count" id="pageCounter">1 / 4</span>
+        <button class="icon-btn" id="nextPage" type="button" title="下一页" aria-label="下一页">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.2 4.8 4.8L6 12.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="progress">
+      <div class="track" id="track" aria-hidden="true"><i id="fill"></i></div>
+      <p class="progress-text">
+        <span><b id="revealCount">0</b>/<span id="itemCount">0</span> 项</span>
+        <span class="sep" aria-hidden="true">·</span>
+        <span><span id="elapsed">0</span>/<span id="duration">0</span> ms</span>
+      </p>
+    </div>
+
+    <div class="settings">
+      <label class="field range-field" for="widthRange">
+        <span class="field-label">对白框宽度</span>
+        <input type="range" id="widthRange" min="8" max="40" step="1" value="8">
+        <output class="field-value" id="widthOut" for="widthRange">8 列</output>
+      </label>
+      <label class="field" for="intervalInput">
+        <span class="field-label">每项间隔</span>
+        <span class="num-wrap">
+          <input type="number" id="intervalInput" min="0" max="2000" step="10" value="100" inputmode="numeric">
+          <span class="unit">ms</span>
+        </span>
+      </label>
+    </div>
+  </section>
+
+  <aside class="rail" aria-label="检查与导出">
+    <section class="sec">
+      <header class="sec-head">
+        <h2>断行检查</h2>
+        <span class="sec-count" id="lineSummary"></span>
+      </header>
+      <div class="line-list" id="lineList"></div>
+    </section>
+
+    <section class="sec">
+      <header class="sec-head">
+        <h2>文稿</h2>
+        <span class="sec-count" id="draftSummary"></span>
+      </header>
+      <textarea id="draft" spellcheck="false" aria-label="当前页文稿" rows="4"></textarea>
+      <p class="syntax">图标写 <code>&lt;铃&gt;</code>，停顿写 <code>{300}</code>；用 <code>\</code> 转义 <code>&lt;</code>、<code>{</code>、<code>\</code>。</p>
+      <div class="edit-actions">
+        <button class="btn small" id="addPage" type="button">新建页</button>
+        <button class="btn small" id="deletePage" type="button">删除本页</button>
+        <button class="btn small ghost" id="resetSample" type="button">载入样例</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <header class="sec-head">
+        <h2>揭示时间</h2>
+        <span class="sec-count" id="timelineSummary"></span>
+      </header>
+      <div class="tlist" id="timeline" tabindex="0" role="group" aria-label="揭示时间线，方向键选择，回车跳转"></div>
+    </section>
+
+    <section class="sec">
+      <header class="sec-head">
+        <h2>导出</h2>
+        <span class="sec-count">全部页</span>
+      </header>
+      <div class="export-bar">
+        <div class="seg" id="exportTabs" role="tablist" aria-label="导出格式">
+          <button class="seg-btn on" type="button" role="tab" aria-selected="true" data-fmt="lines">行内容</button>
+          <button class="seg-btn" type="button" role="tab" aria-selected="false" data-fmt="items">揭示时间</button>
+          <button class="seg-btn" type="button" role="tab" aria-selected="false" data-fmt="json">JSON</button>
+        </div>
+        <button class="btn small" id="copyExport" type="button">复制</button>
+      </div>
+      <pre class="export" id="exportOut" tabindex="0"></pre>
+      <p class="syntax">导出使用当前的列宽与间隔；停顿计入总时长。</p>
+    </section>
+  </aside>
+</main>
+
+<footer class="foot">
+  <p>整页在揭示前已排好：改宽度只重排，不移动播放头。每个字素或图标占一个揭示项，<code>pauseMs</code> 在下一项之前等待。</p>
+  <p class="shortcuts">空格 播放 / 暂停 · ← → 逐项 · [ ] 调宽度 · PgUp / PgDn 翻页</p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
