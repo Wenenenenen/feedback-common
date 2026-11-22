@@ -1,0 +1,569 @@
+<title>支撑场承重编辑器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 布局概念：左侧图纸画布（蓝图网格），右侧检查员面板；手机端上下堆叠。 */
+:root{
+  --bg:#edf2f8; --panel:#ffffff; --panel-2:#f3f7fb; --ink:#1b2f44; --muted:#5c7288;
+  --line:#c8d7e5; --grid:#d9e5f0; --grid-strong:#aec6dc;
+  --accent:#b45309; --accent-ink:#8a3f06; --accent-soft:#fbeeda;
+  --danger:#b91c1c; --danger-soft:#fde4e4; --warn:#c2410c; --warn-soft:#ffead9;
+  --ok:#15803d; --ok-soft:#dcf2e4; --info:#0369a1; --info-soft:#dff0fa;
+  --font-display:"Space Grotesk",Inter,system-ui,sans-serif;
+  --font-body:Inter,system-ui,-apple-system,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0c1e33; --panel:#122947; --panel-2:#0e2340; --ink:#dcebfa; --muted:#8fb0cd;
+  --line:#2a4f7c; --grid:#1b3a5f; --grid-strong:#2f5a8c;
+  --accent:#f2a93b; --accent-ink:#f7c169; --accent-soft:#3a2c10;
+  --danger:#f06a6a; --danger-soft:#451b1b; --warn:#f08a4b; --warn-soft:#42260f;
+  --ok:#4fc07f; --ok-soft:#12351f; --info:#4fb0e8; --info-soft:#10314a;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c1e33; --panel:#122947; --panel-2:#0e2340; --ink:#dcebfa; --muted:#8fb0cd;
+  --line:#2a4f7c; --grid:#1b3a5f; --grid-strong:#2f5a8c;
+  --accent:#f2a93b; --accent-ink:#f7c169; --accent-soft:#3a2c10;
+  --danger:#f06a6a; --danger-soft:#451b1b; --warn:#f08a4b; --warn-soft:#42260f;
+  --ok:#4fc07f; --ok-soft:#12351f; --info:#4fb0e8; --info-soft:#10314a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.5}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance}
+button{font-family:var(--font-body);font-size:13px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 12px}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover:not(:disabled){background:var(--accent-ink);color:#fff}
+button.danger{border-color:var(--danger);color:var(--danger)}
+button.danger:hover:not(:disabled){background:var(--danger);color:#fff}
+button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+input,textarea{font-family:var(--font-mono);font-size:13px;color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=number]{width:64px}
+textarea{width:100%;min-height:96px;resize:vertical}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px}
+
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 0}
+.topbar h1{font-size:20px;margin:0;letter-spacing:.01em}
+.topbar .sub{color:var(--muted);font-size:12px}
+.topbar .spacer{flex:1}
+.pill{font-family:var(--font-mono);font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums}
+.pill.dirty{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.pill.clean{border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stage-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.stage-head .grp{display:flex;align-items:center;gap:6px}
+.stage-head .lbl{font-size:12px;color:var(--muted);letter-spacing:.04em}
+.layer-tag{font-family:var(--font-mono);font-size:13px;min-width:86px;text-align:center;font-variant-numeric:tabular-nums}
+.hint{padding:6px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel-2)}
+.canvas-wrap{overflow-x:auto;background:var(--panel)}
+svg#canvas{display:block;user-select:none;touch-action:none}
+svg#canvas.place{cursor:crosshair}
+.legend{display:flex;flex-wrap:wrap;gap:14px;padding:8px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid var(--line)}
+
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h2{font-size:14px;margin:0 0 8px;letter-spacing:.02em}
+.card h3{font-size:12px;margin:12px 0 4px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.flow{font-family:var(--font-mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+.flow .src{color:var(--warn)} .flow .dst{color:var(--info)}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;letter-spacing:.04em}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}
+.badge.danger{background:var(--danger-soft);color:var(--danger)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+.wave{font-size:12.5px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);margin-top:6px;cursor:pointer}
+.wave.cur{border-color:var(--accent);background:var(--accent-soft)}
+.wave .rm{font-family:var(--font-mono)}
+.msg{font-size:12.5px;padding:6px 10px;border-radius:6px;margin-top:8px}
+.msg.err{background:var(--danger-soft);color:var(--danger)}
+.msg.ok{background:var(--ok-soft);color:var(--ok)}
+.muted{color:var(--muted);font-size:12.5px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+</style>
+
+<div class="wrap">
+  <header class="topbar">
+    <div>
+      <h1>支撑场承重编辑器</h1>
+      <div class="sub">整数格板件 · 载荷均分 · 精确分数 · 逐轮失稳预览</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill" id="countPill">0 / 128</span>
+    <span class="pill clean" id="dirtyPill">已提交</span>
+    <button id="undoBtn" data-action="undo" disabled>撤销</button>
+    <button id="previewBtn" class="primary" data-action="preview">预览失稳</button>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div class="stage-head">
+        <div class="grp" role="group" aria-label="模式">
+          <button id="modeSelect" data-action="mode-select" class="on">选择</button>
+          <button id="modePlace" data-action="mode-place">摆放</button>
+        </div>
+        <div class="grp" aria-label="层">
+          <span class="lbl">层</span>
+          <button data-action="layer-prev" aria-label="下一层">−</button>
+          <span class="layer-tag" id="layerTag">z = 0（地面）</span>
+          <button data-action="layer-next" aria-label="上一层">＋</button>
+        </div>
+        <div class="grp" id="placeParams">
+          <span class="lbl">新板件</span>
+          <label class="lbl">重量 <input type="number" id="placeWeight" min="0" step="1" value="2"></label>
+          <label class="lbl">承重 <input type="number" id="placeCap" min="0" step="1" value="6"></label>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+      <div class="canvas-wrap"><svg id="canvas" role="application" aria-label="板件布局图"></svg></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--danger-soft);border-color:var(--danger)"></i>超载</span>
+        <span><i class="sw" style="background:var(--warn-soft);border-color:var(--warn)"></i>无支撑 / 载荷来源</span>
+        <span><i class="sw" style="background:var(--info-soft);border-color:var(--info)"></i>载荷去向</span>
+        <span><i class="sw" style="background:transparent;border-style:dashed"></i>相邻层轮廓</span>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div id="previewPanel"></div>
+      <div class="card" id="slabPanel"></div>
+      <div class="card" id="ioPanel">
+        <h2>导出 / 导入</h2>
+        <div class="row">
+          <button data-action="export-layout">生成布局 JSON</button>
+          <button data-action="export-record">生成失稳记录</button>
+        </div>
+        <h3>导出结果</h3>
+        <textarea id="exportBox" readonly placeholder="点上面按钮生成，可复制带走"></textarea>
+        <div class="row" style="margin-top:6px">
+          <button data-action="copy-export">复制</button>
+        </div>
+        <h3>导入布局</h3>
+        <textarea id="importBox" placeholder='粘贴 {"slabs":[{"id":"A","footprint":[x,y,z,宽,长],"load":[重量,承重]}…]} 格式的 JSON'></textarea>
+        <div class="row" style="margin-top:6px">
+          <button data-action="import-apply">导入</button>
+          <button data-action="load-sample">载入示例</button>
+          <input type="file" id="importFile" accept=".json,application/json" style="max-width:180px">
+        </div>
+        <div id="ioMsg"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script src="engine.js"></script>
+<script>
+'use strict';
+/* ================= 状态 ================= */
+const GRID = 24, CELL = 34, MAX_SLABS = 128, MAX_LAYER = 15;
+const LAYER_COLORS = ['#2f80ed','#8b5cf6','#219653','#e67e22','#12a5a5','#d6336c','#7c6f64','#5b8def'];
+
+const SAMPLE_SLABS = [
+  {id:'A', x:0, y:0, z:0, w:1, l:1, weight:2, cap:6},
+  {id:'B', x:1, y:0, z:0, w:2, l:1, weight:2, cap:8},
+  {id:'D', x:0, y:0, z:1, w:3, l:1, weight:3, cap:20},
+  {id:'E', x:2, y:0, z:2, w:1, l:1, weight:5, cap:5},
+];
+
+const S = {
+  committed: SAMPLE_SLABS.map(s => ({...s})),
+  working:   SAMPLE_SLABS.map(s => ({...s})),
+  undo: [],
+  layer: 0,
+  mode: 'select',
+  selected: null,
+  placing: null,          // {x0,y0,x1,y1} 拖拽中的矩形
+  preview: null,          // {sim, step}
+};
+const MAX_UNDO = 50;
+
+const $ = id => document.getElementById(id);
+const svgNS = 'http://www.w3.org/2000/svg';
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function dirty(){ return JSON.stringify(S.committed) !== JSON.stringify(S.working); }
+function byId(list, id){ return list.find(s => s.id === id); }
+function nextId(){
+  const used = new Set(S.working.map(s => s.id));
+  for (let i = 0; ; i++){
+    let n = i, id = '';
+    do { id = String.fromCharCode(65 + (n % 26)) + id; n = Math.floor(n / 26) - 1; } while (n >= 0);
+    if (!used.has(id)) return id;
+  }
+}
+
+/* ================= 渲染：顶栏 ================= */
+function renderTop(){
+  $('countPill').textContent = S.working.length + ' / ' + MAX_SLABS;
+  const d = dirty(), pv = !!S.preview;
+  const pill = $('dirtyPill');
+  if (pv){ pill.textContent = '预览中'; pill.className = 'pill dirty'; }
+  else if (d){ pill.textContent = '有未提交修改'; pill.className = 'pill dirty'; }
+  else { pill.textContent = '已提交'; pill.className = 'pill clean'; }
+  $('undoBtn').disabled = pv || !S.undo.length;
+  $('previewBtn').disabled = pv || !S.working.length;
+  $('modeSelect').classList.toggle('on', S.mode === 'select');
+  $('modePlace').classList.toggle('on', S.mode === 'place');
+  $('layerTag').textContent = 'z = ' + S.layer + (S.layer === 0 ? '（地面）' : '');
+  $('placeParams').style.visibility = (S.mode === 'place' && !pv) ? 'visible' : 'hidden';
+  const hint = $('hint');
+  if (pv) hint.textContent = '失稳预览：用右侧面板逐轮查看，确认提交或放弃。';
+  else if (S.mode === 'place') hint.textContent = '摆放模式：在网格上拖出矩形放置板件（z = ' + S.layer + '）。同层不能重叠，最多 ' + MAX_SLABS + ' 块。';
+  else hint.textContent = '点击板件查看载荷从哪来、传给谁；Delete 键删除选中板件。示例布局：删掉 B 再预览，看桥板哪一轮掉。';
+}
+
+/* ================= 渲染：画布 ================= */
+/* 返回当前应展示的板件集合与载荷信息（普通模式 / 预览模式统一）。 */
+function viewState(){
+  if (!S.preview){
+    const res = Engine.computeLoads(S.working);
+    return { slabs: S.working, res, wave: null, stable: false };
+  }
+  const sim = S.preview.sim, step = S.preview.step;
+  const removed = new Set();
+  for (let i = 0; i < step; i++){
+    sim.waves[i].overload.forEach(id => removed.add(id));
+    sim.waves[i].unsupported.forEach(id => removed.add(id));
+  }
+  const present = S.working.filter(s => !removed.has(s.id));
+  const res = Engine.computeLoads(present);
+  const wave = step < sim.waves.length ? sim.waves[step] : null;
+  return { slabs: present, res, wave, stable: step >= sim.waves.length };
+}
+
+function renderCanvas(){
+  const svg = $('canvas');
+  const W = GRID * CELL;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + W);
+  svg.setAttribute('width', W); svg.setAttribute('height', W);
+  svg.classList.toggle('place', S.mode === 'place' && !S.preview);
+  const v = viewState();
+  const cur = v.slabs.filter(s => s.z === S.layer);
+  const below = v.slabs.filter(s => s.z === S.layer - 1);
+  const above = v.slabs.filter(s => s.z === S.layer + 1);
+  const sel = S.selected ? byId(v.slabs, S.selected) : null;
+  const incomingIds = new Set(), outgoingIds = new Set();
+  if (sel){
+    v.res.incoming.get(sel.id).forEach(e => incomingIds.add(e.from));
+    v.res.supporters.get(sel.id).forEach(id => outgoingIds.add(id));
+  }
+  const waveOver = new Set(v.wave ? v.wave.overload : []);
+  const waveUnsup = new Set(v.wave ? v.wave.unsupported : []);
+
+  let h = '';
+  h += '<rect width="' + W + '" height="' + W + '" fill="var(--panel)"/>';
+  for (let i = 0; i <= GRID; i++){
+    const strong = i % 4 === 0;
+    const c = strong ? 'var(--grid-strong)' : 'var(--grid)';
+    const w = strong ? 1.2 : 0.6;
+    h += '<line x1="' + i*CELL + '" y1="0" x2="' + i*CELL + '" y2="' + W + '" stroke="' + c + '" stroke-width="' + w + '"/>';
+    h += '<line x1="0" y1="' + i*CELL + '" x2="' + W + '" y2="' + i*CELL + '" stroke="' + c + '" stroke-width="' + w + '"/>';
+  }
+  const ghost = (s, color, dash) =>
+    '<rect x="' + s.x*CELL+2 + '" y="' + s.y*CELL+2 + '" width="' + (s.w*CELL-4) + '" height="' + (s.l*CELL-4) +
+    '" fill="none" stroke="' + color + '" stroke-width="1.4" stroke-dasharray="' + dash + '" rx="3"/>';
+  below.forEach(s => { if (!outgoingIds.has(s.id)) h += ghost(s, 'var(--grid-strong)', '5 4'); });
+  above.forEach(s => { if (!incomingIds.has(s.id)) h += ghost(s, 'var(--grid-strong)', '2 4'); });
+  // 选中板件的载荷流向：来源（上层）橙、去向（下层）蓝
+  v.slabs.forEach(s => { if (incomingIds.has(s.id)) h += ghost(s, 'var(--warn)', '6 3'); });
+  v.slabs.forEach(s => { if (outgoingIds.has(s.id)) h += ghost(s, 'var(--info)', '6 3'); });
+
+  cur.forEach(s => {
+    const load = v.res.loads.get(s.id);
+    const over = load.gt(new Engine.Fr(s.cap));
+    const unsup = s.z > 0 && v.res.supporters.get(s.id).length === 0;
+    const doomed = waveOver.has(s.id) || waveUnsup.has(s.id);
+    const color = LAYER_COLORS[s.z % LAYER_COLORS.length];
+    let fill = color, stroke = color, opacity = 0.28, sw = 2;
+    if (over || waveOver.has(s.id)){ fill = 'var(--danger)'; stroke = 'var(--danger)'; opacity = 0.3; }
+    else if (unsup || waveUnsup.has(s.id)){ fill = 'var(--warn)'; stroke = 'var(--warn)'; opacity = 0.3; }
+    if (S.selected === s.id){ sw = 3.5; }
+    h += '<g data-slab="' + esc(s.id) + '" style="cursor:pointer">';
+    h += '<rect x="' + (s.x*CELL+2) + '" y="' + (s.y*CELL+2) + '" width="' + (s.w*CELL-4) + '" height="' + (s.l*CELL-4) +
+         '" rx="4" fill="' + fill + '" fill-opacity="' + opacity + '" stroke="' + stroke + '" stroke-width="' + sw + '"' +
+         (doomed ? ' stroke-dasharray="7 4"' : '') + '/>';
+    if (S.selected === s.id)
+      h += '<rect x="' + (s.x*CELL+2) + '" y="' + (s.y*CELL+2) + '" width="' + (s.w*CELL-4) + '" height="' + (s.l*CELL-4) +
+           '" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.6"/>';
+    const cx = (s.x + s.w/2) * CELL, cy = (s.y + s.l/2) * CELL;
+    const idSize = Math.min(15, Math.max(10, s.w * CELL / 3.2));
+    h += '<text x="' + cx + '" y="' + (cy - 2) + '" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="' + idSize + '" fill="var(--ink)" pointer-events="none">' + esc(s.id) + '</text>';
+    const loadStr = load.toString() + ' / ' + s.cap;
+    const fs = Math.min(10.5, Math.max(7.5, (s.w * CELL) / (loadStr.length * 0.62)));
+    h += '<text x="' + cx + '" y="' + (cy + Math.max(10, idSize - 1)) + '" text-anchor="middle" font-family="var(--font-mono)" font-size="' + fs + '" fill="' + (over ? 'var(--danger)' : 'var(--muted)') + '" pointer-events="none">' + esc(loadStr) + '</text>';
+    h += '</g>';
+  });
+  if (S.placing){
+    const p = normRect(S.placing);
+    const ok = canPlace(p);
+    h += '<rect x="' + p.x*CELL + '" y="' + p.y*CELL + '" width="' + p.w*CELL + '" height="' + p.l*CELL +
+         '" fill="' + (ok ? 'var(--accent)' : 'var(--danger)') + '" fill-opacity="0.25" stroke="' + (ok ? 'var(--accent)' : 'var(--danger)') + '" stroke-width="2" stroke-dasharray="6 4"/>';
+  }
+  svg.innerHTML = h;
+}
+
+function normRect(r){
+  return { x: Math.min(r.x0, r.x1), y: Math.min(r.y0, r.y1),
+           w: Math.abs(r.x1 - r.x0) + 1, l: Math.abs(r.y1 - r.y0) + 1 };
+}
+function canPlace(p){
+  if (S.working.length >= MAX_SLABS) return false;
+  if (p.x < 0 || p.y < 0 || p.x + p.w > GRID || p.y + p.l > GRID) return false;
+  const cand = { x: p.x, y: p.y, z: S.layer, w: p.w, l: p.l };
+  return !S.working.some(s => Engine.slabsCollide(s, cand));
+}
+
+/* ================= 渲染：侧栏 ================= */
+function renderSide(){
+  renderPreviewPanel();
+  renderSlabPanel();
+}
+
+function renderPreviewPanel(){
+  const el = $('previewPanel');
+  if (!S.preview){ el.innerHTML = ''; return; }
+  const sim = S.preview.sim, step = S.preview.step, n = sim.waves.length;
+  const totalRemoved = sim.waves.reduce((a, w) => a + w.overload.length + w.unsupported.length, 0);
+  let h = '<div class="card"><h2>失稳预览</h2>';
+  if (!n){
+    h += '<div class="msg ok">结构稳定：没有板件超载或失去支撑。</div>';
+  } else {
+    h += '<div class="row"><button data-action="prev-step" ' + (step === 0 ? 'disabled' : '') + '>‹ 上一轮</button>' +
+         '<span class="mono" style="flex:1;text-align:center">' + (step < n ? '第 ' + (step+1) + ' / ' + n + ' 轮' : '最终结果') + '</span>' +
+         '<button data-action="next-step" ' + (step >= n ? 'disabled' : '') + '>下一轮 ›</button></div>';
+    if (step < n){
+      const w = sim.waves[step];
+      h += '<div style="margin-top:8px;font-size:13px">本轮移除：' +
+           (w.overload.length ? '<span class="badge danger">超载 ' + esc(w.overload.join('、')) + '</span> ' : '') +
+           (w.unsupported.length ? '<span class="badge warn">无支撑 ' + esc(w.unsupported.join('、')) + '</span>' : '') + '</div>';
+    } else {
+      h += '<div class="msg ok">已稳定：剩余 ' + sim.survivors.length + ' 块。</div>';
+    }
+    h += '<h3>时间线</h3>';
+    sim.waves.forEach((w, i) => {
+      h += '<div class="wave' + (i === step ? ' cur' : '') + '" data-action="goto-step" data-step="' + i + '">' +
+           '<b>第 ' + (i+1) + ' 轮</b> <span class="rm">' +
+           (w.overload.length ? '超载 ' + esc(w.overload.join(' ')) : '') +
+           (w.overload.length && w.unsupported.length ? ' · ' : '') +
+           (w.unsupported.length ? '无支撑 ' + esc(w.unsupported.join(' ')) : '') + '</span></div>';
+    });
+  }
+  h += '<div class="row" style="margin-top:10px">' +
+       '<button class="primary" data-action="commit">确认提交' + (totalRemoved ? '（连带移除 ' + totalRemoved + ' 块）' : '') + '</button>' +
+       '<button class="danger" data-action="discard">放弃修改</button></div>';
+  h += '<div class="muted" style="margin-top:6px">提交后可用一次「撤销」恢复整次编辑和连带移除。</div></div>';
+  el.innerHTML = h;
+}
+
+function renderSlabPanel(){
+  const el = $('slabPanel');
+  const s = S.selected ? byId(S.working, S.selected) : null;
+  if (!s || S.preview){
+    el.innerHTML = '<h2>板件详情</h2><div class="muted">' +
+      (S.preview ? '预览中，先确认或放弃。' : '未选中。点击画布上的板件查看载荷流向；切到「摆放」模式添加新板件。') + '</div>';
+    return;
+  }
+  const res = Engine.computeLoads(S.working);
+  const load = res.loads.get(s.id);
+  const over = load.gt(new Engine.Fr(s.cap));
+  const unsup = s.z > 0 && res.supporters.get(s.id).length === 0;
+  const inc = res.incoming.get(s.id), out = res.outgoing.get(s.id);
+  let h = '<h2>板件 <span class="mono">' + esc(s.id) + '</span> ' +
+    (over ? '<span class="badge danger">超载</span>' : unsup ? '<span class="badge warn">无支撑</span>' : '<span class="badge ok">稳定</span>') + '</h2>';
+  h += '<dl class="kv"><dt>位置</dt><dd>x ' + s.x + ' · y ' + s.y + ' · z ' + s.z + '</dd>' +
+       '<dt>尺寸</dt><dd>' + s.w + ' × ' + s.l + ' × 1</dd>' +
+       '<dt>总载荷</dt><dd>' + load + '</dd></dl>';
+  h += '<h3>修改</h3><div class="row">' +
+       '<label class="muted">重量 <input type="number" id="slabWeight" min="0" step="1" value="' + s.weight + '"></label>' +
+       '<label class="muted">承重 <input type="number" id="slabCap" min="0" step="1" value="' + s.cap + '"></label>' +
+       '<button data-action="apply-slab">应用</button><button class="danger" data-action="delete-slab">删除</button></div>';
+  h += '<h3>载荷从哪来</h3><div class="flow">自重 ' + s.weight;
+  if (inc.length) inc.forEach(e => { h += '<br><span class="src">← ' + esc(e.from) + ' 传来 ' + e.amount + '</span>'; });
+  else h += '<br><span class="muted">（无上层传来）</span>';
+  h += '</div><h3>传给谁</h3><div class="flow">';
+  if (s.z === 0) h += '<span class="muted">落在地面，载荷由地基承担。</span>';
+  else if (!out.length) h += '<span class="muted">正下方没有板件——下一轮会因无支撑掉落。</span>';
+  else out.forEach(e => { h += '<span class="dst">→ ' + esc(e.to) + ' 分得 ' + e.amount + '</span><br>'; });
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+function render(){ renderTop(); renderCanvas(); renderSide(); }
+
+/* ================= 动作 ================= */
+function toast(msg, ok){
+  const el = $('ioMsg');
+  el.innerHTML = '<div class="msg ' + (ok ? 'ok' : 'err') + '">' + esc(msg) + '</div>';
+  if (ok) setTimeout(() => { if (el.firstChild) el.innerHTML = ''; }, 4000);
+}
+
+const actions = {
+  'mode-select': () => { S.mode = 'select'; },
+  'mode-place': () => { S.mode = 'place'; S.selected = null; },
+  'layer-prev': () => { S.layer = Math.max(0, S.layer - 1); S.selected = null; },
+  'layer-next': () => { S.layer = Math.min(MAX_LAYER, S.layer + 1); S.selected = null; },
+  'preview': () => {
+    if (!S.working.length) return;
+    S.preview = { sim: Engine.simulate(S.working), step: 0 };
+    S.selected = null; S.placing = null;
+  },
+  'prev-step': () => { if (S.preview) S.preview.step = Math.max(0, S.preview.step - 1); },
+  'next-step': () => { if (S.preview) S.preview.step = Math.min(S.preview.sim.waves.length, S.preview.step + 1); },
+  'goto-step': (t) => { if (S.preview) S.preview.step = +t.dataset.step; },
+  'commit': () => {
+    if (!S.preview) return;
+    S.undo.push(S.committed); if (S.undo.length > MAX_UNDO) S.undo.shift();
+    S.committed = S.preview.sim.survivors.map(s => ({...s}));
+    S.working = S.committed.map(s => ({...s}));
+    S.preview = null;
+    toast('已提交，连带移除已生效。可用「撤销」恢复整次编辑。', true);
+  },
+  'discard': () => {
+    S.working = S.committed.map(s => ({...s}));
+    S.preview = null; S.selected = null;
+  },
+  'undo': () => {
+    if (!S.undo.length || S.preview) return;
+    S.committed = S.undo.pop();
+    S.working = S.committed.map(s => ({...s}));
+    S.selected = null;
+    toast('已撤销，恢复到提交前。', true);
+  },
+  'apply-slab': () => {
+    const s = S.selected && byId(S.working, S.selected); if (!s) return;
+    const w = Math.trunc(+$('slabWeight').value), c = Math.trunc(+$('slabCap').value);
+    if (!(w >= 0) || !(c >= 0)){ toast('重量和承重必须是非负整数。'); return; }
+    s.weight = w; s.cap = c;
+  },
+  'delete-slab': () => {
+    if (!S.selected) return;
+    S.working = S.working.filter(x => x.id !== S.selected);
+    S.selected = null;
+  },
+  'export-layout': () => {
+    const data = { format: 'footprint依次记录x、y、z、宽、长，厚度为1。load记录重量和承重上限。',
+                   slabs: S.working.map(Engine.toSampleFormat) };
+    $('exportBox').value = JSON.stringify(data);
+  },
+  'export-record': () => {
+    const sim = Engine.simulate(S.working);
+    const data = { format: '失稳记录：initialLoads 为当前布局首轮载荷（精确分数），waves 逐轮列出超载与无支撑移除及该轮载荷，survivors 为最终留下的板件。',
+                   initialLoads: sim.initialLoads, waves: sim.waves,
+                   survivors: sim.survivors.map(s => s.id), finalLoads: sim.finalLoads };
+    $('exportBox').value = JSON.stringify(data, null, 1);
+  },
+  'copy-export': () => {
+    const box = $('exportBox');
+    if (!box.value){ toast('还没有可复制的导出内容。'); return; }
+    const done = () => toast('已复制到剪贴板。', true);
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(box.value).then(done, () => { box.select(); document.execCommand('copy'); done(); });
+    else { box.select(); document.execCommand('copy'); done(); }
+  },
+  'import-apply': () => importLayout($('importBox').value),
+  'load-sample': () => {
+    S.undo.push(S.committed);
+    S.committed = SAMPLE_SLABS.map(s => ({...s}));
+    S.working = S.committed.map(s => ({...s}));
+    S.selected = null; S.preview = null; S.layer = 0;
+    toast('已载入示例布局。', true);
+  },
+};
+
+function importLayout(text){
+  let data;
+  try { data = JSON.parse(text); } catch(e){ toast('JSON 解析失败：' + e.message); return; }
+  const arr = data && data.slabs;
+  if (!Array.isArray(arr)){ toast('缺少 slabs 数组。'); return; }
+  if (!arr.length || arr.length > MAX_SLABS){ toast('板件数量需在 1–' + MAX_SLABS + ' 之间。'); return; }
+  const seen = new Set(), slabs = [];
+  for (const raw of arr){
+    if (!raw || raw.id == null || !Array.isArray(raw.footprint) || !Array.isArray(raw.load)){ toast('板件格式不正确：需要 id、footprint、load。'); return; }
+    const s = Engine.fromSampleFormat(raw);
+    if (seen.has(s.id)){ toast('id 重复：' + s.id); return; }
+    seen.add(s.id);
+    if (s.w < 1 || s.l < 1 || s.z < 0 || s.z > MAX_LAYER || s.weight < 0 || s.cap < 0){ toast('板件 ' + s.id + ' 参数非法。'); return; }
+    if (s.x < 0 || s.y < 0 || s.x + s.w > GRID || s.y + s.l > GRID){ toast('板件 ' + s.id + ' 超出 ' + GRID + '×' + GRID + ' 网格。'); return; }
+    if (slabs.some(o => Engine.slabsCollide(o, s))){ toast('板件 ' + s.id + ' 与同层板件重叠。'); return; }
+    slabs.push(s);
+  }
+  S.undo.push(S.committed); if (S.undo.length > MAX_UNDO) S.undo.shift();
+  S.committed = slabs; S.working = slabs.map(s => ({...s}));
+  S.selected = null; S.preview = null; S.layer = 0;
+  toast('已导入 ' + slabs.length + ' 块板件。', true);
+}
+
+/* ================= 事件 ================= */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-action]');
+  if (!t || t.disabled) return;
+  const a = t.dataset.action;
+  if (S.preview && !['prev-step','next-step','goto-step','commit','discard','export-layout','export-record','copy-export'].includes(a)) return;
+  if (actions[a]){ actions[a](t); render(); }
+});
+
+const svg = $('canvas');
+function cellFromEvent(e){
+  const r = svg.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / r.width * GRID);
+  const y = Math.floor((e.clientY - r.top) / r.height * GRID);
+  return { x: Math.max(0, Math.min(GRID - 1, x)), y: Math.max(0, Math.min(GRID - 1, y)) };
+}
+svg.addEventListener('pointerdown', e => {
+  if (S.preview) return;
+  const c = cellFromEvent(e);
+  if (S.mode === 'place'){
+    S.placing = { x0: c.x, y0: c.y, x1: c.x, y1: c.y };
+    svg.setPointerCapture(e.pointerId);
+  } else {
+    const hit = [...S.working].reverse().find(s => s.z === S.layer &&
+      c.x >= s.x && c.x < s.x + s.w && c.y >= s.y && c.y < s.y + s.l);
+    S.selected = hit ? hit.id : null;
+  }
+  render();
+});
+svg.addEventListener('pointermove', e => {
+  if (!S.placing) return;
+  const c = cellFromEvent(e);
+  S.placing.x1 = c.x; S.placing.y1 = c.y;
+  renderCanvas();
+});
+svg.addEventListener('pointerup', () => {
+  if (!S.placing) return;
+  const p = normRect(S.placing);
+  S.placing = null;
+  if (canPlace(p)){
+    const w = Math.trunc(+$('placeWeight').value), c = Math.trunc(+$('placeCap').value);
+    if (w >= 0 && c >= 0){
+      S.working.push({ id: nextId(), x: p.x, y: p.y, z: S.layer, w: p.w, l: p.l, weight: w, cap: c });
+    }
+  }
+  render();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Delete' && S.selected && !S.preview && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)){
+    actions['delete-slab'](); render();
+  }
+  if (e.key === 'Escape'){ S.placing = null; S.selected = null; render(); }
+});
+$('importFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { $('importBox').value = rd.result; importLayout(rd.result); render(); };
+  rd.readAsText(f);
+  e.target.value = '';
+});
+
+render();
+</script>
