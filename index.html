@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>PGS Plane Inspector</title>
+<style>
+/* layout: fixed top control deck, two-column workspace (canvas stage left, inspector rail right),
+   timeline docked at the bottom; stacks to one column under 960px. */
+:root {
+  --bg: #0e1116;
+  --bg-raise: #161b22;
+  --bg-sunken: #0a0d12;
+  --panel: #12171e;
+  --line: #232b36;
+  --line-strong: #313c4a;
+  --fg: #d8dee7;
+  --fg-dim: #8a96a5;
+  --fg-faint: #5c6672;
+  --accent: #4ea1ff;
+  --accent-soft: rgba(78, 161, 255, 0.14);
+  --good: #3fb97a;
+  --warn: #e0a23d;
+  --critical: #e5604d;
+  --forced: #c98bff;
+  --checker-a: #1a2029;
+  --checker-b: #141922;
+  --mono: "SF Mono", "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f4f6f9; --bg-raise: #ffffff; --bg-sunken: #e8ecf1; --panel: #ffffff;
+    --line: #d7dde5; --line-strong: #b8c2cf;
+    --fg: #1c2430; --fg-dim: #55606e; --fg-faint: #8893a0;
+    --accent: #1f6fd6; --accent-soft: rgba(31, 111, 214, 0.10);
+    --good: #1d8a55; --warn: #b07414; --critical: #c43d2b; --forced: #8a3fd6;
+    --checker-a: #e9edf2; --checker-b: #f1f4f8;
+  }
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { display: flex; flex-direction: column; gap: 14px; padding-block: 14px; min-height: 100%; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- top deck ---------- */
+.deck {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.brand { display: flex; flex-direction: column; margin-right: 6px; min-width: 0; }
+.brand h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: .2px; }
+.brand small { color: var(--fg-faint); font-size: 11px; font-family: var(--mono); }
+.sep { width: 1px; align-self: stretch; background: var(--line); }
+button, .btn {
+  appearance: none; border: 1px solid var(--line-strong); background: var(--bg-raise);
+  color: var(--fg); border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 13px;
+  cursor: pointer; white-space: nowrap;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.toggle[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+input[type="text"], input[type="number"] {
+  background: var(--bg-sunken); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 13px; width: 110px;
+}
+label.field { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 12px; }
+.spacer { flex: 1; }
+.pill {
+  font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line-strong);
+  color: var(--fg-dim); white-space: nowrap;
+}
+.pill.good { color: var(--good); border-color: var(--good); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.crit { color: var(--critical); border-color: var(--critical); }
+.pill.forced { color: var(--forced); border-color: var(--forced); }
+
+/* ---------- workspace ---------- */
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; flex: 1; min-height: 0; }
+@media (max-width: 960px) { .workspace { grid-template-columns: 1fr; } }
+.stage, .rail {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; min-width: 0; display: flex; flex-direction: column; gap: 10px;
+}
+.stage-head, .rail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stage-head h2, .rail-head h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .8px; }
+.canvas-wrap {
+  flex: 1; min-height: 280px; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-sunken); border: 1px solid var(--line); border-radius: 8px; overflow: auto; padding: 14px;
+}
+canvas#plane {
+  image-rendering: pixelated; image-rendering: crisp-edges; max-width: 100%; height: auto;
+  box-shadow: 0 0 0 1px var(--line-strong);
+  background:
+    conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%, var(--checker-b) 0 75%, var(--checker-a) 0)
+    0 0 / 16px 16px;
+  cursor: crosshair;
+}
+.empty-note { color: var(--fg-faint); font-size: 13px; text-align: center; }
+.drop-hint { border: 1px dashed var(--line-strong); }
+.drop-hint.dragover { border-color: var(--accent); background: var(--accent-soft); }
+
+/* ---------- inspector rail ---------- */
+.rail { overflow-y: auto; max-height: 70vh; }
+@media (max-width: 960px) { .rail { max-height: none; } }
+.section { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg-raise); min-width: 0; }
+.section h3 { margin: 0 0 8px; font-size: 12px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .6px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12.5px; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; font-family: var(--mono); word-break: break-all; min-width: 0; }
+.obj-list { display: flex; flex-direction: column; gap: 6px; }
+.obj-row {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 12.5px;
+  background: var(--bg-sunken); display: flex; flex-direction: column; gap: 4px; cursor: pointer;
+}
+.obj-row:hover, .obj-row.active { border-color: var(--accent); }
+.obj-row .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.obj-row .id { font-family: var(--mono); font-weight: 600; }
+.tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--fg-dim); }
+.tag.stale { color: var(--warn); border-color: var(--warn); }
+.tag.forced { color: var(--forced); border-color: var(--forced); }
+.tag.missing { color: var(--critical); border-color: var(--critical); }
+.tag.retained { color: var(--accent); border-color: var(--accent); }
+.swatch-row { display: flex; gap: 3px; flex-wrap: wrap; }
+.swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--line-strong); }
+.diag { font-size: 12px; padding: 7px 9px; border-radius: 7px; border: 1px solid; display: flex; gap: 7px; flex-direction: column; }
+.diag.error { border-color: var(--critical); background: rgba(229, 96, 77, .08); color: var(--fg); }
+.diag.warn { border-color: var(--warn); background: rgba(224, 162, 61, .08); }
+.diag .loc { font-family: var(--mono); color: var(--fg-faint); font-size: 11px; }
+.scroll-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+
+/* ---------- timeline ---------- */
+.timeline {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.tl-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tl-top .pts { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+.tl-top .tick { color: var(--fg-faint); font-family: var(--mono); font-size: 12px; }
+input[type="range"] { flex: 1; min-width: 180px; accent-color: var(--accent); }
+.tl-track { position: relative; height: 42px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-sunken); overflow: hidden; }
+.tl-seg { position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-family: var(--mono); color: var(--fg-dim); overflow: hidden; cursor: pointer; padding: 0 4px; }
+.tl-seg:hover { outline: 1px solid var(--accent); }
+.tl-seg.epoch { background: rgba(78,161,255,.10); }
+.tl-seg.palette { background: rgba(224,162,61,.10); }
+.tl-seg.clear { background: rgba(229,96,77,.08); }
+.tl-seg.normal { background: rgba(63,185,122,.07); }
+.tl-seg.forced::after { content: ""; position: absolute; left: 0; top: 0; width: 3px; bottom: 0; background: var(--forced); }
+.tl-cursor { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); pointer-events: none; box-shadow: 0 0 6px var(--accent); }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="deck">
+    <div class="brand">
+      <h1>PGS Plane Inspector</h1>
+      <small>HD-Graphics SUP · 90kHz · END 才提交</small>
+    </div>
+    <div class="sep"></div>
+    <label class="btn" for="file-input">导入 SUP</label>
+    <input id="file-input" type="file" accept=".sup,application/octet-stream" hidden>
+    <button id="btn-png" disabled>导出当前 PNG</button>
+    <button id="btn-json" disabled>导出区间 JSON</button>
+    <div class="sep"></div>
+    <button id="btn-forced" class="toggle" aria-pressed="false">仅看强制字幕</button>
+    <label class="field">结束时刻
+      <input id="end-ticks" type="text" placeholder="如 450000" inputmode="numeric">
+    </label>
+    <div class="spacer"></div>
+    <span id="status-pill" class="pill">未加载</span>
+  </header>
+
+  <main class="workspace">
+    <section class="stage">
+      <div class="stage-head">
+        <h2>合成画布</h2>
+        <span id="canvas-size" class="pill"></span>
+        <span id="state-kind" class="pill"></span>
+        <span id="state-forced" class="pill forced hidden">强制</span>
+        <div class="spacer" style="flex:1"></div>
+        <span class="pill mono" id="hover-pixel"></span>
+      </div>
+      <div class="canvas-wrap" id="drop-zone">
+        <canvas id="plane" width="0" height="0" hidden></canvas>
+        <p class="empty-note" id="empty-note">把 .sup 拖到这里，或用左上角“导入 SUP”（≤ 20MB，画布 ≤ 1920×1080）</p>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="rail-head"><h2>检查器</h2></div>
+      <div class="section" id="pixel-section" hidden>
+        <h3>像素归属</h3>
+        <dl class="kv" id="pixel-kv"></dl>
+      </div>
+      <div class="section" id="objects-section" hidden>
+        <h3>参与叠加的对象（按 source-over 顺序）</h3>
+        <div class="obj-list" id="obj-list"></div>
+      </div>
+      <div class="section" id="palette-section" hidden>
+        <h3>当前调色板（BT.709 limited）</h3>
+        <div class="swatch-row" id="swatches"></div>
+      </div>
+      <div class="section" id="diag-section" hidden>
+        <h3>诊断与解析提示</h3>
+        <div class="scroll-list" id="diag-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="timeline">
+    <div class="tl-top">
+      <button id="btn-prev" disabled>← 上一段</button>
+      <span class="pts" id="tl-pts">--:--:--.---</span>
+      <span class="tick" id="tl-tick">tick —</span>
+      <input id="tl-range" type="range" min="0" max="0" value="0" disabled>
+      <button id="btn-next" disabled>下一段 →</button>
+    </div>
+    <div class="tl-track" id="tl-track"></div>
+  </footer>
+</div>
+
+<script type="module">
+import {
+  parseSup, renderState, buildIntervals, formatTicks, PgsError, LIMITS,
+} from "./js/pgs.js";
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  file: $("file-input"), drop: $("drop-zone"), canvas: $("plane"), empty: $("empty-note"),
+  pill: $("status-pill"), canvasSize: $("canvas-size"), stateKind: $("state-kind"),
+  stateForced: $("state-forced"), hover: $("hover-pixel"), range: $("tl-range"),
+  tlPts: $("tl-pts"), tlTick: $("tl-tick"), track: $("tl-track"),
+  prev: $("btn-prev"), next: $("btn-next"), forced: $("btn-forced"),
+  endTicks: $("end-ticks"), btnPng: $("btn-png"), btnJson: $("btn-json"),
+  pixelSection: $("pixel-section"), pixelKv: $("pixel-kv"),
+  objSection: $("objects-section"), objList: $("obj-list"),
+  palSection: $("palette-section"), swatches: $("swatches"),
+  diagSection: $("diag-section"), diagList: $("diag-list"),
+};
+
+const app = {
+  parsed: null, fileName: "", stateIndex: 0, forcedOnly: false,
+  render: null, userEnd: null, intervals: [],
+};
+
+// ---------------------------------------------------------------- file intake
+els.file.addEventListener("change", () => {
+  if (els.file.files?.[0]) loadFile(els.file.files[0]);
+});
+["dragenter", "dragover"].forEach((ev) =>
+  els.drop.addEventListener(ev, (e) => { e.preventDefault(); els.drop.classList.add("dragover"); }));
+["dragleave", "drop"].forEach((ev) =>
+  els.drop.addEventListener(ev, (e) => { e.preventDefault(); els.drop.classList.remove("dragover"); }));
+els.drop.addEventListener("drop", (e) => {
+  const f = e.dataTransfer?.files?.[0];
+  if (f) loadFile(f);
+});
+
+async function loadFile(file) {
+  resetStatus();
+  if (file.size > LIMITS.MAX_FILE) {
+    return showFatal(`文件 ${file.size} 字节，超过 20MB（${LIMITS.MAX_FILE} 字节）上限`);
+  }
+  let buf;
+  try {
+    buf = await file.arrayBuffer();
+  } catch {
+    return showFatal("读取文件失败");
+  }
+  app.fileName = file.name;
+  try {
+    app.parsed = parseSup(buf);
+  } catch (err) {
+    app.parsed = null;
+    if (err instanceof PgsError) return showFatal(err.message, err);
+    return showFatal("解析失败：" + err.message);
+  }
+  app.stateIndex = 0;
+  app.userEnd = null;
+  els.endTicks.value = "";
+  postParse();
+}
+
+function resetStatus() {
+  els.pill.className = "pill";
+  els.pill.textContent = "解析中…";
+  els.diagList.innerHTML = "";
+}
+
+function showFatal(message, err) {
+  els.pill.className = "pill crit";
+  els.pill.textContent = "解析失败";
+  els.diagSection.hidden = false;
+  const loc = err?.segmentOffset != null
+    ? `段头偏移 0x${err.segmentOffset.toString(16)}（段 #${err.segmentIndex ?? "?"}）`
+    : err?.fileOffset != null ? `文件偏移 0x${err.fileOffset.toString(16)}` : "";
+  els.diagList.innerHTML = "";
+  const d = document.createElement("div");
+  d.className = "diag error";
+  d.innerHTML = `<span>${message}</span>${loc ? `<span class="loc">${loc}</span>` : ""}`;
+  els.diagList.append(d);
+  els.canvas.hidden = true;
+  els.empty.hidden = false;
+  els.empty.textContent = "文件未能解析，见右侧诊断";
+  disableControls();
+}
+
+function disableControls() {
+  els.range.disabled = true; els.prev.disabled = true; els.next.disabled = true;
+  els.btnPng.disabled = true; els.btnJson.disabled = true;
+}
+
+// ---------------------------------------------------------------- after parse
+function postParse() {
+  const p = app.parsed;
+  els.canvas.hidden = false;
+  els.empty.hidden = true;
+  els.canvas.width = p.canvas.width;
+  els.canvas.height = p.canvas.height;
+  els.canvasSize.textContent = `${p.canvas.width} × ${p.canvas.height}`;
+  els.range.disabled = false;
+  els.range.min = 0;
+  els.range.max = Math.max(0, p.states.length - 1);
+  els.range.value = 0;
+  els.prev.disabled = p.states.length <= 1;
+  els.next.disabled = p.states.length <= 1;
+  els.btnPng.disabled = false;
+  els.btnJson.disabled = false;
+  els.pill.className = "pill good";
+  els.pill.textContent = `${p.states.length} 个已提交状态 · ${p.segments.length} 段`;
+  buildTrack();
+  renderDiagnostics();
+  selectState(0);
+}
+
+function renderDiagnostics() {
+  const p = app.parsed;
+  const items = [];
+  for (const d of p.diagnostics) items.push({ level: "error", text: d.message });
+  for (const w of p.warnings) items.push({ level: "warn", text: w });
+  els.diagSection.hidden = items.length === 0;
+  els.diagList.innerHTML = "";
+  for (const it of items.slice(0, 60)) {
+    const d = document.createElement("div");
+    d.className = `diag ${it.level}`;
+    d.textContent = it.text;
+    els.diagList.append(d);
+  }
+}
+
+function buildTrack() {
+  els.track.innerHTML = "";
+  const states = app.parsed.states;
+  if (states.length < 2) return;
+  const min = states[0].pts;
+  const max = states.at(-1).pts;
+  const span = Math.max(1, max - min);
+  states.forEach((s, i) => {
+    const seg = document.createElement("div");
+    const left = ((s.pts - min) / span) * 100;
+    const next = states[i + 1]?.pts ?? s.pts + span * 0.08;
+    const width = Math.max(3, ((next - s.pts) / span) * 100);
+    const forced = s.entries.some((e) => e.forced);
+    seg.className = `tl-seg ${s.kind}${forced ? " forced" : ""}`;
+    seg.style.left = left + "%";
+    seg.style.width = width + "%";
+    seg.title = `PTS ${s.pts} · ${s.kind}${forced ? " · 强制" : ""}`;
+    seg.textContent = String(s.compositionNumber);
+    seg.addEventListener("click", () => selectState(i));
+    els.track.append(seg);
+  });
+  const cursor = document.createElement("div");
+  cursor.className = "tl-cursor";
+  cursor.id = "tl-cursor";
+  els.track.append(cursor);
+}
+
+// ---------------------------------------------------------------- state selection
+function effectiveState(rawIndex) {
+  const s = app.parsed.states[rawIndex];
+  const effectiveForced = s.entries.some((e) => e.forced);
+  if (!app.forcedOnly || effectiveForced) return { state: s, blanked: false };
+  // forced-only filter: non-forced states display as an empty plane but keep metadata visible
+  return { state: { ...s, entries: [], objectCount: 0 }, blanked: true, raw: s };
+}
+
+function selectState(i) {
+  const p = app.parsed;
+  if (!p || !p.states.length) return;
+  app.stateIndex = Math.max(0, Math.min(p.states.length - 1, i));
+  const { state, blanked } = effectiveState(app.stateIndex);
+  app.render = renderState(state, p.canvas);
+  drawCanvas();
+  // header pills
+  const kindLabel = { epoch: "Epoch Start", normal: "Normal", palette: "仅调色板", clear: "清屏" }[state.kind] || state.kind;
+  els.stateKind.textContent = kindLabel + (blanked ? "（强制过滤后空白）" : "");
+  els.stateKind.className = "pill " + (state.kind === "clear" ? "crit" : state.kind === "palette" ? "warn" : "good");
+  const effectiveForced = state.entries.some((e) => e.forced);
+  els.stateForced.classList.toggle("hidden", !effectiveForced);
+  els.tlPts.textContent = formatTicks(state.pts);
+  els.tlTick.textContent = `tick ${state.pts}`;
+  els.range.value = app.stateIndex;
+  const cursor = $("tl-cursor");
+  if (cursor && p.states.length > 1) {
+    const min = p.states[0].pts, max = p.states.at(-1).pts, span = Math.max(1, max - min);
+    cursor.style.left = ((state.pts - min) / span) * 100 + "%";
+  }
+  els.prev.disabled = app.stateIndex === 0;
+  els.next.disabled = app.stateIndex === p.states.length - 1;
+  renderObjectList(state);
+  renderPalette(state);
+  clearPixelInspection();
+}
+
+function drawCanvas() {
+  const { canvas } = els;
+  const ctx = canvas.getContext("2d");
+  const img = new ImageData(app.render.rgba, canvas.width, canvas.height);
+  ctx.putImageData(img, 0, 0);
+}
+
+function renderObjectList(state) {
+  const list = app.render.paintedEntries;
+  els.objSection.hidden = list.length === 0;
+  els.objList.innerHTML = "";
+  list.forEach((info, idx) => {
+    const entry = state.entries[idx];
+    const row = document.createElement("div");
+    row.className = "obj-row";
+    row.dataset.entry = idx;
+    const tags = [];
+    if (info.stale) tags.push('<span class="tag stale">旧对象带入</span>');
+    if (info.missing) tags.push('<span class="tag missing">缺 ODS</span>');
+    if (info.forced) tags.push('<span class="tag forced">强制</span>');
+    if (entry?.retained) tags.push('<span class="tag retained">沿用列表</span>');
+    if (entry?.cropped) tags.push('<span class="tag">裁剪</span>');
+    row.innerHTML = `
+      <div class="top"><span class="id">#${idx} · ODS id=${info.objectId}</span>${tags.join("")}</div>
+      <div class="mono" style="color:var(--fg-dim);font-size:11.5px">
+        放置 ${info.placed ? `(${info.placed.x},${info.placed.y}) ${info.placed.w}×${info.placed.h}` : "未上屏"} ·
+        可见像素 ${info.pixels}
+      </div>
+      ${info.crop ? `<div class="mono" style="color:var(--fg-faint);font-size:11.5px">裁剪矩形 ${JSON.stringify(info.crop)}</div>` : ""}`;
+    row.addEventListener("click", () => highlightEntry(idx));
+    els.objList.append(row);
+  });
+}
+
+function renderPalette(state) {
+  const entries = [...state.paletteSnapshot.entries()];
+  els.palSection.hidden = entries.length === 0;
+  els.swatches.innerHTML = "";
+  entries.forEach(([idx, pal]) => {
+    const [r, g, b, a] = pal.rgba;
+    const sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.style.background = `rgba(${r},${g},${b},${a / 255})`;
+    sw.title = `#${idx} Y=${pal.y} Cb=${pal.cb} Cr=${pal.cr} A=${pal.a} → rgba(${r},${g},${b},${a})`;
+    els.swatches.append(sw);
+  });
+}
+
+function highlightEntry(idx) {
+  document.querySelectorAll(".obj-row").forEach((r) => r.classList.toggle("active", Number(r.dataset.entry) === idx));
+}
+
+// ---------------------------------------------------------------- pixel inspection
+function canvasCoord(evt) {
+  const rect = els.canvas.getBoundingClientRect();
+  const x = Math.floor((evt.clientX - rect.left) * (els.canvas.width / rect.width));
+  const y = Math.floor((evt.clientY - rect.top) * (els.canvas.height / rect.height));
+  return { x, y };
+}
+els.canvas.addEventListener("mousemove", (e) => {
+  const { x, y } = canvasCoord(e);
+  if (x < 0 || y < 0 || x >= els.canvas.width || y >= els.canvas.height) return;
+  els.hover.textContent = `x=${x} y=${y}`;
+});
+els.canvas.addEventListener("click", (e) => {
+  const p = app.parsed;
+  const { x, y } = canvasCoord(e);
+  if (x < 0 || y < 0 || x >= p.canvas.width || y >= p.canvas.height) return;
+  const off = y * p.canvas.width + x;
+  const ownerIdx = app.render.owner[off];
+  const rgba = app.render.rgba.slice(off * 4, off * 4 + 4);
+  els.pixelSection.hidden = false;
+  const state = effectiveState(app.stateIndex).state;
+  let html = `<dt>坐标</dt><dd>(${x}, ${y})</dd>`;
+  html += `<dt>RGBA</dt><dd>(${rgba[0]},${rgba[1]},${rgba[2]},${rgba[3]})</dd>`;
+  if (ownerIdx < 0) {
+    html += `<dt>归属</dt><dd>透明（无对象覆盖）</dd>`;
+  } else {
+    const info = app.render.paintedEntries[ownerIdx];
+    const entry = state.entries[ownerIdx];
+    html += `<dt>对象条目</dt><dd>#${ownerIdx} · ODS id=${info.objectId}</dd>`;
+    html += `<dt>状态</dt><dd>${[
+      info.stale ? "旧对象带入" : "", info.forced ? "强制" : "", entry?.retained ? "沿用列表" : "",
+      entry?.cropped ? "裁剪" : "",
+    ].filter(Boolean).join(" · ") || "正常"}</dd>`;
+    if (info.placed) html += `<dt>放置矩形</dt><dd>(${info.placed.x},${info.placed.y}) ${info.placed.w}×${info.placed.h}</dd>`;
+    highlightEntry(ownerIdx);
+  }
+  els.pixelKv.innerHTML = html;
+});
+function clearPixelInspection() {
+  els.pixelSection.hidden = true;
+  els.pixelKv.innerHTML = "";
+  document.querySelectorAll(".obj-row").forEach((r) => r.classList.remove("active"));
+}
+
+// ---------------------------------------------------------------- timeline controls
+els.range.addEventListener("input", () => selectState(Number(els.range.value)));
+els.prev.addEventListener("click", () => selectState(app.stateIndex - 1));
+els.next.addEventListener("click", () => selectState(app.stateIndex + 1));
+els.forced.addEventListener("click", () => {
+  app.forcedOnly = !app.forcedOnly;
+  els.forced.setAttribute("aria-pressed", String(app.forcedOnly));
+  selectState(app.stateIndex);
+});
+
+// ---------------------------------------------------------------- exports
+els.btnPng.addEventListener("click", () => {
+  if (!app.render) return;
+  // export the straight-alpha RGBA buffer; checkerboard is only a screen backdrop
+  const out = document.createElement("canvas");
+  out.width = els.canvas.width; out.height = els.canvas.height;
+  out.getContext("2d").putImageData(new ImageData(app.render.rgba, out.width, out.height), 0, 0);
+  const a = document.createElement("a");
+  a.download = baseName() + `-pts${app.parsed.states[app.stateIndex].pts}.png`;
+  a.href = out.toDataURL("image/png");
+  a.click();
+});
+
+els.endTicks.addEventListener("change", () => {
+  const v = Number(els.endTicks.value.trim());
+  app.userEnd = Number.isFinite(v) && v >= 0 ? v : null;
+});
+
+els.btnJson.addEventListener("click", () => {
+  const p = app.parsed;
+  const fallbackEnd = app.userEnd ?? p.states.at(-1).pts;
+  if (app.userEnd == null) {
+    // last interval needs a user-supplied end; keep it editable and warn inline
+    els.endTicks.style.outline = "2px solid var(--warn)";
+    els.endTicks.title = "最后一个半开区间需要你给出结束时刻（90kHz tick）";
+  } else {
+    els.endTicks.style.outline = "";
+  }
+  app.intervals = buildIntervals(p.states, app.userEnd ?? fallbackEnd, { forcedOnly: app.forcedOnly });
+  const payload = {
+    source: app.fileName,
+    timeBase: "90kHz",
+    intervalSemantics: "half-open [start,end)",
+    canvas: p.canvas,
+    forcedOnly: app.forcedOnly,
+    lastEndUserSupplied: app.userEnd != null,
+    intervals: app.intervals,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.download = baseName() + "-intervals.json";
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+
+function baseName() {
+  return app.fileName.replace(/\.[^.]+$/, "") || "pgs";
+}
+</script>
+</body>
+</html>
