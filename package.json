@@ -1,0 +1,14 @@
+{
+  "name": "borderless-spawn-baker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "无边界植被投放烘焙器：窗口一致、可分块合并",
+  "scripts": {
+    "test": "node test/core.test.js",
+    "test:page": "node test/page.test.js",
+    "test:interaction": "node test/interaction.test.js",
+    "bench": "node tools/bench.js",
+    "bench:e2e": "node test/perf.e2e.js",
+    "serve": "python3 -m http.server 8000"
+  }
+}
