@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MIDI 乐句卷带台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* 设计基调：录音棚工作台。冷灰纸面 + 琥珀色速度/切点标记，编号栏按工作顺序推进；
+     数据用等宽字体，精确分数与取整微秒成对出现。 */
+  :root {
+    color-scheme: light;
+    --bg: #edf0f3;
+    --panel: #ffffff;
+    --panel-2: #f4f7f9;
+    --line: #d5dce3;
+    --line-strong: #b7c3ce;
+    --ink: #16212b;
+    --dim: #5c6b78;
+    --faint: #8795a1;
+    --accent: #a86412;
+    --accent-ink: #ffffff;
+    --accent-soft: #f1e2c9;
+    --ok: #2b7150;
+    --warn: #8f5d0d;
+    --err: #a93a32;
+    --roll: #fbfcfd;
+    --row-alt: rgba(22, 33, 43, 0.028);
+    --grid: rgba(22, 33, 43, 0.08);
+    --grid-major: rgba(22, 33, 43, 0.17);
+    --grid-fine: rgba(22, 33, 43, 0.045);
+    --lane: #f2f5f7;
+    --row-dark: rgba(22, 33, 43, 0.045);
+    --row-line: rgba(22, 33, 43, 0.11);
+    --note-stroke: rgba(255, 255, 255, 0.5);
+    --band-a: rgba(168, 100, 18, 0.07);
+    --band-b: rgba(43, 113, 80, 0.07);
+    --shadow: 0 1px 0 rgba(22, 33, 43, 0.05);
+    --tc1: #2f7f93;
+    --tc2: #5a68bf;
+    --tc3: #a04f86;
+    --tc4: #3f7d4f;
+    --tc5: #8a5a3c;
+    --tc6: #4a718f;
+    --tc7: #7d6a2a;
+    --tc8: #9a5460;
+    --tc9: #6ba7b6;
+    --tc10: #8b93cc;
+    --tc11: #bf85ad;
+    --tc12: #6fa37a;
+    --tc13: #a88570;
+    --tc14: #7c93a6;
+    --tc15: #a89a6a;
+    --tc16: #b98390;
+    --font-sans: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    --font-head: Archivo, Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0e141a;
+      --panel: #151d25;
+      --panel-2: #1a232c;
+      --line: #25313c;
+      --line-strong: #3a4958;
+      --ink: #e5ecf2;
+      --dim: #94a4b2;
+      --faint: #6e7f8d;
+      --accent: #e9a94f;
+      --accent-ink: #1a1206;
+      --accent-soft: #382a14;
+      --ok: #5ec48f;
+      --warn: #e3ae58;
+      --err: #f07d73;
+      --roll: #10171e;
+      --row-alt: rgba(255, 255, 255, 0.026);
+      --grid: rgba(255, 255, 255, 0.075);
+      --grid-major: rgba(255, 255, 255, 0.16);
+      --grid-fine: rgba(255, 255, 255, 0.04);
+      --lane: #121a22;
+      --row-dark: rgba(255, 255, 255, 0.035);
+      --row-line: rgba(255, 255, 255, 0.1);
+      --note-stroke: rgba(0, 0, 0, 0.35);
+      --band-a: rgba(233, 169, 79, 0.1);
+      --band-b: rgba(94, 196, 143, 0.08);
+      --shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+      --tc1: #58bdd4;
+      --tc2: #97a5f0;
+      --tc3: #dd8fc6;
+      --tc4: #79c08b;
+      --tc5: #c99a76;
+      --tc6: #7fb4d6;
+      --tc7: #c9b466;
+      --tc8: #e28d99;
+      --tc9: #8fd0de;
+      --tc10: #b3bcef;
+      --tc11: #e0aacd;
+      --tc12: #9fd0a8;
+      --tc13: #d3b49c;
+      --tc14: #a9c0d2;
+      --tc15: #cfc190;
+      --tc16: #dba8b1;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e141a;
+    --panel: #151d25;
+    --panel-2: #1a232c;
+    --line: #25313c;
+    --line-strong: #3a4958;
+    --ink: #e5ecf2;
+    --dim: #94a4b2;
+    --faint: #6e7f8d;
+    --accent: #e9a94f;
+    --accent-ink: #1a1206;
+    --accent-soft: #382a14;
+    --ok: #5ec48f;
+    --warn: #e3ae58;
+    --err: #f07d73;
+    --roll: #10171e;
+    --row-alt: rgba(255, 255, 255, 0.026);
+    --grid: rgba(255, 255, 255, 0.075);
+    --grid-major: rgba(255, 255, 255, 0.16);
+    --grid-fine: rgba(255, 255, 255, 0.04);
+    --lane: #121a22;
+    --row-dark: rgba(255, 255, 255, 0.035);
+    --row-line: rgba(255, 255, 255, 0.1);
+    --note-stroke: rgba(0, 0, 0, 0.35);
+    --band-a: rgba(233, 169, 79, 0.1);
+    --band-b: rgba(94, 196, 143, 0.08);
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+    --tc1: #58bdd4;
+    --tc2: #97a5f0;
+    --tc3: #dd8fc6;
+    --tc4: #79c08b;
+    --tc5: #c99a76;
+    --tc6: #7fb4d6;
+    --tc7: #c9b466;
+    --tc8: #e28d99;
+    --tc9: #8fd0de;
+    --tc10: #b3bcef;
+    --tc11: #e0aacd;
+    --tc12: #9fd0a8;
+    --tc13: #d3b49c;
+    --tc14: #a9c0d2;
+    --tc15: #cfc190;
+    --tc16: #dba8b1;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.55 var(--font-sans);
+  }
+  button { font: inherit; color: inherit; }
+  button, input { font-family: inherit; }
+  h1, h2, h3 { font-family: var(--font-head); text-wrap: balance; }
+  .mono, table, .readout, .facts dd { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  .wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-left: max(18px, env(safe-area-inset-left, 0px));
+    padding-right: max(18px, env(safe-area-inset-right, 0px));
+  }
+
+  /* ---------- 报头 ---------- */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px 28px;
+    padding-block: 30px 20px;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .brand svg { flex: none; color: var(--accent); }
+  .brand h1 {
+    margin: 0;
+    font-size: clamp(24px, 3.6vw, 34px);
+    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .masthead .tagline {
+    margin: 6px 0 0;
+    max-width: 62ch;
+    color: var(--dim);
+    font-size: 13.5px;
+  }
+  .masthead .status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    color: var(--dim);
+    font-size: 12px;
+    padding-bottom: 4px;
+  }
+  .status .dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    margin-right: 7px;
+    vertical-align: 1px;
+  }
+  .status.loading .dot { background: var(--faint); }
+  .status.error .dot { background: var(--err); }
+  .status .file { color: var(--ink); font-family: var(--font-mono); }
+
+  /* ---------- 工序 ---------- */
+  .desk { border-top: 1px solid var(--line-strong); }
+  .step {
+    display: grid;
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 26px;
+    padding-block: 26px;
+    border-bottom: 1px solid var(--line);
+  }
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-top: 2px;
+    color: var(--faint);
+  }
+  .rail .num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+  }
+  .rail .name {
+    font-family: var(--font-head);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .rail .hint { font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+  .step > .body { min-width: 0; }
+  .panelhead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    margin-bottom: 12px;
+  }
+  .panelhead h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.005em;
+  }
+  .panelhead .sub { color: var(--dim); font-size: 12.5px; margin-top: 2px; }
+
+  /* ---------- 控件 ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 12.5px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: border-color .12s, background .12s, color .12s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .btn.primary:hover { filter: brightness(1.06); color: var(--accent-ink); }
+  .btn.ghost { background: transparent; border-color: var(--line); }
+  .btn.tiny { padding: 3px 7px; font-size: 11.5px; }
+  .btn.icon { padding: 4px 8px; font-family: var(--font-mono); }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    color: var(--dim);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip .mono { font-size: 10.5px; color: var(--faint); }
+  .chip:hover .mono { color: var(--accent); }
+
+  /* ---------- 01 载入 ---------- */
+  .loadgrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+  .dropzone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding: 22px 20px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 7px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+  .dropzone strong { font-size: 14px; font-weight: 600; }
+  .dropzone .dim { color: var(--dim); font-size: 12.5px; }
+  .dropzone .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .samples {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel-2);
+  }
+  .samples .label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    color: var(--faint);
+  }
+  .samples .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .samples .note { color: var(--dim); font-size: 12px; margin: 0; }
+  .loadmsg { margin-top: 12px; font-size: 12.5px; color: var(--dim); }
+  .loadmsg.error { color: var(--err); }
+  .loadmsg b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- 02 事实 ---------- */
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0 0 4px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .facts > div {
+    flex: 1 1 118px;
+    min-width: 0;
+    padding: 10px 14px;
+    border-right: 1px solid var(--line);
+  }
+  .facts > div:last-child { border-right: 0; }
+  .facts dt {
+    margin: 0;
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.11em;
+  }
+  .facts dd {
+    margin: 2px 0 0;
+    font-size: 15px;
+    line-height: 1.3;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .facts dd small { font-size: 11px; color: var(--faint); font-family: var(--font-sans); }
+  .warnlist {
+    margin: 12px 0 0;
+    padding: 10px 14px 10px 28px;
+    border-left: 3px solid var(--warn);
+    background: color-mix(in srgb, var(--warn) 8%, transparent);
+    color: var(--warn);
+    font-size: 12.5px;
+  }
+  .warnlist li { margin: 2px 0; }
+
+  /* ---------- 卷帘 ---------- */
+  .surface {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--roll);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .rollwrap {
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 430px;
+    border-bottom: 1px solid var(--line);
+  }
+  .rollwrap canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .toolbar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+  .zoombar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--dim);
+    font-size: 11.5px;
+  }
+  .zoombar .span { font-family: var(--font-mono); color: var(--ink); }
+  .zoombar input[type="range"] {
+    flex: 1;
+    min-width: 70px;
+    accent-color: var(--accent);
+    height: 16px;
+  }
+  .readout {
+    padding: 8px 12px;
+    font-size: 11.5px;
+    color: var(--dim);
+    min-height: 32px;
+    border-top: 1px solid transparent;
+    background: var(--panel-2);
+    overflow-wrap: anywhere;
+  }
+  .readout b { color: var(--ink); font-weight: 500; }
+  .readout .accent { color: var(--accent); }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding: 7px 12px;
+    border-top: 1px solid var(--line);
+    color: var(--faint);
+    font-size: 11.5px;
+  }
+  .legend .sw {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend .sw i {
+    width: 9px; height: 9px;
+    border-radius: 2px;
+    background: var(--c);
+    display: inline-block;
+  }
+
+  /* ---------- 剪辑单 ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table caption { caption-side: top; text-align: left; padding: 0 0 8px; color: var(--dim); font-size: 12px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th {
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    background: var(--panel-2);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  th.l, td.l { text-align: left; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--row-alt); }
+  tbody tr.selected td { background: var(--accent-soft); }
+  tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  td .idx { color: var(--faint); font-family: var(--font-mono); }
+  td input[type="number"] {
+    width: 76px;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: right;
+  }
+  td input[type="number"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
+  td .exact { display: block; color: var(--faint); font-size: 10px; line-height: 1.3; }
+  td .cut { color: var(--accent); }
+  td .zero { color: var(--faint); }
+  tfoot td { font-weight: 600; background: var(--panel-2); border-top: 1px solid var(--line-strong); white-space: nowrap; }
+  tfoot .exact { font-weight: 400; }
+  .rowactions { display: inline-flex; gap: 3px; }
+  .tablefoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 12px;
+  }
+  .errmsg {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--err);
+    background: color-mix(in srgb, var(--err) 9%, transparent);
+    color: var(--err);
+    font-size: 12.5px;
+  }
+  .hintline { color: var(--dim); font-size: 12px; margin: 10px 0 0; }
+  .hintline code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+  }
+
+  /* ---------- 输出 ---------- */
+  .outsum {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+  .outsum .item { display: flex; flex-direction: column; gap: 1px; }
+  .outsum .k { color: var(--faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; }
+  .outsum .v { font-family: var(--font-mono); font-size: 14px; }
+  .outsum .v small { font-family: var(--font-sans); font-size: 11px; color: var(--faint); }
+  .drift {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink);
+    font-size: 12px;
+  }
+  .drift .mono { color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+  .exportbox {
+    margin-top: 14px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    padding: 12px 14px;
+  }
+  .exportbox .head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+  .exportbox .head b { font-family: var(--font-mono); font-weight: 500; }
+  .exportbox .meta { color: var(--dim); font-size: 12px; }
+  .exportbox .payload { margin-top: 10px; }
+  .exportbox textarea {
+    width: 100%;
+    min-height: 84px;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--panel-2);
+    color: var(--dim);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+    word-break: break-all;
+  }
+  .exportbox .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .copyok { color: var(--ok); font-size: 12px; }
+  .empty {
+    padding: 26px 18px;
+    color: var(--dim);
+    text-align: center;
+    font-size: 12.5px;
+  }
+  details.manifest { margin-top: 16px; }
+  details.manifest summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    padding: 6px 0;
+  }
+  details.manifest summary:hover { color: var(--accent); }
+  details.manifest .tablewrap { margin-top: 6px; }
+
+  footer.colophon {
+    padding-block: 22px 36px;
+    color: var(--faint);
+    font-size: 12px;
+    line-height: 1.7;
+    border-top: 1px solid var(--line);
+  }
+  footer.colophon b { color: var(--dim); font-weight: 500; }
+  footer.colophon p { margin: 0 0 6px; max-width: 92ch; }
+
+  .sr-only {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 880px) {
+    .step { grid-template-columns: 1fr; gap: 12px; padding-block: 20px; }
+    .rail { flex-direction: row; align-items: baseline; gap: 10px; }
+    .rail .hint { display: none; }
+    .loadgrid { grid-template-columns: 1fr; }
+    .facts > div { flex-basis: 50%; border-bottom: 1px solid var(--line); }
+    .facts > div:nth-child(2n) { border-right: 0; }
+    .facts > div:nth-last-child(-n+2) { border-bottom: 0; }
+  }
+  @media (max-width: 520px) {
+    .masthead { padding-block: 22px 12px; }
+    .facts > div { flex-basis: 50%; border-bottom: 1px solid var(--line); }
+    .facts > div:nth-child(2n) { border-right: 0; }
+    .facts > div:nth-child(2n+1) { border-right: 1px solid var(--line); }
+    .facts > div:nth-last-child(-n+2) { border-bottom: 0; }
+    .readout { font-size: 11px; }
+    .tablefoot { gap: 6px 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <div class="brand">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <circle cx="20" cy="20" r="17" stroke="currentColor" stroke-width="1.6" opacity="0.55"/>
+          <circle cx="20" cy="20" r="9.5" stroke="currentColor" stroke-width="1.6"/>
+          <circle cx="20" cy="20" r="2.6" fill="currentColor"/>
+          <path d="M20 10.5v6M28.2 24.7l-5.1-3M11.8 24.7l5.1-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <h1>MIDI 乐句卷带台</h1>
+          <p class="tagline">按源 tick 的 <b>[start, end)</b> 截取乐句，重复、重排后拼成新的一型 MIDI。跨切点的音符补足起止事件，片段开头继承当时的速度，累计时长按精确分数算到最后一步。</p>
+        </div>
+      </div>
+    </div>
+    <div class="status" id="status" aria-live="polite">
+      <span><span class="dot"></span><span id="statusText">正在准备样例</span></span>
+      <span class="file" id="statusFile">takes.mid</span>
+    </div>
+  </header>
+
+  <main class="desk">
+    <section class="step" aria-labelledby="stepLoadName">
+      <div class="rail">
+        <span class="num">01</span>
+        <span class="name" id="stepLoadName">载入</span>
+        <span class="hint">PPQ 计时的 0 / 1 型，≤16 轨、≤2 万条事件</span>
+      </div>
+      <div class="body">
+        <div class="loadgrid">
+          <div class="dropzone" id="dropzone">
+            <strong>把 .mid 拖到这里</strong>
+            <span class="dim">文件只在本地解析，不会上传。也可以拖入剪辑单 JSON。</span>
+            <div class="row">
+              <button type="button" class="btn" id="pickMidi">选择 MIDI 文件</button>
+              <button type="button" class="btn ghost" id="pickReel">载入剪辑单 JSON</button>
+            </div>
+            <input class="sr-only" type="file" id="midiInput" accept=".mid,.midi,audio/midi,audio/x-midi">
+            <input class="sr-only" type="file" id="reelInput" accept=".json,application/json">
+          </div>
+          <div class="samples">
+            <span class="label">样例包 / SAMPLES</span>
+            <div class="chips">
+              <button type="button" class="chip" data-sample="takes">takes.mid <span class="mono">1 型</span></button>
+              <button type="button" class="chip" data-sample="single">single.mid <span class="mono">0 型</span></button>
+              <button type="button" class="chip" data-sample="truncated">truncated.mid <span class="mono">截断</span></button>
+            </div>
+            <div class="chips">
+              <button type="button" class="chip" id="sampleReel">reel.json <span class="mono">[1,9) [8,14) [1,9)</span></button>
+            </div>
+            <p class="note">takes.mid 含同键重叠与四处变速；reel.json 是包内剪辑单。载入剪辑单时若还没有歌曲，会先载入 takes.mid。</p>
+          </div>
+        </div>
+        <div class="loadmsg" id="loadMsg"></div>
+      </div>
+    </section>
+
+    <section class="step" aria-labelledby="stepSourceName" id="sourceStep" hidden>
+      <div class="rail">
+        <span class="num">02</span>
+        <span class="name" id="stepSourceName">源卷帘</span>
+        <span class="hint">在卷帘上拖动即截取半开区间</span>
+      </div>
+      <div class="body">
+        <div class="facts" id="facts"></div>
+        <div class="warnlist" id="warnings" hidden></div>
+
+        <div class="panelhead" style="margin-top:18px">
+          <div>
+            <h2>源卷帘与速度表</h2>
+            <div class="sub">音符按轨着色，下方是速度阶梯；琥珀色虚线是剪辑单的切点。拖动框选新片段，滚轮平移，Ctrl/⌘ + 滚轮缩放。</div>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn icon" id="zoomOut" aria-label="缩小">−</button>
+            <button type="button" class="btn icon" id="zoomIn" aria-label="放大">+</button>
+            <button type="button" class="btn ghost" id="zoomFit">适配全曲</button>
+            <span class="sep" aria-hidden="true"></span>
+            <button type="button" class="btn ghost" id="playBtn">试听</button>
+            <button type="button" class="btn ghost" id="stopBtn" disabled>停止</button>
+          </div>
+        </div>
+        <div class="surface">
+          <div class="rollwrap" id="sourceWrap">
+            <canvas id="sourceCanvas" aria-label="源 MIDI 钢琴卷帘与速度表"></canvas>
+          </div>
+          <div class="zoombar">
+            <span>第 <span class="span" id="viewFrom">0</span> – <span class="span" id="viewTo">0</span> tick</span>
+            <input type="range" id="panRange" min="0" max="0" value="0" aria-label="横向平移">
+            <span class="span" id="zoomLabel">-- px/tick</span>
+          </div>
+          <div class="readout" id="sourceReadout">把指针移到卷帘上查看 tick、拍位、速度与累计微秒。</div>
+          <div class="legend" id="trackLegend"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" aria-labelledby="stepReelName" id="reelStep" hidden>
+      <div class="rail">
+        <span class="num">03</span>
+        <span class="name" id="stepReelName">剪辑单</span>
+        <span class="hint">按顺序拼接；可重复、重排、复制</span>
+      </div>
+      <div class="body">
+        <div class="panelhead">
+          <div>
+            <h2>片段顺序</h2>
+            <div class="sub">每行是源 tick 的左闭右开区间。改动会立即重算输出，非法区间会被拒绝并说明原因。</div>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn" id="addClip">＋ 添加片段</button>
+            <button type="button" class="btn ghost" id="dupLast">复制末段</button>
+            <button type="button" class="btn ghost" id="clearClips">清空</button>
+          </div>
+        </div>
+        <div class="tablewrap">
+          <table id="clipTable">
+            <caption class="sr-only">剪辑单，每行一个按顺序拼接的源区间</caption>
+            <thead>
+              <tr>
+                <th class="l" scope="col">#</th>
+                <th scope="col">start</th>
+                <th scope="col">end</th>
+                <th scope="col">tick 数</th>
+                <th scope="col">起点 tempo</th>
+                <th scope="col">补足</th>
+                <th scope="col">输出 tick</th>
+                <th scope="col">片段 µs</th>
+                <th scope="col">累计 µs</th>
+                <th class="l" scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="clipBody"></tbody>
+            <tfoot id="clipFoot"></tfoot>
+          </table>
+        </div>
+        <div class="errmsg" id="clipError" hidden></div>
+        <p class="hintline">「补足」是这一片段里被切点截断、需要补出起止事件的音符数。衔接处同一轨的 note-off 会排在 note-on 之前，避免挂音。</p>
+      </div>
+    </section>
+
+    <section class="step" aria-labelledby="stepOutName" id="outStep" hidden>
+      <div class="rail">
+        <span class="num">04</span>
+        <span class="name" id="stepOutName">输出</span>
+        <span class="hint">一型 MIDI + 剪辑清单</span>
+      </div>
+      <div class="body">
+        <div class="outsum" id="outSum"></div>
+        <div class="panelhead">
+          <div>
+            <h2>输出卷帘</h2>
+            <div class="sub">按输出 tick 排列；虚线是片段边界，切点处的缺口表示补足后的起音或收尾。</div>
+          </div>
+          <div class="toolbar">
+            <button type="button" class="btn primary" id="exportMidi">导出 1 型 MIDI</button>
+            <button type="button" class="btn" id="exportManifest">导出剪辑清单 JSON</button>
+          </div>
+        </div>
+        <div class="surface">
+          <div class="rollwrap" id="outWrap">
+            <canvas id="outCanvas" aria-label="重排后的输出钢琴卷帘与速度表"></canvas>
+          </div>
+          <div class="readout" id="outReadout">输出会随剪辑单实时更新。</div>
+        </div>
+
+        <div class="exportbox" id="exportBox" hidden>
+          <div class="head">
+            <b id="exportName">reel-output.mid</b>
+            <span class="meta" id="exportMeta"></span>
+          </div>
+          <div class="payload">
+            <label class="sr-only" for="exportPayload">导出内容（Base64）</label>
+            <textarea id="exportPayload" readonly spellcheck="false"></textarea>
+            <div class="row">
+              <button type="button" class="btn tiny" id="copyPayload">复制 Base64</button>
+              <button type="button" class="btn tiny ghost" id="retryDownload">再试一次下载</button>
+              <span class="copyok" id="copyNote" hidden>已复制</span>
+            </div>
+            <p class="hintline" id="exportHint">预览器内可能拦截下载，可直接复制 Base64 保存为文件。在本地 http 或 file:// 打开时下载正常。</p>
+          </div>
+        </div>
+
+        <details class="manifest" open>
+          <summary>剪辑清单 / MANIFEST — 输出 tick 与累计微秒</summary>
+          <div class="tablewrap">
+            <table id="manifestTable">
+              <caption class="sr-only">剪辑清单的片段输出时刻与累计时长</caption>
+              <thead>
+                <tr>
+                  <th class="l" scope="col">片段</th>
+                  <th class="l" scope="col">源区间</th>
+                  <th scope="col">输出 tick</th>
+                  <th scope="col">tick 数</th>
+                  <th scope="col">起点 tempo</th>
+                  <th scope="col">片段 µs</th>
+                  <th scope="col">累计 µs</th>
+                  <th class="l" scope="col">精确累计</th>
+                </tr>
+              </thead>
+              <tbody id="manifestBody"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="colophon">
+    <p><b>处理约定</b>　note-on / note-off 按（轨、通道、键号）FIFO 配对，零力度 note-on 视为 note-off；片段为左闭右开区间，音符按交集裁切并补合成起止事件；同轨同 tick 先关后开；tempo 取片段起点正在生效的值，未设定时为 500000 µs / 四分音符；时长按 tempo 分段以整数分数累计，最后一步才向下取整到微秒。</p>
+    <p><b>输出</b>　1 型 MIDI：第一轨为速度表，其后保留有音符的源轨道、通道、力度与 PPQ；所有轨道结束事件落在输出总长度上，尾部休止不会被截掉。剪辑清单列出每段输出 tick 与累计微秒，并附精确分数。</p>
+  </footer>
+</div>
+
+<script src="midi-reel.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
