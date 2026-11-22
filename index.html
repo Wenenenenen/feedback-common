@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>序列帧标记事件检查</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1d222b; --panel2: #232a36; --line: #333c4b;
+    --fg: #dfe6f0; --dim: #8b96a6; --accent: #4da3ff; --ok: #4cc38a;
+    --warn: #e5a13c; --bad: #e5636c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 "SF Mono", "Cascadia Code", Consolas, "Microsoft YaHei", monospace; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+           padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  h2 { font-size: 14px; margin: 0 0 8px; color: var(--dim); font-weight: 600; }
+  button { background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+           border-radius: 6px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  #verdict { font-weight: 600; }
+  #verdict.ok { color: var(--ok); } #verdict.bad { color: var(--bad); }
+  #problems { display: none; margin: 10px 16px 0; padding: 8px 12px; border: 1px solid var(--warn);
+              border-radius: 6px; color: var(--warn); white-space: pre-line; }
+  #transport { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+  #transport button { min-width: 44px; }
+  #scrub { flex: 1; accent-color: var(--accent); }
+  #clock { min-width: 210px; text-align: center; color: var(--accent); }
+  select, input[type="number"], input[type="text"] { background: var(--panel2); color: var(--fg);
+           border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font: inherit; }
+  input[type="number"] { width: 64px; }
+  input[type="text"] { width: 110px; }
+  section { padding: 10px 16px; }
+  .trackrow { display: flex; align-items: center; gap: 12px; background: var(--panel);
+              border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+  .trackrow .meta { width: 190px; flex: none; }
+  .trackrow .meta .id { font-weight: 700; }
+  .trackrow .meta .mode { color: var(--dim); font-size: 12px; }
+  .trackrow .frame { width: 170px; flex: none; color: var(--ok); }
+  .trackrow canvas { flex: 1; height: 40px; display: block; }
+  #logPanel table { border-collapse: collapse; width: 100%; max-width: 640px; }
+  #logPanel td, #logPanel th { border-bottom: 1px solid var(--line); padding: 3px 12px 3px 0; text-align: left; }
+  #logPanel th { color: var(--dim); font-weight: 600; }
+  #logPanel tr.fired td { color: var(--ok); }
+  #logPanel tr.now td { background: rgba(77,163,255,.12); }
+  #logPanel tbody tr { cursor: pointer; }
+  #logPanel tbody tr:hover td { background: rgba(77,163,255,.07); }
+  .editor-track { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+                  padding: 10px 12px; margin-bottom: 10px; }
+  .editor-track summary { cursor: pointer; font-weight: 600; }
+  .editor-track table { border-collapse: collapse; margin: 8px 0; }
+  .editor-track td, .editor-track th { padding: 2px 6px 2px 0; text-align: left; }
+  .editor-track th { color: var(--dim); font-size: 12px; font-weight: 600; }
+  .rowbtns { display: flex; gap: 8px; margin: 4px 0 8px; }
+  .hint { color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>序列帧标记事件检查</h1>
+  <button id="btnSample">载入样例</button>
+  <button id="btnImport">导入 JSON</button>
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+  <button id="btnExportScenario">导出场景</button>
+  <button id="btnExportLog">导出日志</button>
+  <span id="verdict"></span>
+</header>
+<div id="problems"></div>
+
+<section id="transport">
+  <button id="btnPlay" class="primary">▶ 播放</button>
+  <button id="btnPrev" title="上一事件">⏮</button>
+  <button id="btnNext" title="下一事件（逐步）">⏭</button>
+  <input id="scrub" type="range" min="0" max="1" step="0.0005" value="0">
+  <span id="clock">0.000</span>
+  <select id="rate">
+    <option value="0.25">0.25×</option>
+    <option value="0.5">0.5×</option>
+    <option value="1" selected>1×</option>
+    <option value="2">2×</option>
+    <option value="4">4×</option>
+  </select>
+</section>
+
+<section id="tracks"></section>
+
+<section id="logPanel">
+  <h2>事件日志（精确分数时刻；点击行跳转）</h2>
+  <table>
+    <thead><tr><th>#</th><th>主时钟</th><th>轨道</th><th>标记</th></tr></thead>
+    <tbody id="logBody"></tbody>
+  </table>
+</section>
+
+<section id="editor">
+  <h2>轨道编辑（每轨 ≤64 段：主时钟起 / 止 / 局部起点 / 速度分子 / 分母；共 ≤16 轨）</h2>
+  <div id="editorBody"></div>
+  <button id="btnAddTrack">+ 添加轨道</button>
+</section>
+
+<script src="engine.js"></script>
+<script>
+'use strict';
+const E = window.SpriteEngine;
+
+const SAMPLE = {"format":"每段依次是主时钟开始、主时钟结束、未折返的局部起点、速度分子和正分母。事件依次为约分后的主时钟、轨道号、标记。预览取右侧段的起点，最末边界显示末段终点。","tracks":[{"id":"A","mode":"loop","duration":4,"segments":[[0,6,-1,3,2]],"markers":[[0,"起"],[1,"换图"],[1,"碰撞区开"]]},{"id":"B","mode":"pingpong","duration":3,"segments":[[0,6,0,1,1],[6,8,6,-1,1],[8,10,2,0,1],[10,11,1,1,1]],"markers":[[0,"归位"],[1,"脚步"],[3,"顶点"]]}],"expected":[["2/3","A","起"],["1","B","脚步"],["4/3","A","换图"],["4/3","A","碰撞区开"],["3","B","顶点"],["10/3","A","起"],["4","A","换图"],["4","A","碰撞区开"],["5","B","脚步"],["6","A","起"],["6","B","归位"],["7","B","脚步"]]};
+
+const MARKER_COLORS = ['#4da3ff','#e5a13c','#4cc38a','#e5636c','#b07fe8','#5fd0d6','#d66fa5','#a8c256'];
+
+let scenario = JSON.parse(JSON.stringify(SAMPLE));
+let events = [];        // [{time:[n,d], track, marker}]
+let eventNums = [];     // Number(time)，仅供播放/滑杆定位
+let tStart = 0, tEnd = 1;
+let cur = 0, playing = false, rafId = null, lastTs = null;
+
+const $ = (id) => document.getElementById(id);
+
+// ---------- 计算 ----------
+function recompute() {
+  const problems = E.validate(scenario.tracks);
+  const box = $('problems');
+  box.style.display = problems.length ? 'block' : 'none';
+  box.textContent = problems.join('\n');
+
+  events = E.computeEvents(scenario.tracks);
+  eventNums = events.map((e) => E.fnum(e.time));
+  const [lo, hi] = E.timelineRange(scenario.tracks);
+  tStart = E.fnum(lo); tEnd = E.fnum(hi);
+  if (tEnd <= tStart) tEnd = tStart + 1;
+  cur = Math.min(Math.max(cur, tStart), tEnd);
+
+  // 与 expected 比对
+  const verdict = $('verdict');
+  if (Array.isArray(scenario.expected)) {
+    const got = E.formatEvents(scenario.tracks, events);
+    const want = scenario.expected;
+    let idx = -1;
+    for (let i = 0; i < Math.max(got.length, want.length); i++) {
+      if (JSON.stringify(got[i]) !== JSON.stringify(want[i])) { idx = i; break; }
+    }
+    if (idx === -1) {
+      verdict.textContent = `✓ 与 expected 一致（${got.length} 条）`;
+      verdict.className = 'ok';
+    } else {
+      verdict.textContent = `✗ 第 ${idx + 1} 条起不一致：期望 ${JSON.stringify(want[idx])}，实际 ${JSON.stringify(got[idx])}`;
+      verdict.className = 'bad';
+    }
+  } else {
+    verdict.textContent = ''; verdict.className = '';
+  }
+
+  renderTracks();
+  renderLog();
+  render();
+}
+
+// ---------- 轨道预览 ----------
+function renderTracks() {
+  const host = $('tracks');
+  host.innerHTML = '';
+  scenario.tracks.forEach((tr, ti) => {
+    const row = document.createElement('div');
+    row.className = 'trackrow';
+    row.innerHTML = `
+      <div class="meta"><div class="id">${esc(tr.id)}</div>
+        <div class="mode">${tr.mode} · 周期 ${tr.duration} · ${tr.segments.length} 段 · ${tr.markers.length} 标记</div></div>
+      <div class="frame" id="frame-${ti}">—</div>
+      <canvas id="cv-${ti}"></canvas>`;
+    host.appendChild(row);
+  });
+  drawCanvases();
+}
+
+function drawCanvases() {
+  scenario.tracks.forEach((tr, ti) => {
+    const cv = $('cv-' + ti);
+    if (!cv) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = w * dpr; cv.height = h * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const X = (t) => (t - tStart) / (tEnd - tStart) * w;
+
+    // 段背景：前进 / 倒退 / 停留
+    tr.segments.forEach((s) => {
+      const x0 = X(s[0]), x1 = X(s[1]);
+      ctx.fillStyle = s[3] > 0 ? 'rgba(76,195,138,.16)' : s[3] < 0 ? 'rgba(229,161,60,.16)' : 'rgba(139,150,166,.10)';
+      ctx.fillRect(x0, 0, x1 - x0, h);
+      ctx.strokeStyle = '#333c4b';
+      ctx.strokeRect(x0 + .5, .5, x1 - x0 - 1, h - 1);
+    });
+    // 事件刻度（按标记着色）
+    events.forEach((e, i) => {
+      if (e.track !== ti) return;
+      ctx.strokeStyle = MARKER_COLORS[e.marker % MARKER_COLORS.length];
+      ctx.lineWidth = eventNums[i] <= cur + 1e-9 ? 2.5 : 1;
+      const x = X(eventNums[i]);
+      ctx.beginPath(); ctx.moveTo(x, 6); ctx.lineTo(x, h - 6); ctx.stroke();
+    });
+    // 播放头
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(X(cur), 0); ctx.lineTo(X(cur), h); ctx.stroke();
+  });
+}
+
+// ---------- 日志 ----------
+function renderLog() {
+  const body = $('logBody');
+  body.innerHTML = '';
+  const rows = E.formatEvents(scenario.tracks, events);
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td>`;
+    tr.onclick = () => { pause(); cur = eventNums[i]; render(); };
+    body.appendChild(tr);
+  });
+}
+
+// ---------- 每帧渲染 ----------
+function render() {
+  $('clock').textContent = `${cur.toFixed(3)} / ${tEnd.toFixed(3)}`;
+  $('scrub').value = (cur - tStart) / (tEnd - tStart);
+
+  scenario.tracks.forEach((tr, ti) => {
+    const el = $('frame-' + ti);
+    if (!el) return;
+    const f = E.positionAt(tr, E.frac(Math.round(cur * 1e6), 1e6));
+    el.textContent = f === null ? '局部帧 —' :
+      `局部帧 ${E.fstr(f)}（${E.fnum(f).toFixed(3)}）`;
+  });
+
+  const rows = $('logBody').rows;
+  let lastFired = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const fired = eventNums[i] <= cur + 1e-9;
+    rows[i].classList.toggle('fired', fired);
+    rows[i].classList.remove('now');
+    if (fired) lastFired = i;
+  }
+  if (lastFired >= 0) rows[lastFired].classList.add('now');
+  drawCanvases();
+}
+
+// ---------- 播放控制 ----------
+function tick(ts) {
+  if (!playing) return;
+  if (lastTs === null) lastTs = ts;
+  const dt = (ts - lastTs) / 1000;
+  lastTs = ts;
+  cur += dt * parseFloat($('rate').value);
+  if (cur >= tEnd) { cur = tEnd; pause(); }
+  render();
+  if (playing) rafId = requestAnimationFrame(tick);
+}
+function play() {
+  if (cur >= tEnd) cur = tStart;
+  playing = true; lastTs = null;
+  $('btnPlay').textContent = '⏸ 暂停';
+  rafId = requestAnimationFrame(tick);
+}
+function pause() {
+  playing = false;
+  $('btnPlay').textContent = '▶ 播放';
+  if (rafId) cancelAnimationFrame(rafId);
+}
+$('btnPlay').onclick = () => (playing ? pause() : play());
+$('btnNext').onclick = () => {
+  pause();
+  const nxt = eventNums.find((t) => t > cur + 1e-9);
+  cur = nxt === undefined ? tEnd : nxt;
+  render();
+};
+$('btnPrev').onclick = () => {
+  pause();
+  let prev = tStart;
+  for (const t of eventNums) { if (t < cur - 1e-9) prev = t; else break; }
+  cur = prev;
+  render();
+};
+$('scrub').oninput = () => {
+  pause();
+  cur = tStart + parseFloat($('scrub').value) * (tEnd - tStart);
+  render();
+};
+window.addEventListener('resize', drawCanvases);
+
+// ---------- 编辑器 ----------
+function renderEditor() {
+  const host = $('editorBody');
+  host.innerHTML = '';
+  scenario.tracks.forEach((tr, ti) => {
+    const det = document.createElement('details');
+    det.className = 'editor-track';
+    det.open = scenario.tracks.length <= 3;
+    det.innerHTML = `
+      <summary>轨道 ${esc(tr.id)}（${tr.mode}，周期 ${tr.duration}）</summary>
+      <div>
+        标识 <input type="text" data-t="${ti}" data-f="id" value="${esc(tr.id)}">
+        模式 <select data-t="${ti}" data-f="mode">
+          <option value="loop" ${tr.mode === 'loop' ? 'selected' : ''}>loop 循环</option>
+          <option value="pingpong" ${tr.mode === 'pingpong' ? 'selected' : ''}>pingpong 往返</option>
+        </select>
+        周期 <input type="number" min="1" step="1" data-t="${ti}" data-f="duration" value="${tr.duration}">
+        <button class="danger" data-del-track="${ti}">删除轨道</button>
+      </div>
+      <table><thead><tr><th>主时钟起</th><th>主时钟止</th><th>局部起点</th><th>速度分子</th><th>速度分母</th><th></th></tr></thead>
+      <tbody>${tr.segments.map((s, si) => `
+        <tr>${s.map((v, vi) => `<td><input type="number" step="1" data-t="${ti}" data-seg="${si}" data-scol="${vi}" value="${v}"></td>`).join('')}
+        <td><button class="danger" data-del-seg="${ti}:${si}">✕</button></td></tr>`).join('')}
+      </tbody></table>
+      <div class="rowbtns"><button data-add-seg="${ti}">+ 添加段</button></div>
+      <table><thead><tr><th>标记帧</th><th>名称</th><th></th></tr></thead>
+      <tbody>${tr.markers.map((m, mi) => `
+        <tr><td><input type="number" step="1" data-t="${ti}" data-mk="${mi}" value="${m[0]}"></td>
+        <td><input type="text" data-t="${ti}" data-mkname="${mi}" value="${esc(m[1])}"></td>
+        <td><button class="danger" data-del-mk="${ti}:${mi}">✕</button></td></tr>`).join('')}
+      </tbody></table>
+      <div class="rowbtns"><button data-add-mk="${ti}">+ 添加标记</button></div>`;
+    host.appendChild(det);
+  });
+}
+
+// 输入变化：只更新状态并重算，不重建编辑器（保留焦点）
+$('editorBody').addEventListener('input', (ev) => {
+  const el = ev.target, ti = +el.dataset.t;
+  const tr = scenario.tracks[ti];
+  if (!tr) return;
+  if (el.dataset.f === 'id') tr.id = el.value;
+  else if (el.dataset.f === 'mode') tr.mode = el.value;
+  else if (el.dataset.f === 'duration') tr.duration = Math.max(1, parseInt(el.value) || 1);
+  else if (el.dataset.seg !== undefined) tr.segments[+el.dataset.seg][+el.dataset.scol] = parseInt(el.value) || 0;
+  else if (el.dataset.mk !== undefined) tr.markers[+el.dataset.mk][0] = parseInt(el.value) || 0;
+  else if (el.dataset.mkname !== undefined) tr.markers[+el.dataset.mkname][1] = el.value;
+  recompute();
+});
+$('editorBody').addEventListener('click', (ev) => {
+  const d = ev.target.dataset;
+  if (d.delTrack !== undefined) scenario.tracks.splice(+d.delTrack, 1);
+  else if (d.addSeg !== undefined) {
+    const tr = scenario.tracks[+d.addSeg];
+    const last = tr.segments[tr.segments.length - 1];
+    const t0 = last ? last[1] : 0;
+    tr.segments.push([t0, t0 + 1, 0, 1, 1]);
+  }
+  else if (d.delSeg !== undefined) {
+    const [ti, si] = d.delSeg.split(':').map(Number);
+    scenario.tracks[ti].segments.splice(si, 1);
+  }
+  else if (d.addMk !== undefined) scenario.tracks[+d.addMk].markers.push([0, '标记']);
+  else if (d.delMk !== undefined) {
+    const [ti, mi] = d.delMk.split(':').map(Number);
+    scenario.tracks[ti].markers.splice(mi, 1);
+  }
+  else return;
+  renderEditor();
+  recompute();
+});
+$('btnAddTrack').onclick = () => {
+  if (scenario.tracks.length >= E.MAX_TRACKS) { alert(`最多 ${E.MAX_TRACKS} 条轨道`); return; }
+  scenario.tracks.push({
+    id: String.fromCharCode(65 + scenario.tracks.length),
+    mode: 'loop', duration: 4, segments: [[0, 4, 0, 1, 1]], markers: [[0, '标记']],
+  });
+  renderEditor();
+  recompute();
+};
+
+// ---------- 导入导出 ----------
+function download(name, obj) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+$('btnSample').onclick = () => {
+  scenario = JSON.parse(JSON.stringify(SAMPLE));
+  cur = 0; pause();
+  renderEditor(); recompute();
+};
+$('btnImport').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const obj = JSON.parse(rd.result);
+      if (!Array.isArray(obj.tracks)) throw new Error('缺少 tracks 数组');
+      scenario = obj;
+      cur = 0; pause();
+      renderEditor(); recompute();
+    } catch (err) { alert('导入失败：' + err.message); }
+  };
+  rd.readAsText(f);
+  ev.target.value = '';
+};
+$('btnExportScenario').onclick = () => download('sprite-marker-transport.json', {
+  tracks: scenario.tracks,
+  expected: E.formatEvents(scenario.tracks, events),
+});
+$('btnExportLog').onclick = () =>
+  download('sprite-marker-log.json', E.formatEvents(scenario.tracks, events));
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+renderEditor();
+recompute();
+</script>
+</body>
+</html>
