@@ -1,0 +1,15 @@
+{
+  "name": "ts-clock-auditor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based MPEG-TS packet and PCR/PTS clock auditor",
+  "scripts": {
+    "test": "node --test test/crc.test.js test/clock.test.js test/ts-parser.test.js test/psi-tables.test.js test/integration.test.js test/ui.test.js test/stress.test.js",
+    "test:e2e": "NODE_PATH=$(npm root -g) node test/e2e.test.js",
+    "serve": "node tools/static-server.js"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  }
+}

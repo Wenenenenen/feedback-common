@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>TS 时钟审计台</title>
+<style>
+/* ---- design tokens: light first, dark via media + data-theme ---- */
+:root {
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --border: rgba(11, 11, 11, 0.10);
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --series-blue: #2a78d6;
+  --series-orange: #eb6834;
+  --series-aqua: #1baf7a;
+  --good: #0ca30c;
+  --warning: #b97e00;
+  --serious: #c05a32;
+  --critical: #c03333;
+  --warning-wash: #fdf3dd;
+  --serious-wash: #fbe9e2;
+  --critical-wash: #fae3e3;
+  --info-wash: #e8f1fc;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.05), 0 2px 8px rgba(11, 11, 11, 0.04);
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --border: rgba(255, 255, 255, 0.10);
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --series-blue: #3987e5;
+    --series-orange: #d95926;
+    --series-aqua: #199e70;
+    --good: #0ca30c;
+    --warning: #e0a52a;
+    --serious: #ec835a;
+    --critical: #e66767;
+    --warning-wash: #33290f;
+    --serious-wash: #3a2118;
+    --critical-wash: #3a1c1c;
+    --info-wash: #16263d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --border: rgba(255, 255, 255, 0.10);
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --series-blue: #3987e5;
+  --series-orange: #d95926;
+  --series-aqua: #199e70;
+  --good: #0ca30c;
+  --warning: #e0a52a;
+  --serious: #ec835a;
+  --critical: #e66767;
+  --warning-wash: #33290f;
+  --serious-wash: #3a2118;
+  --critical-wash: #3a1c1c;
+  --info-wash: #16263d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+
+.app-header {
+  padding: 20px 0 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.app-header .subtitle {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.theme-toggle {
+  margin-left: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.theme-toggle:hover { color: var(--ink); }
+
+/* ---- drop zone ---- */
+#dropzone {
+  border: 1.5px dashed var(--axis);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 26px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+#dropzone:hover, #dropzone.drag-over {
+  border-color: var(--series-blue);
+  background: var(--info-wash);
+}
+#dropzone .dz-title { font-weight: 600; font-size: 15px; }
+#dropzone .dz-hint { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+#file-input { display: none; }
+#file-name { margin-top: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+#load-status { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); }
+#load-status.error { color: var(--critical); font-weight: 600; }
+
+/* ---- summary tiles ---- */
+#summary-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.stat-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.stat-label { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+
+/* ---- filter row ---- */
+.filter-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.filter-row select {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  max-width: 260px;
+}
+.btn {
+  align-self: flex-end;
+  background: var(--series-blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- main grid ---- */
+.work-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .work-grid { grid-template-columns: 1fr; }
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  min-width: 0;
+}
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.panel h2 .count { color: var(--muted); font-weight: 500; margin-left: 6px; }
+
+/* ---- packet table ---- */
+.packet-table-host { font-size: 12.5px; min-width: 0; overflow-x: auto; }
+.table-header, .prow {
+  display: grid;
+  grid-template-columns: 56px 72px 118px 48px 44px 84px minmax(90px, 1.2fr) minmax(120px, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 640px;
+}
+.table-header {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.hcell {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.table-viewport {
+  position: relative;
+  max-height: 460px;
+  overflow-y: auto;
+}
+.table-spacer { position: relative; }
+.prow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 30px;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.prow:hover { background: var(--surface-2); }
+.prow.selected { background: var(--info-wash); outline: 1px solid var(--series-blue); }
+.cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cell.num { font-family: var(--mono); color: var(--ink-2); }
+.cell.clock { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+.badges { display: flex; gap: 4px; flex-wrap: wrap; overflow: visible; }
+.badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.badge-dup { background: var(--info-wash); color: var(--series-blue); }
+.badge-diff { background: var(--critical-wash); color: var(--critical); }
+.badge-gap { background: var(--serious-wash); color: var(--serious); }
+.badge-disc { background: var(--warning-wash); color: var(--warning); }
+.badge-afonly { background: var(--surface-2); color: var(--ink-2); }
+.badge-tei, .badge-sync, .badge-trunc { background: var(--critical-wash); color: var(--critical); }
+
+/* ---- chart ---- */
+#clock-chart { position: relative; min-height: 300px; }
+.chart-empty { color: var(--muted); padding: 60px 0; text-align: center; }
+.clock-svg { width: 100%; height: auto; display: block; }
+.grid-line { stroke: var(--grid); stroke-width: 1; }
+.axis-label { fill: var(--muted); font-size: 10.5px; font-family: var(--mono); }
+.axis-title { fill: var(--ink-2); font-size: 11.5px; }
+.segment-boundary { stroke: var(--warning); stroke-width: 1.4; stroke-dasharray: 5 4; opacity: 0.85; }
+.segment-tag { fill: var(--warning); font-size: 10.5px; font-weight: 600; }
+.clock-line { fill: none; stroke-width: 2; }
+.clock-point { fill: var(--surface); stroke-width: 2; pointer-events: none; }
+.clock-point-normal, .clock-point-first { stroke: var(--series-blue); }
+.clock-point-wrap { stroke: var(--good); }
+.clock-point-regression { stroke: var(--critical); }
+.clock-point-jump { stroke: var(--warning); }
+.kind-marker { font-size: 11px; font-weight: 700; }
+.kind-wrap { fill: var(--good); }
+.kind-regression { fill: var(--critical); }
+.kind-jump { fill: var(--warning); }
+.crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.hover-dot { fill: var(--ink); pointer-events: none; }
+.hit-layer { fill: transparent; cursor: crosshair; }
+.chart-tooltip {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 5;
+  min-width: 170px;
+}
+.tt-title { font-weight: 650; margin-bottom: 4px; font-family: var(--mono); }
+.tt-row { display: flex; justify-content: space-between; gap: 14px; }
+.tt-key { color: var(--muted); }
+.tt-val { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tt-hint { color: var(--series-blue); margin-top: 5px; font-size: 11px; }
+
+/* ---- anomalies ---- */
+#anomaly-list { display: flex; flex-direction: column; gap: 8px; max-height: 560px; overflow-y: auto; }
+.anomaly-item {
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.anomaly-item:hover { background: var(--surface-2); }
+.anomaly-item.severity-critical { border-left-color: var(--critical); }
+.anomaly-item.severity-serious { border-left-color: var(--serious); }
+.anomaly-item.severity-warning { border-left-color: var(--warning); }
+.anomaly-item.severity-info { border-left-color: var(--series-blue); }
+.anomaly-head { display: flex; justify-content: space-between; gap: 8px; }
+.anomaly-name { font-weight: 600; font-size: 12.5px; }
+.anomaly-loc { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.anomaly-detail { color: var(--ink-2); font-size: 11.5px; margin-top: 3px; }
+.anomaly-empty, .anomaly-more { color: var(--muted); font-size: 12.5px; padding: 8px 0; }
+
+/* ---- detail ---- */
+#packet-detail { margin-top: 14px; }
+.detail-title { font-family: var(--mono); font-weight: 650; margin-bottom: 8px; font-size: 12.5px; }
+.detail-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.detail-grid dt { color: var(--muted); }
+.detail-grid dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.detail-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.badge-detail { background: var(--surface-2); color: var(--ink-2); }
+.detail-program {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.empty-placeholder {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 40px 0;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <h1>TS 时钟审计台</h1>
+  <span class="subtitle">188 字节 MPEG-TS 封装与 PCR/PTS 排查 · 本地解析，文件不上传</span>
+  <button class="theme-toggle" id="theme-toggle" type="button">切换主题</button>
+</header>
+
+<section id="dropzone" tabindex="0" aria-label="选择或拖入 TS 文件">
+  <div class="dz-title">点击选择或拖入 .ts 采集文件</div>
+  <div class="dz-hint">最多 32MB，按 188 字节定长包解析；支持首部偏移与末尾截断</div>
+  <input type="file" id="file-input" accept=".ts,video/mp2t,application/octet-stream">
+  <div id="file-name"></div>
+  <div id="load-status"></div>
+</section>
+
+<div id="summary-strip" hidden></div>
+
+<div class="filter-row" id="filter-row" hidden>
+  <label>节目
+    <select id="program-select"></select>
+  </label>
+  <label>PID
+    <select id="pid-select"></select>
+  </label>
+  <label>异常类型
+    <select id="issue-select"></select>
+  </label>
+  <label>时钟视图
+    <select id="clock-kind">
+      <option value="PCR">PCR（27MHz）</option>
+      <option value="PTS">PTS（90kHz）</option>
+      <option value="DTS">DTS（90kHz）</option>
+    </select>
+  </label>
+  <button class="btn" id="export-json" type="button">导出异常 JSON</button>
+</div>
+
+<main class="work-grid" id="work-grid" hidden>
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <section class="panel">
+      <h2>包浏览<span class="count" id="packet-count-label"></span></h2>
+      <div id="packet-table"></div>
+    </section>
+    <section class="panel">
+      <h2>时钟图<span class="count">原值与展开值 · 点击数据点回到原包</span></h2>
+      <div id="clock-chart"></div>
+    </section>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <section class="panel">
+      <h2>异常清单<span class="count" id="anomaly-count-prefix"></span><span id="anomaly-count"></span></h2>
+      <div id="anomaly-list"></div>
+    </section>
+    <section class="panel">
+      <h2>包详情</h2>
+      <div id="packet-detail">
+        <div class="empty-placeholder">在包表、时钟图或异常清单中选择一个包。</div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+import { boot } from "./src/ui/app.js";
+
+// Theme toggle with persistence in localStorage (wrapped for private mode).
+const root = document.documentElement;
+try {
+  const saved = localStorage.getItem("ts-auditor-theme");
+  if (saved) root.dataset.theme = saved;
+} catch { /* storage unavailable */ }
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  const next = root.dataset.theme === "dark" ? "light" : "dark";
+  root.dataset.theme = next;
+  try { localStorage.setItem("ts-auditor-theme", next); } catch { /* ignore */ }
+});
+
+boot();
+</script>
+</body>
+</html>
