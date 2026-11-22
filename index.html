@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>矢量 MSDF 打样</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1d2026; --panel2: #23272f; --line: #333943;
+    --fg: #dfe3ea; --dim: #8b93a1; --accent: #e8b93b;
+    --c-rg: #d4b400; --c-gb: #00a5a5; --c-br: #c045c0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  header { padding: 10px 16px; border-bottom: 1px solid var(--line);
+           display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  label { color: var(--dim); display: inline-flex; align-items: center; gap: 5px; }
+  input, select, button, textarea { background: var(--panel2); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 5px; padding: 3px 7px; font: inherit; }
+  input[type=number] { width: 62px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  #status { color: var(--dim); font-size: 12px; }
+  main { display: flex; gap: 14px; padding: 14px 16px; align-items: flex-start; flex-wrap: wrap; }
+  .views { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+           gap: 12px; flex: 1 1 620px; min-width: 0; }
+  figure { margin: 0; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; padding: 8px; }
+  figcaption { font-size: 12px; color: var(--dim); margin-bottom: 6px; }
+  figure canvas { width: 100%; display: block; border-radius: 4px; cursor: crosshair;
+                  background: #0e1013; }
+  canvas.pix { image-rendering: pixelated; }
+  aside { flex: 0 1 360px; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
+  section.card { background: var(--panel); border: 1px solid var(--line);
+                 border-radius: 8px; padding: 10px 12px; }
+  section.card h2 { font-size: 13px; margin: 0 0 8px; color: var(--accent); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { padding: 3px 6px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: normal; }
+  tr.hov td { background: #2a2f38; }
+  .dim { color: var(--dim); }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  .warn { color: #e08a5b; font-size: 12px; }
+  #segTableWrap { max-height: 260px; overflow: auto; }
+  textarea { width: 100%; height: 90px; resize: vertical; font-size: 11px;
+             font-family: ui-monospace, Consolas, monospace; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+        vertical-align: -1px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>矢量 MSDF 打样</h1>
+  <label>字形 <select id="glyphSel"></select></label>
+  <label>宽 <input id="sizeW" type="number" min="1" max="256" value="32"></label>
+  <label>高 <input id="sizeH" type="number" min="1" max="256" value="32"></label>
+  <label>距离范围 <input id="rangeIn" type="number" min="0.1" step="0.5" value="4"></label>
+  <label>重建缩放 <input id="zoomIn" type="range" min="1" max="16" step="0.5" value="1" style="width:90px"></label>
+  <label><input id="gridIn" type="checkbox" checked> 网格</label>
+  <button id="dlBtn">下载 RGBA PNG</button>
+  <span id="status">就绪</span>
+</header>
+<main>
+  <div class="views">
+    <figure><figcaption>轮廓（<span class="sw" style="background:var(--c-rg)"></span>RG
+      <span class="sw" style="background:var(--c-gb)"></span>GB
+      <span class="sw" style="background:var(--c-br)"></span>BR，箭头为前进方向，左侧实心）</figcaption>
+      <canvas id="cvOutline" width="480" height="480"></canvas></figure>
+    <figure><figcaption>R 通道（伪距离）</figcaption><canvas id="cvR" class="pix"></canvas></figure>
+    <figure><figcaption>G 通道（伪距离）</figcaption><canvas id="cvG" class="pix"></canvas></figure>
+    <figure><figcaption>B 通道（伪距离）</figcaption><canvas id="cvB" class="pix"></canvas></figure>
+    <figure><figcaption>A 通道（真实有符号距离，实心为正）</figcaption><canvas id="cvA" class="pix"></canvas></figure>
+    <figure><figcaption>中位数双线性重建（橙点 = 异号修正纹素）</figcaption>
+      <canvas id="cvRecon" width="480" height="480"></canvas></figure>
+  </div>
+  <aside>
+    <section class="card"><h2>纹素检查</h2><div id="inspectorBody" class="mono">
+      <span class="dim">点击任意视图选择纹素。</span></div></section>
+    <section class="card"><h2>段遮罩（可改）</h2><div id="segTableWrap">
+      <table id="segTable"><thead><tr><th>段</th><th>类型</th><th>遮罩</th></tr></thead>
+      <tbody></tbody></table></div></section>
+    <section class="card"><h2>导入样例 JSON</h2>
+      <input id="fileIn" type="file" accept=".json,application/json">
+      <textarea id="jsonIn" placeholder="粘贴 JSON，或选择文件…"></textarea>
+      <div style="margin-top:6px; display:flex; gap:8px;">
+        <button id="loadBtn">载入</button>
+        <button id="resetBtn">恢复内置样例</button>
+      </div>
+      <div id="importMsg" class="warn"></div></section>
+  </aside>
+</main>
+<script src="msdf-core.js"></script>
+<script>
+'use strict';
+/* 内置样例：samples/vector-msdf-cases.json 的副本（file:// 打开时 fetch 会失败，用它兜底） */
+const EMBEDDED_DOC = {"bounds":[0,0,16,16],"size":[32,32],"range":4,"glyphs":[{"id":"square","contours":[[{"mask":"RG","p":[[2,2],[14,2]]},{"mask":"GB","p":[[14,2],[14,14]]},{"mask":"BR","p":[[14,14],[2,14]]},{"mask":"GB","p":[[2,14],[2,2]]}]]},{"id":"peak-hole","contours":[[{"mask":"BR","p":[[2,3],[13,3]]},{"mask":"RG","p":[[13,3],[14,4],[13,5],[11,6]]},{"mask":"GB","p":[[11,6],[8,15.5]]},{"mask":"BR","p":[[8,15.5],[5,6]]},{"mask":"RG","p":[[5,6],[2,3]]}],[{"mask":"RG","p":[[9,5],[9,4],[8,4]]},{"mask":"GB","p":[[8,4],[7,4],[7,5]]},{"mask":"BR","p":[[7,5],[7,6],[8,6]]},{"mask":"GB","p":[[8,6],[9,6],[9,5]]}]]}]};
+
+const $ = id => document.getElementById(id);
+const MASK_COLOR = { RG: '#d4b400', GB: '#00a5a5', BR: '#c045c0' };
+const TYPE_NAME = ['', '直线', '二次', '三次'];
+
+const state = {
+  doc: null, glyphIndex: 0, segs: [],
+  w: 32, h: 32, range: 4,
+  field: null, bytes: null, medN: null,
+  sel: null, hoverSeg: -1,
+  computeToken: 0,
+};
+
+function setStatus(t) { $('status').textContent = t; }
+function fmt(x, n) { return Number.isFinite(x) ? x.toFixed(n == null ? 4 : n) : '—'; }
+
+// ---------- 载入 ----------
+function loadDoc(doc, source) {
+  const { errors, warnings } = MSDF.validateDoc(doc);
+  const msgEl = $('importMsg');
+  if (errors.length) { msgEl.textContent = '载入失败：' + errors.join('；'); return false; }
+  msgEl.textContent = (source ? '已载入：' + source + '。' : '') +
+    (warnings.length ? ' 警告：' + warnings.join('；') : '');
+  state.doc = doc;
+  const sel = $('glyphSel');
+  sel.innerHTML = '';
+  doc.glyphs.forEach((g, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = g.id || ('glyph ' + i);
+    sel.appendChild(o);
+  });
+  state.glyphIndex = 0; sel.value = '0';
+  $('sizeW').value = doc.size[0]; $('sizeH').value = doc.size[1];
+  $('rangeIn').value = doc.range;
+  selectGlyph(0);
+  return true;
+}
+
+function selectGlyph(gi) {
+  state.glyphIndex = gi;
+  state.segs = MSDF.prepSegments(state.doc.glyphs[gi]);
+  state.sel = null; state.hoverSeg = -1;
+  state.w = Math.max(1, Math.min(256, +$('sizeW').value || 32));
+  state.h = Math.max(1, Math.min(256, +$('sizeH').value || 32));
+  state.range = Math.max(0.01, +$('rangeIn').value || 4);
+  buildSegTable();
+  recompute();
+}
+
+// ---------- 计算 ----------
+async function recompute() {
+  const token = ++state.computeToken;
+  state.w = Math.max(1, Math.min(256, +$('sizeW').value || 32));
+  state.h = Math.max(1, Math.min(256, +$('sizeH').value || 32));
+  const t0 = performance.now();
+  setStatus('计算中… 0%');
+  const F = await MSDF.computeField(state.segs, state.w, state.h, state.doc.bounds, {
+    rowsPerChunk: 8,
+    onProgress: p => setStatus('计算中… ' + Math.round(p * 100) + '%'),
+    shouldCancel: () => token !== state.computeToken,
+  });
+  if (!F || token !== state.computeToken) return;
+  state.field = F;
+  reencode();
+  renderAll();
+  setStatus(`完成：${state.w}×${state.h}，${state.segs.length} 段，异号修正 ${F.nCorr} 纹素，耗时 ${((performance.now() - t0) / 1000).toFixed(2)}s`);
+}
+
+function reencode() {
+  state.range = Math.max(0.01, +$('rangeIn').value || 4);
+  state.bytes = MSDF.encodeField(state.field, state.range);
+  const n = state.w * state.h;
+  state.medN = new Float32Array(n);
+  for (let i = 0; i < n; i++)
+    state.medN[i] = MSDF.median3(state.bytes[i * 4], state.bytes[i * 4 + 1], state.bytes[i * 4 + 2]) / 255;
+}
+
+function renderAll() {
+  renderOutline(); renderChannels(); renderRecon(); renderInspector();
+}
+
+// ---------- 坐标映射 ----------
+function glyphToCanvas(gx, gy, S) {
+  const b = state.doc.bounds, pad = 0.06;
+  const bw = b[2] - b[0], bh = b[3] - b[1];
+  const x = (pad + ((gx - b[0]) / bw) * (1 - 2 * pad)) * S;
+  const y = (1 - pad - ((gy - b[1]) / bh) * (1 - 2 * pad)) * S;
+  return [x, y];
+}
+function canvasToGlyph(cx, cy, S) {
+  const b = state.doc.bounds, pad = 0.06;
+  const bw = b[2] - b[0], bh = b[3] - b[1];
+  const gx = b[0] + ((cx / S - pad) / (1 - 2 * pad)) * bw;
+  const gy = b[1] + ((1 - pad - cy / S) / (1 - 2 * pad)) * bh;
+  return [gx, gy];
+}
+
+// ---------- 轮廓视图 ----------
+function renderOutline() {
+  const cv = $('cvOutline'), S = cv.width, ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, S, S);
+  ctx.fillStyle = '#0e1013'; ctx.fillRect(0, 0, S, S);
+  const b = state.doc.bounds;
+  // 网格（纹素边界）
+  if ($('gridIn').checked && state.w <= 128 && state.h <= 128) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= state.w; i++) {
+      const [x] = glyphToCanvas(b[0] + (b[2] - b[0]) * i / state.w, 0, S);
+      ctx.moveTo(x, glyphToCanvas(0, b[1], S)[1]); ctx.lineTo(x, glyphToCanvas(0, b[3], S)[1]);
+    }
+    for (let j = 0; j <= state.h; j++) {
+      const [, y] = glyphToCanvas(0, b[1] + (b[3] - b[1]) * j / state.h, S);
+      ctx.moveTo(glyphToCanvas(b[0], 0, S)[0], y); ctx.lineTo(glyphToCanvas(b[2], 0, S)[0], y);
+    }
+    ctx.stroke();
+  }
+  // 段
+  const tmp = [0, 0];
+  state.segs.forEach((seg, si) => {
+    const hov = si === state.hoverSeg;
+    ctx.strokeStyle = MASK_COLOR[seg.mask] || '#999';
+    ctx.lineWidth = hov ? 4 : 2;
+    ctx.shadowColor = hov ? '#fff' : 'transparent';
+    ctx.shadowBlur = hov ? 6 : 0;
+    ctx.beginPath();
+    if (seg.p.length === 2) {
+      let [x0, y0] = glyphToCanvas(seg.p[0][0], seg.p[0][1], S);
+      let [x1, y1] = glyphToCanvas(seg.p[1][0], seg.p[1][1], S);
+      ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+    } else {
+      for (let k = 0; k <= 32; k++) {
+        MSDF.evalAt(seg.p, k / 32, tmp);
+        const [x, y] = glyphToCanvas(tmp[0], tmp[1], S);
+        k ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // 方向箭头（t=0.5）
+    MSDF.evalAt(seg.p, 0.5, tmp);
+    const tg = [0, 0]; MSDF.tanAt(seg.p, 0.5, tg);
+    const [mx, my] = glyphToCanvas(tmp[0], tmp[1], S);
+    const ang = Math.atan2(-tg[1], tg[0]); // 画布 y 向下
+    ctx.fillStyle = MASK_COLOR[seg.mask] || '#999';
+    ctx.beginPath();
+    ctx.moveTo(mx + 7 * Math.cos(ang), my + 7 * Math.sin(ang));
+    ctx.lineTo(mx + 5 * Math.cos(ang + 2.5), my + 5 * Math.sin(ang + 2.5));
+    ctx.lineTo(mx + 5 * Math.cos(ang - 2.5), my + 5 * Math.sin(ang - 2.5));
+    ctx.closePath(); ctx.fill();
+    // 端点
+    ctx.beginPath();
+    const [ex, ey] = glyphToCanvas(seg.p[0][0], seg.p[0][1], S);
+    ctx.arc(ex, ey, 2.2, 0, 7); ctx.fill();
+  });
+  // 选中纹素
+  if (state.sel) drawTexelMark(ctx, S);
+}
+
+function drawTexelMark(ctx, S) {
+  const b = state.doc.bounds;
+  const { i, j } = state.sel;
+  const gx0 = b[0] + (b[2] - b[0]) * i / state.w, gx1 = b[0] + (b[2] - b[0]) * (i + 1) / state.w;
+  const gy0 = b[1] + (b[3] - b[1]) * j / state.h, gy1 = b[1] + (b[3] - b[1]) * (j + 1) / state.h;
+  const [x0, y1] = glyphToCanvas(gx0, gy0, S);
+  const [x1, y0] = glyphToCanvas(gx1, gy1, S);
+  ctx.strokeStyle = '#ffe95b'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+}
+
+// ---------- 通道视图 ----------
+const CH_TINT = {
+  R: v => [v, v * 0.22, v * 0.22],
+  G: v => [v * 0.22, v, v * 0.22],
+  B: v => [v * 0.25, v * 0.25, v],
+  A: v => [v, v, v],
+};
+function renderChannels() {
+  const { w, h, field, bytes } = state;
+  if (!field) return;
+  ['R', 'G', 'B', 'A'].forEach((ch, c) => {
+    const cv = $('cv' + ch);
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const tint = CH_TINT[ch];
+    for (let j = 0; j < h; j++) {
+      const row = h - 1 - j; // 顶行 = 高 j
+      for (let i = 0; i < w; i++) {
+        const idx = j * w + i;
+        const o = (row * w + i) * 4;
+        if (c < 3 && field.corrected[idx]) {
+          img.data[o] = 255; img.data[o + 1] = 130; img.data[o + 2] = 0;
+        } else {
+          const [r, g, b] = tint(bytes[idx * 4 + c]);
+          img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b;
+        }
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    if (state.sel) {
+      ctx.strokeStyle = '#ffe95b'; ctx.lineWidth = Math.max(0.06, 2 / (cv.clientWidth / w || 1));
+      ctx.strokeRect(state.sel.i, h - 1 - state.sel.j, 1, 1);
+    }
+  });
+}
+
+// ---------- 中位数重建 ----------
+function renderRecon() {
+  const cv = $('cvRecon'), S = cv.width, ctx = cv.getContext('2d');
+  const { w, h, medN } = state;
+  if (!medN) return;
+  const zoom = +$('zoomIn').value;
+  const span = 1 / zoom;
+  let cu = 0.5, cvv = 0.5;
+  if (state.sel) { cu = (state.sel.i + 0.5) / w; cvv = (state.sel.j + 0.5) / h; }
+  let u0 = Math.min(Math.max(cu - span / 2, 0), 1 - span);
+  let v0 = Math.min(Math.max(cvv - span / 2, 0), 1 - span);
+  if (span >= 1) { u0 = 0; v0 = 0; }
+  const u1 = u0 + span, v1 = v0 + span;
+  state.reconView = { u0, v0, u1, v1 };
+  const img = ctx.createImageData(S, S);
+  const aa = span / S * 1.2; // 一个屏幕像素的纹理宽度
+  for (let sy = 0; sy < S; sy++) {
+    const v = v1 - (sy + 0.5) / S * span;
+    for (let sx = 0; sx < S; sx++) {
+      const u = u0 + (sx + 0.5) / S * span;
+      const m = sampleMed(u, v);
+      const a = MSDF.clamp01((m - 0.5) / aa + 0.5);
+      const o = (sy * S + sx) * 4;
+      // 内部深色 #191d24，外部纸色 #f2f0ea
+      img.data[o]     = 0xf2 + (0x19 - 0xf2) * a;
+      img.data[o + 1] = 0xf0 + (0x1d - 0xf0) * a;
+      img.data[o + 2] = 0xea + (0x24 - 0xea) * a;
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // 修正纹素橙点
+  const { field } = state;
+  if (field && field.nCorr) {
+    ctx.fillStyle = '#ff8c1a';
+    const r = Math.max(1.5, S * span / w / 5);
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      if (!field.corrected[j * w + i]) continue;
+      const u = (i + 0.5) / w, v = (j + 0.5) / h;
+      if (u < u0 || u > u1 || v < v0 || v > v1) continue;
+      const x = (u - u0) / span * S, y = (v1 - v) / span * S;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    }
+  }
+  // 网格
+  if ($('gridIn').checked && S * span / w >= 6 && S * span / h >= 6) {
+    ctx.strokeStyle = 'rgba(80,140,255,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= w; i++) {
+      const x = (i / w - u0) / span * S;
+      if (x < 0 || x > S) continue;
+      ctx.moveTo(x, 0); ctx.lineTo(x, S);
+    }
+    for (let j = 0; j <= h; j++) {
+      const y = (v1 - j / h) / span * S;
+      if (y < 0 || y > S) continue;
+      ctx.moveTo(0, y); ctx.lineTo(S, y);
+    }
+    ctx.stroke();
+  }
+  // 选中纹素
+  if (state.sel) {
+    const x0 = (state.sel.i / w - u0) / span * S, x1 = ((state.sel.i + 1) / w - u0) / span * S;
+    const y1 = (v1 - state.sel.j / h) / span * S, y0 = (v1 - (state.sel.j + 1) / h) / span * S;
+    ctx.strokeStyle = '#ffe95b'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  }
+}
+
+function sampleMed(u, v) {
+  const { w, h, medN } = state;
+  const x = u * w - 0.5, y = v * h - 0.5;
+  const x0 = Math.max(0, Math.min(w - 1, Math.floor(x)));
+  const y0 = Math.max(0, Math.min(h - 1, Math.floor(y)));
+  const x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1);
+  const fx = Math.min(1, Math.max(0, x - Math.floor(x)));
+  const fy = Math.min(1, Math.max(0, y - Math.floor(y)));
+  const m00 = medN[y0 * w + x0], m10 = medN[y0 * w + x1];
+  const m01 = medN[y1 * w + x0], m11 = medN[y1 * w + x1];
+  return (m00 * (1 - fx) + m10 * fx) * (1 - fy) + (m01 * (1 - fx) + m11 * fx) * fy;
+}
+
+// ---------- 纹素检查 ----------
+function renderInspector() {
+  const el = $('inspectorBody');
+  if (!state.field) { el.innerHTML = '<span class="dim">计算中…</span>'; return; }
+  if (!state.sel) { el.innerHTML = '<span class="dim">点击任意视图选择纹素。</span>'; return; }
+  const { i, j } = state.sel, { w, h, field: F, bytes } = state;
+  const idx = j * w + i;
+  const b = state.doc.bounds;
+  const px = b[0] + (i + 0.5) * (b[2] - b[0]) / w;
+  const py = b[1] + (j + 0.5) * (b[3] - b[1]) / h;
+  const segName = k => k >= 0 ? (state.segs[k].id + '·' + state.segs[k].mask) : '—';
+  const row = (ch, sk, t, raw, fin, byte) =>
+    `<tr><td>${ch}</td><td>${segName(sk)}</td><td>${fmt(t, 3)}</td>` +
+    `<td>${fmt(raw)}</td><td>${fmt(fin)}</td><td>${byte} (${(byte / 255).toFixed(3)})</td></tr>`;
+  const med = MSDF.median3(F.R[idx], F.G[idx], F.B[idx]);
+  el.innerHTML =
+    `<div>纹素 <b>(${i}, ${j})</b>　中心 (${fmt(px, 3)}, ${fmt(py, 3)})</div>` +
+    `<table style="margin-top:6px"><thead><tr><th>通道</th><th>命中段</th><th>t</th>` +
+    `<th>修正前</th><th>修正后</th><th>编码</th></tr></thead><tbody>` +
+    row('R', F.segR[idx], F.tR[idx], F.rawR[idx], F.R[idx], bytes[idx * 4]) +
+    row('G', F.segG[idx], F.tG[idx], F.rawG[idx], F.G[idx], bytes[idx * 4 + 1]) +
+    row('B', F.segB[idx], F.tB[idx], F.rawB[idx], F.B[idx], bytes[idx * 4 + 2]) +
+    row('A', F.segA[idx], F.tA[idx], F.A[idx], F.A[idx], bytes[idx * 4 + 3]) +
+    `</tbody></table>` +
+    `<div style="margin-top:6px">中位数 ${fmt(med)}　A ${fmt(F.A[idx])}　` +
+    (F.corrected[idx] ? '<b style="color:#ff8c1a">异号，已用 A 修正</b>' : '同号，未修正') +
+    `</div><div class="dim" style="margin-top:4px">编码 = clamp(0.5 + d / (2·range))，A 为真实距离，RGB 为伪距离</div>`;
+}
+
+// ---------- 段遮罩表 ----------
+function buildSegTable() {
+  const tbody = $('segTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  state.segs.forEach((seg, si) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="mono">${seg.id}</td><td>${TYPE_NAME[seg.type]}</td>`;
+    const td = document.createElement('td');
+    const sel = document.createElement('select');
+    ['RG', 'GB', 'BR'].forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = m;
+      if (m === seg.mask) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => {
+      seg.mask = sel.value;
+      seg.bits = MSDF.maskBits(sel.value);
+      recompute();
+    });
+    td.appendChild(sel);
+    tr.appendChild(td);
+    tr.addEventListener('mouseenter', () => { state.hoverSeg = si; renderOutline(); markSegRow(); });
+    tr.addEventListener('mouseleave', () => { state.hoverSeg = -1; renderOutline(); markSegRow(); });
+    tr.dataset.seg = si;
+    tbody.appendChild(tr);
+  });
+}
+function markSegRow() {
+  $('segTable').querySelectorAll('tbody tr').forEach(tr =>
+    tr.classList.toggle('hov', +tr.dataset.seg === state.hoverSeg));
+}
+
+// ---------- 事件 ----------
+function selectTexel(i, j) {
+  if (i < 0 || j < 0 || i >= state.w || j >= state.h) return;
+  state.sel = { i, j };
+  renderAll();
+}
+
+['R', 'G', 'B', 'A'].forEach(ch => {
+  $('cv' + ch).addEventListener('click', e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const i = Math.floor((e.clientX - r.left) / r.width * state.w);
+    const j = state.h - 1 - Math.floor((e.clientY - r.top) / r.height * state.h);
+    selectTexel(i, j);
+  });
+});
+
+$('cvRecon').addEventListener('click', e => {
+  if (!state.reconView) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const { u0, v1 } = state.reconView, span = state.reconView.u1 - state.reconView.u0;
+  const u = u0 + (e.clientX - r.left) / r.width * span;
+  const v = v1 - (e.clientY - r.top) / r.height * span;
+  selectTexel(Math.floor(u * state.w), Math.floor(v * state.h));
+});
+
+const sdOut = { t: 0, dTrue: 0, dPseudo: 0 };
+$('cvOutline').addEventListener('mousemove', e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const S = e.currentTarget.width;
+  const [gx, gy] = canvasToGlyph((e.clientX - r.left) / r.width * S, (e.clientY - r.top) / r.height * S, S);
+  let best = -1, bestD = Infinity;
+  state.segs.forEach((seg, si) => {
+    MSDF.segDistance(seg, gx, gy, sdOut);
+    const d = Math.abs(sdOut.dTrue);
+    if (d < bestD) { bestD = d; best = si; }
+  });
+  const b = state.doc.bounds;
+  const thresh = (b[2] - b[0]) * 0.02;
+  const hov = bestD <= thresh ? best : -1;
+  if (hov !== state.hoverSeg) { state.hoverSeg = hov; renderOutline(); markSegRow(); }
+});
+$('cvOutline').addEventListener('mouseleave', () => {
+  state.hoverSeg = -1; renderOutline(); markSegRow();
+});
+$('cvOutline').addEventListener('click', e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const S = e.currentTarget.width;
+  const [gx, gy] = canvasToGlyph((e.clientX - r.left) / r.width * S, (e.clientY - r.top) / r.height * S, S);
+  const b = state.doc.bounds;
+  selectTexel(Math.floor((gx - b[0]) / (b[2] - b[0]) * state.w),
+              Math.floor((gy - b[1]) / (b[3] - b[1]) * state.h));
+});
+
+$('glyphSel').addEventListener('change', e => selectGlyph(+e.target.value));
+$('sizeW').addEventListener('change', recompute);
+$('sizeH').addEventListener('change', recompute);
+$('rangeIn').addEventListener('change', () => { if (state.field) { reencode(); renderChannels(); renderRecon(); renderInspector(); } });
+$('zoomIn').addEventListener('input', renderRecon);
+$('gridIn').addEventListener('change', () => { renderOutline(); renderRecon(); });
+
+$('dlBtn').addEventListener('click', () => {
+  if (!state.bytes) return;
+  const top = MSDF.flipRowsTopFirst(state.bytes, state.w, state.h);
+  const png = MSDF.pngEncode(state.w, state.h, top);
+  const id = state.doc.glyphs[state.glyphIndex].id || 'glyph';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
+  a.download = `msdf_${id}_${state.w}x${state.h}.png`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+$('fileIn').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { $('jsonIn').value = rd.result; tryLoad(rd.result, f.name); };
+  rd.readAsText(f);
+});
+$('loadBtn').addEventListener('click', () => tryLoad($('jsonIn').value, '粘贴的 JSON'));
+$('resetBtn').addEventListener('click', () => { $('importMsg').textContent = ''; loadDoc(EMBEDDED_DOC, '内置样例'); });
+
+function tryLoad(text, source) {
+  try { loadDoc(JSON.parse(text), source); }
+  catch (err) { $('importMsg').textContent = 'JSON 解析失败：' + err.message; }
+}
+
+// ---------- 启动 ----------
+fetch('samples/vector-msdf-cases.json')
+  .then(r => { if (!r.ok) throw 0; return r.json(); })
+  .then(doc => loadDoc(doc, 'samples/vector-msdf-cases.json'))
+  .catch(() => loadDoc(EMBEDDED_DOC, '内置样例'));
+</script>
+</body>
+</html>
