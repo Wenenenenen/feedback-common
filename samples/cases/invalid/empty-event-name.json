@@ -1,0 +1,14 @@
+{
+  "_title": "事件名为空",
+  "expect": {
+    "kind": "operand",
+    "pc": 0
+  },
+  "code": [
+    [
+      "WAIT",
+      ""
+    ]
+  ],
+  "events": []
+}

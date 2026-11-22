@@ -1,0 +1,17 @@
+{
+  "_title": "FORK 目标为负",
+  "expect": {
+    "kind": "jump",
+    "pc": 0
+  },
+  "code": [
+    [
+      "FORK",
+      -1
+    ],
+    [
+      "HALT"
+    ]
+  ],
+  "events": []
+}

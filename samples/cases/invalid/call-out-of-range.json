@@ -1,0 +1,17 @@
+{
+  "_title": "CALL 目标越界",
+  "expect": {
+    "kind": "jump",
+    "pc": 0
+  },
+  "code": [
+    [
+      "CALL",
+      5
+    ],
+    [
+      "HALT"
+    ]
+  ],
+  "events": []
+}

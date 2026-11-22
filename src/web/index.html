@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关卡协程调试台</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-2: #11161f;
+    --panel: #151b24;
+    --panel-2: #1b232f;
+    --panel-3: #202a38;
+    --border: #2a3441;
+    --border-soft: #222b37;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --faint: #5a6675;
+    --accent: #4cc2ff;
+    --accent-2: #7ee787;
+    --warn: #ffb454;
+    --danger: #ff6b6b;
+    --violet: #b392f0;
+    --bp: #ff5c8a;
+    --row-h: 24px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eef1f6;
+      --bg-2: #e6eaf1;
+      --panel: #ffffff;
+      --panel-2: #f3f5f9;
+      --panel-3: #e9edf4;
+      --border: #d3dae4;
+      --border-soft: #e2e7ee;
+      --text: #16202b;
+      --muted: #5d6b7c;
+      --faint: #8794a3;
+      --accent: #0b74c4;
+      --accent-2: #1a7f37;
+      --warn: #9a5b00;
+      --danger: #c62828;
+      --violet: #6639ba;
+      --bp: #d81b60;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 var(--sans);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  button, select, input { font: inherit; color: inherit; }
+  button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 11px;
+    cursor: pointer;
+    color: var(--text);
+    transition: background .12s, border-color .12s, transform .05s;
+    white-space: nowrap;
+  }
+  button:hover:not(:disabled) { background: var(--panel-3); border-color: var(--faint); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .42; cursor: default; }
+  button.primary { background: var(--accent); border-color: transparent; color: #041018; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #6ed0ff; border-color: transparent; }
+  button.danger { color: var(--danger); }
+  button.ghost { background: transparent; }
+  select, input[type="file"] {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 9px;
+    max-width: 100%;
+  }
+  kbd {
+    font-family: var(--mono); font-size: 11px;
+    background: var(--panel-3); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0 4px; color: var(--muted);
+  }
+
+  /* ---------------------------------------------------------- header */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  header .brand { display: flex; flex-direction: column; gap: 1px; margin-right: 4px; }
+  header h1 { margin: 0; font-size: 15px; letter-spacing: .3px; font-weight: 650; }
+  header .sub { font-size: 11px; color: var(--muted); }
+  header .spacer { flex: 1; }
+  header .io { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #dropHint {
+    border: 1px dashed var(--border); border-radius: 7px; padding: 4px 10px;
+    color: var(--muted); font-size: 11.5px;
+  }
+  body.dragging #dropHint { border-color: var(--accent); color: var(--accent); background: rgba(76,194,255,.08); }
+  body.dragging::after {
+    content: "松开以导入关卡脚本";
+    position: fixed; inset: 0; display: grid; place-items: center;
+    font-size: 20px; color: var(--accent);
+    background: rgba(13,17,23,.72); pointer-events: none; z-index: 50;
+  }
+
+  /* ---------------------------------------------------------- layout */
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(300px, 1.25fr) minmax(340px, 1.15fr) minmax(300px, 1fr);
+    gap: 8px; padding: 8px;
+  }
+  .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+  .panel.grow { flex: 1; }
+  .panel-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--panel-2);
+    flex: 0 0 auto;
+  }
+  .panel-head h2 { margin: 0; font-size: 12px; font-weight: 650; letter-spacing: .4px; color: var(--text); }
+  .panel-head .meta { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .panel-head .spacer { flex: 1; }
+  .panel-body { flex: 1; min-height: 0; overflow: auto; position: relative; }
+
+  /* ---------------------------------------------------------- code */
+  #codeWrap { position: relative; }
+  #codeList { font-family: var(--mono); font-size: 12px; }
+  .code-row {
+    display: flex; align-items: center; gap: 6px;
+    height: var(--row-h); padding-right: 10px;
+    border-left: 2px solid transparent;
+    white-space: nowrap; cursor: default;
+  }
+  .code-row:hover { background: var(--panel-2); }
+  .code-row .bp {
+    flex: 0 0 18px; width: 18px; height: 100%;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .code-row .bp::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: transparent; border: 1px solid var(--border);
+  }
+  .code-row.has-bp .bp::before { background: var(--bp); border-color: var(--bp); }
+  .code-row .bp:hover::before { border-color: var(--bp); }
+  .code-row .pc { flex: 0 0 46px; text-align: right; color: var(--faint); user-select: none; }
+  .code-row .op { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+  .code-row .op .mnemonic { color: var(--accent); font-weight: 600; }
+  .code-row .op .operand { color: var(--warn); }
+  .code-row .op .name { color: var(--accent-2); }
+  .code-row .marks { display: flex; gap: 3px; flex: 0 0 auto; }
+  .fiber-mark {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--fc); box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+  }
+  .code-row.current { background: rgba(76,194,255,.12); border-left-color: var(--accent); }
+  .code-row.current .pc { color: var(--accent); }
+  .code-row.at-fault { background: rgba(255,107,107,.10); border-left-color: var(--danger); }
+  .code-row.at-enter { border-left-color: var(--warn); }
+
+  /* ---------------------------------------------------------- fibers */
+  #fibersList { font-family: var(--mono); font-size: 11.5px; }
+  .fiber-row {
+    display: grid;
+    grid-template-columns: 34px 58px 42px 34px 34px 1fr;
+    gap: 4px; align-items: center;
+    padding: 3px 10px; height: 26px;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer;
+  }
+  .fiber-row:hover { background: var(--panel-2); }
+  .fiber-row.selected { background: rgba(76,194,255,.10); }
+  .fiber-row .fid { display: flex; align-items: center; gap: 5px; }
+  .fiber-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fc); flex: 0 0 auto; }
+  .fiber-row .pc { color: var(--muted); }
+  .fiber-row .st { font-size: 10.5px; letter-spacing: .2px; }
+  .st.ready { color: var(--accent-2); }
+  .st.waiting { color: var(--violet); }
+  .st.sleeping { color: var(--muted); }
+  .st.new { color: var(--warn); }
+  .st.done { color: var(--faint); }
+  .st.failed { color: var(--danger); }
+  .fiber-row .depth { color: var(--faint); text-align: right; }
+  .fiber-row .extra { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fiber-detail {
+    flex: 0 0 auto; border-top: 1px solid var(--border-soft);
+    background: var(--bg-2); padding: 7px 10px 9px;
+    font-family: var(--mono); font-size: 11px;
+    max-height: 58%; overflow: auto;
+  }
+  .fiber-detail .fd-head {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+    color: var(--muted); font-family: var(--sans);
+  }
+  .fiber-detail .fd-head b { color: var(--text); }
+  .fiber-detail .fd-grid { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+  .fiber-detail .fd-k { color: var(--faint); }
+  .fiber-detail .fd-v { color: var(--text); word-break: break-all; }
+  .fiber-detail .stack-line { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .fiber-detail .sv {
+    background: var(--panel-2); border: 1px solid var(--border-soft);
+    border-radius: 4px; padding: 0 5px; color: var(--warn);
+  }
+  .fiber-detail .sv.dim { color: var(--faint); }
+
+  /* ---------------------------------------------------------- slots */
+  #slots {
+    display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;
+    padding: 8px;
+  }
+  .slot {
+    background: var(--panel-2); border: 1px solid var(--border-soft);
+    border-radius: 6px; padding: 3px 4px 4px; font-family: var(--mono);
+    min-width: 0; transition: background .3s, border-color .3s;
+  }
+  .slot .k { font-size: 9.5px; color: var(--faint); display: block; }
+  .slot .v {
+    font-size: 11.5px; color: var(--text); display: block;
+    overflow: hidden; text-overflow: ellipsis; text-align: right;
+  }
+  .slot.changed { background: rgba(126,231,135,.14); border-color: var(--accent-2); }
+  .slot.zero .v { color: var(--faint); }
+
+  /* ---------------------------------------------------------- events */
+  #eventList { font-family: var(--mono); font-size: 11.5px; }
+  .event-row {
+    display: grid; grid-template-columns: 46px 1fr auto;
+    gap: 8px; padding: 3px 10px; border-bottom: 1px solid var(--border-soft);
+    align-items: center;
+  }
+  .event-row .ef { color: var(--faint); text-align: right; }
+  .event-row .en { color: var(--accent-2); }
+  .event-row .ev { color: var(--warn); font-variant-numeric: tabular-nums; }
+  .event-row.future { opacity: .55; }
+  .event-row.now { background: rgba(76,194,255,.10); }
+  .event-row.delivered .en::after { content: " ✓"; color: var(--muted); }
+
+  /* ---------------------------------------------------------- log */
+  #logList { font-family: var(--mono); font-size: 11.5px; }
+  .log-row {
+    display: grid; grid-template-columns: 52px 34px 1fr auto;
+    gap: 8px; padding: 2px 10px; border-bottom: 1px solid var(--border-soft);
+    align-items: center;
+  }
+  .log-row .lf { color: var(--faint); text-align: right; }
+  .log-row .lfib { color: var(--fc, var(--muted)); }
+  .log-row .ln { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+  .log-row .lv { color: var(--warn); font-variant-numeric: tabular-nums; }
+  .log-empty { padding: 18px 12px; color: var(--faint); text-align: center; font-size: 12px; }
+
+  /* ---------------------------------------------------------- faults */
+  #faultList { font-family: var(--mono); font-size: 11.5px; }
+  .fault-row {
+    padding: 4px 10px; border-bottom: 1px solid var(--border-soft);
+    color: var(--danger); display: flex; gap: 8px; align-items: baseline;
+  }
+  .fault-row .where { color: var(--muted); }
+  .fault-row .msg { color: var(--text); }
+  .fault-empty { padding: 10px; color: var(--faint); font-size: 12px; }
+
+  /* ---------------------------------------------------------- controls */
+  footer {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 14px; border-top: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+  footer .group { display: flex; gap: 6px; align-items: center; }
+  footer .divider { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+  .status-chip {
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    display: inline-flex; gap: 5px; align-items: baseline;
+    background: var(--panel-2); border: 1px solid var(--border-soft);
+    padding: 3px 8px; border-radius: 6px;
+  }
+  .status-chip b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .status-chip.hot b { color: var(--accent); }
+
+  /* ---------------------------------------------------------- dialog / toast */
+  dialog {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--panel); color: var(--text);
+    padding: 0; max-width: min(760px, 92vw); width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  dialog::backdrop { background: rgba(4, 8, 14, .62); }
+  dialog .dlg-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border-soft);
+  }
+  dialog .dlg-head h3 { margin: 0; font-size: 14px; flex: 1; }
+  dialog .dlg-body { padding: 14px 16px; max-height: 66vh; overflow: auto; }
+  dialog .dlg-foot {
+    display: flex; gap: 8px; justify-content: flex-end;
+    padding: 10px 16px; border-top: 1px solid var(--border-soft);
+  }
+  .err-box {
+    border: 1px solid var(--danger); border-radius: 8px;
+    background: rgba(255,107,107,.08); padding: 10px 12px;
+  }
+  .err-box .err-title { color: var(--danger); font-weight: 650; margin-bottom: 4px; }
+  .err-box .err-loc { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .err-box code { color: var(--warn); font-family: var(--mono); }
+  .check-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .check-table th, .check-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border-soft); }
+  .check-table th { color: var(--muted); font-weight: 600; }
+  .check-table td.ok { color: var(--accent-2); }
+  .check-table td.bad { color: var(--danger); }
+  .bench-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 12.5px; }
+  .bench-grid .k { color: var(--muted); }
+  .bench-grid .v { font-family: var(--mono); }
+  .bench-verdict { margin-top: 12px; padding: 9px 12px; border-radius: 8px; font-weight: 600; }
+  .bench-verdict.pass { background: rgba(126,231,135,.12); color: var(--accent-2); }
+  .bench-verdict.fail { background: rgba(255,107,107,.12); color: var(--danger); }
+  .hint { color: var(--muted); font-size: 11.5px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%) translateY(10px);
+    background: var(--panel-3); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 16px; border-radius: 8px;
+    font-size: 12.5px; opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s; z-index: 60;
+    box-shadow: 0 8px 30px rgba(0,0,0,.35);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* 虚拟列表 */
+  .vlist { position: relative; }
+  .vspacer { position: relative; width: 100%; }
+  .vwin { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  @media (max-width: 1080px) {
+    body { overflow: auto; }
+    main { grid-template-columns: 1fr 1fr; }
+    .col.code-col { grid-column: 1 / -1; max-height: 46vh; }
+  }
+  @media (max-width: 720px) {
+    /* 单列堆叠：页面整体滚动，底部控制条吸附在视口底边，避免被面板盖住 */
+    body { overflow: auto; display: block; height: auto; min-height: 100%; }
+    main { grid-template-columns: 1fr; display: flex; flex-direction: column; padding: 6px; }
+    .col { flex: none; min-height: 0; }
+    .col.code-col { max-height: none; }
+    .col.code-col .panel.grow { height: 42vh; }
+    .col.mid-col .panel, .col.log-col .panel { min-height: 220px; }
+    .col.mid-col .panel:first-child { height: 210px; flex: none; }
+    .col.log-col .panel.grow { height: 320px; flex: none; }
+    footer {
+      position: sticky; bottom: 0; z-index: 20;
+      padding: 8px 10px; gap: 6px;
+      box-shadow: 0 -8px 20px rgba(0,0,0,.18);
+    }
+    footer .group { flex-wrap: wrap; }
+    footer kbd { display: none; }
+    header .io { width: 100%; }
+    header .io #sampleSelect { flex: 1 1 auto; }
+    #statusBar { width: 100%; flex-wrap: wrap; }
+  }
+  @media (max-width: 460px) {
+    header { padding: 8px 10px; gap: 8px; }
+    header h1 { font-size: 14px; }
+    footer .divider { display: none; }
+    .status-chip { font-size: 11px; padding: 2px 6px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>关卡协程调试台</h1>
+    <span class="sub">帧调度 · 共享槽 · 快照续跑</span>
+  </div>
+  <div class="io">
+    <select id="sampleSelect" title="内置样例与用例">
+      <option value="">载入样例…</option>
+    </select>
+    <button id="importBtn" title="从文件导入关卡脚本 JSON">导入 JSON</button>
+    <input id="fileInput" type="file" accept=".json,application/json" hidden>
+    <span id="dropHint">拖入 .json</span>
+    <button id="snapBtn" title="载入先前导出的快照">载入快照</button>
+    <input id="snapInput" type="file" accept=".json,application/json" hidden>
+  </div>
+  <div class="spacer"></div>
+  <div class="io">
+    <button id="crossCheckBtn" title="用服务端 Python 独立实现重算当前脚本并比对">对照 Python</button>
+    <button id="selfCheckBtn" title="逐步切分快照并验证续跑一致性">快照自检</button>
+    <button id="benchBtn" title="100 万条指令 + 快照导出性能测试">性能基准</button>
+  </div>
+</header>
+
+<main>
+  <div class="col code-col">
+    <section class="panel grow">
+      <div class="panel-head">
+        <h2>指令</h2>
+        <span class="meta" id="codeMeta">—</span>
+        <div class="spacer"></div>
+        <span class="hint">点击行首圆点设断点</span>
+      </div>
+      <div class="panel-body" id="codeWrap">
+        <div id="codeList" class="vlist"></div>
+        <div id="codeEmpty" class="log-empty">尚未载入关卡脚本</div>
+      </div>
+    </section>
+    <section class="panel" style="flex:0 0 auto; max-height:38%">
+      <div class="panel-head">
+        <h2>运行错误</h2>
+        <span class="meta" id="faultMeta">0</span>
+        <div class="spacer"></div>
+        <span class="hint">只结束故障协程</span>
+      </div>
+      <div class="panel-body" id="faultList"></div>
+    </section>
+  </div>
+
+  <div class="col mid-col">
+    <section class="panel" style="flex:1 1 52%">
+      <div class="panel-head">
+        <h2>协程</h2>
+        <span class="meta" id="fiberMeta">—</span>
+        <div class="spacer"></div>
+        <span class="hint">单击查看栈</span>
+      </div>
+      <div class="panel-body" id="fibersList"></div>
+      <div id="fiberDetail" class="fiber-detail" hidden></div>
+    </section>
+    <section class="panel" style="flex:0 0 auto">
+      <div class="panel-head">
+        <h2>共享槽</h2>
+        <span class="meta">32 × s32</span>
+        <div class="spacer"></div>
+        <span class="hint">写入立即可见</span>
+      </div>
+      <div id="slots"></div>
+    </section>
+    <section class="panel" style="flex:1 1 26%">
+      <div class="panel-head">
+        <h2>事件</h2>
+        <span class="meta" id="eventMeta">0</span>
+        <div class="spacer"></div>
+        <label class="hint" style="display:flex;gap:5px;align-items:center;cursor:pointer">
+          <input type="checkbox" id="eventAll" checked> 显示全部
+        </label>
+      </div>
+      <div class="panel-body" id="eventList"></div>
+    </section>
+  </div>
+
+  <div class="col log-col">
+    <section class="panel grow">
+      <div class="panel-head">
+        <h2>输出日志</h2>
+        <span class="meta" id="logMeta">0</span>
+        <div class="spacer"></div>
+        <label class="hint" style="display:flex;gap:5px;align-items:center;cursor:pointer">
+          <input type="checkbox" id="autoScroll" checked> 跟随
+        </label>
+        <button class="ghost" id="exportLogBtn" title="导出输出日志 JSON">导出</button>
+      </div>
+      <div class="panel-body" id="logWrap">
+        <div id="logList" class="vlist"></div>
+        <div id="logEmpty" class="log-empty">尚无输出（EMIT 产生日志）</div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="group">
+    <button class="primary" id="btnRun">运行 <kbd>F5</kbd></button>
+    <button id="btnPause" disabled>暂停 <kbd>F6</kbd></button>
+    <button id="btnContinue" disabled title="运行到下一个断点">继续 <kbd>F8</kbd></button>
+  </div>
+  <div class="divider"></div>
+  <div class="group">
+    <button id="btnStep" title="只执行下一条指令">单步 <kbd>F10</kbd></button>
+    <button id="btnFrame" title="运行到下一帧">单帧 <kbd>F11</kbd></button>
+    <button id="btnReset">复位</button>
+  </div>
+  <div class="divider"></div>
+  <div class="group">
+    <button id="btnSnapExport" title="导出当前帧中状态的快照">导出快照</button>
+  </div>
+  <div class="spacer" style="flex:1"></div>
+  <div class="group" id="statusBar">
+    <span class="status-chip hot">帧 <b id="statusFrame">0</b></span>
+    <span class="status-chip">阶段 <b id="statusPhase">帧首</b></span>
+    <span class="status-chip">指令 <b id="statusInstr">0</b></span>
+    <span class="status-chip">核心 <b id="statusCore">就绪</b></span>
+  </div>
+</footer>
+
+<dialog id="msgDialog">
+  <div class="dlg-head"><h3 id="msgTitle">提示</h3><button class="ghost" data-close>关闭</button></div>
+  <div class="dlg-body" id="msgBody"></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

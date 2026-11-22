@@ -1,0 +1,16 @@
+{
+  "_title": "frames 作为运行帧数上限",
+  "_note": "无限循环在跑到 frames 指定帧数后停止。",
+  "frames": 4,
+  "code": [
+    [
+      "PUSH",
+      1
+    ],
+    [
+      "JNZ",
+      0
+    ]
+  ],
+  "events": []
+}

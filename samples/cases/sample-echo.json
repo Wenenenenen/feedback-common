@@ -1,0 +1,40 @@
+{
+  "_title": "样例：FORK 后 WAIT / 开门",
+  "_note": "子协程在下一帧开始；frame2 的 bell 唤醒等待中的协程 0。",
+  "frames": 6,
+  "code": [
+    [
+      "FORK",
+      4
+    ],
+    [
+      "WAIT",
+      "bell"
+    ],
+    [
+      "EMIT",
+      "gate"
+    ],
+    [
+      "HALT"
+    ],
+    [
+      "PUSH",
+      9
+    ],
+    [
+      "STORE",
+      0
+    ],
+    [
+      "HALT"
+    ]
+  ],
+  "events": [
+    [
+      2,
+      "bell",
+      7
+    ]
+  ]
+}

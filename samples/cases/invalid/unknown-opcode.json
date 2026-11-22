@@ -1,0 +1,18 @@
+{
+  "_title": "未知指令",
+  "expect": {
+    "kind": "structure",
+    "pc": 1
+  },
+  "code": [
+    [
+      "PUSH",
+      1
+    ],
+    [
+      "TELEPORT",
+      2
+    ]
+  ],
+  "events": []
+}

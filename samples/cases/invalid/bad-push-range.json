@@ -1,0 +1,14 @@
+{
+  "_title": "PUSH 超出 32 位",
+  "expect": {
+    "kind": "operand",
+    "pc": 0
+  },
+  "code": [
+    [
+      "PUSH",
+      2147483648
+    ]
+  ],
+  "events": []
+}

@@ -1,0 +1,15 @@
+{
+  "_title": "操作数个数错误",
+  "expect": {
+    "kind": "operand",
+    "pc": 0
+  },
+  "code": [
+    [
+      "PUSH",
+      1,
+      2
+    ]
+  ],
+  "events": []
+}

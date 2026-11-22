@@ -1,0 +1,18 @@
+{
+  "_title": "槽号越界",
+  "expect": {
+    "kind": "operand",
+    "pc": 1
+  },
+  "code": [
+    [
+      "PUSH",
+      1
+    ],
+    [
+      "STORE",
+      32
+    ]
+  ],
+  "events": []
+}

@@ -1,0 +1,22 @@
+{
+  "_title": "SLEEP 跨帧恢复",
+  "_note": "SLEEP 2 在 frame0 执行，frame2 帧首恢复（当前帧 + 2）。",
+  "code": [
+    [
+      "PUSH",
+      1
+    ],
+    [
+      "SLEEP",
+      2
+    ],
+    [
+      "EMIT",
+      "woke"
+    ],
+    [
+      "HALT"
+    ]
+  ],
+  "events": []
+}

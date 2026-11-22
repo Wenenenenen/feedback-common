@@ -1,0 +1,18 @@
+{
+  "_title": "跳转目标越界",
+  "expect": {
+    "kind": "jump",
+    "pc": 1
+  },
+  "code": [
+    [
+      "PUSH",
+      1
+    ],
+    [
+      "JNZ",
+      99
+    ]
+  ],
+  "events": []
+}
