@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>帧调度工作台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ---- 设计令牌：深色工程风，青色=优化顺序 / 琥珀=声明顺序 / 紫=保留 ---- */
+:root {
+  --bg: #0e131b;
+  --bg-2: #141b26;
+  --panel: #17202c;
+  --panel-2: #1d2837;
+  --line: #283548;
+  --line-soft: #1f2a3a;
+  --fg: #e6ecf4;
+  --fg-2: #a6b4c6;
+  --muted: #6c7c92;
+  --cyan: #1f9ea6;
+  --cyan-dim: #14484d;
+  --amber: #c47a26;
+  --amber-dim: #4d3418;
+  --violet: #a78bfa;
+  --violet-dim: #4c3f7a;
+  --good: #5ccf8e;
+  --warn: #f0c04e;
+  --danger: #f06a6a;
+  --grid-bg: #0c1118;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.25);
+  --radius: 10px;
+  --font: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+:root[data-theme="light"] {
+  --bg: #f3f5f8; --bg-2: #eaeef3; --panel: #ffffff; --panel-2: #f4f7fa;
+  --line: #d5dde7; --line-soft: #e3e9f0;
+  --fg: #16202d; --fg-2: #46566b; --muted: #79889c;
+  --cyan: #0088a0; --cyan-dim: #c9e8ee;
+  --amber: #b06a16; --amber-dim: #fbe3c2;
+  --violet: #6d4fd0; --violet-dim: #e6ddfb;
+  --good: #1f9d57; --warn: #a87c10; --danger: #cf3f3f;
+  --grid-bg: #eef2f6;
+  --shadow: 0 1px 2px rgba(16,32,48,.08), 0 8px 24px rgba(16,32,48,.08);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f3f5f8; --bg-2: #eaeef3; --panel: #ffffff; --panel-2: #f4f7fa;
+    --line: #d5dde7; --line-soft: #e3e9f0;
+    --fg: #16202d; --fg-2: #46566b; --muted: #79889c;
+    --cyan: #0e8f96; --cyan-dim: #c5eff1;
+    --amber: #b06a16; --amber-dim: #fbe3c2;
+    --violet: #6d4fd0; --violet-dim: #e6ddfb;
+    --good: #1f9d57; --warn: #a87c10; --danger: #cf3f3f;
+    --grid-bg: #eef2f6;
+    --shadow: 0 1px 2px rgba(16,32,48,.08), 0 8px 24px rgba(16,32,48,.08);
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font);
+  font-size: 14px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+code, .mono { font-family: var(--mono); }
+button, select, input, textarea { font: inherit; color: inherit; }
+button {
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; font-weight: 500;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+button:hover:not(:disabled) { border-color: var(--cyan); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.primary { background: var(--cyan-dim); border-color: var(--cyan); color: var(--fg); }
+button.ghost { background: transparent; }
+button.small { padding: 3px 8px; font-size: 12px; border-radius: 6px; }
+select, input[type="text"], textarea {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 10px; color: var(--fg);
+}
+select:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--cyan); outline-offset: 1px;
+}
+.wrap { max-width: 1340px; margin: 0 auto; padding-bottom: 48px; }
+
+/* ---- 顶栏 ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 16px 0 14px; border-bottom: 1px solid var(--line-soft); margin-bottom: 18px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 18px; letter-spacing: .2px; }
+.brand .tag { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.topbar .spacer { flex: 1; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+label.inline { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-2); font-size: 13px; }
+
+/* ---- 布局 ---- */
+.grid {
+  display: grid; gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-areas: "stats stats" "left right" "errors errors";
+}
+@media (max-width: 920px) {
+  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stats" "left" "right" "errors"; }
+}
+.area-stats { grid-area: stats; }
+.area-left { grid-area: left; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.area-right { grid-area: right; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.area-errors { grid-area: errors; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.panel > header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-2);
+}
+.panel > header h2 { font-size: 13px; letter-spacing: .6px; text-transform: uppercase; color: var(--fg-2); }
+.panel > header .spacer { flex: 1; }
+.panel > .body { padding: 14px; }
+
+/* ---- 指标卡 ---- */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 700px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat {
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.stat .k { font-size: 11.5px; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+.stat .v { font-family: var(--mono); font-size: 22px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat .sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.stat.good .v { color: var(--good); }
+.stat.warn .v { color: var(--amber); }
+
+/* ---- 通道列表 ---- */
+.pass-list { display: flex; flex-direction: column; gap: 6px; }
+.pass-row {
+  display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 10px; align-items: center;
+  border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px;
+  background: var(--panel-2);
+}
+.pass-row.active { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan) inset; }
+.pass-row.done { opacity: .62; }
+.pass-row .ord {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  text-align: center; border-radius: 6px; background: var(--bg); padding: 3px 0;
+}
+.pass-row.active .ord { color: var(--cyan); }
+.pass-main { min-width: 0; }
+.pass-name { font-weight: 600; font-size: 13.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.op-badge {
+  font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 99px;
+  border: 1px solid var(--line); color: var(--fg-2);
+}
+.op-const { color: var(--violet); border-color: var(--violet-dim); }
+.op-add { color: var(--amber); border-color: var(--amber-dim); }
+.op-box2 { color: var(--cyan); border-color: var(--cyan-dim); }
+.pass-refs { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.pass-refs b { color: var(--fg-2); font-weight: 500; }
+.pass-bytes { font-family: var(--mono); font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+
+/* ---- 版本/固定 ---- */
+.ver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.ver-card {
+  border: 1px solid var(--line-soft); border-radius: 8px; padding: 9px 10px;
+  background: var(--panel-2); display: flex; flex-direction: column; gap: 6px;
+}
+.ver-card.retained { border-color: var(--violet-dim); }
+.ver-card.live { border-color: var(--cyan-dim); }
+.ver-head { display: flex; align-items: center; gap: 8px; }
+.ver-head .ref { font-family: var(--mono); font-size: 12.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ver-head .spacer { flex: 1; }
+.chip {
+  font-size: 10.5px; font-family: var(--mono); padding: 1px 7px; border-radius: 99px;
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+}
+.chip.export { color: var(--violet); border-color: var(--violet-dim); }
+.chip.live { color: var(--cyan); border-color: var(--cyan-dim); }
+.pin-btn { padding: 2px 9px; font-size: 11.5px; border-radius: 99px; }
+.pin-btn.on { background: var(--violet-dim); border-color: var(--violet); color: var(--fg); }
+.ver-meta { font-size: 11.5px; color: var(--muted); font-family: var(--mono); display: flex; justify-content: space-between; gap: 6px; }
+
+/* ---- 回放控制 ---- */
+.replay-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.replay-bar .step-info { font-family: var(--mono); font-size: 13px; color: var(--fg-2); }
+.range-wrap { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 180px; }
+input[type="range"] { flex: 1; accent-color: var(--cyan); }
+.now-pass {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  background: var(--panel-2); font-size: 12.5px; min-height: 38px;
+}
+.now-pass .mono { color: var(--cyan); font-weight: 600; }
+
+/* ---- 槽位 ---- */
+.slot-list { display: flex; flex-direction: column; gap: 6px; }
+.slot-row {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr) 92px; gap: 10px; align-items: center;
+  font-size: 12px;
+}
+.slot-id { font-family: var(--mono); color: var(--fg-2); }
+.slot-track { position: relative; height: 22px; background: var(--grid-bg); border-radius: 6px; overflow: hidden; }
+.slot-seg {
+  position: absolute; top: 2px; bottom: 2px; border-radius: 4px;
+  background: var(--cyan-dim); border: 1px solid var(--cyan);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; overflow: hidden; white-space: nowrap;
+}
+.slot-seg.retained { background: var(--violet-dim); border-color: var(--violet); }
+.slot-seg.dead { opacity: .45; }
+.slot-cursor { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--fg); z-index: 2; }
+.slot-class { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; }
+.slot-empty { color: var(--muted); font-size: 12.5px; padding: 6px 0; }
+
+/* ---- 时间线图表 ---- */
+.chart-wrap { width: 100%; overflow-x: auto; }
+svg.chart { display: block; width: 100%; height: auto; min-width: 480px; }
+.chart text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.chart .grid-line { stroke: var(--line-soft); stroke-width: 1; }
+.chart .axis-line { stroke: var(--line); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); margin-bottom: 8px; }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .swatch { width: 14px; height: 3px; border-radius: 2px; }
+#chart-tooltip {
+  position: fixed; z-index: 50; pointer-events: none; display: none;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; box-shadow: var(--shadow); max-width: 260px;
+}
+#chart-tooltip .mono { font-size: 11.5px; }
+.tt-title { font-weight: 600; margin-bottom: 4px; }
+.tt-row { display: flex; justify-content: space-between; gap: 14px; color: var(--fg-2); }
+.tt-row b { color: var(--fg); font-weight: 600; }
+
+/* ---- 像素网格 ---- */
+.pixel-wrap { display: flex; flex-direction: column; gap: 10px; }
+.pixel-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.pixel-stage {
+  background: var(--grid-bg); border: 1px solid var(--line-soft);
+  border-radius: 8px; padding: 14px; overflow: auto;
+}
+.pixel-grid { display: grid; gap: 2px; width: max-content; margin: 0 auto; }
+.px {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; border-radius: 2px; position: relative;
+}
+.px.r8 { color: rgba(255,255,255,.85); }
+.px.empty-cell { background: transparent; border: 1px dashed var(--line); }
+.pixel-caption { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; }
+.ver-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+.ver-pick {
+  font-family: var(--mono); font-size: 11.5px; padding: 4px 9px; border-radius: 99px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--fg-2); cursor: pointer;
+}
+.ver-pick.on { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+.ver-pick:disabled { opacity: .35; cursor: default; }
+
+/* ---- 错误 ---- */
+.error-card {
+  border: 1px solid var(--danger); border-left-width: 4px; border-radius: 8px;
+  padding: 12px 14px; background: var(--panel); margin-bottom: 10px;
+}
+.error-card .kind {
+  display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--danger); border: 1px solid var(--danger); border-radius: 99px; padding: 1px 8px; margin-bottom: 6px;
+}
+.error-card .msg { font-size: 13.5px; }
+.error-card .refs { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* ---- 顺序对比表 ---- */
+.cmp-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cmp-table th, .cmp-table td { padding: 7px 8px; border-bottom: 1px solid var(--line-soft); text-align: left; }
+.cmp-table th { color: var(--muted); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; }
+.cmp-table td.mono, .cmp-table th.mono { font-family: var(--mono); }
+.cmp-table tr.match td:first-child { color: var(--good); }
+.cmp-table tr.diff td:first-child { color: var(--amber); }
+
+/* ---- 模态 ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(4, 8, 14, .66); z-index: 40;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  width: min(720px, 100%); max-height: 86vh; display: flex; flex-direction: column;
+  box-shadow: var(--shadow);
+}
+.modal header { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line-soft); }
+.modal header h2 { font-size: 15px; }
+.modal header .spacer { flex: 1; }
+.modal .body { padding: 14px 16px; overflow: auto; }
+.modal textarea {
+  width: 100%; min-height: 300px; resize: vertical; font-family: var(--mono);
+  font-size: 12px; line-height: 1.5;
+}
+.modal footer { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--line-soft); }
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--cyan); color: var(--fg);
+  padding: 9px 16px; border-radius: 99px; font-size: 13px; z-index: 60;
+  box-shadow: var(--shadow);
+}
+.section-note { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.scroll-x { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>帧调度工作台</h1>
+      <span class="tag">transient frame · lifetime scheduler</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="toolbar">
+      <label class="inline">用例
+        <select id="case-select"></select>
+      </label>
+      <button id="btn-import" class="small">导入 JSON</button>
+      <button id="btn-export" class="small primary" disabled>导出排程</button>
+      <button id="btn-theme" class="small ghost" title="切换浅色/深色">◐ 主题</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- 指标 -->
+    <section class="area-stats">
+      <div class="stats">
+        <div class="stat good">
+          <div class="k">优化峰值（存活字节）</div>
+          <div class="v" id="stat-peak-opt">—</div>
+          <div class="sub" id="stat-peak-opt-sub">最小可能峰值</div>
+        </div>
+        <div class="stat warn">
+          <div class="k">声明顺序峰值</div>
+          <div class="v" id="stat-peak-decl">—</div>
+          <div class="sub" id="stat-peak-decl-sub">按 JSON 中通道顺序执行</div>
+        </div>
+        <div class="stat">
+          <div class="k">不做复用的总占用</div>
+          <div class="v" id="stat-total">—</div>
+          <div class="sub">所有版本字节之和</div>
+        </div>
+        <div class="stat">
+          <div class="k">实际槽位数 / 版本数</div>
+          <div class="v" id="stat-slots">—</div>
+          <div class="sub" id="stat-slots-sub">同尺寸非重叠版本共享槽</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 左列 -->
+    <div class="area-left">
+      <section class="panel">
+        <header>
+          <h2>通道与依赖</h2>
+          <span class="spacer"></span>
+          <span class="chip" id="pass-count"></span>
+        </header>
+        <div class="body">
+          <div class="pass-list" id="pass-list"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header>
+          <h2>版本与固定</h2>
+          <span class="spacer"></span>
+          <span class="chip">图钉保留到帧末，与导出同等处理</span>
+        </header>
+        <div class="body">
+          <div class="ver-grid" id="ver-grid"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header><h2>声明顺序 vs 优化顺序</h2></header>
+        <div class="body scroll-x">
+          <table class="cmp-table" id="cmp-table">
+            <thead><tr><th>步</th><th>优化顺序</th><th>声明顺序</th><th>关系</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右列 -->
+    <div class="area-right">
+      <section class="panel">
+        <header><h2>逐步回放</h2><span class="spacer"></span><span class="chip" id="replay-mode-chip"></span></header>
+        <div class="body">
+          <div class="replay-bar">
+            <button id="btn-first" class="small" title="回到开头">⏮</button>
+            <button id="btn-prev" class="small" title="上一步">◀</button>
+            <button id="btn-play" class="small" title="自动播放">▶</button>
+            <button id="btn-next" class="small" title="下一步">▶</button>
+            <button id="btn-last" class="small" title="到帧末">⏭</button>
+            <div class="range-wrap"><input type="range" id="step-range" min="0" max="0" value="0"></div>
+            <span class="step-info" id="step-info">0 / 0</span>
+          </div>
+          <div class="now-pass" id="now-pass" style="margin-top:10px">尚未执行任何通道。</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header><h2>存活字节时间线</h2><span class="spacer"></span></header>
+        <div class="body">
+          <div class="legend">
+            <span class="item"><span class="swatch" style="background:var(--cyan)"></span>优化顺序（圆点为通道执行期间峰值）</span>
+            <span class="item"><span class="swatch" style="background:var(--amber)"></span>声明顺序</span>
+          </div>
+          <div class="chart-wrap" id="chart-wrap"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header><h2>槽位视图</h2><span class="spacer"></span><span class="chip" id="slot-bytes-chip"></span></header>
+        <div class="body">
+          <div class="slot-list" id="slot-list"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header><h2>图像查看器</h2><span class="spacer"></span></header>
+        <div class="body">
+          <div class="pixel-wrap">
+            <div class="ver-picker" id="ver-picker"></div>
+            <div class="pixel-stage" id="pixel-stage"></div>
+            <div class="pixel-caption" id="pixel-caption">选择一个已产出的版本查看像素</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 错误 -->
+    <section class="area-errors" id="error-section" hidden>
+      <section class="panel">
+        <header><h2>帧描述存在问题，无法排程</h2></header>
+        <div class="body" id="error-list"></div>
+      </section>
+    </section>
+  </div>
+</div>
+
+<div id="chart-tooltip"></div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script src="model.js"></script>
+<script src="scheduler.js"></script>
+<script src="engine.js"></script>
+<script src="samples.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
