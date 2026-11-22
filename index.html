@@ -1,0 +1,1844 @@
+<title>征召推演台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* ===== 设计令牌：冷灰 slate 底，甲蓝乙琥珀，克制胜负用语义色 ===== */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #edf1f6;
+  --surface-3: #e2e8f0;
+  --border: #d4dbe4;
+  --fg: #18202d;
+  --muted: #5b687a;
+  --faint: #8a97a8;
+  --team-a: #1d4ed8;
+  --team-a-soft: #dbe7fe;
+  --team-b: #b45309;
+  --team-b-soft: #fdeccf;
+  --good: #15803d;
+  --good-soft: #dcfce7;
+  --bad: #b91c1c;
+  --bad-soft: #fee2e2;
+  --accent: #4f46e5;
+  --ban: #7c3aed;
+  --ban-soft: #ede9fe;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 14px rgba(16,24,40,.06);
+  --radius: 12px;
+  --font-body: "Noto Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c;
+    --surface: #19202b;
+    --surface-2: #212a37;
+    --surface-3: #2b3645;
+    --border: #313d4d;
+    --fg: #e7ecf3;
+    --muted: #9aa8ba;
+    --faint: #6b788a;
+    --team-a: #7cb0ff;
+    --team-a-soft: #1e3a5f;
+    --team-b: #fbbf24;
+    --team-b-soft: #4a3413;
+    --good: #4ade80;
+    --good-soft: #14331f;
+    --bad: #f87171;
+    --bad-soft: #3d1717;
+    --accent: #a5b4fc;
+    --ban: #c4b5fd;
+    --ban-soft: #35264d;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.28);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #19202b; --surface-2: #212a37; --surface-3: #2b3645;
+  --border: #313d4d; --fg: #e7ecf3; --muted: #9aa8ba; --faint: #6b788a;
+  --team-a: #7cb0ff; --team-a-soft: #1e3a5f; --team-b: #fbbf24; --team-b-soft: #4a3413;
+  --good: #4ade80; --good-soft: #14331f; --bad: #f87171; --bad-soft: #3d1717;
+  --accent: #a5b4fc; --ban: #c4b5fd; --ban-soft: #35264d;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.28);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.page {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 1240px;
+  margin: 0 auto;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+h1,h2,h3 { margin: 0; text-wrap: balance; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+
+/* ===== 顶栏 ===== */
+header.top {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px); z-index: 21; background: var(--bg);
+}
+.top-inner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-block: 10px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 19px; font-weight: 900; letter-spacing: .04em; }
+.brand .sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.btn.small { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
+
+/* ===== 布局 ===== */
+main { padding-block: 18px 60px; display: flex; flex-direction: column; gap: 16px; }
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  min-width: 0;
+}
+.card > h2 {
+  font-size: 13px; font-weight: 700; letter-spacing: .12em;
+  color: var(--muted); text-transform: uppercase;
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card > h2 .count {
+  font-family: var(--font-mono); font-weight: 500;
+  background: var(--surface-2); border-radius: 6px; padding: 1px 7px;
+  letter-spacing: 0; font-size: 11px; color: var(--muted);
+}
+
+/* ===== 回合条 ===== */
+.turn-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.turn-chip {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border); border-radius: 9px;
+  padding: 6px 10px; background: var(--surface);
+  font-size: 12.5px; min-width: 0;
+}
+.turn-chip .no { font-family: var(--font-mono); color: var(--faint); font-size: 11px; }
+.turn-chip .tag { font-weight: 700; padding: 1px 7px; border-radius: 6px; font-size: 11.5px; }
+.tag.a { background: var(--team-a-soft); color: var(--team-a); }
+.tag.b { background: var(--team-b-soft); color: var(--team-b); }
+.tag.pick { background: var(--good-soft); color: var(--good); }
+.tag.ban { background: var(--ban-soft); color: var(--ban); }
+.turn-chip.current { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.turn-chip.done { opacity: .55; }
+.turn-chip.done .hero-id { font-family: var(--font-mono); font-weight: 700; }
+
+/* ===== 队伍板 ===== */
+.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .teams { grid-template-columns: 1fr; } }
+.team-board { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.team-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; font-weight: 700; font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
+}
+.team-a .team-head { background: var(--team-a-soft); color: var(--team-a); }
+.team-b .team-head { background: var(--team-b-soft); color: var(--team-b); }
+.team-head .pre { margin-left: auto; font-size: 11px; font-weight: 500; opacity: .85; }
+.slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 10px; }
+.slot {
+  border: 1px dashed var(--border); border-radius: 9px;
+  min-height: 74px; padding: 6px 4px; text-align: center;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  background: var(--surface-2);
+}
+.slot.filled { border-style: solid; background: var(--surface); }
+.slot .s-label { font-size: 10.5px; color: var(--faint); letter-spacing: .08em; }
+.slot .s-id { font-family: var(--font-mono); font-weight: 700; font-size: 17px; }
+.slot .s-score { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.team-foot {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--muted);
+}
+.team-foot b { color: var(--fg); font-family: var(--font-mono); font-weight: 700; }
+
+/* ===== 英雄池 ===== */
+.pool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 9px;
+}
+.hero-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 8px 8px 7px;
+  text-align: left;
+  transition: border-color .15s, transform .08s, box-shadow .15s;
+  min-width: 0;
+}
+button.hero-card:not(:disabled):hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+button.hero-card:not(:disabled):active { transform: translateY(1px); }
+.hero-card:disabled { cursor: default; }
+.hero-card.used { opacity: .42; }
+.hero-card.banned {
+  opacity: .5;
+  background: var(--ban-soft);
+}
+.hero-card.banned::after {
+  content: "禁"; position: absolute; top: 6px; right: 7px;
+  font-size: 10.5px; font-weight: 700; color: var(--ban);
+  border: 1px solid var(--ban); border-radius: 5px; padding: 0 4px;
+}
+.hero-card.illegal-pick { border-style: dashed; }
+.hero-id-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 5px; }
+.hero-id-row .id { font-family: var(--font-mono); font-weight: 700; font-size: 18px; }
+.hero-id-row .star { color: #d97706; font-size: 13px; }
+.hero-id-row .greedy-dot {
+  margin-left: auto; font-size: 10px; font-weight: 700;
+  color: var(--muted); border: 1px solid var(--border);
+  border-radius: 5px; padding: 0 4px;
+}
+.score-rows { display: flex; flex-direction: column; gap: 2px; }
+.score-line { display: flex; align-items: center; gap: 3px; }
+.score-line .who { font-size: 9.5px; font-weight: 700; width: 9px; color: var(--faint); }
+.score-line.a .who { color: var(--team-a); }
+.score-line.b .who { color: var(--team-b); }
+.score-cell {
+  flex: 1; text-align: center;
+  font-family: var(--font-mono); font-size: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 0; color: var(--muted);
+}
+.score-cell.null { color: var(--faint); background: transparent; }
+.value-badge {
+  margin-top: 6px;
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700;
+  border-radius: 6px; padding: 2px 6px;
+  display: flex; justify-content: space-between; gap: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  min-height: 22px; align-items: center;
+}
+.value-badge.pending { color: var(--faint); font-weight: 500; justify-content: center; }
+.value-badge.win { color: var(--team-a); border-color: var(--team-a); }
+.value-badge.loss { color: var(--team-b); border-color: var(--team-b); }
+.value-badge.zero { color: var(--muted); }
+.value-badge.pos { color: var(--good); }
+.value-badge.neg { color: var(--bad); }
+.illegal-note { margin-top: 5px; font-size: 10.5px; color: var(--bad); }
+
+/* ===== 分析面板 ===== */
+.banner {
+  border-radius: 10px; padding: 10px 12px; font-size: 13px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+}
+.banner.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); color: var(--bad); font-weight: 700; }
+.banner.good { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 40%, var(--border)); color: var(--good); }
+.banner.info .spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--surface-3); border-top-color: var(--accent);
+  animation: spin .8s linear infinite; flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .banner.info .spinner { animation: none; } }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+table.moves { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 460px; }
+table.moves th {
+  text-align: left; font-size: 11px; letter-spacing: .08em;
+  color: var(--muted); font-weight: 700; text-transform: uppercase;
+  padding: 8px 10px; background: var(--surface-2);
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+table.moves td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.moves tr:last-child td { border-bottom: none; }
+table.moves tr.opt { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+table.moves tr.clickable { cursor: pointer; }
+table.moves tr.clickable:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.chip {
+  display: inline-block; padding: 1px 8px; border-radius: 6px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+  border: 1px solid var(--border); background: var(--surface); white-space: nowrap;
+}
+.chip.win { color: var(--team-a); border-color: var(--team-a); }
+.chip.loss { color: var(--team-b); border-color: var(--team-b); }
+.chip.pos { color: var(--good); }
+.chip.neg { color: var(--bad); }
+.chip.zero { color: var(--muted); }
+.cont { font-size: 11.5px; color: var(--muted); line-height: 1.7; }
+.cont b { color: var(--fg); font-family: var(--font-mono); }
+.greedy-mark { font-size: 10px; font-weight: 700; color: var(--ban); border: 1px solid var(--ban); border-radius: 5px; padding: 0 5px; white-space: nowrap; }
+
+/* ===== 历史/操作 ===== */
+.history-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.hist-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 9px; background: var(--surface-2); font-size: 12px;
+}
+.hist-chip .hero-id { font-family: var(--font-mono); font-weight: 700; }
+.hist-chip.ban { border-color: var(--ban); }
+.hist-chip.pick { border-color: var(--good); }
+.controls-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== 数据包区 ===== */
+details.pkg { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+details.pkg > summary {
+  cursor: pointer; padding: 12px 14px; font-weight: 700; font-size: 13.5px;
+  list-style: none; display: flex; align-items: center; gap: 8px;
+}
+details.pkg > summary::before { content: "▸"; color: var(--faint); transition: transform .15s; }
+details.pkg[open] > summary::before { transform: rotate(90deg); }
+.pkg-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+textarea.pkg-json {
+  width: 100%; min-height: 150px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface-2); padding: 10px;
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+}
+.pkg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bm-result {
+  font-family: var(--font-mono); font-size: 12px;
+  border-radius: 9px; padding: 10px 12px; border: 1px solid var(--border);
+  background: var(--surface-2); white-space: pre-wrap;
+}
+.bm-result .pass { color: var(--good); font-weight: 700; }
+.bm-result .fail { color: var(--bad); font-weight: 700; }
+.err-banner {
+  background: var(--bad-soft); color: var(--bad);
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--border));
+  border-radius: 10px; padding: 10px 12px; font-size: 12.5px;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.err-banner code { font-family: var(--font-mono); font-size: 11.5px; }
+.rules-list { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid var(--border); display: inline-block; }
+.swatch.a { background: var(--team-a-soft); border-color: var(--team-a); }
+.swatch.b { background: var(--team-b-soft); border-color: var(--team-b); }
+.swatch.g { background: var(--good-soft); border-color: var(--good); }
+.swatch.vn { background: var(--ban-soft); border-color: var(--ban); }
+</style>
+
+<!-- ================= 引擎源码（主线程与 Web Worker 共用同一份） ================= -->
+<script type="text/draft-engine" id="engine-source">
+(function (global) {
+  'use strict';
+  var SLOTS = 4;
+  var LOSS_BASE = 0;
+  var NORMAL_BASE = 1000000000;
+  var WIN_BASE = 2000000000;
+  var MAX_POOL = 16;
+
+  function fail(msg) { throw new Error(msg); }
+  function isInt(v) { return typeof v === 'number' && Number.isInteger(v); }
+  function inRange(v) { return isInt(v) && Math.abs(v) <= 10000; }
+  function lexLess(a, b) {
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return a[i] < b[i];
+    }
+    return false;
+  }
+
+  function createDraftEngine(pkg) {
+    if (!pkg || typeof pkg !== 'object') fail('数据包不是合法对象');
+
+    /* ---------- 英雄与槽位分 ---------- */
+    if (!Array.isArray(pkg.heroes) || pkg.heroes.length === 0) fail('heroes 缺失或为空');
+    var sorted = pkg.heroes.slice().sort(function (x, y) { return x.id - y.id; });
+    var idSeen = Object.create(null);
+    for (var i = 0; i < sorted.length; i++) {
+      var h = sorted[i];
+      if (!isInt(h.id)) fail('英雄 id 必须是整数');
+      if (idSeen[h.id]) fail('英雄 id 重复: ' + h.id);
+      idSeen[h.id] = true;
+      for (var k = 0; k < 2; k++) {
+        var key = k === 0 ? 'a' : 'b';
+        if (!Array.isArray(h[key]) || h[key].length !== SLOTS) fail('英雄 ' + h.id + ' 的 ' + key + ' 必须是 4 项数组');
+        for (var s = 0; s < SLOTS; s++) {
+          var v = h[key][s];
+          if (v !== null && !inRange(v)) fail('英雄 ' + h.id + ' 的槽位分须为 null 或 ±10000 内整数');
+        }
+      }
+    }
+    var H = sorted.length;
+    if (H > 24) fail('英雄总数（含预选）超过 24，位掩码无法承载');
+    var idToGi = new Map();
+    sorted.forEach(function (h, idx) { idToGi.set(h.id, idx); });
+    function giOf(id, where) {
+      if (!idToGi.has(id)) fail(where + ' 引用了不存在的英雄 id: ' + id);
+      return idToGi.get(id);
+    }
+    var scoreA = sorted.map(function (h) { return h.a.slice(); });
+    var scoreB = sorted.map(function (h) { return h.b.slice(); });
+
+    /* ---------- 可用池（最多 16） ---------- */
+    if (!Array.isArray(pkg.available)) fail('available 必须是数组');
+    if (pkg.available.length > MAX_POOL) fail('available 超过 16 个角色');
+    var availIds = pkg.available.slice().sort(function (x, y) { return x - y; });
+    if (new Set(availIds).size !== availIds.length) fail('available 含重复编号');
+    var pool = availIds.map(function (id) { return giOf(id, 'available'); });
+    var P = pool.length;
+    var giToBit = new Int8Array(H).fill(-1);
+    pool.forEach(function (g, b) { giToBit[g] = b; });
+
+    /* ---------- 预选 ---------- */
+    function parseTeam(key) {
+      var arr = pkg[key];
+      if (!Array.isArray(arr)) fail(key + ' 必须是数组');
+      if (new Set(arr).size !== arr.length) fail(key + ' 含重复英雄');
+      var gis = arr.map(function (id) { return giOf(id, key); });
+      var mask = 0;
+      gis.forEach(function (g) { mask = (mask | (1 << g)) >>> 0; });
+      return { gis: gis, mask: mask };
+    }
+    var preA = parseTeam('a');
+    var preB = parseTeam('b');
+    preA.gis.forEach(function (g) {
+      if (giToBit[g] >= 0) fail('a 中英雄 ' + sorted[g].id + ' 不能同时出现在 available');
+      if (preB.mask & (1 << g)) fail('英雄 ' + sorted[g].id + ' 不能同时属于两队预选');
+    });
+    preB.gis.forEach(function (g) {
+      if (giToBit[g] >= 0) fail('b 中英雄 ' + sorted[g].id + ' 不能同时出现在 available');
+    });
+
+    /* ---------- 回合序列 ---------- */
+    if (!Array.isArray(pkg.turns) || pkg.turns.length === 0 || pkg.turns.length > 8) fail('turns 必须为 1~8 手的数组');
+    var turns = pkg.turns.map(function (t, idx) {
+      if (!Array.isArray(t) || t.length !== 2) fail('第 ' + (idx + 1) + ' 手格式应为 [队, 动作]');
+      if (t[0] !== "A" && t[0] !== "B") fail('第 ' + (idx + 1) + ' 手队伍只能是 A 或 B');
+      if (t[1] !== "pick" && t[1] !== "ban") fail('第 ' + (idx + 1) + ' 手动作只能是 pick 或 ban');
+      return { team: t[0], action: t[1] };
+    });
+    var pickA = 0, pickB = 0, banCount = 0;
+    turns.forEach(function (t) {
+      if (t.action === 'pick') { if (t.team === 'A') pickA++; else pickB++; }
+      else banCount++;
+    });
+    if (preA.gis.length + pickA !== 4) fail('A 预选人数 + 选人数必须恰为 4（当前 ' + (preA.gis.length + pickA) + '）');
+    if (preB.gis.length + pickB !== 4) fail('B 预选人数 + 选人数必须恰为 4（当前 ' + (preB.gis.length + pickB) + '）');
+    // 动作数只受池容量约束；动作数超过池的局面会在对应层以"无合法手"判负，属合法终局
+
+    /* ---------- 配合分 ---------- */
+    function parseSyn(key) {
+      var map = new Map();
+      (pkg[key] || []).forEach(function (e, idx) {
+        if (!Array.isArray(e) || e.length !== 3) fail(key + ' 第 ' + (idx + 1) + ' 项须为 [角色1,角色2,分值]');
+        var x = giOf(e[0], key), y = giOf(e[1], key);
+        if (x === y) fail(key + ' 配合分不能是同一角色');
+        if (!inRange(e[2])) fail(key + ' 分值须为 ±10000 内整数');
+        var pair = x < y ? x * H + y : y * H + x;
+        if (map.has(pair)) fail(key + ' 存在重复的配合对');
+        map.set(pair, e[2]);
+      });
+      return map;
+    }
+    var synA = parseSyn('synA');
+    var synB = parseSyn('synB');
+
+    /* ---------- 克制项 ---------- */
+    var counter = (pkg.counter || []).map(function (e, idx) {
+      if (!Array.isArray(e) || e.length !== 5) fail('counter 第 ' + (idx + 1) + ' 项须为 5 元素数组');
+      if (!isInt(e[1]) || e[1] < 0 || e[1] >= SLOTS) fail('counter 主动槽位越界');
+      if (!isInt(e[3]) || e[3] < 0 || e[3] >= SLOTS) fail('counter 对方槽位越界');
+      if (!inRange(e[4])) fail('counter 分值须为 ±10000 内整数');
+      return { ag: giOf(e[0], 'counter'), aslot: e[1], bg: giOf(e[2], 'counter'), bslot: e[3], val: e[4] };
+    });
+
+    /* ---------- 池掩码 → 全局掩码 ---------- */
+    var tableSize = Math.max(1, 1 << P);
+    var toGlobal = new Uint32Array(tableSize);
+    for (var m = 1; m < tableSize; m++) {
+      var lb = m & -m;
+      var bit = 31 - Math.clz32(lb);
+      toGlobal[m] = (toGlobal[m ^ lb] | (1 << pool[bit])) >>> 0;
+    }
+
+    /* ---------- 自写槽位匹配：合规判定 ---------- */
+    var feasMemo = [new Map(), new Map()];
+    function dfsFill(scores, memo, mask, slot) {
+      if (slot === SLOTS) return mask === 0 ? 1 : 0;
+      var key = mask * 4 + slot;
+      var cached = memo.get(key);
+      if (cached !== undefined) return cached;
+      var r = 0;
+      for (var mm = mask; mm; mm = mm & (mm - 1)) {
+        var low = mm & -mm;
+        var g = 31 - Math.clz32(low);
+        if (scores[g][slot] !== null && dfsFill(scores, memo, mask ^ low, slot + 1)) { r = 1; break; }
+      }
+      memo.set(key, r);
+      return r;
+    }
+    function canFill(team, gmask) {
+      var idx = team === 'A' ? 0 : 1;
+      return dfsFill(idx === 0 ? scoreA : scoreB, feasMemo[idx], gmask, 0) === 1;
+    }
+    /* 部分匹配：允许空槽。选入合法性 = 本队当前全部角色仍能互异占住合规槽，
+       剩余槽位留空（终局前本来就不会满编），保证未来仍有补满可能 */
+    var partialMemo = [new Map(), new Map()];
+    function dfsPartial(scores, memo, mask, slot) {
+      if (slot === SLOTS) return mask === 0 ? 1 : 0;
+      var key = mask * 4 + slot;
+      var cached = memo.get(key);
+      if (cached !== undefined) return cached;
+      var r = dfsPartial(scores, memo, mask, slot + 1); // 本槽留空
+      if (r === 0) {
+        for (var mm = mask; mm; mm = mm & (mm - 1)) {
+          var low = mm & -mm;
+          var g = 31 - Math.clz32(low);
+          if (scores[g][slot] !== null && dfsPartial(scores, memo, mask ^ low, slot + 1)) { r = 1; break; }
+        }
+      }
+      memo.set(key, r);
+      return r;
+    }
+    function canAssign(team, gmask) {
+      var idx = team === 'A' ? 0 : 1;
+      return dfsPartial(idx === 0 ? scoreA : scoreB, partialMemo[idx], gmask, 0) === 1;
+    }
+    if (!canAssign('A', preA.mask)) fail('A 预选英雄无法分配到互异合规槽位');
+    if (!canAssign('B', preB.mask)) fail('B 预选英雄无法分配到互异合规槽位');
+
+    /* 可满编 DP：本队还需从池中选 need 人。
+       reachable[池子集] = 存在一条把该子集全部选入、且每步选后仍可最终满编四槽的合法路径。
+       一次选入合法 ⇔ 选后池选集合仍 reachable。 */
+    var preMasks = [preA.mask, preB.mask];
+    var needCounts = [4 - preA.gis.length, 4 - preB.gis.length];
+    var reachable = [null, null];
+    function popCount(x) {
+      var n = 0;
+      while (x) { x &= x - 1; n++; }
+      return n;
+    }
+    (function buildReachable() {
+      for (var ti = 0; ti < 2; ti++) {
+        var team = ti === 0 ? 'A' : 'B';
+        var preMask = preMasks[ti];
+        var need = needCounts[ti];
+        var reach = new Uint8Array(tableSize);
+        // 基数 0：预选本身必须放得下（建包已校验），空池选集作为递归基
+        reach[0] = canAssign(team, preMask) ? 1 : 0;
+        for (var k = 1; k <= need; k++) {
+          for (var sub = 0; sub < tableSize; sub++) {
+            if (popCount(sub) !== k) continue;
+            // 该集合（预选 + k 个池角色）必须现在就放得进互异合规槽（允许其余槽空）
+            if (!canAssign(team, (preMask | toGlobal[sub]) >>> 0)) continue;
+            // 且至少去掉一个元素后的 k-1 集合可达，即存在合法的上一手
+            for (var mm2 = sub; mm2; mm2 = mm2 & (mm2 - 1)) {
+              var low2 = mm2 & -mm2;
+              if (reach[sub ^ low2]) { reach[sub] = 1; break; }
+            }
+          }
+        }
+        // 终层再保证：基数=need 的可达集合确实能占满四槽
+        for (var s2 = 0; s2 < tableSize; s2++) {
+          if (reach[s2] && popCount(s2) === need) {
+            if (!canFill(team, (preMask | toGlobal[s2]) >>> 0)) reach[s2] = 0;
+          }
+        }
+        reachable[ti] = reach;
+      }
+    })();
+    /* 选入合法性：池选掩码（池位）选入后，本队池选集合仍在可达表上 */
+    function pickLegal(team, pmAfter) {
+      var idx = team === 'A' ? 0 : 1;
+      return reachable[idx][pmAfter] === 1;
+    }
+
+    /* ---------- 自写最优槽位分配（个人分+配合，平分取编号序列小者） ---------- */
+    var assignCache = [new Map(), new Map()];
+    function bestAssign(team, gmask) {
+      var idx = team === 'A' ? 0 : 1;
+      var cache = assignCache[idx];
+      if (cache.has(gmask)) return cache.get(gmask);
+      var scores = idx === 0 ? scoreA : scoreB;
+      var syn = idx === 0 ? synA : synB;
+      var memo = new Map();
+      function dfs(mask, slot) {
+        if (slot === SLOTS) return mask === 0 ? { v: 0, seq: [] } : null;
+        var key = mask * 4 + slot;
+        if (memo.has(key)) return memo.get(key);
+        var best = null;
+        var chosenBefore = gmask ^ mask;
+        for (var mm = mask; mm; mm = mm & (mm - 1)) {
+          var low = mm & -mm;
+          var g = 31 - Math.clz32(low);
+          if (scores[g][slot] === null) continue;
+          var sub = dfs(mask ^ low, slot + 1);
+          if (sub === null) continue;
+          var v = scores[g][slot] + sub.v;
+          for (var cm = chosenBefore; cm; cm = cm & (cm - 1)) {
+            var cl = cm & -cm;
+            var cg = 31 - Math.clz32(cl);
+            var pair = g < cg ? g * H + cg : cg * H + g;
+            var sv = syn.get(pair);
+            if (sv !== undefined) v += sv;
+          }
+          var seq = [g].concat(sub.seq);
+          if (best === null || v > best.v || (v === best.v && lexLess(seq, best.seq))) best = { v: v, seq: seq };
+        }
+        memo.set(key, best);
+        return best;
+      }
+      var result = dfs(gmask, 0);
+      cache.set(gmask, result);
+      return result;
+    }
+    /* 部分最优分配（界面用；空槽记 -1，字典序中 -1 最小） */
+    function partialAssign(team, gmask) {
+      var idx = team === 'A' ? 0 : 1;
+      var scores = idx === 0 ? scoreA : scoreB;
+      var syn = idx === 0 ? synA : synB;
+      var memo = new Map();
+      function dfs(mask, slot) {
+        if (slot === SLOTS) return mask === 0 ? { v: 0, seq: [] } : null;
+        var key = mask * 4 + slot;
+        if (memo.has(key)) return memo.get(key);
+        var best = dfs(mask, slot + 1);
+        if (best) best = { v: best.v, seq: [-1].concat(best.seq) };
+        var chosenBefore = gmask ^ mask;
+        for (var mm = mask; mm; mm = mm & (mm - 1)) {
+          var low = mm & -mm;
+          var g = 31 - Math.clz32(low);
+          if (scores[g][slot] === null) continue;
+          var sub = dfs(mask ^ low, slot + 1);
+          if (sub === null) continue;
+          var v = scores[g][slot] + sub.v;
+          for (var cm = chosenBefore; cm; cm = cm & (cm - 1)) {
+            var cl = cm & -cm;
+            var cg = 31 - Math.clz32(cl);
+            var pair = g < cg ? g * H + cg : cg * H + g;
+            var sv = syn.get(pair);
+            if (sv !== undefined) v += sv;
+          }
+          var seq = [g].concat(sub.seq);
+          if (best === null || v > best.v || (v === best.v && lexLess(seq, best.seq))) best = { v: v, seq: seq };
+        }
+        memo.set(key, best);
+        return best;
+      }
+      return dfs(gmask, 0) || { v: 0, seq: [-1, -1, -1, -1] };
+    }
+
+    /* ---------- 终局分差 ---------- */
+    function terminalDiff(av, pa, pb) {
+      var ga = (preA.mask | toGlobal[pa]) >>> 0;
+      var gb = (preB.mask | toGlobal[pb]) >>> 0;
+      var aa = bestAssign('A', ga);
+      var bb = bestAssign('B', gb);
+      if (!aa || !bb) fail('终局存在无法填满四槽的队伍');
+      var d = aa.v - bb.v;
+      for (var i = 0; i < counter.length; i++) {
+        var e = counter[i];
+        var aOwnsAg = (ga & (1 << e.ag)) !== 0;
+        var bOwnsBg = (gb & (1 << e.bg)) !== 0;
+        // 正向：甲持主动角色并落在主动槽，乙持对方角色并落在对方槽 → 甲对乙 +val
+        if (aOwnsAg && bOwnsBg && aa.seq[e.aslot] === e.ag && bb.seq[e.bslot] === e.bg) {
+          d += e.val;
+        }
+        // 反向：乙持主动角色（落在乙的主动槽 aslot），甲持对方角色（落在甲的对方槽 bslot）→ 乙对甲，扣分差
+        var bOwnsAg = (gb & (1 << e.ag)) !== 0;
+        var aOwnsBg = (ga & (1 << e.bg)) !== 0;
+        if (bOwnsAg && aOwnsBg && bb.seq[e.aslot] === e.ag && aa.seq[e.bslot] === e.bg) {
+          d -= e.val;
+        }
+      }
+      if (d <= -900000000 || d >= 900000000) fail('终局分差超出编码安全区间');
+      return d;
+    }
+
+    /* ---------- 合法着法 ---------- */
+    function legalMoves(av, pa, pb, t) {
+      if (t >= turns.length) return { done: true, moves: [] };
+      var turn = turns[t];
+      var pm = turn.team === 'A' ? pa : pb;
+      var out = [];
+      for (var bit = 0; bit < P; bit++) {
+        var bm = 1 << bit;
+        if (!(av & bm)) continue;
+        if (turn.action === 'ban') {
+          out.push({ bit: bit, gi: pool[bit], id: sorted[pool[bit]].id, legal: true });
+        } else {
+          var nm = pm | bm;
+          var ok = pickLegal(turn.team, nm);
+          out.push({
+            bit: bit, gi: pool[bit], id: sorted[pool[bit]].id,
+            legal: ok, reason: ok ? null : '选后本队将无法把四个角色分配到互异合规槽位'
+          });
+        }
+      }
+      return { done: false, turn: turn, moves: out };
+    }
+
+    /* ---------- 记忆化极小化极大 ---------- */
+    var memo = new Map();
+    var visited = 0;
+    function packKey(av, pa, pb, t) {
+      return (((av * 65536 + pa) * 65536 + pb) * 16 + t);
+    }
+    function solve(av, pa, pb, t) {
+      if (t === turns.length) {
+        return { v: NORMAL_BASE + terminalDiff(av, pa, pb), bit: -1 };
+      }
+      var key = packKey(av, pa, pb, t);
+      var got = memo.get(key);
+      if (got !== undefined) {
+        var code = got % 32;
+        return { v: Math.floor(got / 32), bit: code === 0 ? -1 : code - 1 };
+      }
+      visited++;
+      var turn = turns[t];
+      var maximizing = turn.team === 'A';
+      var pm = turn.team === 'A' ? pa : pb;
+      var bestV = maximizing ? -1 : Infinity;
+      var bestBit = -1;
+      for (var bit = 0; bit < P; bit++) {
+        var bm = 1 << bit;
+        if (!(av & bm)) continue;
+        var r;
+        if (turn.action === 'pick') {
+          var nm = pm | bm;
+          if (!pickLegal(turn.team, nm)) continue;
+          r = turn.team === 'A'
+            ? solve(av ^ bm, nm, pb, t + 1)
+            : solve(av ^ bm, pa, nm, t + 1);
+        } else {
+          r = solve(av ^ bm, pa, pb, t + 1);
+        }
+        if ((maximizing && r.v > bestV) || (!maximizing && r.v < bestV)) {
+          bestV = r.v;
+          bestBit = bit;
+        }
+      }
+      if (bestBit === -1) bestV = maximizing ? LOSS_BASE : WIN_BASE;
+      memo.set(key, bestV * 32 + (bestBit + 1));
+      return { v: bestV, bit: bestBit };
+    }
+
+    function stepState(av, pa, pb, t, bit) {
+      var turn = turns[t];
+      var bm = 1 << bit;
+      if (turn.action === 'pick') {
+        if (turn.team === 'A') return { av: av ^ bm, pa: pa | bm, pb: pb, t: t + 1 };
+        return { av: av ^ bm, pa: pa, pb: pb | bm, t: t + 1 };
+      }
+      return { av: av ^ bm, pa: pa, pb: pb, t: t + 1 };
+    }
+
+    /* 求某个首手的精确值与最优续手（续手沿记忆化结果行走） */
+    function solveRoot(av, pa, pb, t, bit) {
+      var child = stepState(av, pa, pb, t, bit);
+      var first = solve(child.av, child.pa, child.pb, child.t);
+      var cont = [];
+      var s = child;
+      while (s.t < turns.length) {
+        var rv = solve(s.av, s.pa, s.pb, s.t);
+        if (rv.bit < 0) break;
+        cont.push({
+          bit: rv.bit,
+          team: turns[s.t].team,
+          action: turns[s.t].action,
+          id: sorted[pool[rv.bit]].id
+        });
+        s = stepState(s.av, s.pa, s.pb, s.t, rv.bit);
+      }
+      var endValue = solve(s.av, s.pa, s.pb, s.t).v;
+      return { value: first.v, continuation: cont, endValue: endValue, ended: s.t === turns.length };
+    }
+
+    function analyze(av, pa, pb, t) {
+      var info = legalMoves(av, pa, pb, t);
+      if (info.done) {
+        return {
+          done: true, diff: terminalDiff(av, pa, pb), moves: [],
+          visited: visited, memoSize: memo.size
+        };
+      }
+      var moves = info.moves.map(function (m) {
+        var row = { bit: m.bit, gi: m.gi, id: m.id, legal: m.legal, reason: m.reason };
+        if (m.legal) {
+          var r = solveRoot(av, pa, pb, t, m.bit);
+          row.value = r.value;
+          row.continuation = r.continuation;
+          row.endValue = r.endValue;
+          row.ended = r.ended;
+        }
+        return row;
+      });
+      return { done: false, turn: info.turn, moves: moves, visited: visited, memoSize: memo.size };
+    }
+
+    /* 贪心对照：只看当前最优分配总分，不推演对手 */
+    function greedyPick(av, pa, pb, t) {
+      var info = legalMoves(av, pa, pb, t);
+      if (info.done || info.turn.action !== 'pick') return null;
+      var team = info.turn.team;
+      var preMask = team === 'A' ? preA.mask : preB.mask;
+      var pm = team === 'A' ? pa : pb;
+      var best = null;
+      info.moves.forEach(function (m) {
+        if (!m.legal) return;
+        var nm = pm | (1 << m.bit);
+        var gmask = (preMask | toGlobal[nm]) >>> 0;
+        var r = partialAssign(team, gmask);
+        if (best === null || r.v > best.v || (r.v === best.v && m.id < best.id)) {
+          best = { bit: m.bit, id: m.id, v: r.v };
+        }
+      });
+      return best;
+    }
+
+    return {
+      heroes: sorted,
+      pool: pool,
+      turns: turns,
+      initialState: function () { return { av: P === 0 ? 0 : (1 << P) - 1, pa: 0, pb: 0, t: 0 }; },
+      rootValue: function (av, pa, pb, t) { return solve(av, pa, pb, t).v; },
+      legalMoves: legalMoves,
+      stepState: stepState,
+      analyze: analyze,
+      solveRoot: solveRoot,
+      greedyPick: greedyPick,
+      partialAssign: partialAssign,
+      bestAssign: bestAssign,
+      canFill: canFill,
+      canAssign: canAssign,
+      terminalDiff: terminalDiff,
+      decodeValue: function (v) {
+        if (v >= WIN_BASE) return { kind: 'win' };
+        if (v >= NORMAL_BASE) return { kind: 'normal', diff: v - NORMAL_BASE };
+        return { kind: 'loss' };
+      },
+      stateMasks: function (pa, pb) {
+        return {
+          ga: (preA.mask | toGlobal[pa]) >>> 0,
+          gb: (preB.mask | toGlobal[pb]) >>> 0
+        };
+      },
+      stats: function () { return { visited: visited, memoSize: memo.size, poolSize: P }; },
+      constants: { LOSS_BASE: LOSS_BASE, NORMAL_BASE: NORMAL_BASE, WIN_BASE: WIN_BASE }
+    };
+  }
+
+  /* 基准形状：双队各预选两名固定占槽 0/1，16 名同分工兵只可占槽 2/3，8 手 ban/pick */
+  function buildBenchmarkPackage() {
+    var heroes = [];
+    for (var id = 1; id <= 16; id++) {
+      heroes.push({ id: id, a: [null, null, 1, 1], b: [null, null, 1, 1] });
+    }
+    heroes.push({ id: 101, a: [1, 1, null, null], b: [null, null, null, null] });
+    heroes.push({ id: 102, a: [1, 1, null, null], b: [null, null, null, null] });
+    heroes.push({ id: 201, a: [null, null, null, null], b: [1, 1, null, null] });
+    heroes.push({ id: 202, a: [null, null, null, null], b: [1, 1, null, null] });
+    return {
+      rules: ['满额计时基准：双队各预选两名固定占槽0和1，16名可用角色只可占槽2和3且两队评分全相同。',
+        '顺序为 A禁、B禁、A选、B选、A禁、B禁、A选、B选，配合与克制均为空。'],
+      heroes: heroes,
+      available: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+      a: [101, 102],
+      b: [201, 202],
+      turns: [['A', 'ban'], ['B', 'ban'], ['A', 'pick'], ['B', 'pick'], ['A', 'ban'], ['B', 'ban'], ['A', 'pick'], ['B', 'pick']],
+      synA: [], synB: [], counter: []
+    };
+  }
+
+  global.__DraftEngine = {
+    createDraftEngine: createDraftEngine,
+    buildBenchmarkPackage: buildBenchmarkPackage,
+    lexLess: lexLess
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+
+<!-- ================= 界面与 Worker 引导 ================= -->
+<script>
+function __draftBoot() {
+  'use strict';
+  var engineSrc = document.getElementById('engine-source').textContent;
+  // eslint-disable-next-line no-new-func
+  new Function(engineSrc)();
+  var E = globalThis.__DraftEngine;
+
+  var DEFAULT_PKG = {
+    rules: ['heroes列出唯一数字id和双方槽分a、b，长度均为4，null代表不可占槽。available为最多16个起始可用编号，a和b为两队已选编号。turns每项为[队A或B,动作pick或ban]。'],
+    heroes: [
+      { id: 1, a: [null, null, null, 3], b: [null, null, null, 1] },
+      { id: 2, a: [null, null, null, 2], b: [null, null, null, 4] },
+      { id: 11, a: [1, null, null, null], b: [null, null, null, null] },
+      { id: 12, a: [null, 1, null, null], b: [null, null, null, null] },
+      { id: 13, a: [null, null, 1, null], b: [null, null, null, null] },
+      { id: 21, a: [null, null, null, null], b: [1, null, null, null] },
+      { id: 22, a: [null, null, null, null], b: [null, 1, null, null] },
+      { id: 23, a: [null, null, null, null], b: [null, null, 1, null] }
+    ],
+    available: [1, 2],
+    a: [11, 12, 13],
+    b: [21, 22, 23],
+    turns: [['A', 'pick'], ['B', 'pick']],
+    synA: [], synB: [], counter: []
+  };
+
+  /* ---------- DOM 速查 ---------- */
+  var $ = function (id) { return document.getElementById(id); };
+  var els = {
+    themeBtn: $('theme-btn'),
+    turnStrip: $('turn-strip'),
+    teamA: $('team-a-board'),
+    teamB: $('team-b-board'),
+    pool: $('pool-grid'),
+    banner: $('status-banner'),
+    movesTableWrap: $('moves-table-wrap'),
+    history: $('history-row'),
+    undo: $('btn-undo'),
+    reset: $('btn-reset'),
+    pkgText: $('pkg-text'),
+    pkgApply: $('pkg-apply'),
+    pkgSample: $('pkg-sample'),
+    pkgBench: $('pkg-bench'),
+    exportBox: $('export-box'),
+    btnExport: $('btn-export'),
+    btnCopy: $('btn-copy'),
+    importBox: $('import-box'),
+    btnImport: $('btn-import'),
+    btnFile: $('import-file'),
+    verifyResult: $('verify-result'),
+    bmResult: $('bm-result'),
+    errBanner: $('err-banner'),
+    rulesBox: $('rules-box'),
+    legend: $('legend')
+  };
+
+  /* ---------- 主题 ---------- */
+  function applyTheme(t) {
+    if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  try { applyTheme(localStorage.getItem('draft-theme') || ''); } catch (e) {}
+  els.themeBtn.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme') ||
+      (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem('draft-theme', next); } catch (e) {}
+  });
+
+  /* ---------- 应用状态 ---------- */
+  var pkg = null;
+  var engine = null;
+  var state = null;
+  var history = [];           // {bit, team, action, id}
+  var analysis = null;        // 最近一次 analyze 结果
+  var analysisReq = 0;
+  var analyzeTimer = null;
+  var pool = null;            // Worker 池
+
+  function showError(msg) {
+    if (!msg) { els.errBanner.hidden = true; return; }
+    els.errBanner.hidden = false;
+    $('err-text').textContent = msg;
+  }
+
+  /* ---------- Worker 池 ---------- */
+  var WORKER_BOOT = engineSrc + '\nvar __DE=globalThis.__DraftEngine;\nself.onmessage=function(e){var m=e.data;\n' +
+    'if(m.type==="init"){self.__eng=__DE.createDraftEngine(m.pkg);self.postMessage({type:"ready",id:m.id});}\n' +
+    'else if(m.type==="analyze"){var s=m.state;var t0=Date.now();\n' +
+    'var results=m.bits.map(function(bit){var r=self.__eng.solveRoot(s.av,s.pa,s.pb,s.t,bit);return {bit:bit,value:r.value,continuation:r.continuation,endValue:r.endValue,ended:r.ended};});\n' +
+    'var st=self.__eng.stats();\n' +
+    'self.postMessage({type:"result",id:m.id,reqId:m.reqId,results:results,visited:st.visited,memoSize:st.memoSize,ms:Date.now()-t0});}\n' +
+    'else if(m.type==="benchmark"){var eng=__DE.createDraftEngine(m.pkg);var st0=eng.initialState();var info=eng.legalMoves(st0.av,st0.pa,st0.pb,0);\n' +
+    'var bits=info.moves.filter(function(x){return x.legal;}).map(function(x){return x.bit;});\n' +
+    'var t1=Date.now();var rows=bits.map(function(b){return eng.solveRoot(st0.av,st0.pa,st0.pb,0,b);});\n' +
+    'var st2=eng.stats();\n' +
+    'self.postMessage({type:"benchmark-done",id:m.id,bits:bits,rows:rows,visited:st2.visited,memoSize:st2.memoSize,ms:Date.now()-t1});}\n};';
+
+  function SolverPool(size) {
+    this.size = Math.max(1, size);
+    this.workers = [];
+    this.seq = 0;
+    this.fallbackEngine = null;
+  }
+  SolverPool.prototype.start = function () {
+    var self = this;
+    var blob = new Blob([WORKER_BOOT], { type: 'application/javascript' });
+    var url = URL.createObjectURL(blob);
+    var promises = [];
+    for (var i = 0; i < this.size; i++) {
+      (function (idx) {
+        promises.push(new Promise(function (resolve) {
+          var w;
+          try { w = new Worker(url); } catch (e) { resolve(false); return; }
+          w.onmessage = function (e) {
+            var msg = e.data;
+            if (msg.type === 'ready' && msg.id === 'init-' + idx) {
+              self.workers[idx].busy = false;
+              resolve(true);
+            } else if (self.handlers[msg.id]) {
+              self.handlers[msg.id](msg);
+            }
+          };
+          w.onerror = function () { resolve(false); };
+          self.workers[idx] = { worker: w, busy: false };
+          w.postMessage({ type: 'init', id: 'init-' + idx, pkg: pkg });
+        }));
+      })(i);
+    }
+    return Promise.all(promises).then(function (oks) {
+      self.alive = oks.some(Boolean);
+      if (!self.alive) self.fallbackEngine = E.createDraftEngine(pkg);
+      return self.alive;
+    });
+  };
+  SolverPool.prototype.handlers = {};
+  SolverPool.prototype.analyze = function (st, legalBits) {
+    var self = this;
+    if (!this.alive) {
+      var t0 = Date.now();
+      var rows = legalBits.map(function (bit) {
+        var r = self.fallbackEngine.solveRoot(st.av, st.pa, st.pb, st.t, bit);
+        return { bit: bit, value: r.value, continuation: r.continuation, endValue: r.endValue, ended: r.ended };
+      });
+      var st2 = self.fallbackEngine.stats();
+      return Promise.resolve({ rows: rows, visited: st2.visited, memoSize: st2.memoSize, ms: Date.now() - t0, parallel: false });
+    }
+    var id = 'r-' + (++this.seq);
+    var buckets = this.workers.map(function () { return []; });
+    legalBits.forEach(function (bit, i) { buckets[i % self.workers.length].push(bit); });
+    var collected = [];
+    var visited = 0, memoSize = 0, maxMs = 0;
+    var pending = 0;
+    return new Promise(function (resolve, reject) {
+      self.handlers[id] = function (msg) {
+        collected = collected.concat(msg.results);
+        visited += msg.visited; memoSize += msg.memoSize; maxMs = Math.max(maxMs, msg.ms);
+        pending--;
+        if (pending === 0) {
+          delete self.handlers[id];
+          resolve({ rows: collected, visited: visited, memoSize: memoSize, ms: maxMs, parallel: true });
+        }
+      };
+      buckets.forEach(function (bits, idx) {
+        if (bits.length === 0) return;
+        pending++;
+        self.workers[idx].worker.postMessage({ type: 'analyze', id: id, reqId: self.seq, state: st, bits: bits });
+      });
+      if (pending === 0) resolve({ rows: [], visited: 0, memoSize: 0, ms: 0, parallel: true });
+    });
+  };
+  SolverPool.prototype.benchmark = function () {
+    var self = this;
+    var bp = E.buildBenchmarkPackage();
+    if (!this.alive) {
+      var eng = E.createDraftEngine(bp);
+      var s0 = eng.initialState();
+      var info = eng.legalMoves(s0.av, s0.pa, s0.pb, 0);
+      var bits = info.moves.filter(function (x) { return x.legal; }).map(function (x) { return x.bit; });
+      var t1 = Date.now();
+      var rows = bits.map(function (b) { return eng.solveRoot(s0.av, s0.pa, s0.pb, 0, b); });
+      var st2 = eng.stats();
+      return Promise.resolve({ bits: bits, rows: rows, visited: st2.visited, memoSize: st2.memoSize, ms: Date.now() - t1, parallel: false });
+    }
+    var id = 'bm-' + (++this.seq);
+    return new Promise(function (resolve, reject) {
+      self.handlers[id] = function (msg) { delete self.handlers[id]; resolve(msg); };
+      // 全部首手交给第一个 worker：基准形状下单 worker 计时更能反映搜索本身
+      self.workers[0].worker.postMessage({ type: 'benchmark', id: id, pkg: bp });
+    });
+  };
+  SolverPool.prototype.destroy = function () {
+    this.workers.forEach(function (w) { try { w.worker.terminate(); } catch (e) {} });
+    this.workers = [];
+    this.handlers = {};
+  };
+
+  /* ---------- 载入数据包 ---------- */
+  function loadPackage(nextPkg) {
+    var eng = E.createDraftEngine(nextPkg); // 校验，抛错即拒绝
+    if (pool) pool.destroy();
+    pkg = nextPkg;
+    engine = eng;
+    history = [];
+    state = engine.initialState();
+    analysis = null;
+    var n = Math.min(4, Math.max(1, navigator.hardwareConcurrency || 4));
+    pool = new SolverPool(n);
+    els.pkgText.value = JSON.stringify(pkg, null, 2);
+    renderRules();
+    pool.start().then(function () { requestAnalysis(); });
+    scheduleRender();
+  }
+
+  function renderRules() {
+    els.rulesBox.innerHTML = '';
+    (pkg.rules || []).forEach(function (r) {
+      var li = document.createElement('li');
+      li.textContent = r;
+      els.rulesBox.appendChild(li);
+    });
+  }
+
+  /* ---------- 着法应用/撤回 ---------- */
+  function applyMove(bit) {
+    var info = engine.legalMoves(state.av, state.pa, state.pb, state.t);
+    var m = info.moves.filter(function (x) { return x.bit === bit; })[0];
+    if (!m || !m.legal) return;
+    history.push({ bit: bit, team: info.turn.team, action: info.turn.action, id: m.id });
+    state = engine.stepState(state.av, state.pa, state.pb, state.t, bit);
+    analysis = null;
+    scheduleRender();
+    requestAnalysis();
+  }
+  function undo() {
+    if (history.length === 0) return;
+    history.pop();
+    state = engine.initialState();
+    for (var i = 0; i < history.length; i++) {
+      state = engine.stepState(state.av, state.pa, state.pb, state.t, history[i].bit);
+    }
+    analysis = null;
+    scheduleRender();
+    requestAnalysis();
+  }
+  function reset() {
+    if (history.length === 0) return;
+    history = [];
+    state = engine.initialState();
+    analysis = null;
+    scheduleRender();
+    requestAnalysis();
+  }
+
+  /* ---------- 精确推演调度 ---------- */
+  function requestAnalysis() {
+    if (analyzeTimer) clearTimeout(analyzeTimer);
+    analyzeTimer = setTimeout(runAnalysis, 60);
+  }
+  function runAnalysis() {
+    var req = ++analysisReq;
+    var info = engine.legalMoves(state.av, state.pa, state.pb, state.t);
+    if (info.done) {
+      analysis = engine.analyze(state.av, state.pa, state.pb, state.t);
+      analysis.req = req;
+      scheduleRender();
+      return;
+    }
+    var bits = info.moves.filter(function (m) { return m.legal; }).map(function (m) { return m.bit; });
+    scheduleRender(); // 先出“推演中”
+    if (bits.length === 0) {
+      analysis = { done: false, turn: info.turn, moves: info.moves, visited: 0, memoSize: 0, req: req, empty: true };
+      scheduleRender();
+      return;
+    }
+    pool.analyze(state, bits).then(function (r) {
+      if (req !== analysisReq) return;
+      var byBit = {};
+      r.rows.forEach(function (row) { byBit[row.bit] = row; });
+      var moves = info.moves.map(function (m) {
+        var row = { bit: m.bit, id: m.id, legal: m.legal, reason: m.reason };
+        if (m.legal && byBit[m.bit]) {
+          row.value = byBit[m.bit].value;
+          row.continuation = byBit[m.bit].continuation;
+          row.endValue = byBit[m.bit].endValue;
+          row.ended = byBit[m.bit].ended;
+        }
+        return row;
+      });
+      analysis = {
+        done: false, turn: info.turn, moves: moves,
+        visited: r.visited, memoSize: r.memoSize, ms: r.ms, parallel: r.parallel, req: req
+      };
+      scheduleRender();
+    }).catch(function (err) {
+      if (req !== analysisReq) return;
+      showError('推演失败：' + err.message);
+    });
+  }
+
+  /* ---------- 渲染 ---------- */
+  var renderQueued = false;
+  function scheduleRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () { renderQueued = false; render(); });
+  }
+
+  function valueLabel(v) {
+    var d = engine.decodeValue(v);
+    if (d.kind === 'win') return { text: '甲强制胜', cls: 'win' };
+    if (d.kind === 'loss') return { text: '乙强制胜', cls: 'loss' };
+    var diff = d.diff;
+    if (diff === 0) return { text: '分差 0', cls: 'zero' };
+    return { text: '分差 ' + (diff > 0 ? '+' : '') + diff, cls: diff > 0 ? 'pos' : 'neg' };
+  }
+
+  function renderTurnStrip() {
+    els.turnStrip.innerHTML = '';
+    engine.turns.forEach(function (turn, idx) {
+      var chip = document.createElement('div');
+      chip.className = 'turn-chip';
+      if (idx < state.t) chip.classList.add('done');
+      if (idx === state.t && state.t < engine.turns.length) chip.classList.add('current');
+      var no = document.createElement('span');
+      no.className = 'no';
+      no.textContent = '第' + (idx + 1) + '手';
+      var team = document.createElement('span');
+      team.className = 'tag ' + (turn.team === 'A' ? 'a' : 'b');
+      team.textContent = turn.team === 'A' ? '甲' : '乙';
+      var act = document.createElement('span');
+      act.className = 'tag ' + (turn.action === 'pick' ? 'pick' : 'ban');
+      act.textContent = turn.action === 'pick' ? '选入' : '禁用';
+      chip.appendChild(no); chip.appendChild(team); chip.appendChild(act);
+      if (idx < history.length) {
+        var hid = document.createElement('span');
+        hid.className = 'hero-id';
+        hid.textContent = '#' + history[idx].id;
+        chip.appendChild(hid);
+      }
+      els.turnStrip.appendChild(chip);
+    });
+  }
+
+  function renderTeamBoard(team) {
+    var isA = team === 'A';
+    var root = isA ? els.teamA : els.teamB;
+    var pickMask = isA ? state.pa : state.pb;
+    var masks = engine.stateMasks(state.pa, state.pb);
+    var gmask = isA ? masks.ga : masks.gb;
+    var r = engine.partialAssign(team, gmask);
+    var heroes = engine.heroes;
+    var scores = isA ? heroes.map(function (h) { return h.a; }) : heroes.map(function (h) { return h.b; });
+    root.querySelector('.slots').innerHTML = '';
+    for (var s = 0; s < 4; s++) {
+      var slot = document.createElement('div');
+      slot.className = 'slot' + (r.seq[s] >= 0 ? ' filled' : '');
+      var label = document.createElement('div');
+      label.className = 's-label';
+      label.textContent = '槽 ' + s;
+      slot.appendChild(label);
+      if (r.seq[s] >= 0) {
+        var gid = document.createElement('div');
+        gid.className = 's-id';
+        gid.textContent = heroes[r.seq[s]].id;
+        var sc = document.createElement('div');
+        sc.className = 's-score';
+        sc.textContent = '个人分 ' + scores[r.seq[s]][s];
+        slot.appendChild(gid); slot.appendChild(sc);
+      }
+      root.querySelector('.slots').appendChild(slot);
+    }
+    var preIds = isA ? pkg.a : pkg.b;
+    root.querySelector('.team-head .pre').textContent = '预选 ' + preIds.length + ' 人 · 共 ' +
+      (preIds.length + (isA ? countPicks('A') : countPicks('B'))) + '/4';
+    root.querySelector('.team-foot').innerHTML = '';
+    var foot = root.querySelector('.team-foot');
+    foot.appendChild(footItem('当前最优个人+配合', r.v));
+    var full = preIds.length + (isA ? countPicks('A') : countPicks('B')) === 4;
+    if (full) {
+      var best = engine.bestAssign(team, gmask);
+      foot.appendChild(footItem('满编最优总分', best.v));
+      var seq = document.createElement('span');
+      seq.innerHTML = '槽位序列 <b class="mono">[' + best.seq.map(function (g) { return heroes[g].id; }).join(', ') + ']</b>';
+      foot.appendChild(seq);
+    }
+  }
+  function footItem(label, val) {
+    var span = document.createElement('span');
+    span.innerHTML = label + ' <b>' + val + '</b>';
+    return span;
+  }
+  function countPicks(team) {
+    var mask = team === 'A' ? state.pa : state.pb;
+    var n = 0;
+    while (mask) { mask &= mask - 1; n++; }
+    return n;
+  }
+
+  function renderPool() {
+    els.pool.innerHTML = '';
+    var usedA = state.pa, usedB = state.pb, av = state.av;
+    var greedy = null;
+    if (analysis && !analysis.done && analysis.turn && analysis.turn.action === 'pick') {
+      greedy = engine.greedyPick(state.av, state.pa, state.pb, state.t);
+    }
+    var optBit = optimalBit();
+    engine.heroes.forEach(function (h, gi) {
+      var bit = gi < engine.heroes.length ? bitOfGi(gi) : -1;
+      var inPool = bit >= 0;
+      var card = document.createElement(inPool ? 'button' : 'div');
+      card.className = 'hero-card';
+      if (inPool) card.type = 'button';
+      var banned = inPool && !(av & (1 << bit));
+      var globalBit = 1 << gi;
+      var masksNow = engine.stateMasks(state.pa, state.pb);
+      var inA = (masksNow.ga & globalBit) !== 0;
+      var inB = (masksNow.gb & globalBit) !== 0;
+      if (!inPool || banned || inA || inB) {
+        card.classList.add('used');
+        if (banned) card.classList.add('banned');
+        if (inPool) card.disabled = true;
+      }
+      var idRow = document.createElement('div');
+      idRow.className = 'hero-id-row';
+      var idSpan = document.createElement('span');
+      idSpan.className = 'id';
+      idSpan.textContent = h.id;
+      idRow.appendChild(idSpan);
+      if (inPool && optBit === bit) {
+        var star = document.createElement('span');
+        star.className = 'star';
+        star.textContent = '★ 最优';
+        star.title = '精确极小化极大最优首手';
+        idRow.appendChild(star);
+      }
+      if (inPool && greedy && greedy.bit === bit) {
+        var g = document.createElement('span');
+        g.className = 'greedy-dot';
+        g.textContent = '贪心';
+        g.title = '只按当前最高分的贪心选择（不推演对手下一手）';
+        idRow.appendChild(g);
+      }
+      card.appendChild(idRow);
+
+      var rows = document.createElement('div');
+      rows.className = 'score-rows';
+      rows.appendChild(scoreLine('a', h.a));
+      rows.appendChild(scoreLine('b', h.b));
+      card.appendChild(rows);
+
+      if (inPool && !banned && !inA && !inB) {
+        var legality = currentLegality(bit);
+        if (legality && !legality.legal) {
+          card.classList.add('illegal-pick');
+          card.disabled = true;
+          var note = document.createElement('div');
+          note.className = 'illegal-note';
+          note.textContent = '选入不合规';
+          note.title = legality.reason || '';
+          card.appendChild(note);
+        } else if (analysis && analysis.moves) {
+          var row = analysis.moves.filter(function (x) { return x.bit === bit; })[0];
+          var badge = document.createElement('div');
+          if (row && row.value !== undefined) {
+            var lab = valueLabel(row.value);
+            badge.className = 'value-badge ' + lab.cls;
+            badge.textContent = lab.text;
+          } else {
+            badge.className = 'value-badge pending';
+            badge.textContent = '推演中…';
+          }
+          card.appendChild(badge);
+          if (!card.disabled) {
+            card.addEventListener('click', function () { applyMove(bit); });
+          }
+        }
+      }
+      els.pool.appendChild(card);
+    });
+  }
+
+  function bitOfGi(gi) {
+    var poolGis = engine.pool;
+    for (var i = 0; i < poolGis.length; i++) if (poolGis[i] === gi) return i;
+    return -1;
+  }
+  function currentLegality(bit) {
+    if (!analysis || !analysis.moves) return null;
+    return analysis.moves.filter(function (x) { return x.bit === bit; })[0] || null;
+  }
+  function optimalBit() {
+    if (!analysis || analysis.done || !analysis.moves) return -1;
+    var legal = analysis.moves.filter(function (m) { return m.legal && m.value !== undefined; });
+    if (legal.length === 0) return -1;
+    var maximizing = analysis.turn.team === 'A';
+    legal.sort(function (x, y) {
+      if (x.value !== y.value) return maximizing ? y.value - x.value : x.value - y.value;
+      return x.id - y.id;
+    });
+    return legal[0].bit;
+  }
+
+  function scoreLine(who, arr) {
+    var line = document.createElement('div');
+    line.className = 'score-line ' + who;
+    var w = document.createElement('span');
+    w.className = 'who';
+    w.textContent = who === 'a' ? '甲' : '乙';
+    line.appendChild(w);
+    arr.forEach(function (v) {
+      var c = document.createElement('span');
+      c.className = 'score-cell' + (v === null ? ' null' : '');
+      c.textContent = v === null ? '·' : v;
+      line.appendChild(c);
+    });
+    return line;
+  }
+
+  function renderBannerAndTable() {
+    var banner = els.banner;
+    banner.className = 'banner';
+    banner.innerHTML = '';
+    if (!analysis) {
+      banner.classList.add('info');
+      var sp = document.createElement('span');
+      sp.className = 'spinner';
+      banner.appendChild(sp);
+      banner.appendChild(document.createTextNode('正在求解精确终局值…'));
+    } else if (analysis.done) {
+      banner.classList.add('good');
+      var d = analysis.diff;
+      banner.textContent = '已至终局：甲 − 乙 克制后分差 = ' + (d > 0 ? '+' : '') + d +
+        '（含个人槽位分、队内配合与双方克制）';
+    } else {
+      var legalCount = analysis.moves.filter(function (m) { return m.legal; }).length;
+      if (legalCount === 0) {
+        banner.classList.add('bad');
+        banner.textContent = '第 ' + (state.t + 1) + ' 手 ' +
+          (analysis.turn.team === 'A' ? '甲' : '乙') +
+          (analysis.turn.action === 'pick' ? ' 选入' : ' 禁用') +
+          ' 无合法着法，' + (analysis.turn.team === 'A' ? '甲' : '乙') + ' 判负';
+      } else {
+        banner.classList.add('info');
+        var turn = analysis.turn;
+        var txt = '第 ' + (state.t + 1) + ' 手：' +
+          (turn.team === 'A' ? '甲' : '乙') + (turn.action === 'pick' ? ' 选入（取最大值）' : ' 禁用（取' + (turn.team === 'A' ? '最大' : '最小') + '值）') +
+          ' · 合法着法 ' + legalCount + ' 个';
+        if (analysis.visited) {
+          txt += ' · 记忆状态 ' + analysis.visited.toLocaleString() + ' 节点 · 分片耗时 ' + analysis.ms + 'ms' +
+            (analysis.parallel ? '（' + Math.min(4, navigator.hardwareConcurrency || 4) + ' worker 并行）' : '（主线程）');
+        }
+        banner.textContent = txt;
+      }
+    }
+
+    var wrap = els.movesTableWrap;
+    wrap.innerHTML = '';
+    if (analysis && !analysis.done && analysis.moves && analysis.moves.some(function (m) { return m.legal; })) {
+      var table = document.createElement('table');
+      table.className = 'moves';
+      var thead = document.createElement('thead');
+      thead.innerHTML = '<tr><th>着法</th><th>英雄</th><th>精确值（甲视角）</th><th>最优续手</th><th></th></tr>';
+      table.appendChild(thead);
+      var tbody = document.createElement('tbody');
+      var rows = analysis.moves.filter(function (m) { return m.legal; }).slice();
+      var maximizing = analysis.turn.team === 'A';
+      rows.sort(function (x, y) {
+        if (x.value !== y.value) return maximizing ? y.value - x.value : x.value - y.value;
+        return x.id - y.id;
+      });
+      var opt = rows[0];
+      var greedy = analysis.turn.action === 'pick'
+        ? engine.greedyPick(state.av, state.pa, state.pb, state.t) : null;
+      rows.forEach(function (m) {
+        var tr = document.createElement('tr');
+        tr.className = 'clickable' + (m === opt ? ' opt' : '');
+        var td0 = document.createElement('td');
+        td0.innerHTML = '<span class="tag ' + (analysis.turn.team === 'A' ? 'a' : 'b') + '">' +
+          (analysis.turn.team === 'A' ? '甲' : '乙') + '</span> ' +
+          '<span class="tag ' + (analysis.turn.action === 'pick' ? 'pick' : 'ban') + '">' +
+          (analysis.turn.action === 'pick' ? '选入' : '禁用') + '</span>';
+        var td1 = document.createElement('td');
+        td1.innerHTML = '<span class="mono"><b>#' + m.id + '</b></span>' + (m === opt ? ' <span style="color:#d97706">★</span>' : '');
+        var lab = valueLabel(m.value);
+        var td2 = document.createElement('td');
+        td2.innerHTML = '<span class="chip ' + lab.cls + '">' + lab.text + '</span>';
+        var td3 = document.createElement('td');
+        td3.className = 'cont';
+        td3.innerHTML = continuationHtml(m);
+        var td4 = document.createElement('td');
+        if (greedy && greedy.bit === m.bit) td4.innerHTML = '<span class="greedy-mark">贪心选此</span>';
+        tr.appendChild(td0); tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+        tr.addEventListener('click', function () { applyMove(m.bit); });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+    } else if (analysis && analysis.done) {
+      var p = document.createElement('div');
+      p.className = 'bm-result';
+      p.textContent = '所有回合已走完，无剩余着法。终局分差见上方状态条。';
+      wrap.appendChild(p);
+    }
+  }
+
+  function continuationHtml(m) {
+    if (!m.continuation || m.continuation.length === 0) {
+      var end = m.endValue !== undefined ? valueLabel(m.endValue).text : '';
+      return '下一步即终局 · ' + end;
+    }
+    var parts = m.continuation.map(function (c) {
+      return '<span class="tag ' + (c.team === 'A' ? 'a' : 'b') + '">' + (c.team === 'A' ? '甲' : '乙') + '</span>' +
+        (c.action === 'pick' ? '选' : '禁') + ' <b>#' + c.id + '</b>';
+    });
+    var tail = m.endValue !== undefined ? ' → ' + valueLabel(m.endValue).text : '';
+    return parts.join(' · ') + tail;
+  }
+
+  function renderHistory() {
+    els.history.innerHTML = '';
+    if (history.length === 0) {
+      var span = document.createElement('span');
+      span.style.color = 'var(--faint)';
+      span.style.fontSize = '12px';
+      span.textContent = '尚未落子';
+      els.history.appendChild(span);
+    }
+    history.forEach(function (h) {
+      var c = document.createElement('span');
+      c.className = 'hist-chip ' + h.action;
+      c.innerHTML = '<span class="tag ' + (h.team === 'A' ? 'a' : 'b') + '">' + (h.team === 'A' ? '甲' : '乙') + '</span>' +
+        (h.action === 'pick' ? '选' : '禁') + ' <span class="hero-id">#' + h.id + '</span>';
+      els.history.appendChild(c);
+    });
+    els.undo.disabled = history.length === 0;
+    els.reset.disabled = history.length === 0;
+  }
+
+  function render() {
+    if (!engine || !state) return;
+    renderTurnStrip();
+    renderTeamBoard('A');
+    renderTeamBoard('B');
+    renderPool();
+    renderBannerAndTable();
+    renderHistory();
+  }
+
+  /* ---------- 导出/导入 ---------- */
+  function currentRootSnapshot() {
+    // 导出时对初始局面重新分析，作为核验基线
+    var s0 = engine.initialState();
+    var info = engine.legalMoves(s0.av, s0.pa, s0.pb, 0);
+    if (info.done) return [];
+    return info.moves.filter(function (m) { return m.legal; }).map(function (m) {
+      var r = engine.solveRoot(s0.av, s0.pa, s0.pb, 0, m.bit);
+      return {
+        team: info.turn.team,
+        action: info.turn.action,
+        hero: m.id,
+        encodedValue: r.value,
+        value: engine.decodeValue(r.value)
+      };
+    });
+  }
+
+  function buildExport() {
+    return {
+      format: 'draft-endgame-replay-v1',
+      exportedAt: new Date().toISOString(),
+      pkg: pkg,
+      moves: history.map(function (h) {
+        return { team: h.team, action: h.action, hero: h.id };
+      }),
+      rootValues: currentRootSnapshot()
+    };
+  }
+  els.btnExport.addEventListener('click', function () {
+    els.exportBox.value = JSON.stringify(buildExport(), null, 2);
+  });
+  els.btnCopy.addEventListener('click', function () {
+    var text = els.exportBox.value;
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () { fallbackSelect(els.exportBox); });
+    } else fallbackSelect(els.exportBox);
+  });
+  function fallbackSelect(ta) {
+    ta.focus(); ta.select();
+  }
+
+  function verifyImport(text) {
+    var doc;
+    try { doc = JSON.parse(text); }
+    catch (e) { showError('导入 JSON 解析失败：' + e.message); return; }
+    var nextPkg = doc.format === 'draft-endgame-replay-v1' ? doc.pkg : doc;
+    var eng;
+    try { eng = E.createDraftEngine(nextPkg); }
+    catch (e) { showError('数据包校验失败：' + e.message); return; }
+    var checks = [];
+    var st = eng.initialState();
+    var moves = Array.isArray(doc.moves) ? doc.moves : [];
+    var ok = true;
+    for (var i = 0; i < moves.length; i++) {
+      var mv = moves[i];
+      var info = eng.legalMoves(st.av, st.pa, st.pb, st.t);
+      if (info.done) { ok = false; checks.push('第 ' + (i + 1) + ' 手 ' + JSON.stringify(mv) + '：回合已结束，多余着法'); break; }
+      var match = info.moves.filter(function (x) { return x.legal && x.id === mv.hero && info.turn.team === mv.team && info.turn.action === mv.action; })[0];
+      if (!match) {
+        ok = false;
+        checks.push('第 ' + (i + 1) + ' 手 ' + mv.team + (mv.action === 'pick' ? '选' : '禁') + ' #' + mv.hero + '：在该局面下不是合法着法');
+        break;
+      }
+      st = eng.stepState(st.av, st.pa, st.pb, st.t, match.bit);
+      checks.push('第 ' + (i + 1) + ' 手 ' + mv.team + (mv.action === 'pick' ? '选' : '禁') + ' #' + mv.hero + '：合法');
+    }
+    if (doc.format === 'draft-endgame-replay-v1' && Array.isArray(doc.rootValues) && doc.rootValues.length) {
+      var s0 = eng.initialState();
+      var info0 = eng.legalMoves(s0.av, s0.pa, s0.pb, 0);
+      var expected = Object.create(null);
+      doc.rootValues.forEach(function (r) { expected[r.hero] = r.encodedValue; });
+      info0.moves.filter(function (m) { return m.legal; }).forEach(function (m) {
+        var r = eng.solveRoot(s0.av, s0.pa, s0.pb, 0, m.bit);
+        if (expected[m.id] === undefined) { ok = false; checks.push('首手 #' + m.id + '：导出快照缺值'); }
+        else if (expected[m.id] !== r.value) {
+          ok = false;
+          checks.push('首手 #' + m.id + '：重算值 ' + r.value + ' 与导出值 ' + expected[m.id] + ' 不一致');
+        } else checks.push('首手 #' + m.id + '：精确值复核一致（' + r.value + '）');
+      });
+    }
+    els.verifyResult.hidden = false;
+    els.verifyResult.className = 'bm-result ' + (ok ? '' : 'fail');
+    els.verifyResult.innerHTML = (ok ? '<span class="pass">核验通过</span>' : '<span class="fail">核验失败</span>') +
+      '\n' + checks.join('\n');
+    if (!ok) return;
+    // 核验通过后正式载入并回放
+    loadPackage(nextPkg);
+    var replay = moves.slice();
+    replay.forEach(function (mv) {
+      var info2 = engine.legalMoves(state.av, state.pa, state.pb, state.t);
+      var mm = info2.moves.filter(function (x) { return x.legal && x.id === mv.hero; })[0];
+      if (mm) applyMove(mm.bit);
+    });
+  }
+  els.btnImport.addEventListener('click', function () {
+    els.verifyResult.hidden = true;
+    verifyImport(els.importBox.value);
+  });
+  els.btnFile.addEventListener('change', function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () { els.importBox.value = String(reader.result); };
+    reader.readAsText(f);
+  });
+
+  /* ---------- 基准测速 ---------- */
+  els.pkgBench.addEventListener('click', function () {
+    els.bmResult.hidden = false;
+    els.bmResult.innerHTML = '基准形状生成中：16 名同分角色、8 手（禁禁选选禁禁选选）…';
+    pool.benchmark().then(function (r) {
+      var allSame = r.rows.length > 0 && r.rows.every(function (x) { return x.value === r.rows[0].value; });
+      var pass = r.ms <= 8000 && allSame;
+      var lines = [
+        (pass ? '<span class="pass">达标 ≤ 8s</span>' : '<span class="fail">未达标</span>') +
+        ' · 单 worker 全首手求解 ' + r.ms + 'ms' + (r.parallel === false ? '（主线程回退）' : ''),
+        '首手数 ' + r.bits.length + ' · 访问记忆状态 ' + r.visited.toLocaleString() + ' · 终态记忆表 ' + r.memoSize.toLocaleString(),
+        '全部首手同值: ' + (allSame ? '是（对称形状，值 = ' + r.rows[0].value + '，即分差 0）' : '否'),
+        '同值取编号最小者: 最优首手 = 池位 ' + r.bits[0] + '（英雄 #' + (r.bits[0] + 1) + '）'
+      ];
+      els.bmResult.innerHTML = lines.join('\n');
+    }).catch(function (err) {
+      els.bmResult.innerHTML = '<span class="fail">测速失败：' + err.message + '</span>';
+    });
+  });
+
+  /* ---------- 其他控件 ---------- */
+  els.pkgApply.addEventListener('click', function () {
+    try {
+      var next = JSON.parse(els.pkgText.value);
+      loadPackage(next);
+      showError(null);
+    } catch (e) {
+      showError(e.message);
+    }
+  });
+  els.pkgSample.addEventListener('click', function () {
+    loadPackage(JSON.parse(JSON.stringify(DEFAULT_PKG)));
+    showError(null);
+  });
+  els.undo.addEventListener('click', undo);
+  els.reset.addEventListener('click', reset);
+
+  /* ---------- 热更新状态保持 ---------- */
+  try {
+    if (window.claude && window.claude.hot && window.claude.hot.snapshot) {
+      window.claude.hot.snapshot(function () {
+        return { pkg: pkg, history: history };
+      });
+    }
+  } catch (e) {}
+  function start(saved) {
+    var initPkg = DEFAULT_PKG;
+    var initHistory = [];
+    if (saved && saved.pkg) { initPkg = saved.pkg; initHistory = saved.history || []; }
+    try {
+      loadPackage(initPkg);
+      initHistory.forEach(function (mv) {
+        var info = engine.legalMoves(state.av, state.pa, state.pb, state.t);
+        var mm = info.moves && info.moves.filter(function (x) { return x.legal && x.id === mv.id; })[0];
+        if (mm) history.push({ bit: mm.bit, team: info.turn.team, action: info.turn.action, id: mm.id }),
+          state = engine.stepState(state.av, state.pa, state.pb, state.t, mm.bit);
+      });
+      requestAnalysis();
+    } catch (e) {
+      showError(e.message);
+      loadPackage(DEFAULT_PKG);
+    }
+  }
+  try {
+    if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start);
+    else start(window.claude && window.claude.hot ? window.claude.hot.data : null);
+  } catch (e) { start(null); }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', __draftBoot, { once: true });
+} else {
+  __draftBoot();
+}
+</script>
+
+<header class="top">
+  <div class="page top-inner">
+    <div class="brand">
+      <h1>征召推演台</h1>
+      <span class="sub">精确终局 · 极小化极大 · 槽位匹配自解</span>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="theme-btn" type="button">切换主题</button>
+      <button class="btn" id="pkg-bench" type="button">基准测速</button>
+      <button class="btn" id="pkg-sample" type="button">载入示例</button>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <main>
+    <div class="err-banner" id="err-banner" hidden><span>⚠</span><span id="err-text"></span></div>
+
+    <section class="card">
+      <h2>回合序列 <span class="count">选禁顺序</span></h2>
+      <div class="turn-strip" id="turn-strip"></div>
+    </section>
+
+    <div class="grid">
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section class="card">
+          <h2>队伍槽位 <span class="count">最优分配随局面实时更新</span></h2>
+          <div class="teams">
+            <div class="team-board team-a" id="team-a-board">
+              <div class="team-head"><span>甲队 A</span><span class="pre"></span></div>
+              <div class="slots"></div>
+              <div class="team-foot"></div>
+            </div>
+            <div class="team-board team-b" id="team-b-board">
+              <div class="team-head"><span>乙队 B</span><span class="pre"></span></div>
+              <div class="slots"></div>
+              <div class="team-foot"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>可用英雄 <span class="count">点卡片即按当前回合选/禁</span></h2>
+          <div class="legend" id="legend" style="margin-bottom:10px">
+            <span><i class="swatch a"></i>甲槽分行</span>
+            <span><i class="swatch b"></i>乙槽分行</span>
+            <span><i class="swatch g"></i>选入</span>
+            <span><i class="swatch vn"></i>禁用</span>
+            <span>★ 精确最优 · 「贪心」= 只看当前最高分的短视选择</span>
+          </div>
+          <div class="pool-grid" id="pool-grid"></div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <section class="card">
+          <h2>局面状态</h2>
+          <div class="banner" id="status-banner"></div>
+          <div style="height:12px"></div>
+          <div class="history-row" id="history-row"></div>
+          <div style="height:10px"></div>
+          <div class="controls-row">
+            <button class="btn primary" id="btn-undo" type="button">撤一手</button>
+            <button class="btn" id="btn-reset" type="button">回到开局</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>精确推演 <span class="count">每个合法手的终局值与最优续手</span></h2>
+          <div class="table-wrap" id="moves-table-wrap"></div>
+        </section>
+      </div>
+    </div>
+
+    <details class="pkg">
+      <summary>数据包、导出序列与导回核验</summary>
+      <div class="pkg-body">
+        <div>
+          <h3 style="font-size:12.5px;margin-bottom:6px;color:var(--muted)">当前数据包（可编辑后应用）</h3>
+          <textarea class="pkg-json" id="pkg-text" spellcheck="false"></textarea>
+          <div class="pkg-actions" style="margin-top:8px">
+            <button class="btn primary small" id="pkg-apply" type="button">应用数据包</button>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:12.5px;margin-bottom:6px;color:var(--muted)">导出序列（含首手精确值快照，可整段复制导回）</h3>
+          <textarea class="pkg-json" id="export-box" spellcheck="false" placeholder="点击「生成导出序列」后出现 JSON"></textarea>
+          <div class="pkg-actions" style="margin-top:8px">
+            <button class="btn primary small" id="btn-export" type="button">生成导出序列</button>
+            <button class="btn small" id="btn-copy" type="button">复制</button>
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:12.5px;margin-bottom:6px;color:var(--muted)">导回核验（粘贴 replay JSON 或裸数据包，也可选择文件）</h3>
+          <textarea class="pkg-json" id="import-box" spellcheck="false" placeholder='{"format":"draft-endgame-replay-v1", ...}'></textarea>
+          <div class="pkg-actions" style="margin-top:8px">
+            <button class="btn primary small" id="btn-import" type="button">导回并核验</button>
+            <label class="btn small" for="import-file" style="display:inline-flex;align-items:center">选择文件</label>
+            <input type="file" id="import-file" accept=".json,application/json" hidden>
+          </div>
+          <div class="bm-result" id="verify-result" hidden style="margin-top:10px"></div>
+        </div>
+        <div class="bm-result" id="bm-result" hidden></div>
+        <div>
+          <h3 style="font-size:12.5px;margin-bottom:6px;color:var(--muted)">包内规则原文</h3>
+          <ul class="rules-list" id="rules-box"></ul>
+        </div>
+      </div>
+    </details>
+  </main>
+</div>
