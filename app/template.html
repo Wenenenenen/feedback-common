@@ -1,0 +1,795 @@
+<title>四面体探针校验台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+  /* Design plan
+     Palette: cool paper neutrals, sodium-lamp amber accent, steel-cyan for geometry,
+     reserved red/green for clamp state. Both themes from the same token set.
+     Type: IBM Plex Sans + Noto Sans SC for text, IBM Plex Mono for all measurements.
+     Layout: instrument console — stage (3D + section) left, control rail right;
+     stacks to one column below 1040px. */
+  :root {
+    --bg: #eceff2;
+    --surface: #ffffff;
+    --surface-2: #f5f6f7;
+    --surface-3: #eef0f2;
+    --ink: #151a20;
+    --ink-2: #4b5560;
+    --ink-3: #78828d;
+    --line: #d8dde2;
+    --line-strong: #b9c1c9;
+    --accent: #b05f08;
+    --accent-ink: #7c4300;
+    --on-accent: #ffffff;
+    --accent-soft: #fbf0e1;
+    --accent-line: #e7c79b;
+    --geo: #2b6b85;
+    --geo-soft: #e3eef3;
+    --good: #1c7a4b;
+    --crit: #b4372b;
+    --crit-soft: #fbeceb;
+    --canvas-bg: #e7ebef;
+    --grid-line: #cfd6dc;
+    --shadow: 0 1px 2px rgba(16, 24, 32, .05), 0 8px 24px rgba(16, 24, 32, .06);
+    --r-card: 10px;
+    --r-ctl: 6px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1116;
+      --surface: #141a21;
+      --surface-2: #1a212a;
+      --surface-3: #10161c;
+      --ink: #e7ecf1;
+      --ink-2: #a6b1bd;
+      --ink-3: #78838f;
+      --line: #28323d;
+      --line-strong: #3b4754;
+      --accent: #f0a43a;
+      --accent-ink: #ffcf8c;
+      --on-accent: #1a1206;
+      --accent-soft: #2a2114;
+      --accent-line: #57401f;
+      --geo: #74b7d1;
+      --geo-soft: #16262d;
+      --good: #4bc48a;
+      --crit: #f0796b;
+      --crit-soft: #2c1917;
+      --canvas-bg: #0a0e12;
+      --grid-line: #232c36;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1116;
+    --surface: #141a21;
+    --surface-2: #1a212a;
+    --surface-3: #10161c;
+    --ink: #e7ecf1;
+    --ink-2: #a6b1bd;
+    --ink-3: #78838f;
+    --line: #28323d;
+    --line-strong: #3b4754;
+    --accent: #f0a43a;
+    --accent-ink: #ffcf8c;
+    --on-accent: #1a1206;
+    --accent-soft: #2a2114;
+    --accent-line: #57401f;
+    --geo: #74b7d1;
+    --geo-soft: #16262d;
+    --good: #4bc48a;
+    --crit: #f0796b;
+    --crit-soft: #2c1917;
+    --canvas-bg: #0a0e12;
+    --grid-line: #232c36;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono, .num {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app {
+    max-width: 1560px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 14px 28px;
+  }
+
+  /* ---------- header ---------- */
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow);
+  }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .mark {
+    width: 34px; height: 34px; flex: none;
+    border: 1px solid var(--accent-line);
+    border-radius: 8px;
+    background: var(--accent-soft);
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    line-height: 1.25;
+  }
+  .brand .sub {
+    margin: 1px 0 0;
+    color: var(--ink-3);
+    font-size: 11px;
+    letter-spacing: .02em;
+  }
+  .bar-stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+    flex: 1;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--ink-2);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .pill b { color: var(--ink); font-weight: 500; }
+  .pill.ok { border-color: color-mix(in srgb, var(--good) 40%, var(--line)); color: var(--good); background: transparent; }
+  .pill.bad { border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); color: var(--crit); background: transparent; }
+  .bar-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-ctl);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.3;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--ink-3); }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.ghost { background: transparent; }
+  .btn.ghost[aria-pressed="true"] { background: var(--surface-3); border-color: var(--line-strong); color: var(--ink); }
+  .btn.ghost[aria-pressed="false"] { color: var(--ink-3); }
+  .btn.ghost[aria-pressed="false"] .sw { opacity: .35; }
+  .btn.ghost .sw { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+  .btn.active { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-ink); }
+  .btn .ico { width: 13px; height: 13px; display: block; }
+
+  /* ---------- layout ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 14px;
+    align-items: stretch;
+    margin-top: 14px;
+  }
+  @media (max-width: 1040px) { .layout { align-items: start; } }
+  .stage { display: grid; gap: 14px; min-width: 0; align-content: start; }
+  /* On wide screens the cut-plane view sits beside the 3D view: both are views of the
+     same volume, and a side-by-side pair keeps both legible. */
+  @media (min-width: 1180px) {
+    .stage { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); align-items: stretch; }
+    .stage > .card { display: flex; flex-direction: column; min-height: 0; }
+    .stage > .card > .canvas-wrap { flex: 1 1 auto; min-height: 0; }
+    #view3dWrap { height: clamp(440px, 58vh, 700px); }
+    #sectionWrap { height: clamp(440px, 58vh, 700px); }
+  }
+  .rail { display: grid; gap: 12px; min-width: 0; }
+  @media (max-width: 1040px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 11px 14px 9px;
+    flex-wrap: wrap;
+  }
+  .card-head h2, .card > h2 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .card > h2 { padding: 12px 14px 6px; }
+  .card-head .hint { color: var(--ink-3); font-size: 11px; margin-left: auto; }
+  .card-body { padding: 0 14px 13px; }
+  .divider { height: 1px; background: var(--line); margin: 0 14px; }
+
+  /* ---------- 3D stage ---------- */
+  .canvas-wrap {
+    position: relative;
+    background: var(--canvas-bg);
+    border-top: 1px solid var(--line);
+    overflow: hidden;
+    touch-action: none;
+  }
+  #view3dWrap { height: clamp(340px, 56vh, 620px); }
+  #view3d { display: block; width: 100%; height: 100%; }
+  #section { display: block; max-width: 100%; max-height: 100%; }
+  #sectionWrap { height: 300px; display: flex; align-items: center; justify-content: center; }
+  .overlay {
+    position: absolute;
+    left: 10px; top: 10px;
+    display: flex; flex-direction: column; gap: 6px;
+    pointer-events: none;
+    max-width: 70%;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    align-self: flex-start;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    font-size: 11px;
+    backdrop-filter: blur(4px);
+  }
+  .chip b { color: var(--ink); font-weight: 500; }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .chip.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+  .chip.bad { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); }
+  .overlay .legend {
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
+    font-size: 10.5px; color: var(--ink-3);
+    padding-top: 2px; letter-spacing: .02em;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend i { width: 8px; height: 2px; display: inline-block; background: currentColor; }
+  .legend .lq { color: var(--accent); }
+  .legend .lp { color: var(--geo); }
+  .legend .lt { color: var(--ink-3); }
+
+  /* ---------- segmented ---------- */
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-ctl); overflow: hidden; }
+  .seg button {
+    border: 0; background: var(--surface); color: var(--ink-2);
+    padding: 4px 11px; font-size: 11.5px; line-height: 1.5;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 500; }
+
+  /* ---------- forms ---------- */
+  .field { display: grid; gap: 4px; min-width: 0; }
+  .field > label, .lbl {
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 4px 7px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-ctl);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 20px; background: transparent; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px; border-radius: 2px; background: var(--line-strong);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; margin-top: -5px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: var(--line-strong); }
+  input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent);
+  }
+  .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .row.wrap { flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  .sep { flex: none; width: 1px; align-self: stretch; background: var(--line); }
+
+  /* ---------- cases ---------- */
+  .case-list { display: grid; gap: 5px; padding: 0 14px 12px; }
+  .case-btn {
+    display: flex; align-items: center; gap: 9px;
+    width: 100%;
+    padding: 6px 9px;
+    border: 1px solid transparent;
+    border-radius: var(--r-ctl);
+    background: transparent;
+    text-align: left;
+    color: var(--ink);
+    font-size: 12.5px;
+  }
+  .case-btn:hover { background: var(--surface-2); }
+  .case-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-ink); }
+  .case-btn .n { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-3); width: 22px; text-align: right; }
+  .case-btn[aria-pressed="true"] .n { color: var(--accent-ink); }
+  .case-btn .desc { color: var(--ink-3); font-size: 11px; margin-left: auto; }
+  .case-btn[aria-pressed="true"] .desc { color: var(--accent-ink); opacity: .8; }
+  details.loader { border-top: 1px solid var(--line); }
+  details.loader summary {
+    cursor: pointer; list-style: none;
+    padding: 9px 14px;
+    font-size: 11.5px; color: var(--ink-2);
+    display: flex; align-items: center; gap: 6px;
+  }
+  details.loader summary::-webkit-details-marker { display: none; }
+  details.loader summary::before { content: "+"; font-family: monospace; color: var(--ink-3); }
+  details.loader[open] summary::before { content: "−"; }
+  details.loader .inner { padding: 0 14px 14px; display: grid; gap: 7px; }
+  textarea {
+    width: 100%;
+    min-height: 92px;
+    padding: 7px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-ctl);
+    background: var(--surface-2);
+    color: var(--ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    resize: vertical;
+  }
+  .msg { font-size: 11.5px; line-height: 1.45; }
+  .msg.err { color: var(--crit); }
+  .msg.ok { color: var(--good); }
+
+  /* ---------- query card ---------- */
+  .qgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .readout { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 5px 7px; min-width: 0; }
+  .readout .k { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .readout .v { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .statusline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-2); }
+  .tag {
+    font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--line); color: var(--ink-2); background: var(--surface-2);
+    font-family: "IBM Plex Mono", monospace; letter-spacing: .02em;
+  }
+  .tag.acc { color: var(--accent-ink); border-color: var(--accent-line); background: var(--accent-soft); }
+  .tag.geo { color: var(--geo); border-color: color-mix(in srgb, var(--geo) 40%, var(--line)); }
+  .tag.crit { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); background: var(--crit-soft); }
+
+  /* ---------- ball card ---------- */
+  .ball-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 12px; align-items: center; padding: 0 14px 12px; }
+  #ball { width: 132px; height: 132px; display: block; border-radius: 50%; }
+  .ball-side { display: grid; gap: 7px; min-width: 0; }
+  .swatch-line { display: flex; align-items: center; gap: 8px; }
+  .swatch {
+    width: 26px; height: 26px; border-radius: 6px; flex: none;
+    border: 1px solid rgba(0,0,0,.18);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .swatch-val { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .meter { display: grid; grid-template-columns: 12px minmax(0, 1fr) 40px; align-items: center; gap: 6px; }
+  .meter .ch { font-size: 10px; color: var(--ink-3); font-family: "IBM Plex Mono", monospace; }
+  .meter .val { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .meter .track { position: relative; height: 14px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+  .meter .zero { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-strong); }
+  .meter .fill { position: absolute; top: 2px; bottom: 2px; border-radius: 2px 4px 4px 2px; }
+  .meter .fill.neg { border-radius: 4px 2px 2px 4px; background: var(--crit); }
+
+  /* ---------- weights ---------- */
+  .wlist { display: grid; gap: 2px; padding: 0 14px 12px; }
+  .wrow {
+    display: grid;
+    grid-template-columns: 24px 64px minmax(0, 1fr) 46px;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    border-radius: 4px;
+  }
+  .wrow.zero { opacity: .45; }
+  .wrow .idx {
+    width: 22px; height: 22px; border-radius: 5px;
+    display: grid; place-items: center;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2);
+  }
+  .wrow.hot .idx { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .wrow .coords { font-family: "IBM Plex Mono", monospace; font-size: 9.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wbar { position: relative; height: 12px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+  .wbar > i { position: absolute; left: 0; top: 2px; bottom: 2px; border-radius: 2px 4px 4px 2px; background: var(--ink-3); }
+  .wrow.hot .wbar > i { background: var(--accent); }
+  .wval { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+
+  .emptynote { padding: 2px 14px 14px; color: var(--ink-3); font-size: 12px; }
+
+  /* ---------- log ---------- */
+  .loglist { display: grid; gap: 0; padding: 0 14px 4px; max-height: 216px; overflow: auto; scrollbar-width: thin; }
+  .logrow {
+    display: grid;
+    grid-template-columns: 30px 64px minmax(0, 1fr) 54px;
+    gap: 8px; align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 11px;
+    min-width: 0;
+  }
+  .logrow:last-child { border-bottom: 0; }
+  .logrow .seq { font-family: "IBM Plex Mono", monospace; color: var(--ink-3); font-size: 10px; }
+  .logrow .pt { font-family: "IBM Plex Mono", monospace; color: var(--ink-2); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .logrow .mid { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .logrow .mid .tag { white-space: nowrap; }
+  .logrow .mini { display: inline-flex; gap: 2px; }
+  .logrow .mini i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .log-empty { padding: 2px 14px 14px; color: var(--ink-3); font-size: 11.5px; }
+  .log-foot { display: flex; gap: 7px; align-items: center; padding: 8px 14px 13px; border-top: 1px solid var(--line); }
+  .log-foot .count { color: var(--ink-3); font-size: 11px; margin-right: auto; }
+
+  /* ---------- dialog ---------- */
+  dialog {
+    width: min(940px, calc(100vw - max(32px, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px) + 24px)));
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .32);
+    overflow: hidden;
+  }
+  dialog::backdrop { background: rgba(8, 12, 16, .5); backdrop-filter: blur(2px); }
+  .dlg-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .dlg-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+  .dlg-head .x { margin-left: auto; }
+  .dlg-tabs { display: flex; gap: 2px; padding: 10px 16px 0; border-bottom: 1px solid var(--line); }
+  .dlg-tabs button {
+    border: 1px solid transparent; border-bottom: 0;
+    background: transparent; color: var(--ink-2);
+    padding: 6px 12px; font-size: 12px;
+    border-radius: 6px 6px 0 0;
+  }
+  .dlg-tabs button[aria-selected="true"] {
+    background: var(--surface-2);
+    border-color: var(--line);
+    color: var(--ink);
+    margin-bottom: -1px;
+  }
+  .dlg-body { padding: 13px 16px 16px; display: grid; gap: 8px; }
+  .dlg-body .note { color: var(--ink-3); font-size: 11.5px; line-height: 1.5; }
+  .dlg-body textarea { min-height: 220px; max-height: 52vh; font-size: 10.5px; }
+  .dlg-foot { display: flex; gap: 8px; align-items: center; padding: 0 16px 16px; }
+  .dlg-foot .spacer { flex: 1; }
+
+  /* ---------- misc ---------- */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(22px, env(safe-area-inset-bottom, 0px));
+    margin-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+    transform: translate(-50%, 16px);
+    opacity: 0;
+    pointer-events: none;
+    background: var(--ink);
+    color: var(--bg);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    max-width: min(92vw, 560px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .25);
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .error-banner {
+    margin: 12px 14px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--crit) 45%, var(--line));
+    background: var(--crit-soft);
+    color: var(--crit);
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  @media (max-width: 1040px) {
+    #view3dWrap { height: clamp(320px, 48vh, 480px); }
+    .rail { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .brand .sub { display: none; }
+    .pill.fp { display: none; }
+    .bar { gap: 10px; padding: 9px 11px; }
+    .bar-actions { width: 100%; }
+    .bar-actions .btn { flex: 1; justify-content: center; }
+    .ball-row { grid-template-columns: 108px minmax(0, 1fr); }
+    #ball { width: 108px; height: 108px; }
+    .wrow { grid-template-columns: 22px 58px minmax(0, 1fr) 42px; }
+    .card-head .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 34 34" aria-hidden="true">
+        <g fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-linejoin="round">
+          <path d="M17 5 L28 12 L28 24 L17 29 L6 24 L6 12 Z" opacity=".45"/>
+          <path d="M17 5 L17 17 L6 12 M17 17 L28 12 M17 17 L17 29" opacity=".9"/>
+        </g>
+        <circle cx="17" cy="17" r="2.2" fill="var(--accent)"/>
+      </svg>
+      <div>
+        <h1>四面体探针校验台</h1>
+        <p class="sub">Delaunay 剖分 · 重心插值 · 包外投影</p>
+      </div>
+    </div>
+    <div class="bar-stats" id="barStats"></div>
+    <div class="bar-actions">
+      <button class="btn" id="btnShuffle" title="打乱探针输入顺序后重新剖分，验证结果是否一致">
+        <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 4h3l6 8h3M2 12h3l2-2.7M11.5 4H14M12.5 2.5 14 4l-1.5 1.5M12.5 10.5 14 12l-1.5 1.5"/></svg>
+        打乱顺序验证
+      </button>
+      <button class="btn" id="btnSweep" title="沿切面自动扫过整个模型，记录每次跨单元">
+        <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 8h9M8 5l3 3-3 3M13 3v10"/></svg>
+        <span id="sweepLabel">自动扫描</span>
+      </button>
+      <button class="btn primary" id="btnExport">
+        <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M8 2v8M5 7l3 3 3-3M3 12.5h10"/></svg>
+        导出
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="card">
+        <div class="card-head">
+          <h2>三维视图</h2>
+          <div class="row" style="margin-left:auto; gap:6px">
+            <button class="btn ghost" id="btnTets" aria-pressed="true" title="显示/隐藏四面体棱"><span class="sw"></span>四面体</button>
+            <button class="btn ghost" id="btnHull" aria-pressed="true" title="显示/隐藏凸包"><span class="sw"></span>凸包</button>
+            <button class="btn ghost" id="btnBall3d" aria-pressed="true" title="显示/隐藏场景内的测试球"><span class="sw"></span>测试球</button>
+            <button class="btn ghost" id="btnResetView" title="重置视角">重置视角</button>
+          </div>
+        </div>
+        <div class="canvas-wrap" id="view3dWrap">
+          <canvas id="view3d" role="img" aria-label="三维剖分视图：探针、四面体、凸包、查询点与测试球"></canvas>
+          <div class="overlay">
+            <div class="chip" id="regionChip"><span class="dot"></span><span id="regionChipText">—</span></div>
+            <div class="legend">
+              <span class="lq"><i></i>查询点</span>
+              <span class="lp"><i></i>投影点</span>
+              <span class="lt"><i></i>单元棱</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>切面</h2>
+          <div class="seg" id="axisSeg" role="group" aria-label="切面法向轴">
+            <button data-axis="x" aria-pressed="false">X</button>
+            <button data-axis="y" aria-pressed="false">Y</button>
+            <button data-axis="z" aria-pressed="true">Z</button>
+          </div>
+          <span class="mono" id="planeOffsetVal" style="margin-left:auto;font-size:11.5px;color:var(--ink-2)">0.0</span>
+        </div>
+        <div class="row" style="padding:0 14px 9px; gap:9px">
+          <label class="lbl" for="planeOffset" style="white-space:nowrap">偏移</label>
+          <input type="range" id="planeOffset" class="grow" min="-1000" max="1000" step="0.5" value="2" aria-label="切面偏移">
+        </div>
+        <div class="canvas-wrap" id="sectionWrap">
+          <canvas id="section" role="img" aria-label="切面视图：切面上的单元截面、探针与查询点"></canvas>
+          <div class="overlay">
+            <div class="chip" id="sectionChip">切面 · —</div>
+            <div class="legend">
+              <span class="lq"><i></i>查询点</span>
+              <span class="lp"><i></i>投影点</span>
+              <span class="lt"><i></i>单元截面</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="card">
+        <div class="card-head"><h2>用例</h2><span class="hint" id="caseMeta"></span></div>
+        <div class="case-list" id="caseList"></div>
+        <details class="loader">
+          <summary>载入自己的探针数据</summary>
+          <div class="inner">
+            <p class="note" style="margin:0;color:var(--ink-3);font-size:11.5px">
+              4–64 个探针，坐标取 −1000–1000 的整数。每个探针给出 RGB 三组系数，每组为
+              <span class="mono">[常数, x, y, z]</span>。
+            </p>
+            <textarea id="jsonInput" spellcheck="false" aria-label="探针 JSON"></textarea>
+            <div class="row">
+              <button class="btn" id="btnApplyJson">解析并剖分</button>
+              <button class="btn ghost" id="btnSampleJson">填入样例格式</button>
+            </div>
+            <div class="msg" id="jsonMsg" role="status"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card" id="queryCard">
+        <div class="card-head"><h2>查询点</h2><div class="statusline" style="margin-left:auto"><span class="tag" id="regionTag">—</span></div></div>
+        <div class="card-body" style="display:grid; gap:9px">
+          <div class="qgrid">
+            <div class="readout"><div class="k">X</div><div class="v" id="qx">—</div></div>
+            <div class="readout"><div class="k">Y</div><div class="v" id="qy">—</div></div>
+            <div class="readout"><div class="k">Z</div><div class="v" id="qz">—</div></div>
+          </div>
+          <div class="row" style="gap:9px">
+            <div class="field grow">
+              <label for="planeU" id="planeULabel">切面内 X 坐标</label>
+              <input type="number" id="planeU" step="0.5">
+            </div>
+            <div class="field grow">
+              <label for="planeV" id="planeVLabel">切面内 Y 坐标</label>
+              <input type="number" id="planeV" step="0.5">
+            </div>
+          </div>
+          <div class="divider" style="margin:1px 0"></div>
+          <div class="row" style="justify-content:space-between">
+            <span class="lbl">球面法线方向</span>
+            <span class="mono" style="font-size:11px;color:var(--ink-2)" id="normalVal">—</span>
+          </div>
+          <div class="row" style="gap:9px">
+            <div class="field grow">
+              <label for="azimuth">方位角 <span class="mono" id="azVal">0°</span></label>
+              <input type="range" id="azimuth" min="0" max="360" step="1" value="0">
+            </div>
+            <div class="field grow">
+              <label for="elevation">仰角 <span class="mono" id="elVal">0°</span></label>
+              <input type="range" id="elevation" min="-90" max="90" step="1" value="0">
+            </div>
+          </div>
+          <div class="row" style="gap:5px">
+            <button class="btn ghost" data-normal="0,1,0" style="font-size:11px;padding:3px 8px">+Y 顶光</button>
+            <button class="btn ghost" data-normal="1,0,0" style="font-size:11px;padding:3px 8px">+X 侧光</button>
+            <button class="btn ghost" data-normal="0,-1,0" style="font-size:11px;padding:3px 8px">−Y 底光</button>
+            <button class="btn ghost" data-normal="0,0,1" style="font-size:11px;padding:3px 8px">+Z 前光</button>
+          </div>
+          <p class="note" style="margin:0;color:var(--ink-3);font-size:10.5px;line-height:1.5">
+            方向键微调查询点（Shift 加大步长）；在三维视图里拖动小球可移点，空白处拖动旋转视角，滚轮缩放。
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>测试球</h2><span class="hint" id="ballMeta"></span></div>
+        <div class="ball-row">
+          <canvas id="ball" width="132" height="132" aria-label="测试球当前光照"></canvas>
+          <div class="ball-side">
+            <div class="swatch-line">
+              <div class="swatch" id="ballSwatch"></div>
+              <div>
+                <div class="lbl" style="margin-bottom:1px">当前读数</div>
+                <div class="swatch-val" id="ballVal">—</div>
+              </div>
+            </div>
+            <div style="display:grid; gap:3px">
+              <div class="meter" data-ch="0"><span class="ch">R</span><div class="track"><span class="zero"></span><span class="fill" data-fill></span></div><span class="val" data-val>—</span></div>
+              <div class="meter" data-ch="1"><span class="ch">G</span><div class="track"><span class="zero"></span><span class="fill" data-fill></span></div><span class="val" data-val>—</span></div>
+              <div class="meter" data-ch="2"><span class="ch">B</span><div class="track"><span class="zero"></span><span class="fill" data-fill></span></div><span class="val" data-val>—</span></div>
+            </div>
+            <div class="statusline" id="clampLine" style="font-size:11px">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>参与的探针与权重</h2><span class="hint mono" id="tetLabel"></span></div>
+        <div class="wlist" id="weightList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>查询记录</h2><span class="hint">跨单元时自动记录</span></div>
+        <div class="loglist" id="logList"></div>
+        <div class="log-foot">
+          <span class="count" id="logCount">0 条</span>
+          <button class="btn" id="btnRecord" style="font-size:11px;padding:3px 9px">记录当前点</button>
+          <button class="btn ghost" id="btnClearLog" style="font-size:11px;padding:3px 9px">清空</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<dialog id="exportDialog">
+  <div class="dlg-head">
+    <h2>导出</h2>
+    <span class="hint" id="exportMeta" style="color:var(--ink-3);font-size:11.5px"></span>
+    <button class="btn ghost x" id="btnCloseExport">关闭</button>
+  </div>
+  <div class="dlg-tabs" id="exportTabs" role="tablist">
+    <button role="tab" data-kind="tri" aria-selected="true">剖分 JSON</button>
+    <button role="tab" data-kind="csv" aria-selected="false">查询记录 CSV</button>
+    <button role="tab" data-kind="report" aria-selected="false">校验报告 HTML</button>
+  </div>
+  <div class="dlg-body">
+    <p class="note" id="exportNote">—</p>
+    <textarea id="exportText" readonly spellcheck="false" aria-label="导出内容"></textarea>
+  </div>
+  <div class="dlg-foot">
+    <span class="note mono" id="exportSize" style="color:var(--ink-3);font-size:11px"></span>
+    <span class="spacer"></span>
+    <button class="btn" id="btnSelectAll">全选</button>
+    <button class="btn primary" id="btnCopyExport">复制</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
