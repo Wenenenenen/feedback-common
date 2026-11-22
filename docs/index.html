@@ -1,0 +1,634 @@
+<title>LTC 波形索引器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* layout: control band on top, full-width waveform, scrollable frame table below.
+   Instrument aesthetic: dark scope surface, amber trace, monospace readouts. */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f4;
+  --line: #d4dbe1;
+  --fg: #1a2128;
+  --muted: #5d6a76;
+  --faint: #8a959f;
+  --accent: #c47a1e;
+  --accent-soft: #c47a1e22;
+  --good: #2f8f5f;
+  --warn: #9a7d1e;
+  --danger: #c05244;
+  --info: #2f6fb0;
+  --grid: #e2e7eb;
+  --radius: 10px;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #101316; --panel: #171c21; --panel-2: #1d242b; --line: #2a333c;
+    --fg: #e6eaee; --muted: #8b98a5; --faint: #5c6873;
+    --accent: #f0a848; --accent-soft: #f0a84833;
+    --good: #5fbf8f; --warn: #e0c05a; --danger: #e07a6a; --info: #6aa6e0;
+    --grid: #222a31;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101316; --panel: #171c21; --panel-2: #1d242b; --line: #2a333c;
+  --fg: #e6eaee; --muted: #8b98a5; --faint: #5c6873;
+  --accent: #f0a848; --accent-soft: #f0a84833;
+  --good: #5fbf8f; --warn: #e0c05a; --danger: #e07a6a; --info: #6aa6e0;
+  --grid: #222a31;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8; --panel: #ffffff; --panel-2: #eef1f4; --line: #d4dbe1;
+  --fg: #1a2128; --muted: #5d6a76; --faint: #8a959f;
+  --accent: #c47a1e; --accent-soft: #c47a1e22;
+  --good: #2f8f5f; --warn: #9a7d1e; --danger: #c05244; --info: #2f6fb0;
+  --grid: #e2e7eb;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 1180px; margin: 0 auto; padding-block: 20px 40px; }
+
+header.masthead {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+header.masthead h1 {
+  font-family: var(--mono); font-size: 20px; font-weight: 600; margin: 0;
+  letter-spacing: 0.3px;
+}
+header.masthead .sub { color: var(--muted); font-size: 13px; }
+header.masthead .spacer { flex: 1; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+}
+.panel h2 {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+  margin: 0 0 12px;
+}
+.controls { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field > label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted);
+}
+select, input[type="file"] {
+  font-family: var(--sans); font-size: 14px; color: var(--fg);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 11px;
+}
+select { min-width: 180px; }
+select:focus-visible, button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.file-wrap { position: relative; }
+.file-wrap input[type="file"] { width: 100%; max-width: 340px; }
+button {
+  font-family: var(--sans); font-size: 14px; font-weight: 600;
+  color: var(--bg); background: var(--accent); border: none;
+  border-radius: 8px; padding: 10px 18px; cursor: pointer;
+}
+button.secondary {
+  background: var(--panel-2); color: var(--fg); border: 1px solid var(--line);
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:not(:disabled):active { transform: translateY(1px); }
+
+.status-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 12px; color: var(--muted);
+}
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.chip.good .dot { background: var(--good); }
+.chip.warn .dot { background: var(--warn); }
+.chip.info .dot { background: var(--info); }
+.chip b { color: var(--fg); font-weight: 600; }
+
+.scope-wrap { position: relative; }
+canvas#scope {
+  display: block; width: 100%; height: 220px;
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--radius); cursor: crosshair;
+}
+.scope-hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.scope-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.scope-toolbar .readout {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px;
+}
+.scope-toolbar .readout b { color: var(--accent); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 13px; }
+thead th {
+  position: sticky; top: 0; background: var(--panel-2); color: var(--muted);
+  text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.8px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+tbody td { padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--accent-soft); }
+tbody tr.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+tbody tr.break-row td:first-child { border-left: 3px solid var(--warn); }
+td.idx { color: var(--faint); width: 44px; }
+td.label { font-weight: 600; color: var(--fg); }
+td.time, td.samples { color: var(--muted); }
+.pill {
+  font-size: 11px; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted);
+}
+.pill.fwd { color: var(--info); border-color: #2f6fb055; }
+.pill.rev { color: var(--warn); border-color: #9a7d1e55; }
+.break-note { color: var(--warn); font-family: var(--sans); font-size: 12px; }
+.gap-banner {
+  display: flex; align-items: center; gap: 9px;
+  color: var(--danger); font-family: var(--sans); font-size: 12px;
+  padding: 8px 14px; background: #e07a6a14;
+  border-bottom: 1px solid var(--line);
+}
+.empty {
+  color: var(--muted); text-align: center; padding: 44px 20px;
+  border: 1px dashed var(--line); border-radius: var(--radius);
+}
+.empty .big { font-family: var(--mono); font-size: 15px; color: var(--fg); margin-bottom: 6px; }
+.error {
+  color: var(--danger); background: #e07a6a14; border: 1px solid #e07a6a44;
+  border-radius: 8px; padding: 11px 14px; margin-top: 12px; font-size: 13px;
+}
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.hidden { display: none !important; }
+@media (max-width: 640px) {
+  canvas#scope { height: 170px; }
+  .controls { gap: 12px; }
+  .field { flex: 1 1 100%; }
+  select, .file-wrap input[type="file"] { max-width: 100%; width: 100%; }
+}
+</style>
+
+<div class="app">
+  <header class="masthead">
+    <h1>LTC 波形索引器</h1>
+    <span class="sub">从录音轨读取线性时间码 · 双相标记解码 · 逐帧定位</span>
+    <span class="spacer"></span>
+    <button id="themeBtn" class="secondary" type="button">切换主题</button>
+  </header>
+
+  <section class="panel">
+    <h2>输入与解码设置</h2>
+    <div class="controls">
+      <div class="field">
+        <label for="fileInput">WAV 文件（≤90 秒，48kHz，16 位 PCM）</label>
+        <div class="file-wrap">
+          <input id="fileInput" type="file" accept=".wav,audio/wav">
+        </div>
+      </div>
+      <div class="field">
+        <label for="modeSelect">时间码模式</label>
+        <select id="modeSelect">
+          <option value="ndf25">25 帧 非丢帧（25 NDF）</option>
+          <option value="df30" selected>30000/1001 丢帧（29.97 DF）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="channelSelect">声道</label>
+        <select id="channelSelect"><option value="0">声道 1</option></select>
+      </div>
+      <div class="field">
+        <button id="exportBtn" class="secondary" type="button" disabled>导出 CSV</button>
+      </div>
+    </div>
+    <div id="statusRow" class="status-row hidden"></div>
+    <div id="errorBox" class="error hidden"></div>
+  </section>
+
+  <section class="panel">
+    <h2>波形与帧定位</h2>
+    <div class="scope-toolbar">
+      <span class="readout">光标样本：<b id="cursorSample">—</b></span>
+      <span class="readout">时间：<b id="cursorTime">—</b></span>
+      <span class="readout">选中帧：<b id="cursorFrame">—</b></span>
+      <span class="spacer" style="flex:1"></span>
+      <button id="zoomOut" class="secondary" type="button" disabled>缩小</button>
+      <button id="zoomIn" class="secondary" type="button" disabled>放大</button>
+      <button id="zoomReset" class="secondary" type="button" disabled>重置视图</button>
+    </div>
+    <div class="scope-wrap">
+      <canvas id="scope"></canvas>
+    </div>
+    <p class="scope-hint">点击波形或下方表格可逐帧定位；琥珀色块为已解码帧，红色斜纹区为信号缺口（边缘不足、无法确定帧）。</p>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--accent)"></i>已解码帧范围</span>
+      <span><i class="sw" style="background:var(--info)"></i>当前选中帧</span>
+      <span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--danger),var(--danger) 4px,transparent 4px,transparent 8px)"></i>缺口</span>
+      <span><i class="sw" style="background:var(--good)"></i>检测到的跳变沿</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>帧索引（按样本顺序）</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>方向</th><th>时间码标签</th><th>起始样本</th><th>结束样本</th>
+            <th>时间位置</th><th>说明</th>
+          </tr>
+        </thead>
+        <tbody id="frameBody"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty">
+      <div class="big">尚未载入文件</div>
+      选择一个 WAV 录音后，这里会按样本顺序列出每一帧的方向、时间码标签、帧范围与时间码断点。
+    </div>
+  </section>
+</div>
+
+<script type="module">
+import {
+  parseWav, decodeChannel, buildEnvelope, describeBreak,
+} from './ltc-decoder.js';
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  parsed: null, result: null, mode: 'df30', channel: 0, fileName: '',
+  viewStart: 0, viewWidth: 0, selected: -1,
+};
+
+// ---- theme toggle (viewer default is system; this just pins a choice) ----
+$('themeBtn').addEventListener('click', () => {
+  const root = document.documentElement;
+  const cur = root.getAttribute('data-theme');
+  root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+});
+
+// ---- channel options update once a file is parsed ----
+function populateChannels(numChannels) {
+  const sel = $('channelSelect');
+  sel.innerHTML = '';
+  for (let c = 0; c < numChannels; c++) {
+    const opt = document.createElement('option');
+    opt.value = String(c);
+    opt.textContent = numChannels === 1 ? '声道 1（单声道）' : `声道 ${c + 1}`;
+    sel.appendChild(opt);
+  }
+}
+
+function showError(msg) {
+  const box = $('errorBox');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+}
+function clearError() { $('errorBox').classList.add('hidden'); }
+
+// ---- main decode ----
+async function handleFile(file) {
+  clearError();
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const parsed = parseWav(buf);
+    if (parsed.sampleRate !== 48000) {
+      throw new Error(`采样率为 ${parsed.sampleRate} Hz，本工具仅支持 48000 Hz。`);
+    }
+    if (parsed.durationSec > 90 + 0.05) {
+      throw new Error(`时长 ${parsed.durationSec.toFixed(2)} 秒，超过 90 秒上限。`);
+    }
+    state.parsed = parsed;
+    state.fileName = file.name.replace(/\.wav$/i, '') || 'ltc-index';
+    populateChannels(parsed.numChannels);
+    state.channel = 0;
+    runDecode();
+  } catch (err) {
+    showError(err.message || String(err));
+    resetOutputs();
+  }
+}
+
+function runDecode() {
+  if (!state.parsed) return;
+  state.mode = $('modeSelect').value;
+  state.channel = Number($('channelSelect').value);
+  const samples = state.parsed.channels[state.channel];
+  const result = decodeChannel(samples, state.parsed.sampleRate, state.mode);
+  state.result = result;
+  state.selected = -1;
+  state.viewStart = 0;
+  state.viewWidth = state.parsed.numFrames;
+  renderStatus();
+  renderTable();
+  drawScope();
+  $('exportBtn').disabled = result.frames.length === 0;
+  ['zoomIn', 'zoomOut', 'zoomReset'].forEach((id) => $(id).disabled = false);
+}
+
+function renderStatus() {
+  const { result, parsed } = state;
+  const row = $('statusRow');
+  row.classList.remove('hidden');
+  const dirPill = result.direction === 'rev'
+    ? '<span class="chip warn"><span class="dot"></span>方向 <b>倒放（反向时间码）</b></span>'
+    : '<span class="chip info"><span class="dot"></span>方向 <b>正放</b></span>';
+  const gapCount = result.gapRanges.length;
+  const gapChip = gapCount === 0
+    ? '<span class="chip good"><span class="dot"></span>缺口 <b>无</b></span>'
+    : `<span class="chip warn"><span class="dot"></span>缺口 <b>${gapCount} 处</b></span>`;
+  row.innerHTML = `
+    ${dirPill}
+    <span class="chip"><span class="dot"></span>已解码帧 <b>${result.frames.length}</b></span>
+    <span class="chip"><span class="dot"></span>采样率 <b>${parsed.sampleRate} Hz</b></span>
+    <span class="chip"><span class="dot"></span>时长 <b>${parsed.durationSec.toFixed(3)} s</b></span>
+    <span class="chip"><span class="dot"></span>位元周期 <b>${result.bitPeriod.toFixed(2)} 样本</b></span>
+    ${gapChip}`;
+}
+
+function sampleToTime(s) {
+  const sec = s / state.parsed.sampleRate;
+  const mm = Math.floor(sec / 60);
+  const ss = (sec - mm * 60).toFixed(4);
+  return `${String(mm).padStart(2, '0')}:${ss.padStart(7, '0')}`;
+}
+
+function renderTable() {
+  const body = $('frameBody');
+  const { frames } = state.result;
+  const empty = $('emptyState');
+  body.innerHTML = '';
+  if (!frames.length) { empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  frames.forEach((f, i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.index = String(i);
+    const prev = i > 0 ? frames[i - 1] : null;
+    const note = prev ? describeBreak(prev, f, state.mode, state.result.direction) : null;
+    const isBreak = f.gapBefore || (note && note !== null);
+    if (isBreak) tr.classList.add('break-row');
+    const dir = state.result.direction;
+    tr.innerHTML = `
+      <td class="idx">${i + 1}</td>
+      <td><span class="pill ${dir}">${dir === 'rev' ? '倒放' : '正放'}</span></td>
+      <td class="label">${f.label}</td>
+      <td class="samples">${f.startSample}</td>
+      <td class="samples">${f.endSample}</td>
+      <td class="time">${sampleToTime(f.startSample)}</td>
+      <td>${f.gapBefore
+        ? '<span class="break-note">▲ 前有缺口</span>'
+        : (note ? `<span class="break-note">${note}</span>` : '')}</td>`;
+    tr.addEventListener('click', () => selectFrame(i, true));
+    body.appendChild(tr);
+  });
+}
+
+function selectFrame(i, center) {
+  state.selected = i;
+  document.querySelectorAll('#frameBody tr').forEach((tr) => {
+    tr.classList.toggle('selected', Number(tr.dataset.index) === i);
+  });
+  const f = state.result.frames[i];
+  $('cursorFrame').textContent = f.label;
+  if (center) {
+    // zoom the scope onto the frame with a little context
+    const span = f.endSample - f.startSample;
+    state.viewWidth = Math.min(state.parsed.numFrames, Math.max(span * 6, 2000));
+    state.viewStart = Math.max(0, f.startSample - (state.viewWidth - span) / 2);
+    if (state.viewStart + state.viewWidth > state.parsed.numFrames) {
+      state.viewStart = Math.max(0, state.parsed.numFrames - state.viewWidth);
+    }
+    drawScope();
+  }
+}
+
+// ---- waveform scope ----
+const canvas = $('scope');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth;
+  const cssH = canvas.clientHeight;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (state.result) drawScope();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function drawScope() {
+  const { parsed, result } = state;
+  if (!parsed || !result) return;
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+  const grid = cssVar('--grid');
+  const line = cssVar('--line');
+  const accent = cssVar('--accent');
+  const good = cssVar('--good');
+  const danger = cssVar('--danger');
+  const info = cssVar('--info');
+  const muted = cssVar('--muted');
+  const total = parsed.numFrames;
+  const vs = state.viewStart;
+  const vw = state.viewWidth;
+  const xOf = (sample) => ((sample - vs) / vw) * W;
+
+  // grid lines
+  ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  for (let gx = 0; gx <= 10; gx++) {
+    const x = (gx / 10) * W;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2);
+  ctx.strokeStyle = line; ctx.stroke();
+
+  const samples = parsed.channels[state.channel];
+  const startIdx = Math.max(0, Math.floor(vs));
+  const endIdx = Math.min(total, Math.ceil(vs + vw));
+  const view = samples.subarray(startIdx, endIdx);
+  const buckets = Math.max(60, Math.min(W, 1400));
+  const env = buildEnvelope(view, buckets);
+  const amp = 32768;
+  const yOf = (v) => H / 2 - (v / amp) * (H / 2 - 8);
+
+  // gap shading first (under the trace)
+  ctx.save();
+  ctx.fillStyle = danger + '22';
+  for (const [g0, g1] of result.gapRanges) {
+    const x0 = xOf(Math.max(g0, vs));
+    const x1 = xOf(Math.min(g1, vs + vw));
+    if (x1 < 0 || x0 > W) continue;
+    ctx.fillRect(x0, 0, Math.max(1, x1 - x0), H);
+  }
+  ctx.restore();
+
+  // decoded frame bands
+  ctx.fillStyle = accent + '1f';
+  for (const f of result.frames) {
+    const x0 = xOf(Math.max(f.startSample, vs));
+    const x1 = xOf(Math.min(f.endSample, vs + vw));
+    if (x1 < 0 || x0 > W) continue;
+    ctx.fillRect(x0, 0, Math.max(1, x1 - x0), H);
+  }
+  // selected frame highlight
+  if (state.selected >= 0) {
+    const f = result.frames[state.selected];
+    const x0 = xOf(Math.max(f.startSample, vs));
+    const x1 = xOf(Math.min(f.endSample, vs + vw));
+    ctx.fillStyle = info + '30';
+    ctx.fillRect(x0, 0, Math.max(1, x1 - x0), H);
+    ctx.strokeStyle = info; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + 0.5, 0, Math.max(1, x1 - x0) - 1, H);
+  }
+
+  // min/max envelope trace
+  ctx.strokeStyle = accent; ctx.lineWidth = 1;
+  ctx.beginPath();
+  const bw = W / buckets;
+  for (let b = 0; b < buckets; b++) {
+    const x = b * bw;
+    ctx.moveTo(x, yOf(env.max[b]));
+    ctx.lineTo(x, yOf(env.min[b]));
+  }
+  ctx.stroke();
+
+  // detected edges (subtle ticks, only when zoomed enough to stay sparse)
+  if (vw <= 12000) {
+    ctx.strokeStyle = good + 'aa'; ctx.lineWidth = 1;
+    for (const e of result.edges) {
+      if (e < vs || e > vs + vw) continue;
+      const x = xOf(e);
+      ctx.beginPath(); ctx.moveTo(x, H - 6); ctx.lineTo(x, H); ctx.stroke();
+    }
+  }
+
+  // frame boundary markers + labels
+  ctx.font = '10px ' + cssVar('--mono');
+  ctx.fillStyle = muted;
+  for (let i = 0; i < result.frames.length; i++) {
+    const f = result.frames[i];
+    if (f.startSample < vs || f.startSample > vs + vw) continue;
+    const x = xOf(f.startSample);
+    ctx.strokeStyle = accent; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 9); ctx.stroke();
+    if (bw * (80 * result.bitPeriod / vw) > 0 || vw < 4000) {
+      ctx.fillText(String(i + 1), x + 2, 12);
+    }
+  }
+}
+
+// ---- pointer interaction ----
+canvas.addEventListener('click', (ev) => {
+  if (!state.result || !state.result.frames.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const frac = (ev.clientX - rect.left) / rect.width;
+  const sample = state.viewStart + frac * state.viewWidth;
+  $('cursorSample').textContent = Math.round(sample);
+  $('cursorTime').textContent = sampleToTime(sample);
+  // find frame containing or nearest to the sample
+  let best = -1;
+  const frames = state.result.frames;
+  for (let i = 0; i < frames.length; i++) {
+    if (sample >= frames[i].startSample && sample < frames[i].endSample) { best = i; break; }
+  }
+  if (best < 0) {
+    let bestDist = Infinity;
+    for (let i = 0; i < frames.length; i++) {
+      const d = Math.min(Math.abs(sample - frames[i].startSample),
+                         Math.abs(sample - frames[i].endSample));
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+  }
+  if (best >= 0) selectFrame(best, false);
+});
+
+// ---- zoom controls ----
+$('zoomIn').addEventListener('click', () => {
+  const center = state.viewStart + state.viewWidth / 2;
+  state.viewWidth = Math.max(400, state.viewWidth / 2.5);
+  state.viewStart = Math.max(0, center - state.viewWidth / 2);
+  drawScope();
+});
+$('zoomOut').addEventListener('click', () => {
+  const center = state.viewStart + state.viewWidth / 2;
+  state.viewWidth = Math.min(state.parsed.numFrames, state.viewWidth * 2.5);
+  state.viewStart = Math.max(0, center - state.viewWidth / 2);
+  drawScope();
+});
+$('zoomReset').addEventListener('click', () => {
+  state.viewStart = 0;
+  state.viewWidth = state.parsed.numFrames;
+  drawScope();
+});
+
+// ---- CSV export ----
+$('exportBtn').addEventListener('click', () => {
+  const { frames } = state.result;
+  if (!frames.length) return;
+  const sr = state.parsed.sampleRate;
+  const lines = [['index', 'direction', 'timecode', 'start_sample', 'end_sample',
+                  'start_seconds', 'break_note'].join(',')];
+  frames.forEach((f, i) => {
+    const prev = i > 0 ? frames[i - 1] : null;
+    const note = prev ? (describeBreak(prev, f, state.mode, state.result.direction) || '') : '';
+    const gap = f.gapBefore ? 'gap_before' : '';
+    const combined = [note, gap].filter(Boolean).join(';');
+    lines.push([
+      i + 1,
+      state.result.direction,
+      f.label,
+      f.startSample,
+      f.endSample,
+      (f.startSample / sr).toFixed(6),
+      `"${combined}"`,
+    ].join(','));
+  });
+  const csv = '﻿' + lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = state.fileName + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+function resetOutputs() {
+  state.parsed = null; state.result = null;
+  $('statusRow').classList.add('hidden');
+  $('frameBody').innerHTML = '';
+  $('emptyState').classList.remove('hidden');
+  $('exportBtn').disabled = true;
+  ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+}
+
+$('fileInput').addEventListener('change', (e) => handleFile(e.target.files[0]));
+$('modeSelect').addEventListener('change', () => state.parsed && runDecode());
+$('channelSelect').addEventListener('change', () => state.parsed && runDecode());
+
+// initial canvas sizing once layout is ready
+requestAnimationFrame(resizeCanvas);
+</script>
