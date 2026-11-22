@@ -1,0 +1,225 @@
+<title>RPA1 录音归档抽查台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/*__CSS__*/
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <h1>RPA1 录音归档抽查台</h1>
+      <span class="tag">无损 · 分块 · 可抽查</span>
+    </div>
+    <p class="sub">导入 WAV 生成 RPA1 归档，或打开已有归档；逐块核对 <b>选参、偏移与 CRC32</b>，任意区间试听并导出完好片段。</p>
+  </header>
+
+  <section class="load" aria-label="导入">
+    <div class="load-row">
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="选择或拖放 WAV / RPA1 文件">
+        <span class="drop-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        </span>
+        <span class="drop-text">
+          <strong>拖放文件，或点击选择</strong>
+          <span>支持 PCM WAV（8–48 kHz · 16/24 位 · 单/双声道 · ≤90 秒）与 .rpa 归档</span>
+        </span>
+        <input type="file" id="file-input" accept=".wav,.rpa,audio/wav,application/octet-stream" class="sr-only" />
+      </div>
+      <div class="load-actions">
+        <button class="btn" type="button" data-sample="mono16">载入 mono16.wav</button>
+        <button class="btn" type="button" data-sample="stereo24">载入 stereo24.wav</button>
+      </div>
+    </div>
+
+    <div class="samples" id="wav-info" hidden>
+      <span class="lbl">已读取 WAV</span>
+      <div class="summary" id="wav-info-body" style="flex:1 1 100%; margin-top:6px"></div>
+      <div style="flex:1 1 100%; display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:4px">
+        <span id="wav-info-note" class="mono" style="font-size:0.8rem;color:var(--muted)"></span>
+        <button class="btn primary" type="button" id="encode-btn" disabled>
+          <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m4 5 7 7-7 7"/><path d="m13 5 7 7-7 7"/></svg></span>
+          编码并下载 RPA1
+        </button>
+      </div>
+      <div class="encode-bar" id="encode-bar">
+        <div class="progress"><i id="encode-progress-i"></i></div>
+        <div class="encode-meta" id="encode-meta"></div>
+      </div>
+    </div>
+  </section>
+
+  <main class="workspace" id="workspace" hidden aria-live="polite">
+    <!-- 摘要 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>归档概览</h2>
+        <button class="btn small ghost" type="button" id="download-archive" hidden>
+          <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span>
+          重新下载 .rpa
+        </button>
+      </div>
+      <div class="panel-body">
+        <div class="fileline">
+          <span class="kind" id="fkind">RPA1 归档</span>
+          <span class="fname" id="fname">—</span>
+        </div>
+        <div class="summary" id="summary"></div>
+        <div class="health" id="health"></div>
+        <div id="notices"></div>
+      </div>
+    </section>
+
+    <!-- 块状态图 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>块状态图</h2>
+        <div class="legend" aria-hidden="true">
+          <span><i style="background:var(--ok)"></i>完好</span>
+          <span><i style="background:var(--crit)"></i>损坏</span>
+          <span><i style="background:var(--index)"></i>索引损坏</span>
+          <span><i style="background:var(--accent);opacity:.45"></i>选区</span>
+        </div>
+      </div>
+      <div class="map-wrap">
+        <div class="map-head">
+          <span class="title">点击任意块定位并试听</span>
+        </div>
+        <div class="map-canvas-wrap" id="map-canvas-wrap" role="button" tabindex="0" aria-label="块状态图">
+          <canvas id="map-canvas"></canvas>
+        </div>
+        <div class="map-hint">
+          <span id="map-hint-l">帧 0</span>
+          <span id="map-hint-r"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 选区与试听 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>区间试听与导出</h2>
+        <span class="chip ok" id="sel-length-chip"><span>以 <b id="sel-length">0 帧</b></span></span>
+      </div>
+      <div class="panel-body">
+        <div class="sel-grid">
+          <div>
+            <div class="field-row">
+              <div class="field">
+                <label for="sel-start">起始帧（含）</label>
+                <input type="number" id="sel-start" min="0" step="1" inputmode="numeric" value="0" />
+                <span class="hint" id="sel-start-hint">0.000s</span>
+              </div>
+              <div class="field">
+                <label for="sel-end">结束帧（不含）</label>
+                <input type="number" id="sel-end" min="0" step="1" inputmode="numeric" value="0" />
+                <span class="hint" id="sel-end-hint">0.000s</span>
+              </div>
+            </div>
+            <div class="quick">
+              <button class="btn small" type="button" id="sel-all">全选</button>
+              <button class="btn small" type="button" id="sel-nudge-l">起点 −1024</button>
+              <button class="btn small" type="button" id="sel-nudge-r">终点 +1024</button>
+              <button class="btn small" type="button" id="sel-first-sec">从此起 1 秒</button>
+            </div>
+            <div class="wave-wrap">
+              <canvas id="wave-canvas"></canvas>
+              <div class="wave-empty" id="wave-empty">载入归档后显示波形</div>
+            </div>
+            <div class="sel-state" id="sel-state"></div>
+          </div>
+          <div class="transport">
+            <button class="btn primary" type="button" id="play-btn">
+              <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg></span>
+              试听区间
+            </button>
+            <button class="btn" type="button" id="export-btn">
+              <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span>
+              导出区间 WAV
+            </button>
+            <div class="play-status" id="play-status" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 块表 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>逐块选参与校验</h2>
+        <div class="jump">
+          <label for="jump-input">跳至块</label>
+          <input type="number" id="jump-input" min="0" step="1" inputmode="numeric" />
+        </div>
+      </div>
+      <div class="table-tools">
+        <div class="seg" role="group" aria-label="筛选">
+          <button type="button" data-filter="all" aria-pressed="true">全部</button>
+          <button type="button" data-filter="bad" aria-pressed="false">仅异常</button>
+          <button type="button" data-filter="ok" aria-pressed="false">完好</button>
+          <button type="button" data-filter="crc" aria-pressed="false">块损坏</button>
+          <button type="button" data-filter="index" aria-pressed="false">索引损坏</button>
+        </div>
+        <div class="jump" style="font-family:var(--font-mono)">每页 50 块</div>
+      </div>
+      <div class="table-scroll">
+        <table class="blocks">
+          <thead>
+            <tr>
+              <th class="num">块</th>
+              <th class="num">帧数</th>
+              <th class="num">偏移</th>
+              <th class="num">字节</th>
+              <th>模式</th>
+              <th>第 1 路 阶/k</th>
+              <th>第 2 路 阶/k</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="block-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="info" id="pager-info"></span>
+        <div class="pages">
+          <button class="btn small" type="button" id="prev-page">上一页</button>
+          <span class="info" id="page-label" style="align-self:center">1 / 1</span>
+          <button class="btn small" type="button" id="next-page">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 损坏演练 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>损坏演练</h2>
+        <button class="btn small ghost" type="button" id="restore">恢复完好归档</button>
+      </div>
+      <div class="panel-body">
+        <p style="margin:0 0 12px; color:var(--muted); font-size:0.86rem; max-width:64ch">
+          在内存副本上模拟损坏，验证索引损坏与块损坏的定位与隔离：头错误绝不丢弃当前归档。
+        </p>
+        <div class="quick" style="margin-top:0">
+          <button class="btn small" type="button" id="sim-index">损坏索引条目</button>
+          <button class="btn small" type="button" id="sim-block">损坏一个块</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>RPA1 · 每 1024 帧独立编码 · 逐路 0–2 阶预测 × 0–15 Rice 参数取最短</span>
+      <span class="mono">CRC32 = zlib.crc32</span>
+    </footer>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script>
+/*__RPA1__*/
+</script>
+<script>
+/*__SAMPLES__*/
+</script>
+<script>
+/*__APP__*/
+</script>

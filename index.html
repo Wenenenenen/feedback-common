@@ -1,0 +1,3120 @@
+<title>RPA1 录音归档抽查台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ==========================================================================
+   RPA1 归档抽查 — 设计令牌
+   方向：录音校准台 / 仪器面板。冷调纸底、墨色正文、单一青绿信号色，
+   状态色独立于信号色；数据一律用等宽字体，成列对齐。
+   ========================================================================== */
+
+:root {
+  --bg: #f2f4f0;
+  --bg-deep: #e9ece6;
+  --surface: #ffffff;
+  --surface-2: #edf1ec;
+  --ink: #161c18;
+  --ink-2: #35413a;
+  --muted: #5b665e;
+  --faint: #8a958c;
+  --line: #d5dcd3;
+  --line-strong: #bcc6bb;
+  --accent: #0e7a68;
+  --accent-strong: #0a5f51;
+  --accent-soft: #d9ece7;
+  --on-accent: #ffffff;
+  --ok: #2c8a57;
+  --ok-soft: #dcefe2;
+  --warn: #a06a0b;
+  --warn-soft: #f6e8c6;
+  --crit: #b0372f;
+  --crit-soft: #f6dcd9;
+  --index: #6f479f;
+  --index-soft: #ebe1f6;
+  --focus: #1a90c9;
+  --shadow: 0 1px 2px rgba(22, 28, 24, 0.06), 0 6px 18px rgba(22, 28, 24, 0.05);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e120f;
+    --bg-deep: #0a0d0b;
+    --surface: #151b17;
+    --surface-2: #1a231d;
+    --ink: #e6ece6;
+    --ink-2: #c3cec5;
+    --muted: #94a298;
+    --faint: #6c7a71;
+    --line: #29352d;
+    --line-strong: #3a4a3f;
+    --accent: #46d0b6;
+    --accent-strong: #6fe0c9;
+    --accent-soft: #14352e;
+    --on-accent: #05201a;
+    --ok: #4cc487;
+    --ok-soft: #123024;
+    --warn: #e0a63a;
+    --warn-soft: #352a10;
+    --crit: #e66a60;
+    --crit-soft: #3a1c19;
+    --index: #b394e6;
+    --index-soft: #2a2238;
+    --focus: #67c5f2;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 22px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e120f;
+  --bg-deep: #0a0d0b;
+  --surface: #151b17;
+  --surface-2: #1a231d;
+  --ink: #e6ece6;
+  --ink-2: #c3cec5;
+  --muted: #94a298;
+  --faint: #6c7a71;
+  --line: #29352d;
+  --line-strong: #3a4a3f;
+  --accent: #46d0b6;
+  --accent-strong: #6fe0c9;
+  --accent-soft: #14352e;
+  --on-accent: #05201a;
+  --ok: #4cc487;
+  --ok-soft: #123024;
+  --warn: #e0a63a;
+  --warn-soft: #352a10;
+  --crit: #e66a60;
+  --crit-soft: #3a1c19;
+  --index: #b394e6;
+  --index-soft: #2a2238;
+  --focus: #67c5f2;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 22px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ */
+
+* { box-sizing: border-box; }
+
+/* 本地/发布环境都依赖 hidden 属性控制显隐 */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+  padding-block: 0 72px;
+}
+
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+.mono { font-family: var(--font-mono); font-feature-settings: "zero" 1; }
+
+.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+
+/* ---------------- masthead ---------------- */
+
+.masthead {
+  padding-block: 30px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand { display: flex; align-items: baseline; gap: 12px; }
+
+.brand h1 {
+  font-size: 1.55rem;
+  letter-spacing: -0.02em;
+}
+
+.brand .tag {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 3px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.masthead .sub {
+  color: var(--muted);
+  font-size: 0.86rem;
+  max-width: 46ch;
+}
+
+.masthead .sub b { color: var(--ink-2); font-weight: 600; }
+
+/* ---------------- load zone ---------------- */
+
+.load {
+  margin-top: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.load-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.drop {
+  flex: 1 1 320px;
+  min-width: 0;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--surface-2);
+}
+
+.drop:hover, .drop:focus-visible, .drop.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.drop .drop-icon {
+  width: 34px; height: 34px; flex: none;
+  color: var(--accent);
+}
+
+.drop .drop-text { min-width: 0; }
+.drop .drop-text strong { display: block; font-size: 0.95rem; }
+.drop .drop-text span { display: block; color: var(--muted); font-size: 0.8rem; }
+
+.load-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.samples {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.samples .lbl { color: var(--muted); font-size: 0.8rem; margin-right: 2px; }
+
+/* ---------------- buttons ---------------- */
+
+.btn {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 550;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.13s, border-color 0.13s, color 0.13s, opacity 0.13s;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); }
+.btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn:disabled { opacity: 0.42; cursor: not-allowed; }
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
+
+.btn.ghost { background: transparent; }
+.btn.small { padding: 6px 10px; font-size: 0.78rem; }
+.btn.icon { padding: 9px; }
+
+.btn .b-ico { width: 15px; height: 15px; }
+
+/* ---------------- workspace ---------------- */
+
+.workspace { margin-top: 22px; display: none; }
+.workspace.live { display: block; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.panel-head h2 { font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+.panel-body { padding: 18px; }
+
+/* summary readouts */
+
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 1px; background: var(--line); border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line); }
+.readout { background: var(--surface); padding: 12px 14px; min-width: 0; }
+.readout .k { font-size: 0.68rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.readout .v { font-family: var(--font-mono); font-size: 1.02rem; font-variant-numeric: tabular-nums; margin-top: 3px; color: var(--ink); }
+.readout .v small { color: var(--muted); font-size: 0.72rem; }
+
+.fileline { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.fileline .fname { font-family: var(--font-mono); font-size: 0.88rem; color: var(--ink); word-break: break-all; }
+.fileline .kind { font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* health chips */
+
+.health { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 0.78rem; padding: 5px 11px 5px 9px;
+  border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink-2);
+  white-space: nowrap;
+}
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); background: var(--ok-soft); }
+.chip.ok .dot { background: var(--ok); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: var(--warn-soft); }
+.chip.warn .dot { background: var(--warn); }
+.chip.crit { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, var(--line)); background: var(--crit-soft); }
+.chip.crit .dot { background: var(--crit); }
+.chip.index { color: var(--index); border-color: color-mix(in srgb, var(--index) 40%, var(--line)); background: var(--index-soft); }
+.chip.index .dot { background: var(--index); }
+.chip b { font-family: var(--font-mono); font-weight: 600; }
+
+.notice {
+  margin-top: 14px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.notice .n-ico { flex: none; width: 17px; height: 17px; margin-top: 1px; }
+.notice.crit { border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); background: var(--crit-soft); color: var(--crit); }
+.notice.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: var(--warn-soft); color: var(--warn); }
+.notice.index { border-color: color-mix(in srgb, var(--index) 45%, var(--line)); background: var(--index-soft); color: var(--index); }
+.notice.ok { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: var(--ok-soft); color: var(--ok); }
+.notice .n-body { min-width: 0; }
+.notice b { font-weight: 650; }
+.notice code { font-family: var(--font-mono); font-size: 0.82em; background: color-mix(in srgb, currentColor 10%, transparent); padding: 1px 5px; border-radius: 4px; }
+
+/* encode progress */
+
+.encode-bar { margin-top: 14px; display: none; }
+.encode-bar.on { display: block; }
+.progress { height: 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.progress > i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width 0.12s linear; }
+.encode-meta { display: flex; justify-content: space-between; margin-top: 7px; font-size: 0.78rem; color: var(--muted); font-family: var(--font-mono); }
+
+/* ---------------- block map ---------------- */
+
+.map-wrap { padding: 16px 18px 8px; }
+.map-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.map-head .title { font-size: 0.8rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); }
+.legend { display: flex; gap: 13px; flex-wrap: wrap; font-size: 0.74rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+.map-canvas-wrap { position: relative; width: 100%; height: 54px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line); cursor: crosshair; }
+.map-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+
+.map-hint { display: flex; justify-content: space-between; margin-top: 7px; font-size: 0.72rem; color: var(--faint); font-family: var(--font-mono); }
+
+/* ---------------- selection / transport ---------------- */
+
+.sel-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: start; }
+@media (max-width: 680px) { .sel-grid { grid-template-columns: 1fr; } }
+
+.field-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.field input {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  width: 128px;
+  font-variant-numeric: tabular-nums;
+}
+.field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+.field .hint { font-size: 0.72rem; color: var(--faint); font-family: var(--font-mono); }
+
+.quick { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+
+.transport { display: flex; flex-direction: column; gap: 10px; align-items: stretch; min-width: 150px; }
+.transport .btn { justify-content: center; }
+.play-status { font-size: 0.76rem; color: var(--muted); font-family: var(--font-mono); text-align: center; min-height: 1.2em; }
+
+/* waveform */
+
+.wave-wrap { margin-top: 16px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-2); overflow: hidden; position: relative; }
+.wave-wrap canvas { display: block; width: 100%; height: 108px; }
+.wave-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.82rem; color: var(--faint); font-family: var(--font-mono); pointer-events: none; }
+
+.sel-state { margin-top: 14px; font-size: 0.82rem; }
+.sel-state .cross { color: var(--crit); }
+
+/* ---------------- table ---------------- */
+
+.table-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button {
+  font-family: var(--font-ui); font-size: 0.78rem; padding: 6px 12px; border: 0; background: var(--surface);
+  color: var(--muted); cursor: pointer; border-right: 1px solid var(--line);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+.seg button:hover:not([aria-pressed="true"]) { background: var(--surface-2); }
+
+.jump { display: flex; gap: 7px; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.jump input { font-family: var(--font-mono); font-size: 0.82rem; width: 88px; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); }
+
+.table-scroll { overflow-x: auto; }
+table.blocks { width: 100%; border-collapse: collapse; font-size: 0.81rem; min-width: 720px; }
+table.blocks th {
+  position: sticky; top: 0; text-align: left; font-weight: 600; color: var(--muted);
+  font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); white-space: nowrap; z-index: 1;
+}
+table.blocks td { padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.blocks td.num, table.blocks th.num { text-align: right; }
+table.blocks tbody tr { cursor: pointer; }
+table.blocks tbody tr:hover { background: var(--surface-2); }
+table.blocks tbody tr.sel { background: var(--accent-soft); }
+table.blocks tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+table.blocks td .st { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-ui); font-size: 0.76rem; }
+table.blocks td .st i { width: 8px; height: 8px; border-radius: 50%; }
+.st.s-ok { color: var(--ok); } .st.s-ok i { background: var(--ok); }
+.st.s-crc { color: var(--crit); } .st.s-crc i { background: var(--crit); }
+.st.s-block { color: var(--crit); } .st.s-block i { background: var(--crit); }
+.st.s-index { color: var(--index); } .st.s-index i { background: var(--index); }
+.par { color: var(--ink-2); }
+.par b { color: var(--accent-strong); font-weight: 600; }
+.mode-pill { font-family: var(--font-ui); font-size: 0.72rem; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--ink-2); background: var(--surface-2); }
+.mode-pill.ms { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent-strong); background: var(--accent-soft); }
+
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; flex-wrap: wrap; }
+.pager .info { font-size: 0.78rem; color: var(--muted); font-family: var(--font-mono); }
+.pager .pages { display: flex; gap: 6px; }
+
+.row-detail { margin: 0; padding: 0 18px 16px; }
+.row-detail .detail-card {
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2);
+  padding: 13px 15px; font-size: 0.82rem;
+}
+.row-detail .detail-card h4 { margin: 0 0 8px; font-size: 0.8rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.row-detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 5px 16px; margin: 0; }
+.row-detail dt { color: var(--muted); }
+.row-detail dd { margin: 0; font-family: var(--font-mono); word-break: break-word; }
+.row-detail .err { margin-top: 9px; color: var(--crit); font-family: var(--font-mono); font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; }
+
+/* errors list */
+
+.issue-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; background: var(--line); border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line); }
+.issue-list li { background: var(--surface); padding: 10px 14px; display: flex; gap: 12px; align-items: baseline; font-size: 0.82rem; }
+.issue-list li .idx { font-family: var(--font-mono); color: var(--muted); flex: none; min-width: 74px; }
+.issue-list li .msg { min-width: 0; color: var(--ink-2); }
+.issue-list li.k-index .idx { color: var(--index); }
+.issue-list li.k-block .idx { color: var(--crit); }
+
+/* toast */
+
+.toasts { position: fixed; z-index: 50; right: max(18px, env(safe-area-inset-right, 0px)); bottom: max(18px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 9px; max-width: min(380px, calc(100vw - 36px)); }
+.toast {
+  background: var(--ink); color: var(--bg); border-radius: var(--radius-sm);
+  padding: 11px 15px; font-size: 0.84rem; box-shadow: var(--shadow);
+  animation: toast-in 0.2s ease both;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.toast .t-ico { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+.toast.crit { background: var(--crit); color: #fff; }
+.toast.ok { background: var(--ok); color: #fff; }
+.toast.warn { background: var(--warn); color: #fff; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } .progress > i { transition: none; } }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--faint); font-size: 0.78rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.footer .mono { color: var(--muted); }
+
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <h1>RPA1 录音归档抽查台</h1>
+      <span class="tag">无损 · 分块 · 可抽查</span>
+    </div>
+    <p class="sub">导入 WAV 生成 RPA1 归档，或打开已有归档；逐块核对 <b>选参、偏移与 CRC32</b>，任意区间试听并导出完好片段。</p>
+  </header>
+
+  <section class="load" aria-label="导入">
+    <div class="load-row">
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="选择或拖放 WAV / RPA1 文件">
+        <span class="drop-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        </span>
+        <span class="drop-text">
+          <strong>拖放文件，或点击选择</strong>
+          <span>支持 PCM WAV（8–48 kHz · 16/24 位 · 单/双声道 · ≤90 秒）与 .rpa 归档</span>
+        </span>
+        <input type="file" id="file-input" accept=".wav,.rpa,audio/wav,application/octet-stream" class="sr-only" />
+      </div>
+      <div class="load-actions">
+        <button class="btn" type="button" data-sample="mono16">载入 mono16.wav</button>
+        <button class="btn" type="button" data-sample="stereo24">载入 stereo24.wav</button>
+      </div>
+    </div>
+
+    <div class="samples" id="wav-info" hidden>
+      <span class="lbl">已读取 WAV</span>
+      <div class="summary" id="wav-info-body" style="flex:1 1 100%; margin-top:6px"></div>
+      <div style="flex:1 1 100%; display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:4px">
+        <span id="wav-info-note" class="mono" style="font-size:0.8rem;color:var(--muted)"></span>
+        <button class="btn primary" type="button" id="encode-btn" disabled>
+          <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m4 5 7 7-7 7"/><path d="m13 5 7 7-7 7"/></svg></span>
+          编码并下载 RPA1
+        </button>
+      </div>
+      <div class="encode-bar" id="encode-bar">
+        <div class="progress"><i id="encode-progress-i"></i></div>
+        <div class="encode-meta" id="encode-meta"></div>
+      </div>
+    </div>
+  </section>
+
+  <main class="workspace" id="workspace" hidden aria-live="polite">
+    <!-- 摘要 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>归档概览</h2>
+        <button class="btn small ghost" type="button" id="download-archive" hidden>
+          <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span>
+          重新下载 .rpa
+        </button>
+      </div>
+      <div class="panel-body">
+        <div class="fileline">
+          <span class="kind" id="fkind">RPA1 归档</span>
+          <span class="fname" id="fname">—</span>
+        </div>
+        <div class="summary" id="summary"></div>
+        <div class="health" id="health"></div>
+        <div id="notices"></div>
+      </div>
+    </section>
+
+    <!-- 块状态图 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>块状态图</h2>
+        <div class="legend" aria-hidden="true">
+          <span><i style="background:var(--ok)"></i>完好</span>
+          <span><i style="background:var(--crit)"></i>损坏</span>
+          <span><i style="background:var(--index)"></i>索引损坏</span>
+          <span><i style="background:var(--accent);opacity:.45"></i>选区</span>
+        </div>
+      </div>
+      <div class="map-wrap">
+        <div class="map-head">
+          <span class="title">点击任意块定位并试听</span>
+        </div>
+        <div class="map-canvas-wrap" id="map-canvas-wrap" role="button" tabindex="0" aria-label="块状态图">
+          <canvas id="map-canvas"></canvas>
+        </div>
+        <div class="map-hint">
+          <span id="map-hint-l">帧 0</span>
+          <span id="map-hint-r"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 选区与试听 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>区间试听与导出</h2>
+        <span class="chip ok" id="sel-length-chip"><span>以 <b id="sel-length">0 帧</b></span></span>
+      </div>
+      <div class="panel-body">
+        <div class="sel-grid">
+          <div>
+            <div class="field-row">
+              <div class="field">
+                <label for="sel-start">起始帧（含）</label>
+                <input type="number" id="sel-start" min="0" step="1" inputmode="numeric" value="0" />
+                <span class="hint" id="sel-start-hint">0.000s</span>
+              </div>
+              <div class="field">
+                <label for="sel-end">结束帧（不含）</label>
+                <input type="number" id="sel-end" min="0" step="1" inputmode="numeric" value="0" />
+                <span class="hint" id="sel-end-hint">0.000s</span>
+              </div>
+            </div>
+            <div class="quick">
+              <button class="btn small" type="button" id="sel-all">全选</button>
+              <button class="btn small" type="button" id="sel-nudge-l">起点 −1024</button>
+              <button class="btn small" type="button" id="sel-nudge-r">终点 +1024</button>
+              <button class="btn small" type="button" id="sel-first-sec">从此起 1 秒</button>
+            </div>
+            <div class="wave-wrap">
+              <canvas id="wave-canvas"></canvas>
+              <div class="wave-empty" id="wave-empty">载入归档后显示波形</div>
+            </div>
+            <div class="sel-state" id="sel-state"></div>
+          </div>
+          <div class="transport">
+            <button class="btn primary" type="button" id="play-btn">
+              <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg></span>
+              试听区间
+            </button>
+            <button class="btn" type="button" id="export-btn">
+              <span class="b-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg></span>
+              导出区间 WAV
+            </button>
+            <div class="play-status" id="play-status" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 块表 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>逐块选参与校验</h2>
+        <div class="jump">
+          <label for="jump-input">跳至块</label>
+          <input type="number" id="jump-input" min="0" step="1" inputmode="numeric" />
+        </div>
+      </div>
+      <div class="table-tools">
+        <div class="seg" role="group" aria-label="筛选">
+          <button type="button" data-filter="all" aria-pressed="true">全部</button>
+          <button type="button" data-filter="bad" aria-pressed="false">仅异常</button>
+          <button type="button" data-filter="ok" aria-pressed="false">完好</button>
+          <button type="button" data-filter="crc" aria-pressed="false">块损坏</button>
+          <button type="button" data-filter="index" aria-pressed="false">索引损坏</button>
+        </div>
+        <div class="jump" style="font-family:var(--font-mono)">每页 50 块</div>
+      </div>
+      <div class="table-scroll">
+        <table class="blocks">
+          <thead>
+            <tr>
+              <th class="num">块</th>
+              <th class="num">帧数</th>
+              <th class="num">偏移</th>
+              <th class="num">字节</th>
+              <th>模式</th>
+              <th>第 1 路 阶/k</th>
+              <th>第 2 路 阶/k</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="block-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="info" id="pager-info"></span>
+        <div class="pages">
+          <button class="btn small" type="button" id="prev-page">上一页</button>
+          <span class="info" id="page-label" style="align-self:center">1 / 1</span>
+          <button class="btn small" type="button" id="next-page">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 损坏演练 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>损坏演练</h2>
+        <button class="btn small ghost" type="button" id="restore">恢复完好归档</button>
+      </div>
+      <div class="panel-body">
+        <p style="margin:0 0 12px; color:var(--muted); font-size:0.86rem; max-width:64ch">
+          在内存副本上模拟损坏，验证索引损坏与块损坏的定位与隔离：头错误绝不丢弃当前归档。
+        </p>
+        <div class="quick" style="margin-top:0">
+          <button class="btn small" type="button" id="sim-index">损坏索引条目</button>
+          <button class="btn small" type="button" id="sim-block">损坏一个块</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>RPA1 · 每 1024 帧独立编码 · 逐路 0–2 阶预测 × 0–15 Rice 参数取最短</span>
+      <span class="mono">CRC32 = zlib.crc32</span>
+    </footer>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script>
+/*
+ * RPA1 — 录音无损归档编解码核心
+ *
+ * 纯 JavaScript（无 DOM / 无 Node 内建依赖），浏览器与 Node 共用。
+ * 格式细节见 samples/格式.txt 与 README.md。
+ *
+ *   WAV 子集：小端 RIFF / PCM(格式码 1) / 一个 fmt + 一个 data，区块按偶数字节补齐。
+ *   RPA1 头 ："RPA1" | u32 sampleRate | u8 channels | u8 bitDepth
+ *             | u32 totalFrames | u32 numBlocks
+ *   目录    ：numBlocks 条 u32 offset / u32 size / u32 crc32
+ *   块      ：u8 mode | (u8 order, u8 k) × channels | 各路位流（各自补齐到整块末尾）
+ *
+ * 位流：MSB first；Rice 码 q<31 写 q 个 0 + 1 + k 位余数；
+ *       q>=31 写 31 个 0 + 28 位原始 u。整个块末尾补最少的 0 到字节边界。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.RPA1 = factory();
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  var MAGIC = 0x31504152; // "RPA1" little-endian u32
+  var HEADER_SIZE = 18;
+  var ENTRY_SIZE = 12;
+  var FRAMES_PER_BLOCK = 1024;
+  var MAX_SECONDS = 90;
+  var MIN_RATE = 8000;
+  var MAX_RATE = 48000;
+  var ESCAPE_Q = 31;
+  var ESCAPE_BITS = 28;
+
+  /* ------------------------------------------------------------------ */
+  /* CRC32（与 Python zlib.crc32 一致）                                  */
+  /* ------------------------------------------------------------------ */
+
+  var CRC_TABLE = (function () {
+    var table = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes, start, end) {
+    var c = 0xffffffff;
+    var s = start === undefined ? 0 : start;
+    var e = end === undefined ? bytes.length : end;
+    for (var i = s; i < e; i++) {
+      c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+    }
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 小工具                                                              */
+  /* ------------------------------------------------------------------ */
+
+  function ceilDiv(a, b) {
+    return Math.floor((a + b - 1) / b);
+  }
+
+  function bitDepthRange(bitDepth) {
+    return { min: -Math.pow(2, bitDepth - 1), max: Math.pow(2, bitDepth - 1) - 1 };
+  }
+
+  function failure(kind, message, extra) {
+    var err = { kind: kind, message: message };
+    if (extra) {
+      for (var key in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, key)) err[key] = extra[key];
+      }
+    }
+    return err;
+  }
+
+  function readU32(bytes, offset) {
+    return (
+      (bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24)) >>>
+      0
+    );
+  }
+
+  function writeU32(bytes, offset, value) {
+    value = value >>> 0;
+    bytes[offset] = value & 0xff;
+    bytes[offset + 1] = (value >>> 8) & 0xff;
+    bytes[offset + 2] = (value >>> 16) & 0xff;
+    bytes[offset + 3] = (value >>> 24) & 0xff;
+  }
+
+  function concatChunks(chunks, total) {
+    var out = new Uint8Array(total);
+    var pos = 0;
+    for (var i = 0; i < chunks.length; i++) {
+      out.set(chunks[i], pos);
+      pos += chunks[i].length;
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* WAV 解析 / 生成                                                     */
+  /* ------------------------------------------------------------------ */
+
+  function parseWav(bytes) {
+    if (!bytes || bytes.length < 12) {
+      return { ok: false, error: failure('wav', '文件太小，不是有效的 WAV。') };
+    }
+    if (
+      bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46 ||
+      bytes[8] !== 0x57 || bytes[9] !== 0x41 || bytes[10] !== 0x56 || bytes[11] !== 0x45
+    ) {
+      return { ok: false, error: failure('wav', 'RIFF/WAVE 标识不匹配。') };
+    }
+
+    var pos = 12;
+    var fmtChunk = null;
+    var dataChunk = null;
+    var chunkCount = 0;
+    while (pos + 8 <= bytes.length) {
+      var id = String.fromCharCode(bytes[pos], bytes[pos + 1], bytes[pos + 2], bytes[pos + 3]);
+      var size = readU32(bytes, pos + 4);
+      var body = pos + 8;
+      if (body + size > bytes.length) {
+        return { ok: false, error: failure('wav', '区块 “' + id + '” 越过文件结尾。') };
+      }
+      if (id === 'fmt ') {
+        if (fmtChunk) return { ok: false, error: failure('wav', 'WAV 含多个 fmt 区块。') };
+        fmtChunk = { offset: body, size: size };
+      } else if (id === 'data') {
+        if (dataChunk) return { ok: false, error: failure('wav', 'WAV 含多个 data 区块。') };
+        dataChunk = { offset: body, size: size };
+      }
+      chunkCount++;
+      pos = body + size + (size & 1);
+    }
+
+    if (pos !== bytes.length) {
+      return { ok: false, error: failure('wav', 'RIFF 区块长度与文件不一致。') };
+    }
+    if (!fmtChunk || !dataChunk) {
+      return { ok: false, error: failure('wav', 'WAV 必须恰好包含一个 fmt 和一个 data 区块。') };
+    }
+    if (fmtChunk.size < 16) {
+      return { ok: false, error: failure('wav', 'fmt 区块长度不足 16 字节。') };
+    }
+
+    var fmt = fmtChunk.offset;
+    var audioFormat = bytes[fmt] | (bytes[fmt + 1] << 8);
+    var channels = bytes[fmt + 2] | (bytes[fmt + 3] << 8);
+    var sampleRate = readU32(bytes, fmt + 4);
+    var byteRate = readU32(bytes, fmt + 8);
+    var blockAlign = bytes[fmt + 12] | (bytes[fmt + 13] << 8);
+    var bitDepth = bytes[fmt + 14] | (bytes[fmt + 15] << 8);
+
+    if (audioFormat !== 1) {
+      return { ok: false, error: failure('wav', '仅支持 PCM（格式码 1），实际为 ' + audioFormat + '。') };
+    }
+    if (channels !== 1 && channels !== 2) {
+      return { ok: false, error: failure('wav', '仅支持单声道或双声道，实际 ' + channels + ' 声道。') };
+    }
+    if (bitDepth !== 16 && bitDepth !== 24) {
+      return { ok: false, error: failure('wav', '仅支持 16 或 24 位，实际 ' + bitDepth + ' 位。') };
+    }
+    if (sampleRate < MIN_RATE || sampleRate > MAX_RATE) {
+      return { ok: false, error: failure('wav', '采样率须在 8–48 kHz，实际 ' + sampleRate + ' Hz。') };
+    }
+    var bytesPerSample = bitDepth / 8;
+    var expectedAlign = channels * bytesPerSample;
+    if (blockAlign !== expectedAlign) {
+      return { ok: false, error: failure('wav', 'blockAlign=' + blockAlign + '，与声道数/位深推算的 ' + expectedAlign + ' 不符。') };
+    }
+    // byteRate 在部分录音设备写入不准，且不影响帧计数，这里仅在明显为零时提示性忽略，不做硬校验。
+    void byteRate;
+    if (dataChunk.size % blockAlign !== 0) {
+      return { ok: false, error: failure('wav', 'data 字节数不是整帧。') };
+    }
+    var totalFrames = dataChunk.size / blockAlign;
+    if (totalFrames <= 0) {
+      return { ok: false, error: failure('wav', 'data 区块为空。') };
+    }
+    if (totalFrames > MAX_SECONDS * sampleRate) {
+      return {
+        ok: false,
+        error: failure('wav', '录音长度 ' + (totalFrames / sampleRate).toFixed(2) + ' 秒，超过 90 秒上限。')
+      };
+    }
+
+    var channelsData = [];
+    for (var c = 0; c < channels; c++) channelsData.push(new Int32Array(totalFrames));
+    var dataOffset = dataChunk.offset;
+    var frameBytes = blockAlign;
+    var i;
+    if (bitDepth === 16) {
+      if (channels === 1) {
+        var mono16 = channelsData[0];
+        for (i = 0; i < totalFrames; i++) {
+          var o16 = dataOffset + i * 2;
+          mono16[i] = (bytes[o16] | (bytes[o16 + 1] << 8)) << 16 >> 16;
+        }
+      } else {
+        var l16 = channelsData[0];
+        var r16 = channelsData[1];
+        for (i = 0; i < totalFrames; i++) {
+          var p16 = dataOffset + i * 4;
+          l16[i] = (bytes[p16] | (bytes[p16 + 1] << 8)) << 16 >> 16;
+          r16[i] = (bytes[p16 + 2] | (bytes[p16 + 3] << 8)) << 16 >> 16;
+        }
+      }
+    } else {
+      if (channels === 1) {
+        var mono24 = channelsData[0];
+        for (i = 0; i < totalFrames; i++) {
+          var o24 = dataOffset + i * 3;
+          var v = bytes[o24] | (bytes[o24 + 1] << 8) | (bytes[o24 + 2] << 16);
+          mono24[i] = (v << 8) >> 8;
+        }
+      } else {
+        var l24 = channelsData[0];
+        var r24 = channelsData[1];
+        for (i = 0; i < totalFrames; i++) {
+          var p24 = dataOffset + i * 6;
+          var lv = bytes[p24] | (bytes[p24 + 1] << 8) | (bytes[p24 + 2] << 16);
+          var rv = bytes[p24 + 3] | (bytes[p24 + 4] << 8) | (bytes[p24 + 5] << 16);
+          l24[i] = (lv << 8) >> 8;
+          r24[i] = (rv << 8) >> 8;
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      sampleRate: sampleRate,
+      channels: channels,
+      bitDepth: bitDepth,
+      totalFrames: totalFrames,
+      channelsData: channelsData
+    };
+  }
+
+  /**
+   * 生成 WAV 字节。channelsData 为各声道的 Int32Array（整段），
+   * start/end 为左闭右开帧区间。
+   */
+  function encodeWav(sampleRate, channels, bitDepth, channelsData, start, end) {
+    start = start === undefined ? 0 : start;
+    end = end === undefined ? channelsData[0].length : end;
+    var frames = end - start;
+    var bytesPerSample = bitDepth / 8;
+    var blockAlign = channels * bytesPerSample;
+    var dataSize = frames * blockAlign;
+    var pad = dataSize & 1;
+    var riffSize = 4 + 8 + 16 + 8 + dataSize + pad;
+    var out = new Uint8Array(8 + riffSize);
+
+    out[0] = 0x52; out[1] = 0x49; out[2] = 0x46; out[3] = 0x46;
+    writeU32(out, 4, riffSize);
+    out[8] = 0x57; out[9] = 0x41; out[10] = 0x56; out[11] = 0x45;
+    out[12] = 0x66; out[13] = 0x6d; out[14] = 0x74; out[15] = 0x20;
+    writeU32(out, 16, 16);
+    out[20] = 1; out[21] = 0;
+    out[22] = channels & 0xff; out[23] = channels >> 8;
+    writeU32(out, 24, sampleRate);
+    writeU32(out, 28, sampleRate * blockAlign);
+    out[32] = blockAlign & 0xff; out[33] = blockAlign >> 8;
+    out[34] = bitDepth & 0xff; out[35] = bitDepth >> 8;
+    out[36] = 0x64; out[37] = 0x61; out[38] = 0x74; out[39] = 0x61;
+    writeU32(out, 40, dataSize);
+
+    var pos = 44;
+    if (bitDepth === 16) {
+      if (channels === 1) {
+        var m = channelsData[0];
+        for (var i = start; i < end; i++) {
+          var s = m[i];
+          out[pos++] = s & 0xff;
+          out[pos++] = (s >> 8) & 0xff;
+        }
+      } else {
+        var l = channelsData[0];
+        var r = channelsData[1];
+        for (var j = start; j < end; j++) {
+          var a = l[j], b = r[j];
+          out[pos++] = a & 0xff; out[pos++] = (a >> 8) & 0xff;
+          out[pos++] = b & 0xff; out[pos++] = (b >> 8) & 0xff;
+        }
+      }
+    } else {
+      if (channels === 1) {
+        var mm = channelsData[0];
+        for (var q = start; q < end; q++) {
+          var v = mm[q];
+          out[pos++] = v & 0xff;
+          out[pos++] = (v >> 8) & 0xff;
+          out[pos++] = (v >> 16) & 0xff;
+        }
+      } else {
+        var ll = channelsData[0];
+        var rr = channelsData[1];
+        for (var t = start; t < end; t++) {
+          var lv = ll[t], rv = rr[t];
+          out[pos++] = lv & 0xff; out[pos++] = (lv >> 8) & 0xff; out[pos++] = (lv >> 16) & 0xff;
+          out[pos++] = rv & 0xff; out[pos++] = (rv >> 8) & 0xff; out[pos++] = (rv >> 16) & 0xff;
+        }
+      }
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 位写入 / 位读取                                                     */
+  /* ------------------------------------------------------------------ */
+
+  function BitWriter(buf, offset) {
+    this.buf = buf;
+    this.pos = offset;
+    this.acc = 0;
+    this.nbits = 0;
+  }
+
+  // 追加 n (<=24) 位，高位先写。
+  BitWriter.prototype.append = function (value, n) {
+    if (n <= 0) return;
+    var mask = n === 32 ? 0xffffffff : (1 << n) - 1;
+    this.acc = ((this.acc << n) | (value & mask)) >>> 0;
+    this.nbits += n;
+    while (this.nbits >= 8) {
+      this.nbits -= 8;
+      this.buf[this.pos++] = (this.acc >>> this.nbits) & 0xff;
+    }
+    this.acc &= (1 << this.nbits) - 1;
+  };
+
+  BitWriter.prototype.zeros = function (n) {
+    while (n > 24) {
+      this.append(0, 24);
+      n -= 24;
+    }
+    this.append(0, n);
+  };
+
+  BitWriter.prototype.bits28 = function (value) {
+    this.append(value >>> 4, 24);
+    this.append(value & 0xf, 4);
+  };
+
+  // 最少的 0 补到字节边界。
+  BitWriter.prototype.finish = function () {
+    if (this.nbits > 0) {
+      this.buf[this.pos++] = (this.acc << (8 - this.nbits)) & 0xff;
+      this.acc = 0;
+      this.nbits = 0;
+    }
+  };
+
+  function BitReader(bytes, start, end) {
+    this.bytes = bytes;
+    this.pos = start;
+    this.end = end;
+    this.acc = 0;
+    this.nbits = 0;
+    this.bitPos = start * 8;
+  }
+
+  // 读 n (<=24) 位；越界返回 -1。
+  BitReader.prototype.read = function (n) {
+    if (n === 0) return 0;
+    while (this.nbits < n) {
+      if (this.pos >= this.end) return -1;
+      this.acc = ((this.acc << 8) | this.bytes[this.pos++]) >>> 0;
+      this.nbits += 8;
+    }
+    this.nbits -= n;
+    var v = (this.acc >>> this.nbits) & ((1 << n) - 1);
+    this.acc &= (1 << this.nbits) - 1;
+    this.bitPos += n;
+    return v;
+  };
+
+  // 读一元前缀里的 0 的个数，最多 31；遇 1 返回计数，遇 31 个 0 返回 31。
+  BitReader.prototype.unary = function () {
+    var q = 0;
+    while (q < ESCAPE_Q) {
+      var b = this.read(1);
+      if (b < 0) return -1;
+      if (b === 1) return q;
+      q++;
+    }
+    return ESCAPE_Q;
+  };
+
+  BitReader.prototype.bits28 = function () {
+    var hi = this.read(24);
+    if (hi < 0) return -1;
+    var lo = this.read(4);
+    if (lo < 0) return -1;
+    return hi * 16 + lo;
+  };
+
+  /* ------------------------------------------------------------------ */
+  /* 预测与残差                                                          */
+  /* ------------------------------------------------------------------ */
+
+  // 把 src[start..start+n) 按给定预测阶变换为映射后的 u 序列（u >= 0）。
+  function residualU(src, start, n, order) {
+    var u = new Int32Array(n);
+    var i, r, prev, prev2;
+    if (order === 0) {
+      for (i = 0; i < n; i++) {
+        r = src[start + i];
+        u[i] = r >= 0 ? r * 2 : -r * 2 - 1;
+      }
+    } else if (order === 1) {
+      prev = 0;
+      for (i = 0; i < n; i++) {
+        var v1 = src[start + i];
+        r = v1 - prev;
+        prev = v1;
+        u[i] = r >= 0 ? r * 2 : -r * 2 - 1;
+      }
+    } else {
+      prev = 0;
+      prev2 = 0;
+      for (i = 0; i < n; i++) {
+        var v2 = src[start + i];
+        r = v2 - (2 * prev - prev2);
+        prev2 = prev;
+        prev = v2;
+        u[i] = r >= 0 ? r * 2 : -r * 2 - 1;
+      }
+    }
+    return u;
+  }
+
+  // 某路所有 k 的位数（未补齐），带转义开销。
+  // 返回 Float64Array(16)；顺带返回总额最小的 k 与索引。
+  function costAllK(u) {
+    var n = u.length;
+    var costs = new Float64Array(16);
+    var k, i;
+    // 展开 16 个累加器，避免内层数组访问开销。
+    var c0 = 0, c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0, c6 = 0, c7 = 0;
+    var c8 = 0, c9 = 0, c10 = 0, c11 = 0, c12 = 0, c13 = 0, c14 = 0, c15 = 0;
+    for (i = 0; i < n; i++) {
+      var v = u[i];
+      var q;
+      q = v; c0 += q < 31 ? q + 1 : 59;
+      q = v >>> 1; c1 += q < 31 ? q + 2 : 59;
+      q = v >>> 2; c2 += q < 31 ? q + 3 : 59;
+      q = v >>> 3; c3 += q < 31 ? q + 4 : 59;
+      q = v >>> 4; c4 += q < 31 ? q + 5 : 59;
+      q = v >>> 5; c5 += q < 31 ? q + 6 : 59;
+      q = v >>> 6; c6 += q < 31 ? q + 7 : 59;
+      q = v >>> 7; c7 += q < 31 ? q + 8 : 59;
+      q = v >>> 8; c8 += q < 31 ? q + 9 : 59;
+      q = v >>> 9; c9 += q < 31 ? q + 10 : 59;
+      q = v >>> 10; c10 += q < 31 ? q + 11 : 59;
+      q = v >>> 11; c11 += q < 31 ? q + 12 : 59;
+      q = v >>> 12; c12 += q < 31 ? q + 13 : 59;
+      q = v >>> 13; c13 += q < 31 ? q + 14 : 59;
+      q = v >>> 14; c14 += q < 31 ? q + 15 : 59;
+      q = v >>> 15; c15 += q < 31 ? q + 16 : 59;
+    }
+    costs[0] = c0; costs[1] = c1; costs[2] = c2; costs[3] = c3;
+    costs[4] = c4; costs[5] = c5; costs[6] = c6; costs[7] = c7;
+    costs[8] = c8; costs[9] = c9; costs[10] = c10; costs[11] = c11;
+    costs[12] = c12; costs[13] = c13; costs[14] = c14; costs[15] = c15;
+    return costs;
+  }
+
+  // 每路：在 0..2 阶 × 0..15 k 中选位数最短者；同长按阶数、k 升序。
+  function pickChannel(src, start, n) {
+    var best = { total: Infinity, order: 0, k: 0, u: null };
+    for (var order = 0; order < 3; order++) {
+      var u = residualU(src, start, n, order);
+      var costs = costAllK(u);
+      for (var k = 0; k < 16; k++) {
+        var total = costs[k];
+        if (
+          total < best.total ||
+          (total === best.total && (order < best.order || (order === best.order && k < best.k)))
+        ) {
+          best.total = total;
+          best.order = order;
+          best.k = k;
+          best.u = u;
+        }
+      }
+    }
+    return best;
+  }
+
+  function writeChannel(writer, u, k) {
+    var n = u.length;
+    for (var i = 0; i < n; i++) {
+      var v = u[i];
+      var q = v >>> k;
+      if (q < ESCAPE_Q) {
+        if (q > 0) writer.zeros(q);
+        writer.append(1, 1);
+        if (k > 0) writer.append(v & ((1 << k) - 1), k <= 24 ? k : 24);
+      } else {
+        writer.zeros(ESCAPE_Q);
+        writer.bits28(v);
+      }
+    }
+  }
+
+  /**
+   * 编码一个块。channels 为各声道 Int32Array（整段），start 为块起始帧，
+   * frames 为本块帧数。返回 { bytes, info } 或 { error }。
+   */
+  function encodeBlock(channels, start, frames, bitDepth, stereo) {
+    var modes = stereo ? [0, 1] : [0];
+    var best = null;
+    var mode, c;
+
+    for (var mi = 0; mi < modes.length; mi++) {
+      mode = modes[mi];
+      var work = [];
+      if (!stereo) {
+        work.push({ arr: channels[0], start: start });
+      } else if (mode === 0) {
+        work.push({ arr: channels[0], start: start });
+        work.push({ arr: channels[1], start: start });
+      } else {
+        var l = channels[0], r = channels[1];
+        var mid = new Int32Array(frames);
+        var side = new Int32Array(frames);
+        for (c = 0; c < frames; c++) {
+          var sum = l[start + c] + r[start + c];
+          side[c] = r[start + c] - l[start + c];
+          mid[c] = sum >= 0 ? sum >> 1 : -((-sum + 1) >> 1); // floor((L+R)/2)
+        }
+        work.push({ arr: mid, start: 0 });
+        work.push({ arr: side, start: 0 });
+      }
+
+      var picks = [];
+      var total = 0;
+      for (var ch = 0; ch < work.length; ch++) {
+        var pick = pickChannel(work[ch].arr, work[ch].start, frames);
+        picks.push(pick);
+        total += pick.total;
+      }
+
+      if (
+        best === null ||
+        total < best.total ||
+        (total === best.total && mode < best.mode) ||
+        (total === best.total &&
+          mode === best.mode &&
+          tieCompare(picks, best.picks) < 0)
+      ) {
+        best = { total: total, mode: mode, picks: picks };
+      }
+    }
+
+    var headerLen = 1 + 2 * (stereo ? 2 : 1);
+    var byteLen = headerLen + ceilDiv(best.total, 8);
+    var out = new Uint8Array(byteLen);
+    out[0] = best.mode;
+    var hp = 1;
+    for (var p = 0; p < best.picks.length; p++) {
+      out[hp++] = best.picks[p].order;
+      out[hp++] = best.picks[p].k;
+    }
+    var writer = new BitWriter(out, headerLen);
+    for (var w = 0; w < best.picks.length; w++) {
+      writeChannel(writer, best.picks[w].u, best.picks[w].k);
+    }
+    writer.finish();
+
+    return {
+      bytes: out,
+      info: {
+        mode: best.mode,
+        orders: best.picks.map(function (x) { return x.order; }),
+        ks: best.picks.map(function (x) { return x.k; }),
+        bits: best.total
+      }
+    };
+  }
+
+  // 同长时比较：模式之后依次第一路阶数、第一路 k、第二路阶数、第二路 k。
+  function tieCompare(a, b) {
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].order !== b[i].order) return a[i].order - b[i].order;
+      if (a[i].k !== b[i].k) return a[i].k - b[i].k;
+    }
+    return 0;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 整档编码                                                            */
+  /* ------------------------------------------------------------------ */
+
+  function encode(options) {
+    var channels = options.channelsData;
+    var sampleRate = options.sampleRate;
+    var bitDepth = options.bitDepth;
+    var channelsCount = options.channels || channels.length;
+    var totalFrames = channels[0].length;
+    var stereo = channelsCount === 2;
+
+    if (!totalFrames) return { ok: false, error: failure('encode', '没有可编码的帧。') };
+    if (channelsCount !== 1 && channelsCount !== 2) {
+      return { ok: false, error: failure('encode', '仅支持单声道或双声道。') };
+    }
+    if (bitDepth !== 16 && bitDepth !== 24) {
+      return { ok: false, error: failure('encode', '仅支持 16 或 24 位。') };
+    }
+    if (sampleRate < MIN_RATE || sampleRate > MAX_RATE) {
+      return { ok: false, error: failure('encode', '采样率须在 8–48 kHz。') };
+    }
+    if (totalFrames > MAX_SECONDS * sampleRate) {
+      return { ok: false, error: failure('encode', '录音超过 90 秒上限。') };
+    }
+
+    var numBlocks = ceilDiv(totalFrames, FRAMES_PER_BLOCK);
+    var dirEnd = HEADER_SIZE + numBlocks * ENTRY_SIZE;
+    var chunks = [];
+    var entries = new Array(numBlocks);
+    var offset = dirEnd;
+
+    for (var b = 0; b < numBlocks; b++) {
+      var start = b * FRAMES_PER_BLOCK;
+      var frames = Math.min(FRAMES_PER_BLOCK, totalFrames - start);
+      var result = encodeBlock(channels, start, frames, bitDepth, stereo);
+      if (result.error) return { ok: false, error: result.error };
+      var block = result.bytes;
+      var crc = crc32(block, 0, block.length);
+      entries[b] = { offset: offset, size: block.length, crc: crc, info: result.info, frames: frames };
+      offset += block.length;
+      chunks.push(block);
+      if (options.onProgress && b % 64 === 0) {
+        options.onProgress(b + 1, numBlocks);
+      }
+    }
+
+    var out = new Uint8Array(offset);
+    out[0] = 0x52; out[1] = 0x50; out[2] = 0x41; out[3] = 0x31;
+    writeU32(out, 4, sampleRate);
+    out[8] = channelsCount;
+    out[9] = bitDepth;
+    writeU32(out, 10, totalFrames);
+    writeU32(out, 14, numBlocks);
+
+    var dp = HEADER_SIZE;
+    for (var e = 0; e < numBlocks; e++) {
+      writeU32(out, dp, entries[e].offset);
+      writeU32(out, dp + 4, entries[e].size);
+      writeU32(out, dp + 8, entries[e].crc);
+      dp += ENTRY_SIZE;
+    }
+    var pos = dirEnd;
+    for (var ci = 0; ci < chunks.length; ci++) {
+      out.set(chunks[ci], pos);
+      pos += chunks[ci].length;
+    }
+
+    return {
+      ok: true,
+      bytes: out,
+      entries: entries,
+      header: {
+        sampleRate: sampleRate,
+        channels: channelsCount,
+        bitDepth: bitDepth,
+        totalFrames: totalFrames,
+        numBlocks: numBlocks
+      }
+    };
+  }
+
+  /**
+   * 异步分块编码：每若干块让出事件循环，便于界面显示进度而保持响应。
+   * options 与 encode 相同，另接受 onProgress(done, total) 与 chunk（每批块数）。
+   */
+  function encodeAsync(options) {
+    var channels = options.channelsData;
+    var sampleRate = options.sampleRate;
+    var bitDepth = options.bitDepth;
+    var channelsCount = options.channels || channels.length;
+    var totalFrames = channels[0].length;
+    var stereo = channelsCount === 2;
+
+    if (!totalFrames) return Promise.resolve({ ok: false, error: failure('encode', '没有可编码的帧。') });
+    if (channelsCount !== 1 && channelsCount !== 2) {
+      return Promise.resolve({ ok: false, error: failure('encode', '仅支持单声道或双声道。') });
+    }
+    if (bitDepth !== 16 && bitDepth !== 24) {
+      return Promise.resolve({ ok: false, error: failure('encode', '仅支持 16 或 24 位。') });
+    }
+    if (sampleRate < MIN_RATE || sampleRate > MAX_RATE) {
+      return Promise.resolve({ ok: false, error: failure('encode', '采样率须在 8–48 kHz。') });
+    }
+    if (totalFrames > MAX_SECONDS * sampleRate) {
+      return Promise.resolve({ ok: false, error: failure('encode', '录音超过 90 秒上限。') });
+    }
+
+    var numBlocks = ceilDiv(totalFrames, FRAMES_PER_BLOCK);
+    var dirEnd = HEADER_SIZE + numBlocks * ENTRY_SIZE;
+    var entries = new Array(numBlocks);
+    var chunks = new Array(numBlocks);
+    var offset = dirEnd;
+    var chunkSize = options.chunk || 32;
+    var b = 0;
+
+    function step() {
+      var end = Math.min(numBlocks, b + chunkSize);
+      for (; b < end; b++) {
+        var start = b * FRAMES_PER_BLOCK;
+        var frames = Math.min(FRAMES_PER_BLOCK, totalFrames - start);
+        var result = encodeBlock(channels, start, frames, bitDepth, stereo);
+        if (result.error) return { ok: false, error: result.error };
+        var block = result.bytes;
+        chunks[b] = block;
+        entries[b] = {
+          offset: offset,
+          size: block.length,
+          crc: crc32(block, 0, block.length),
+          info: result.info,
+          frames: frames
+        };
+        offset += block.length;
+      }
+      if (options.onProgress) options.onProgress(b, numBlocks);
+      if (b >= numBlocks) return null;
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          resolve(step());
+        }, 0);
+      });
+    }
+
+    function finalize() {
+      var out = new Uint8Array(offset);
+      out[0] = 0x52; out[1] = 0x50; out[2] = 0x41; out[3] = 0x31;
+      writeU32(out, 4, sampleRate);
+      out[8] = channelsCount;
+      out[9] = bitDepth;
+      writeU32(out, 10, totalFrames);
+      writeU32(out, 14, numBlocks);
+      var dp = HEADER_SIZE;
+      for (var e = 0; e < numBlocks; e++) {
+        writeU32(out, dp, entries[e].offset);
+        writeU32(out, dp + 4, entries[e].size);
+        writeU32(out, dp + 8, entries[e].crc);
+        dp += ENTRY_SIZE;
+      }
+      var pos = dirEnd;
+      for (var ci = 0; ci < numBlocks; ci++) {
+        out.set(chunks[ci], pos);
+        pos += chunks[ci].length;
+      }
+      return {
+        ok: true,
+        bytes: out,
+        entries: entries,
+        header: {
+          sampleRate: sampleRate,
+          channels: channelsCount,
+          bitDepth: bitDepth,
+          totalFrames: totalFrames,
+          numBlocks: numBlocks
+        }
+      };
+    }
+
+    return new Promise(function (resolve) {
+      function drive() {
+        var r = step();
+        if (r === null) {
+          resolve(finalize());
+        } else if (r && r.ok === false) {
+          resolve(r);
+        } else {
+          r.then(drive);
+        }
+      }
+      drive();
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 归档解析                                                            */
+  /* ------------------------------------------------------------------ */
+
+  function parseHeader(bytes) {
+    if (!bytes || bytes.length < HEADER_SIZE) {
+      return { ok: false, error: failure('header', '文件不足 18 字节，无法读取 RPA1 头。') };
+    }
+    if (bytes[0] !== 0x52 || bytes[1] !== 0x50 || bytes[2] !== 0x41 || bytes[3] !== 0x31) {
+      return { ok: false, error: failure('header', 'RPA1 魔数不匹配。') };
+    }
+    var sampleRate = readU32(bytes, 4);
+    var channels = bytes[8];
+    var bitDepth = bytes[9];
+    var totalFrames = readU32(bytes, 10);
+    var numBlocks = readU32(bytes, 14);
+
+    if (channels !== 1 && channels !== 2) {
+      return { ok: false, error: failure('header', '声道数字段非法：' + channels + '。') };
+    }
+    if (bitDepth !== 16 && bitDepth !== 24) {
+      return { ok: false, error: failure('header', '位深字段非法：' + bitDepth + '。') };
+    }
+    if (sampleRate < MIN_RATE || sampleRate > MAX_RATE) {
+      return { ok: false, error: failure('header', '采样率字段非法：' + sampleRate + '。') };
+    }
+    if (totalFrames <= 0) {
+      return { ok: false, error: failure('header', '总帧数为 0。') };
+    }
+    if (totalFrames > MAX_SECONDS * sampleRate) {
+      return { ok: false, error: failure('header', '总帧数超过 90 秒上限。') };
+    }
+    var expectBlocks = ceilDiv(totalFrames, FRAMES_PER_BLOCK);
+    if (numBlocks !== expectBlocks) {
+      return {
+        ok: false,
+        error: failure('header', '块数 ' + numBlocks + ' 与总帧数推算的 ' + expectBlocks + ' 不符。')
+      };
+    }
+
+    return {
+      ok: true,
+      header: {
+        sampleRate: sampleRate,
+        channels: channels,
+        bitDepth: bitDepth,
+        totalFrames: totalFrames,
+        numBlocks: numBlocks
+      }
+    };
+  }
+
+  /**
+   * 解析 RPA1（含索引容错）。头错误返回 ok:false（调用方应保留旧归档）。
+   * 索引错误不阻止打开：对应条目 status='index'，并在 errors 中记录条目号。
+   */
+  function parse(bytes) {
+    var parsed = parseHeader(bytes);
+    if (!parsed.ok) return { ok: false, error: parsed.error, errors: [parsed.error] };
+    var header = parsed.header;
+    var errors = [];
+    var dirEnd = HEADER_SIZE + header.numBlocks * ENTRY_SIZE;
+    var entries = new Array(header.numBlocks);
+
+    if (bytes.length < dirEnd) {
+      // 目录本身被截断：保留头信息，全部条目标记为索引损坏。
+      errors.push(
+        failure('index', '块目录被截断：需要 ' + dirEnd + ' 字节，文件只有 ' + bytes.length + ' 字节。', {
+          entry: 0
+        })
+      );
+      for (var z = 0; z < header.numBlocks; z++) {
+        entries[z] = makeEntry(z, header, 0, 0, 0, 'index', '目录被截断', dirEnd, bytes.length);
+      }
+      return { ok: true, header: header, dirEnd: dirEnd, bytes: bytes, entries: entries, errors: errors };
+    }
+
+    // 先读目录。
+    var raw = new Array(header.numBlocks);
+    for (var i = 0; i < header.numBlocks; i++) {
+      var p = HEADER_SIZE + i * ENTRY_SIZE;
+      raw[i] = { offset: readU32(bytes, p), size: readU32(bytes, p + 4), crc: readU32(bytes, p + 8) };
+    }
+
+    // 每个条目先判“几何是否落在合法范围内”，并算一次 CRC。
+    // anchor 表示“在目录声明的 (偏移, 块长) 处 CRC 与目录一致”——数据与索引都对得上。
+    var minBlock = 1 + 2 * header.channels;
+    var bound = new Array(header.numBlocks);
+    var anchor = new Array(header.numBlocks);
+    var actualCrc = new Array(header.numBlocks);
+    for (var b0 = 0; b0 < header.numBlocks; b0++) {
+      var r0 = raw[b0];
+      bound[b0] = r0.offset >= dirEnd && r0.size >= minBlock && r0.offset + r0.size <= bytes.length;
+      actualCrc[b0] = bound[b0] ? crc32(bytes, r0.offset, r0.offset + r0.size) : null;
+      anchor[b0] = bound[b0] && actualCrc[b0] === r0.crc;
+    }
+
+    // 用“目录声明值”判断某条目是否与相邻条目首尾相接（连续铺排是格式硬约束）：
+    //   · 数据损坏不会改动目录，故该条目几何仍与邻居严丝合缝；
+    //   · 索引损坏改动了偏移或块长，该条目几何必然与邻居对不上。
+    // 于是：anchor → 好块；几何自洽但 CRC 不符 → 块损坏；几何对不上 → 索引损坏。
+    // 这样不论篡改偏移还是块长，都能精确指到条目，完好的块始终可用。
+    for (var j = 0; j < header.numBlocks; j++) {
+      var e = raw[j];
+      var localConsistent = bound[j];
+      if (localConsistent) {
+        if (j === 0) {
+          if (e.offset !== dirEnd) localConsistent = false;
+        } else if (e.offset !== raw[j - 1].offset + raw[j - 1].size) {
+          localConsistent = false;
+        }
+        if (localConsistent) {
+          var endHere = e.offset + e.size;
+          if (j === header.numBlocks - 1) {
+            if (endHere !== bytes.length) localConsistent = false;
+          } else if (endHere !== raw[j + 1].offset) {
+            localConsistent = false;
+          }
+        }
+      }
+
+      var status;
+      var problem = null;
+      if (anchor[j]) {
+        status = 'ok';
+      } else if (localConsistent) {
+        status = 'crc';
+        problem = 'CRC32 校验失败（目录 0x' + hex8(e.crc) + '，实际 0x' + hex8(actualCrc[j]) + '）。';
+      } else {
+        status = 'index';
+        if (!bound[j]) {
+          if (e.size < minBlock) problem = '块长 ' + e.size + ' 小于块头最小长度 ' + minBlock + '。';
+          else if (e.offset < dirEnd) problem = '偏移 ' + e.offset + ' 落在目录区内（目录结束于 ' + dirEnd + '）。';
+          else problem = '偏移+长度 ' + (e.offset + e.size) + ' 越过文件尾 ' + bytes.length + '。';
+        } else if (j === 0 ? e.offset !== dirEnd : e.offset !== raw[j - 1].offset + raw[j - 1].size) {
+          problem = '偏移 ' + e.offset + ' 与相邻块首尾不对接（上一块结束于 ' +
+            (j === 0 ? dirEnd : raw[j - 1].offset + raw[j - 1].size) + '）。';
+        } else {
+          problem = '块长 ' + e.size + ' 与下一块起始 ' +
+            (j < header.numBlocks - 1 ? raw[j + 1].offset : bytes.length) + ' 不对接。';
+        }
+      }
+
+      entries[j] = makeEntry(j, header, e.offset, e.size, e.crc, status, problem, dirEnd, bytes.length);
+      entries[j].actualCrc = actualCrc[j];
+      if (status !== 'ok') {
+        // 损坏条目仍尝试读块头用于展示，但不信任其内容。
+        entries[j].headerInfo = tryParseBlockHeader(bytes, entries[j], header);
+      }
+      if (status === 'index') {
+        errors.push(failure('index', problem, { entry: j }));
+      } else if (status === 'crc') {
+        errors.push(failure('block', problem, { entry: j }));
+      } else {
+        entries[j].headerInfo = tryParseBlockHeader(bytes, entries[j], header);
+        if (!entries[j].headerInfo.ok) {
+          entries[j].status = 'block';
+          entries[j].error = entries[j].headerInfo.error;
+          errors.push(failure('block', entries[j].error, { entry: j }));
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      header: header,
+      dirEnd: dirEnd,
+      bytes: bytes,
+      entries: entries,
+      errors: errors
+    };
+  }
+
+  function makeEntry(index, header, offset, size, crc, status, error, dirEnd, fileLength) {
+    var startFrame = index * FRAMES_PER_BLOCK;
+    return {
+      index: index,
+      offset: offset,
+      size: size,
+      crc: crc,
+      actualCrc: null,
+      status: status,
+      error: error || null,
+      startFrame: startFrame,
+      frames: Math.min(FRAMES_PER_BLOCK, Math.max(0, header.totalFrames - startFrame)),
+      endFrame: Math.min(header.totalFrames, startFrame + FRAMES_PER_BLOCK),
+      dirEnd: dirEnd,
+      fileLength: fileLength,
+      headerInfo: null
+    };
+  }
+
+  function hex8(v) {
+    return ('00000000' + (v >>> 0).toString(16)).slice(-8);
+  }
+
+  function tryParseBlockHeader(bytes, entry, header) {
+    if (entry.size < 1 + 2 * header.channels) {
+      return { ok: false, error: '块头长度不足。' };
+    }
+    var p = entry.offset;
+    var mode = bytes[p];
+    if (mode !== 0 && mode !== 1) return { ok: false, error: '块模式 ' + mode + ' 非法。' };
+    if (mode === 1 && header.channels !== 2) return { ok: false, error: '单声道块使用了中侧模式。' };
+    var chans = header.channels;
+    var orders = [];
+    var ks = [];
+    for (var c = 0; c < chans; c++) {
+      var order = bytes[p + 1 + c * 2];
+      var k = bytes[p + 2 + c * 2];
+      if (order > 2) return { ok: false, error: '第 ' + (c + 1) + ' 路预测阶 ' + order + ' 越界。' };
+      if (k > 15) return { ok: false, error: '第 ' + (c + 1) + ' 路 Rice 参数 ' + k + ' 越界。' };
+      orders.push(order);
+      ks.push(k);
+    }
+    return { ok: true, mode: mode, orders: orders, ks: ks, headerLen: 1 + 2 * chans };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 块解码                                                              */
+  /* ------------------------------------------------------------------ */
+
+  function decodeBlockPayload(bytes, entry, header, headerInfo) {
+    var chans = header.channels;
+    var n = entry.frames;
+    var headerLen = headerInfo.headerLen;
+    var reader = new BitReader(bytes, entry.offset + headerLen, entry.offset + entry.size);
+    var decoded = [];
+    var range = bitDepthRange(header.bitDepth);
+    // 中侧模式下中间量（含“侧”）可超 PCM 范围，只有还原出的 L/R 才做范围校验；
+    // 但仍需一个量级上界，防止 CRC 自洽但内容被构造的块让预测器发散并静默回绕 int32。
+    // 合法侧声道最大约 2^(bitDepth)，这里留足余量。
+    var checkIntermediate = headerInfo.mode !== 1;
+    var intermediateMax = Math.pow(2, header.bitDepth + 2);
+    var c, i;
+
+    function bad(message) {
+      return { ok: false, error: failure('block', message) };
+    }
+
+    for (c = 0; c < chans; c++) {
+      var order = headerInfo.orders[c];
+      var k = headerInfo.ks[c];
+      var out = new Int32Array(n);
+      var prev = 0;
+      var prev2 = 0;
+      for (i = 0; i < n; i++) {
+        var q = reader.unary();
+        if (q < 0) return bad('第 ' + (c + 1) + ' 路位流在第 ' + i + ' 个样本处提前结束。');
+        var u;
+        if (q === ESCAPE_Q) {
+          u = reader.bits28();
+          if (u < 0) return bad('第 ' + (c + 1) + ' 路转义位流提前结束。');
+          if ((u >>> k) < ESCAPE_Q) {
+            return bad('第 ' + (c + 1) + ' 路转义中 q=' + (u >>> k) + ' 小于 31。');
+          }
+        } else {
+          var rem = reader.read(k);
+          if (rem < 0) return bad('第 ' + (c + 1) + ' 路余数位流提前结束。');
+          u = q * Math.pow(2, k) + rem;
+        }
+        var r = u & 1 ? -((u + 1) / 2) : u / 2;
+        var pred = order === 0 ? 0 : order === 1 ? prev : 2 * prev - prev2;
+        var value = pred + r;
+        if (checkIntermediate) {
+          if (value < range.min || value > range.max) {
+            return bad('第 ' + (c + 1) + ' 路解码出超出 ' + header.bitDepth + ' 位范围的值 ' + value + '。');
+          }
+        } else if (value < -intermediateMax || value > intermediateMax) {
+          return bad('第 ' + (c + 1) + ' 路中间量 ' + value + ' 超出允许量级。');
+        }
+        out[i] = value;
+        prev2 = prev;
+        prev = value;
+      }
+      decoded.push(out);
+    }
+
+    // 补齐位与额外字节检查。
+    var consumedBits = reader.bitPos - (entry.offset + headerLen) * 8;
+    var payloadBytes = ceilDiv(consumedBits, 8);
+    if (headerLen + payloadBytes !== entry.size) {
+      if (headerLen + payloadBytes < entry.size) {
+        return bad('块尾部多出 ' + (entry.size - headerLen - payloadBytes) + ' 字节。');
+      }
+      return bad('块位流超出块长。');
+    }
+    var padBits = payloadBytes * 8 - consumedBits;
+    if (padBits > 0) {
+      var last = bytes[entry.offset + entry.size - 1];
+      if ((last & ((1 << padBits) - 1)) !== 0) {
+        return bad('块末尾补位非零。');
+      }
+    }
+
+    if (headerInfo.mode === 1) {
+      var mid = decoded[0];
+      var side = decoded[1];
+      var left = new Int32Array(n);
+      var right = new Int32Array(n);
+      for (i = 0; i < n; i++) {
+        var s = side[i];
+        var half = s >= 0 ? s >> 1 : -((-s + 1) >> 1); // floor(side / 2)
+        var lv = mid[i] - half;
+        var rv = lv + s;
+        if (lv < range.min || lv > range.max || rv < range.min || rv > range.max) {
+          return bad('中侧解码出超出 ' + header.bitDepth + ' 位范围的 PCM 值。');
+        }
+        left[i] = lv;
+        right[i] = rv;
+      }
+      decoded = [left, right];
+    }
+
+    return { ok: true, channels: decoded };
+  }
+
+  /**
+   * 解码单个块。返回 { ok, channels } 或 { ok:false, error }。
+   * 索引损坏 / CRC 不符 / 块结构错误的块均拒绝解码。
+   */
+  function decodeBlock(archive, index) {
+    var entry = archive.entries[index];
+    if (!entry) return { ok: false, error: failure('block', '块 ' + index + ' 不存在。') };
+    if (entry.status === 'index') {
+      return { ok: false, error: failure('index', '索引条目 ' + index + ' 损坏：' + entry.error, { entry: index }) };
+    }
+    if (entry.status === 'crc') {
+      return { ok: false, error: failure('block', '块 ' + index + ' CRC 校验失败。', { entry: index }) };
+    }
+    if (entry.status !== 'ok') {
+      return { ok: false, error: failure('block', '块 ' + index + ' 不可解码：' + entry.error, { entry: index }) };
+    }
+    if (!entry.headerInfo || !entry.headerInfo.ok) {
+      return { ok: false, error: failure('block', '块 ' + index + ' 块头非法：' + (entry.headerInfo && entry.headerInfo.error)) };
+    }
+    var result = decodeBlockPayload(archive.bytes, entry, archive.header, entry.headerInfo);
+    if (!result.ok) {
+      result.error.entry = index;
+      return result;
+    }
+    return result;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 区间解码 / 导出                                                     */
+  /* ------------------------------------------------------------------ */
+
+  function blockIndexForFrame(frame) {
+    return Math.floor(frame / FRAMES_PER_BLOCK);
+  }
+
+  /**
+   * 解码 [start, end) 帧区间，只解码相交块。
+   * 任一相交块损坏时返回 ok:false 并列出坏块号（禁止跨坏块导出）。
+   */
+  function decodeRange(archive, start, end) {
+    var total = archive.header.totalFrames;
+    if (!Number.isInteger(start) || !Number.isInteger(end)) {
+      return { ok: false, error: failure('range', '区间端点必须是整数帧。') };
+    }
+    if (start < 0 || end > total || start >= end) {
+      return { ok: false, error: failure('range', '区间 [' + start + ', ' + end + ') 超出 0..' + total + '。') };
+    }
+    var firstBlock = blockIndexForFrame(start);
+    var lastBlock = blockIndexForFrame(end - 1);
+    var bad = [];
+    var pieces = [];
+    for (var b = firstBlock; b <= lastBlock; b++) {
+      var entry = archive.entries[b];
+      if (!entry || entry.status !== 'ok') {
+        bad.push(b);
+        continue;
+      }
+      var decoded = decodeBlock(archive, b);
+      if (!decoded.ok) {
+        bad.push(b);
+        continue;
+      }
+      pieces.push({ block: b, channels: decoded.channels, startFrame: entry.startFrame, frames: entry.frames });
+    }
+    if (bad.length) {
+      return {
+        ok: false,
+        error: failure('block', '区间跨越损坏块 ' + bad.join(', ') + '，已禁止解码/导出。', { blocks: bad }),
+        badBlocks: bad
+      };
+    }
+
+    var count = end - start;
+    var chans = archive.header.channels;
+    var out = [];
+    for (var c = 0; c < chans; c++) out.push(new Int32Array(count));
+    var outPos = 0;
+    for (var p = 0; p < pieces.length; p++) {
+      var piece = pieces[p];
+      var from = Math.max(start, piece.startFrame);
+      var to = Math.min(end, piece.startFrame + piece.frames);
+      var len = to - from;
+      if (len <= 0) continue;
+      var sourceOffset = from - piece.startFrame;
+      for (var cc = 0; cc < chans; cc++) {
+        out[cc].set(piece.channels[cc].subarray(sourceOffset, sourceOffset + len), outPos);
+      }
+      outPos += len;
+    }
+    return { ok: true, channels: out, blocksDecoded: pieces.length };
+  }
+
+  function exportWav(archive, start, end) {
+    var decoded = decodeRange(archive, start, end);
+    if (!decoded.ok) return decoded;
+    var h = archive.header;
+    var bytes = encodeWav(h.sampleRate, h.channels, h.bitDepth, decoded.channels, 0, decoded.channels[0].length);
+    return { ok: true, bytes: bytes, channels: decoded.channels, blocksDecoded: decoded.blocksDecoded };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 描述信息                                                            */
+  /* ------------------------------------------------------------------ */
+
+  function describe(archive) {
+    var h = archive.header;
+    var okBlocks = 0, badBlocks = 0, indexBlocks = 0;
+    for (var i = 0; i < archive.entries.length; i++) {
+      var s = archive.entries[i].status;
+      if (s === 'ok') okBlocks++;
+      else if (s === 'index') indexBlocks++;
+      else badBlocks++;
+    }
+    return {
+      sampleRate: h.sampleRate,
+      channels: h.channels,
+      bitDepth: h.bitDepth,
+      totalFrames: h.totalFrames,
+      numBlocks: h.numBlocks,
+      duration: h.totalFrames / h.sampleRate,
+      okBlocks: okBlocks,
+      badBlocks: badBlocks,
+      indexBlocks: indexBlocks
+    };
+  }
+
+  return {
+    MAGIC: MAGIC,
+    HEADER_SIZE: HEADER_SIZE,
+    ENTRY_SIZE: ENTRY_SIZE,
+    FRAMES_PER_BLOCK: FRAMES_PER_BLOCK,
+    MAX_SECONDS: MAX_SECONDS,
+    MIN_RATE: MIN_RATE,
+    MAX_RATE: MAX_RATE,
+    crc32: crc32,
+    parseWav: parseWav,
+    encodeWav: encodeWav,
+    encodeBlock: encodeBlock,
+    encode: encode,
+    encodeAsync: encodeAsync,
+    parse: parse,
+    parseHeader: parseHeader,
+    decodeBlock: decodeBlock,
+    decodeRange: decodeRange,
+    exportWav: exportWav,
+    describe: describe
+  };
+});
+
+</script>
+<script>
+/* 示例录音（来自 samples/rice-pcm-cases.zip），base64 内嵌以便页面离线可用。
+   由 tools/extract_samples.js 生成，请勿手工编辑。 */
+(function(root){
+  root.RPA_SAMPLES = {
+    mono16: { name: "mono16.wav", b64: "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" },
+    stereo24: { name: "stereo24.wav", b64: "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" }
+  };
+})(typeof globalThis!=="undefined"?globalThis:this);
+
+</script>
+<script>
+/* RPA1 归档抽查 — 界面逻辑
+ * 依赖全局 RPA1（src/rpa1.js）与可选的 RPA_SAMPLES（samples.js）。
+ */
+(function () {
+  'use strict';
+
+  var R = window.RPA1;
+  var FPB = R.FRAMES_PER_BLOCK;
+
+  /* ---------------- DOM 助手 ---------------- */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      for (var k in attrs) {
+        if (!Object.prototype.hasOwnProperty.call(attrs, k)) continue;
+        if (k === 'class') node.className = attrs[k];
+        else if (k === 'text') node.textContent = attrs[k];
+        else if (k === 'html') node.innerHTML = attrs[k];
+        else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2), attrs[k]);
+        else if (attrs[k] != null) node.setAttribute(k, attrs[k]);
+      }
+    }
+    if (children) {
+      (Array.isArray(children) ? children : [children]).forEach(function (c) {
+        if (c == null) return;
+        node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      });
+    }
+    return node;
+  }
+
+  function fmtInt(n) { return Number(n).toLocaleString('en-US'); }
+  function fmtSeconds(frames, rate) {
+    if (!rate) return '';
+    var s = frames / rate;
+    return s >= 60
+      ? Math.floor(s / 60) + ':' + ('0' + (s % 60).toFixed(3)).slice(-6)
+      : s.toFixed(3) + 's';
+  }
+  function hex(v) { return '0x' + ('00000000' + (v >>> 0).toString(16)).slice(-8); }
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  /* 图标（内联 SVG，随 currentColor 着色） */
+  var ICONS = {
+    upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M4 20h16"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>',
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/></svg>'
+  };
+  function icon(name, cls) {
+    var span = document.createElement('span');
+    span.className = cls || '';
+    span.innerHTML = ICONS[name] || '';
+    var svg = span.firstChild;
+    if (svg) { svg.style.display = 'block'; svg.style.width = '100%'; svg.style.height = '100%'; }
+    return span;
+  }
+
+  /* ---------------- 状态 ---------------- */
+  var state = {
+    archive: null,          // RPA1.parse 的结果
+    bytes: null,            // 当前归档字节
+    sourceName: 'archive',
+    kind: 'rpa',            // 'rpa' | 'wav'
+    wavMeta: null,          // 若来自 WAV，保留元信息
+    selection: { start: 0, end: 0 },
+    peaks: null,
+    peaksReady: false,
+    mapGeom: null,
+    page: 0,
+    pageSize: 50,
+    filter: 'all',
+    expanded: -1,
+    playing: null,
+    audioCtx: null,
+    autoDownloaded: false
+  };
+
+  /* ---------------- 提示 ---------------- */
+  function toast(message, kind, timeout) {
+    var host = $('toasts');
+    // 最多同时显示 3 条，避免连点操作时堆叠遮挡。
+    while (host.children.length >= 3) host.removeChild(host.firstChild);
+    var t = el('div', { class: 'toast ' + (kind || '') });
+    if (kind) t.appendChild(icon(kind === 'ok' ? 'check' : kind === 'warn' ? 'alert' : 'alert', 't-ico'));
+    t.appendChild(el('span', { text: message }));
+    host.appendChild(t);
+    setTimeout(function () {
+      t.style.opacity = '0';
+      t.style.transform = 'translateY(6px)';
+      t.style.transition = 'opacity .2s, transform .2s';
+      setTimeout(function () { t.remove(); }, 220);
+    }, timeout || 4200);
+  }
+
+  /* ---------------- 下载 ---------------- */
+  function downloadBytes(bytes, filename, mime) {
+    try {
+      var blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+      return true;
+    } catch (err) {
+      toast('无法触发下载：' + err.message, 'crit');
+      return false;
+    }
+  }
+
+  function baseName(name) {
+    return (name || 'archive').replace(/\.[^.]+$/, '');
+  }
+
+  /* ---------------- 加载 ---------------- */
+  function readFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var bytes = new Uint8Array(reader.result);
+      handleUploadedBytes(bytes, file.name);
+    };
+    reader.onerror = function () { toast('读取文件失败。', 'crit'); };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function handleUploadedBytes(bytes, name) {
+    // 先按 WAV 试解析，再按 RPA1。
+    var isWav = bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 &&
+      bytes[2] === 0x46 && bytes[3] === 0x46;
+    var isRpa = bytes.length >= 4 && bytes[0] === 0x52 && bytes[1] === 0x50 &&
+      bytes[2] === 0x41 && bytes[3] === 0x31;
+    if (isWav) {
+      prepareWav(bytes, name);
+    } else if (isRpa) {
+      openArchive(bytes, name, 'rpa', null);
+    } else {
+      toast('无法识别的文件：既不是 WAV 也不是 RPA1 归档。', 'crit');
+    }
+  }
+
+  /* ---------------- WAV 准备 ---------------- */
+  var pendingWav = null;
+
+  function prepareWav(bytes, name) {
+    var parsed = R.parseWav(bytes);
+    if (!parsed.ok) {
+      toast('WAV 解析失败：' + parsed.error.message, 'crit', 7000);
+      return;
+    }
+    pendingWav = { parsed: parsed, name: name };
+    state.wavMeta = parsed;
+    state.sourceName = name;
+    state.kind = 'wav';
+
+    var p = parsed;
+    $('wav-info').hidden = false;
+    $('wav-info-body').innerHTML = '';
+    var rows = [
+      ['采样率', fmtInt(p.sampleRate) + ' Hz'],
+      ['声道', p.channels === 1 ? '单声道' : '双声道（立体声）'],
+      ['位深', p.bitDepth + ' 位'],
+      ['帧数', fmtInt(p.totalFrames)],
+      ['时长', fmtTime(p.totalFrames / p.sampleRate)],
+      ['源大小', fmtBytes(bytes.length)]
+    ];
+    rows.forEach(function (r) {
+      $('wav-info-body').appendChild(el('div', { class: 'readout' }, [
+        el('div', { class: 'k', text: r[0] }),
+        el('div', { class: 'v', text: r[1] })
+      ]));
+    });
+    var blocks = Math.ceil(p.totalFrames / FPB);
+    $('wav-info-note').textContent = '将切成 ' + fmtInt(blocks) + ' 个 1024 帧块独立编码。';
+    $('encode-btn').disabled = false;
+    $('wav-info').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function fmtTime(sec) {
+    var m = Math.floor(sec / 60);
+    var s = sec - m * 60;
+    return m > 0 ? m + ' 分 ' + s.toFixed(2) + ' 秒' : s.toFixed(2) + ' 秒';
+  }
+
+  /* ---------------- 编码 ---------------- */
+  function runEncode() {
+    if (!pendingWav) return;
+    var p = pendingWav.parsed;
+    var btn = $('encode-btn');
+    btn.disabled = true;
+    $('encode-bar').classList.add('on');
+    $('encode-bar').setAttribute('aria-busy', 'true');
+    var t0 = performance.now();
+    state.autoDownloaded = false;
+
+    var progEl = $('encode-progress-i');
+    var metaEl = $('encode-meta');
+
+    R.encodeAsync({
+      sampleRate: p.sampleRate,
+      channels: p.channels,
+      bitDepth: p.bitDepth,
+      channelsData: p.channelsData,
+      chunk: 24,
+      onProgress: function (done, total) {
+        var pct = Math.round((done / total) * 100);
+        progEl.style.width = pct + '%';
+        metaEl.innerHTML = '';
+        metaEl.appendChild(el('span', { text: '编码中 ' + done + ' / ' + total + ' 块' }));
+        metaEl.appendChild(el('span', { text: pct + '%' }));
+      }
+    }).then(function (res) {
+      $('encode-bar').classList.remove('on');
+      $('encode-bar').removeAttribute('aria-busy');
+      btn.disabled = false;
+      if (!res.ok) {
+        toast('编码失败：' + (res.error && res.error.message), 'crit', 7000);
+        return;
+      }
+      var ms = performance.now() - t0;
+      var outName = baseName(pendingWav.name) + '.rpa';
+      // 立即触发下载，满足「可下载」时限；随后再渲染工作台。
+      downloadBytes(res.bytes, outName, 'application/octet-stream');
+      state.autoDownloaded = true;
+      toast('已编码并下载 ' + outName + '（' + fmtBytes(res.bytes.length) + '，用时 ' + (ms / 1000).toFixed(2) + ' 秒）', 'ok', 8000);
+      openArchive(res.bytes, outName, 'rpa', pendingWav.parsed, outName, ms);
+    });
+  }
+
+  /* ---------------- 打开归档 ---------------- */
+  function openArchive(bytes, name, kind, wavParsed, downloadName, encodeMs) {
+    var arc = R.parse(bytes);
+    if (!arc.ok) {
+      // 头错误：保留已打开的归档，只提示错误。
+      toast('无法打开：' + arc.error.message + '（已保留上一个归档）', 'crit', 8000);
+      return;
+    }
+    stopPlayback();
+    state.archive = arc;
+    state.bytes = bytes;
+    state.sourceName = name;
+    state.kind = kind;
+    state.wavMeta = wavParsed || null;
+    state.selection = { start: 0, end: arc.header.totalFrames };
+    state.page = 0;
+    state.filter = 'all';
+    state.expanded = -1;
+    state.peaks = null;
+    state.peaksReady = false;
+    state.encodeMs = encodeMs || null;
+    state.downloadName = downloadName || (kind === 'rpa' ? name : null);
+    state.baseDownloadName = state.downloadName;
+    state.originalBytes = bytes.slice();
+
+    renderWorkspace();
+    computePeaksAsync();
+  }
+
+  /* ---------------- 工作台渲染 ---------------- */
+  function renderWorkspace() {
+    var arc = state.archive;
+    $('workspace').classList.add('live');
+    $('workspace').hidden = false;
+
+    // 文件行
+    $('fname').textContent = state.sourceName;
+    $('fkind').textContent = state.kind === 'wav' ? 'WAV 源' : 'RPA1 归档';
+    var dl = $('download-archive');
+    if (state.downloadName) {
+      dl.hidden = false;
+      dl.disabled = false;
+    } else {
+      dl.hidden = true;
+    }
+
+    // 摘要
+    var h = arc.header;
+    var summary = $('summary');
+    summary.innerHTML = '';
+    var cells = [
+      ['采样率', fmtInt(h.sampleRate) + ' ', 'Hz'],
+      ['声道', h.channels === 1 ? '单声道' : '双声道', ''],
+      ['位深', h.bitDepth + ' ', '位'],
+      ['总帧', fmtInt(h.totalFrames), ''],
+      ['时长', (h.totalFrames / h.sampleRate).toFixed(3) + ' ', '秒'],
+      ['块数', fmtInt(h.numBlocks), ''],
+      ['归档大小', fmtBytes(state.bytes.length), '']
+    ];
+    if (state.encodeMs != null) cells.push(['编码用时', (state.encodeMs / 1000).toFixed(2) + ' ', '秒']);
+    cells.forEach(function (c) {
+      var v = el('div', { class: 'v' });
+      v.appendChild(document.createTextNode(c[1]));
+      if (c[2]) v.appendChild(el('small', { text: c[2] }));
+      summary.appendChild(el('div', { class: 'readout' }, [
+        el('div', { class: 'k', text: c[0] }), v
+      ]));
+    });
+
+    // 健康 chips
+    var chips = $('health');
+    chips.innerHTML = '';
+    var okCount = 0, crcCount = 0, idxCount = 0;
+    for (var hi = 0; hi < arc.entries.length; hi++) {
+      var hs = arc.entries[hi].status;
+      if (hs === 'ok') okCount++;
+      else if (hs === 'index') idxCount++;
+      else crcCount++;
+    }
+    if (okCount) chips.appendChild(chip('ok', '完好块', okCount));
+    if (crcCount) chips.appendChild(chip('crit', '损坏块', crcCount));
+    if (idxCount) chips.appendChild(chip('index', '索引损坏', idxCount));
+
+    // 全局提示
+    var notices = $('notices');
+    notices.innerHTML = '';
+    var idxEntries = [];
+    var badEntries = [];
+    for (var q = 0; q < arc.entries.length; q++) {
+      var s = arc.entries[q].status;
+      if (s === 'index') idxEntries.push(arc.entries[q].index);
+      else if (s === 'crc' || s === 'block') badEntries.push(arc.entries[q].index);
+    }
+    if (idxEntries.length) {
+      notices.appendChild(notice('index', '索引损坏',
+        '块目录有 ' + idxEntries.length + ' 个条目异常：条目 ' + summarizeList(idxEntries) +
+        '。归档已保持打开，其余块仍可试听与导出；涉及这些条目的区间会被拒绝。'));
+    }
+    if (badEntries.length) {
+      notices.appendChild(notice('crit', '块损坏',
+        '校验失败：块 ' + summarizeList(badEntries) + '。已禁止导出跨越这些坏块的区间；坏块之外的区间仍可正常试听与导出。'));
+    }
+    if (!badEntries.length && !idxEntries.length) {
+      notices.appendChild(notice('ok', '全部校验通过',
+        '每个块的 CRC32 与块头均正常，可对任意区间试听与导出。'));
+    }
+
+    // 选择与播放
+    $('sel-start').max = String(h.totalFrames);
+    $('sel-end').max = String(h.totalFrames);
+    $('sel-start').value = String(state.selection.start);
+    $('sel-end').value = String(state.selection.end);
+    setSelection(state.selection.start, state.selection.end, true);
+
+    renderBlockMap();
+    renderSelectionState();
+    state.page = 0;
+    renderTable();
+    requestAnimationFrame(drawWaveform);
+  }
+
+  function chip(kind, label, n) {
+    return el('span', { class: 'chip ' + kind }, [
+      el('i', { class: 'dot' }),
+      document.createTextNode(label + ' '),
+      el('b', { text: fmtInt(n) })
+    ]);
+  }
+
+  // 列出编号，过多时截断，便于在提示里直接点名条目 / 块号。
+  function summarizeList(list, max) {
+    max = max || 12;
+    if (list.length <= max) return list.join('、');
+    return list.slice(0, max).join('、') + ' 等 ' + list.length + ' 个';
+  }
+
+  function notice(kind, title, body) {
+    var n = el('div', { class: 'notice ' + kind });
+    n.appendChild(icon(kind === 'ok' ? 'check' : kind === 'index' ? 'info' : 'alert', 'n-ico'));
+    n.appendChild(el('div', { class: 'n-body' }, [
+      el('b', { text: title + '　' }),
+      document.createTextNode(body)
+    ]));
+    return n;
+  }
+
+  /* ---------------- 选择 ---------------- */
+  function setSelection(start, end, fromInput) {
+    var total = state.archive.header.totalFrames;
+    start = Math.max(0, Math.min(total, Math.round(start)));
+    end = Math.max(0, Math.min(total, Math.round(end)));
+    if (end < start) { var t = start; start = end; end = t; }
+    state.selection.start = start;
+    state.selection.end = end;
+    if (!fromInput) {
+      $('sel-start').value = String(start);
+      $('sel-end').value = String(end);
+    }
+    updateSelectionLabels();
+    renderSelectionState();
+    drawWaveform();
+    renderBlockMap();
+    markSelectedRows();
+  }
+
+  function updateSelectionLabels() {
+    var rate = state.archive.header.sampleRate;
+    $('sel-start-hint').textContent = fmtSeconds(state.selection.start, rate);
+    $('sel-end-hint').textContent = fmtSeconds(state.selection.end, rate);
+    var len = state.selection.end - state.selection.start;
+    $('sel-length').textContent = fmtInt(len) + ' 帧（' + fmtSeconds(len, rate) + '）';
+  }
+
+  // 选区是否跨越坏块；返回相交坏块编号数组。
+  function badBlocksInRange(start, end) {
+    if (end <= start) return [];
+    var first = Math.floor(start / FPB);
+    var last = Math.floor((end - 1) / FPB);
+    var bad = [];
+    for (var b = first; b <= last; b++) {
+      var e = state.archive.entries[b];
+      if (!e || e.status !== 'ok') bad.push(b);
+    }
+    return bad;
+  }
+
+  function renderSelectionState() {
+    var host = $('sel-state');
+    host.innerHTML = '';
+    var bad = badBlocksInRange(state.selection.start, state.selection.end);
+    if (state.selection.end <= state.selection.start) {
+      host.appendChild(el('span', { class: 'cross', text: '区间为空。请设置结束帧大于起始帧。' }));
+      $('play-btn').disabled = true;
+      $('export-btn').disabled = true;
+      return;
+    }
+    if (bad.length) {
+      host.appendChild(el('span', { class: 'cross' }, [
+        document.createTextNode('所选区间跨越损坏块 ' + bad.join('、') + '，已禁止试听与导出。请缩小到坏块之外。')
+      ]));
+      $('play-btn').disabled = true;
+      $('export-btn').disabled = true;
+      return;
+    }
+    $('play-btn').disabled = false;
+    $('export-btn').disabled = false;
+    var len = state.selection.end - state.selection.start;
+    host.appendChild(el('span', {
+      text: '区间可用：' + fmtInt(len) + ' 帧，始于 ' + fmtInt(state.selection.start) + ' 帧。'
+    }));
+  }
+
+  /* ---------------- 块图 ---------------- */
+  function renderBlockMap() {
+    var canvas = $('map-canvas');
+    var wrap = $('map-canvas-wrap');
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(1, Math.round(wrap.clientWidth));
+    var hgt = Math.max(1, Math.round(wrap.clientHeight));
+    canvas.width = w * dpr;
+    canvas.height = hgt * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = hgt + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, hgt);
+
+    var arc = state.archive;
+    var n = arc.entries.length;
+    var style = getComputedStyle(document.documentElement);
+    var colOk = style.getPropertyValue('--ok').trim();
+    var colCrit = style.getPropertyValue('--crit').trim();
+    var colIndex = style.getPropertyValue('--index').trim();
+    var colFaint = style.getPropertyValue('--faint').trim();
+    var colAccent = style.getPropertyValue('--accent').trim();
+
+    var barTop = 6, barH = hgt - 20;
+    ctx.fillStyle = colFaint;
+    ctx.globalAlpha = 0.25;
+    ctx.fillRect(0, barTop, w, barH);
+    ctx.globalAlpha = 1;
+
+    var bw = w / n;
+    for (var i = 0; i < n; i++) {
+      var s = arc.entries[i].status;
+      var color = s === 'ok' ? colOk : s === 'index' ? colIndex : colCrit;
+      ctx.fillStyle = color;
+      if (s !== 'ok') ctx.globalAlpha = 0.9;
+      var x = i * bw;
+      var ww = Math.max(bw, 1);
+      ctx.fillRect(x, barTop, ww, barH);
+      ctx.globalAlpha = 1;
+    }
+
+    // 选区覆盖
+    var total = arc.header.totalFrames;
+    var sx = (state.selection.start / total) * w;
+    var ex = (state.selection.end / total) * w;
+    ctx.fillStyle = colAccent;
+    ctx.globalAlpha = 0.22;
+    ctx.fillRect(sx, 0, Math.max(1, ex - sx), hgt);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = colAccent;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx + 0.75, 0.75, Math.max(1, ex - sx) - 1.5, hgt - 1.5);
+
+    state.mapGeom = { w: w, n: n, total: total };
+    $('map-hint-l').textContent = '帧 0';
+    $('map-hint-r').textContent = '帧 ' + fmtInt(total) + '（共 ' + fmtInt(n) + ' 块）';
+    wrap.setAttribute('aria-label', '块状态图，共 ' + n + ' 块，点击可定位');
+  }
+
+  function mapClick(ev) {
+    if (!state.mapGeom) return;
+    var rect = $('map-canvas-wrap').getBoundingClientRect();
+    var frac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    var total = state.archive.header.totalFrames;
+    var frame = Math.floor(frac * total);
+    var b = Math.min(state.archive.entries.length - 1, Math.floor(frame / FPB));
+    var e = state.archive.entries[b];
+    var start = e.startFrame != null ? e.startFrame : b * FPB;
+    var end = Math.min(total, start + FPB);
+    setSelection(start, end);
+    state.expanded = b;
+    state.page = Math.floor(b / state.pageSize);
+    state.filter = 'all';
+    renderTable();
+    toast('已定位到块 ' + b + '（帧 ' + start + '–' + end + '）');
+  }
+
+  /* ---------------- 表格 ---------------- */
+  function statusMeta(entry) {
+    switch (entry.status) {
+      case 'ok': return { cls: 's-ok', label: '完好', color: 'ok' };
+      case 'crc': return { cls: 's-crc', label: 'CRC 失败', color: 'crit' };
+      case 'block': return { cls: 's-block', label: '块损坏', color: 'crit' };
+      case 'index': return { cls: 's-index', label: '索引损坏', color: 'index' };
+      default: return { cls: 's-crc', label: entry.status, color: 'crit' };
+    }
+  }
+
+  function filteredEntries() {
+    var all = state.archive.entries;
+    if (state.filter === 'all') return all.slice();
+    return all.filter(function (e) {
+      if (state.filter === 'bad') return e.status !== 'ok';
+      if (state.filter === 'ok') return e.status === 'ok';
+      if (state.filter === 'index') return e.status === 'index';
+      if (state.filter === 'crc') return e.status === 'crc' || e.status === 'block';
+      return true;
+    });
+  }
+
+  function renderTable() {
+    var tbody = $('block-tbody');
+    tbody.innerHTML = '';
+    var rows = filteredEntries();
+    var arc = state.archive;
+    var total = rows.length;
+    var pages = Math.max(1, Math.ceil(total / state.pageSize));
+    if (state.page >= pages) state.page = pages - 1;
+    if (state.page < 0) state.page = 0;
+    var from = state.page * state.pageSize;
+    var to = Math.min(total, from + state.pageSize);
+
+    if (!total) {
+      var tr = el('tr');
+      tr.appendChild(el('td', { colspan: '8', class: 'empty-row', text: '没有符合筛选条件的块。' }));
+      tr.style.cursor = 'default';
+      tbody.appendChild(tr);
+    }
+
+    for (var i = from; i < to; i++) {
+      var e = rows[i];
+      var st = statusMeta(e);
+      var info = e.headerInfo && e.headerInfo.ok ? e.headerInfo : null;
+      var modeTxt = info ? (info.mode === 1 ? '中侧' : (arc.header.channels === 2 ? '原始 L/R' : '原始')) : '—';
+      var lTxt = info ? '<b>' + info.orders[0] + '</b>阶 <b>' + info.ks[0] + '</b>' : '—';
+      var rTxt = info && arc.header.channels === 2 ? '<b>' + info.orders[1] + '</b>阶 <b>' + info.ks[1] + '</b>' : (arc.header.channels === 1 ? '—' : '—');
+
+      var tr = el('tr', { 'data-block': String(e.index) });
+      if (e.index === state.expanded) tr.classList.add('sel');
+      tr.appendChild(el('td', { class: 'num', text: String(e.index) }));
+      tr.appendChild(el('td', { class: 'num', text: fmtInt(e.frames) }));
+      tr.appendChild(el('td', { class: 'num', text: fmtInt(e.offset) }));
+      tr.appendChild(el('td', { class: 'num', text: fmtInt(e.size) }));
+      tr.appendChild(el('td', {}, [el('span', { class: 'mode-pill ' + (info && info.mode === 1 ? 'ms' : ''), text: modeTxt })]));
+      var ltd = el('td', { class: 'par' }); ltd.innerHTML = lTxt; tr.appendChild(ltd);
+      var rtd = el('td', { class: 'par' }); rtd.innerHTML = rTxt; tr.appendChild(rtd);
+      tr.appendChild(el('td', {}, [
+        el('span', { class: 'st ' + st.cls }, [el('i'), document.createTextNode(st.label)])
+      ]));
+      tr.addEventListener('click', onRowClick);
+      tbody.appendChild(tr);
+
+      if (e.index === state.expanded) {
+        var detailTr = el('tr', { class: 'detail-row' });
+        var td = el('td', { colspan: '8' });
+        td.appendChild(buildDetail(e, st));
+        detailTr.appendChild(td);
+        detailTr.style.cursor = 'default';
+        tbody.appendChild(detailTr);
+      }
+    }
+
+    $('pager-info').textContent = total
+      ? '第 ' + (from + 1) + '–' + to + ' 条，共 ' + fmtInt(total) + ' 条'
+      : '共 0 条';
+    $('prev-page').disabled = state.page <= 0;
+    $('next-page').disabled = state.page >= pages - 1;
+    $('page-label').textContent = (state.page + 1) + ' / ' + pages;
+  }
+
+  function buildDetail(e, st) {
+    var card = el('div', { class: 'detail-card' });
+    var info = e.headerInfo;
+    var title = el('h4', { text: '块 ' + e.index + ' 详情' });
+    card.appendChild(title);
+    var dl = el('dl');
+    function add(k, v, mono) {
+      dl.appendChild(el('dt', { text: k }));
+      dl.appendChild(el('dd', { class: mono === false ? '' : '', text: v }));
+    }
+    add('帧范围', fmtInt(e.startFrame) + ' – ' + fmtInt(e.endFrame) + '（' + fmtInt(e.frames) + ' 帧）');
+    add('字节偏移', fmtInt(e.offset));
+    add('块字节数', fmtInt(e.size));
+    add('目录 CRC32', hex(e.crc));
+    add('实际 CRC32', e.actualCrc == null ? '未能读取' : hex(e.actualCrc));
+    if (info && info.ok) {
+      add('模式', info.mode === 1 ? '1 · 中侧（mid/side）' : '0 · 原始' + (state.archive.header.channels === 2 ? ' L/R' : ''));
+      add('第 1 路', '预测 ' + info.orders[0] + ' 阶 · Rice k=' + info.ks[0]);
+      if (state.archive.header.channels === 2)
+        add('第 2 路', '预测 ' + info.orders[1] + ' 阶 · Rice k=' + info.ks[1]);
+    } else if (info && info.error) {
+      add('块头', info.error);
+    }
+    card.appendChild(dl);
+    if (e.error) card.appendChild(el('div', { class: 'err', text: e.error }));
+    var bar = el('div', { class: 'quick', style: 'margin-top:11px' });
+    var selBtn = el('button', { class: 'btn small', type: 'button', text: '选中此块试听' });
+    selBtn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      setSelection(e.startFrame, e.endFrame);
+      $('sel-start').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    selBtn.disabled = e.status !== 'ok';
+    bar.appendChild(selBtn);
+    card.appendChild(bar);
+    return card;
+  }
+
+  function onRowClick(ev) {
+    var tr = ev.currentTarget;
+    var idx = Number(tr.getAttribute('data-block'));
+    state.expanded = state.expanded === idx ? -1 : idx;
+    renderTable();
+    markSelectedRows();
+  }
+
+  function markSelectedRows() {
+    var rows = $('block-tbody').querySelectorAll('tr[data-block]');
+    rows.forEach(function (tr) {
+      tr.classList.remove('sel');
+    });
+    if (state.expanded >= 0) {
+      var found = $('block-tbody').querySelector('tr[data-block="' + state.expanded + '"]');
+      if (found) found.classList.add('sel');
+    }
+  }
+
+  /* ---------------- 波形 ---------------- */
+  function computePeaksAsync() {
+    var arc = state.archive;
+    var total = arc.header.totalFrames;
+    var cols = Math.max(200, Math.min(1200, Math.round(($('wave-canvas').parentElement.clientWidth || 800))));
+    var peaks = new Float32Array(cols * 2); // min,max per column
+    var has = new Uint8Array(cols);
+    var badCols = new Uint8Array(cols);
+    state.peaks = { cols: cols, data: peaks, has: has, bad: badCols };
+    state.peaksReady = false;
+    $('wave-empty').textContent = '正在解码校验与绘制波形…';
+    $('wave-empty').hidden = false;
+
+    var n = arc.entries.length;
+    var b = 0;
+    var chunk = 120;
+    var framesPerCol = total / cols;
+    var scale = normScale();
+    var chanCount = arc.header.channels;
+
+    function step() {
+      var end = Math.min(n, b + chunk);
+      for (; b < end; b++) {
+        var entry = arc.entries[b];
+        if (entry.status !== 'ok') {
+          // 标记该块覆盖的列
+          var c0 = Math.floor(entry.startFrame / framesPerCol);
+          var c1 = Math.min(cols - 1, Math.floor((entry.endFrame - 1) / framesPerCol));
+          for (var bc = c0; bc <= c1; bc++) badCols[bc] = 1;
+          continue;
+        }
+        var dec = R.decodeBlock(arc, b);
+        if (!dec.ok) {
+          var d0 = Math.floor(entry.startFrame / framesPerCol);
+          var d1 = Math.min(cols - 1, Math.floor((entry.endFrame - 1) / framesPerCol));
+          for (var dc = d0; dc <= d1; dc++) badCols[dc] = 1;
+          continue;
+        }
+        var chans = dec.channels;
+        var base = entry.startFrame;
+        var ch0 = chans[0];
+        var ch1 = chanCount === 2 ? chans[1] : null;
+        for (var i = 0; i < entry.frames; i++) {
+          var col = Math.floor((base + i) / framesPerCol);
+          if (col >= cols) col = cols - 1;
+          var v = ch0[i];
+          var min = v, max = v;
+          if (ch1) {
+            var vv = ch1[i];
+            if (vv < min) min = vv;
+            if (vv > max) max = vv;
+          }
+          var lo = min / scale;
+          var hi = max / scale;
+          if (!has[col]) { peaks[col * 2] = lo; peaks[col * 2 + 1] = hi; has[col] = 1; }
+          else {
+            if (lo < peaks[col * 2]) peaks[col * 2] = lo;
+            if (hi > peaks[col * 2 + 1]) peaks[col * 2 + 1] = hi;
+          }
+        }
+      }
+      if (b < n) {
+        $('wave-empty').textContent = '正在解码校验 ' + Math.round((b / n) * 100) + '%';
+        setTimeout(step, 0);
+      } else {
+        state.peaksReady = true;
+        $('wave-empty').hidden = true;
+        drawWaveform();
+        renderSelectionState();
+      }
+    }
+    setTimeout(step, 0);
+  }
+
+  function normScale() {
+    return Math.pow(2, state.archive.header.bitDepth - 1);
+  }
+
+  function drawWaveform() {
+    var canvas = $('wave-canvas');
+    var wrap = canvas.parentElement;
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(1, Math.round(wrap.clientWidth));
+    var h = 108;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    var style = getComputedStyle(document.documentElement);
+    var colLine = style.getPropertyValue('--line').trim();
+    var colAccent = style.getPropertyValue('--accent').trim();
+    var colCrit = style.getPropertyValue('--crit').trim();
+    var colFaint = style.getPropertyValue('--faint').trim();
+
+    var mid = h / 2;
+    ctx.strokeStyle = colLine;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, Math.round(mid) + 0.5);
+    ctx.lineTo(w, Math.round(mid) + 0.5);
+    ctx.stroke();
+
+    if (!state.peaks) return;
+    var peaks = state.peaks;
+    var cols = peaks.cols;
+    var data = peaks.data, has = peaks.has, bad = peaks.bad;
+    var total = state.archive.header.totalFrames;
+    var selS = (state.selection.start / total) * w;
+    var selE = (state.selection.end / total) * w;
+
+    // 选区底色
+    ctx.fillStyle = colAccent;
+    ctx.globalAlpha = 0.09;
+    ctx.fillRect(selS, 0, Math.max(1, selE - selS), h);
+    ctx.globalAlpha = 1;
+
+    var colW = w / cols;
+    var amp = mid - 6;
+    for (var c = 0; c < cols; c++) {
+      var x = c * colW;
+      if (bad[c]) {
+        ctx.fillStyle = colCrit;
+        ctx.globalAlpha = 0.16;
+        ctx.fillRect(x, 0, Math.max(1, colW), h);
+        ctx.globalAlpha = 1;
+        continue;
+      }
+      if (!has[c]) continue;
+      var lo = data[c * 2], hi = data[c * 2 + 1];
+      var y1 = mid - hi * amp;
+      var y2 = mid - lo * amp;
+      ctx.fillStyle = colAccent;
+      ctx.fillRect(x, Math.min(y1, y2), Math.max(1, colW * 0.9), Math.max(1, Math.abs(y2 - y1)));
+    }
+
+    // 选区边界
+    ctx.strokeStyle = colAccent;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(selS + 0.5, 0); ctx.lineTo(selS + 0.5, h);
+    ctx.moveTo(selE - 0.5, 0); ctx.lineTo(selE - 0.5, h);
+    ctx.stroke();
+
+    // 播放头
+    if (state.playing && state.playHead != null) {
+      var px = (state.playHead / total) * w;
+      ctx.strokeStyle = colFaint;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, 0); ctx.lineTo(px, h);
+      ctx.stroke();
+    }
+  }
+
+  /* ---------------- 播放 ---------------- */
+  function ensureAudio() {
+    if (!state.audioCtx) {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) { toast('此浏览器不支持 Web Audio，无法试听。', 'crit'); return null; }
+      state.audioCtx = new Ctx();
+    }
+    if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+    return state.audioCtx;
+  }
+
+  function stopPlayback() {
+    if (state.playing) {
+      try { state.playing.stop(); } catch (e) { /* 已停止 */ }
+      state.playing = null;
+    }
+    state.playHead = null;
+    $('play-status').textContent = '';
+    $('play-btn').innerHTML = '';
+    $('play-btn').appendChild(icon('play', 'b-ico'));
+    $('play-btn').appendChild(document.createTextNode('试听区间'));
+    drawWaveform();
+  }
+
+  function playSelection() {
+    if (state.playing) { stopPlayback(); return; }
+    var sel = state.selection;
+    if (sel.end <= sel.start) { toast('请先设置有效区间。', 'warn'); return; }
+    var bad = badBlocksInRange(sel.start, sel.end);
+    if (bad.length) {
+      toast('区间跨越损坏块 ' + bad.join('、') + '，已禁止试听。', 'crit', 6000);
+      return;
+    }
+    var dec = R.decodeRange(state.archive, sel.start, sel.end);
+    if (!dec.ok) {
+      toast(dec.error.message, 'crit', 6000);
+      return;
+    }
+    var ctx = ensureAudio();
+    if (!ctx) return;
+
+    var h = state.archive.header;
+    var len = sel.end - sel.start;
+    var buffer = ctx.createBuffer(h.channels, len, h.sampleRate);
+    var scale = 1 / normScale();
+    for (var c = 0; c < h.channels; c++) {
+      var ch = buffer.getChannelData(c);
+      var src = dec.channels[c];
+      for (var i = 0; i < len; i++) ch[i] = src[i] * scale;
+    }
+
+    var srcNode = ctx.createBufferSource();
+    srcNode.buffer = buffer;
+    srcNode.connect(ctx.destination);
+    var startedAt = ctx.currentTime;
+    var dur = len / h.sampleRate;
+
+    srcNode.onended = function () {
+      if (state.playing === srcNode) stopPlayback();
+    };
+    srcNode.start();
+
+    state.playing = srcNode;
+    state.playHead = sel.start;
+    $('play-btn').innerHTML = '';
+    $('play-btn').appendChild(icon('stop', 'b-ico'));
+    $('play-btn').appendChild(document.createTextNode('停止'));
+    $('play-status').textContent = '播放中 · ' + fmtSeconds(len, h.sampleRate);
+
+    function tick() {
+      if (state.playing !== srcNode) return;
+      var elapsed = ctx.currentTime - startedAt;
+      if (elapsed >= dur) { stopPlayback(); return; }
+      state.playHead = sel.start + elapsed * h.sampleRate;
+      $('play-status').textContent = '播放中 · ' + elapsed.toFixed(2) + ' / ' + dur.toFixed(2) + 's';
+      drawWaveform();
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------------- 导出 ---------------- */
+  function exportSelection() {
+    var sel = state.selection;
+    if (sel.end <= sel.start) { toast('请先设置有效区间。', 'warn'); return; }
+    var bad = badBlocksInRange(sel.start, sel.end);
+    if (bad.length) {
+      toast('区间跨越损坏块 ' + bad.join('、') + '，已禁止导出。', 'crit', 6000);
+      return;
+    }
+    var res = R.exportWav(state.archive, sel.start, sel.end);
+    if (!res.ok) {
+      if (res.badBlocks && res.badBlocks.length) {
+        toast('导出被拒绝：区间跨越损坏块 ' + res.badBlocks.join('、') + '。', 'crit', 6000);
+      } else {
+        toast('导出失败：' + (res.error && res.error.message), 'crit', 6000);
+      }
+      return;
+    }
+    var name = baseName(state.downloadName || state.sourceName) + '_' +
+      sel.start + '-' + sel.end + '.wav';
+    downloadBytes(res.bytes, name, 'audio/wav');
+    toast('已导出 ' + name + '（' + fmtInt(sel.end - sel.start) + ' 帧，' + fmtBytes(res.bytes.length) + '）', 'ok', 6000);
+  }
+
+  /* ---------------- 损坏演示 ---------------- */
+  function corruptIndexEntry() {
+    if (!state.archive) return;
+    var total = state.archive.header.numBlocks;
+    if (total < 2) { toast('块太少，无法演示索引损坏。', 'warn'); return; }
+    // 选一个非首非尾的条目，改其偏移字段，保证与相邻块不再首尾相接。
+    var idx = Math.min(total - 2, Math.max(1, Math.floor(total / 2)));
+    if (idx < 0) idx = 0;
+    var copy = new Uint8Array(state.bytes);
+    var p = R.HEADER_SIZE + idx * R.ENTRY_SIZE;
+    copy[p] ^= 0xff;
+    copy[p + 1] ^= 0x7f;
+    applyCorruption(copy, '已损坏索引条目 ' + idx + '（偏移字段）。');
+  }
+
+  function corruptBlock() {
+    if (!state.archive) return;
+    var usable = state.archive.entries.filter(function (e) { return e.status === 'ok'; });
+    if (!usable.length) { toast('没有完好的块可供破坏。', 'warn'); return; }
+    var e = usable[Math.floor(usable.length / 2)];
+    var copy = new Uint8Array(state.bytes);
+    copy[e.offset] ^= 0xff; // 破坏块首字节，使 CRC 失配
+    applyCorruption(copy, '已损坏块 ' + e.index + ' 的数据（CRC 将失配）。');
+  }
+
+  function applyCorruption(copy, message) {
+    stopPlayback();
+    var arc = R.parse(copy);
+    if (!arc.ok) { toast('损坏导致头错误，已保留原归档。', 'warn'); return; }
+    state.archive = arc;
+    state.bytes = copy;
+    state.peaks = null;
+    state.peaksReady = false;
+    state.expanded = -1;
+    state.page = 0;
+    state.filter = 'all';
+    state.downloadName = null;
+    toast(message, 'warn', 6000);
+    renderWorkspace();
+    computePeaksAsync();
+  }
+
+  function restoreArchive() {
+    if (!state.originalBytes) { toast('没有可恢复的原始字节。', 'warn'); return; }
+    var arc = R.parse(state.originalBytes);
+    if (!arc.ok) { toast('恢复失败。', 'crit'); return; }
+    stopPlayback();
+    state.archive = arc;
+    state.bytes = state.originalBytes;
+    state.peaks = null;
+    state.peaksReady = false;
+    state.expanded = -1;
+    state.page = 0;
+    state.filter = 'all';
+    state.downloadName = state.baseDownloadName;
+    renderWorkspace();
+    computePeaksAsync();
+    toast('已恢复到校验通过的归档。', 'ok');
+  }
+
+  /* ---------------- 事件绑定 ---------------- */
+  function bind() {
+    var fileInput = $('file-input');
+    $('drop').addEventListener('click', function () { fileInput.click(); });
+    $('drop').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+    });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files && fileInput.files[0]) readFile(fileInput.files[0]);
+      fileInput.value = '';
+    });
+    ['dragenter', 'dragover'].forEach(function (evt) {
+      $('drop').addEventListener(evt, function (e) {
+        e.preventDefault(); $('drop').classList.add('dragging');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (evt) {
+      $('drop').addEventListener(evt, function (e) {
+        e.preventDefault(); $('drop').classList.remove('dragging');
+      });
+    });
+    $('drop').addEventListener('drop', function (e) {
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+    });
+
+    $('encode-btn').addEventListener('click', runEncode);
+    $('download-archive').addEventListener('click', function () {
+      if (!state.bytes || !state.downloadName) return;
+      downloadBytes(state.bytes, state.downloadName, 'application/octet-stream');
+    });
+
+    // 示例
+    document.querySelectorAll('[data-sample]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-sample');
+        var s = window.RPA_SAMPLES && window.RPA_SAMPLES[key];
+        if (!s) { toast('示例不可用。', 'warn'); return; }
+        var bin = atob(s.b64);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        handleUploadedBytes(bytes, s.name);
+      });
+    });
+
+    // 选择输入
+    function readFrameInput(input, fallback) {
+      var v = parseInt(input.value, 10);
+      if (isNaN(v)) return fallback;
+      return v;
+    }
+    $('sel-start').addEventListener('change', function () {
+      setSelection(readFrameInput($('sel-start'), state.selection.start), state.selection.end);
+    });
+    $('sel-end').addEventListener('change', function () {
+      setSelection(state.selection.start, readFrameInput($('sel-end'), state.selection.end));
+    });
+    $('sel-all').addEventListener('click', function () {
+      setSelection(0, state.archive.header.totalFrames);
+    });
+    $('sel-first-sec').addEventListener('click', function () {
+      var rate = state.archive.header.sampleRate;
+      setSelection(state.selection.start, Math.min(state.archive.header.totalFrames, state.selection.start + rate));
+    });
+    $('sel-nudge-l').addEventListener('click', function () {
+      setSelection(state.selection.start - 1024, state.selection.end);
+    });
+    $('sel-nudge-r').addEventListener('click', function () {
+      setSelection(state.selection.start, state.selection.end + 1024);
+    });
+
+    $('play-btn').addEventListener('click', playSelection);
+    $('export-btn').addEventListener('click', exportSelection);
+
+    // 表格分页与筛选
+    document.querySelectorAll('.seg [data-filter]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('.seg [data-filter]').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+        b.setAttribute('aria-pressed', 'true');
+        state.filter = b.getAttribute('data-filter');
+        state.page = 0;
+        renderTable();
+      });
+    });
+    $('prev-page').addEventListener('click', function () {
+      if (state.page > 0) { state.page--; renderTable(); }
+    });
+    $('next-page').addEventListener('click', function () {
+      state.page++; renderTable();
+    });
+    $('jump-input').addEventListener('change', function () {
+      var v = parseInt($('jump-input').value, 10);
+      if (isNaN(v)) return;
+      var b = Math.max(0, Math.min(state.archive.entries.length - 1, v));
+      state.expanded = b;
+      state.page = Math.floor(b / state.pageSize);
+      state.filter = 'all';
+      renderTable();
+      var row = $('block-tbody').querySelector('tr[data-block="' + b + '"]');
+      if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+
+    $('map-canvas-wrap').addEventListener('click', mapClick);
+    $('map-canvas-wrap').addEventListener('keydown', function (ev) {
+      if (!state.archive) return;
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      var n = state.archive.entries.length;
+      var current = state.expanded >= 0 ? state.expanded : 0;
+      var target = Math.min(n - 1, Math.max(0, current));
+      var e = state.archive.entries[target];
+      setSelection(e.startFrame, e.endFrame);
+      state.expanded = target;
+      state.page = Math.floor(target / state.pageSize);
+      renderTable();
+    });
+
+    $('sim-index').addEventListener('click', corruptIndexEntry);
+    $('sim-block').addEventListener('click', corruptBlock);
+    $('restore').addEventListener('click', restoreArchive);
+
+    window.addEventListener('resize', debounce(function () {
+      if (!state.archive) return;
+      renderBlockMap();
+      drawWaveform();
+    }, 150));
+  }
+
+  function debounce(fn, ms) {
+    var t;
+    return function () {
+      clearTimeout(t);
+      var args = arguments;
+      t = setTimeout(function () { fn.apply(null, args); }, ms);
+    };
+  }
+
+  /* ---------------- 启动 ---------------- */
+  function init() {
+    bind();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+
+</script>
