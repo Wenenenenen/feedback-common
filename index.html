@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>快门曝光积分台 · Continuous Shutter Render</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="masthead">
+      <div class="masthead-title">
+        <div class="eyebrow">Continuous Shutter Render</div>
+        <h1>快门曝光积分台</h1>
+        <p class="lede">
+          按连续时间解析计算运动模糊：像素中心覆盖、深度遮挡切换与曝光积分全部求解到事件时刻，
+          不做固定抽帧，也不做时间采样逼近。
+        </p>
+      </div>
+      <div class="masthead-actions">
+        <label class="field-inline">
+          <span>场景</span>
+          <select id="caseSelect"></select>
+        </label>
+        <button class="btn" id="importBtn" type="button">导入 JSON</button>
+        <input id="fileInput" type="file" accept="application/json,.json" hidden />
+        <button class="btn btn-ghost" id="resetBtn" type="button">恢复样例</button>
+      </div>
+    </header>
+
+    <div id="errorBanner" class="error-banner" hidden>
+      <strong>载入失败</strong>
+      <ul id="errorList"></ul>
+      <p class="hint">原场景保持不变。</p>
+    </div>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <section class="card">
+          <h2>曝光窗口</h2>
+          <div class="control">
+            <div class="control-head"><label for="startRange">曝光起点</label><output id="startOut" class="num"></output></div>
+            <input id="startRange" type="range" min="-0.5" max="1.5" step="0.001" value="0" />
+          </div>
+          <div class="control">
+            <div class="control-head"><label for="durationRange">曝光时长</label><output id="durationOut" class="num"></output></div>
+            <input id="durationRange" type="range" min="0.01" max="1.5" step="0.001" value="1" />
+          </div>
+          <div class="control">
+            <div class="control-head"><label for="scanDelayRange">全画面扫描延迟</label><output id="scanDelayOut" class="num"></output></div>
+            <input id="scanDelayRange" type="range" min="0" max="1.5" step="0.001" value="0" />
+          </div>
+          <div class="control">
+            <div class="control-head"><span>扫描方向</span></div>
+            <div class="segmented" role="radiogroup" aria-label="扫描方向">
+              <button type="button" data-scan="down" class="active" role="radio" aria-checked="true">自上而下</button>
+              <button type="button" data-scan="up" role="radio" aria-checked="false">自下而上</button>
+            </div>
+          </div>
+          <div class="control">
+            <div class="control-head"><span>权重形状</span></div>
+            <div class="segmented" role="radiogroup" aria-label="权重形状">
+              <button type="button" data-weight="uniform" class="active" role="radio" aria-checked="true">均匀</button>
+              <button type="button" data-weight="triangle" role="radio" aria-checked="false">中间最高</button>
+            </div>
+            <p class="hint">三角权重以窗口中心为峰、两端为零，总权重减半。</p>
+          </div>
+
+          <div class="scan-viz">
+            <div class="viz-head"><span>各行曝光窗口</span><span class="legend-note"><i class="swatch-line"></i>窗口区间</span></div>
+            <svg id="scanSvg" class="mini-chart" role="img" aria-label="各行曝光窗口起始时间"></svg>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>场景概要</h2>
+          <dl class="summary" id="caseSummary"></dl>
+          <div class="legend" id="cardLegend"></div>
+        </section>
+
+        <section class="card">
+          <h2>计算</h2>
+          <div class="run-state" id="runState">
+            <span class="dot" id="runDot"></span>
+            <span id="runText">就绪</span>
+          </div>
+          <div class="progress" aria-hidden="true"><div id="progressFill"></div></div>
+          <p class="hint">积分在 Worker 中解析求解；拖动参数会取消过期计算。</p>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="viewers">
+          <figure class="card viewer">
+            <figcaption>
+              <div>
+                <h2>瞬时画面</h2>
+                <p class="sub">t = <span id="tReadout" class="num">0.500</span> · 像素中心覆盖</p>
+              </div>
+              <div class="chips" id="instantChips"></div>
+            </figcaption>
+            <div class="canvas-wrap" id="instantWrap">
+              <canvas id="instantCanvas"></canvas>
+            </div>
+            <div class="playback">
+              <button class="btn btn-icon" id="playBtn" type="button" aria-label="播放 / 暂停">▶</button>
+              <input id="timeRange" type="range" min="0" max="1" step="0.001" value="0.5" aria-label="采样时刻" />
+              <button class="btn btn-ghost btn-small" id="outlineBtn" type="button" aria-pressed="true">轮廓</button>
+            </div>
+          </figure>
+
+          <figure class="card viewer">
+            <figcaption>
+              <div>
+                <h2>曝光积分</h2>
+                <p class="sub">解析连续时间 · 归一化线性 RGB</p>
+              </div>
+              <div class="chips" id="integratedChips"></div>
+            </figcaption>
+            <div class="canvas-wrap" id="integratedWrap">
+              <canvas id="integratedCanvas"></canvas>
+            </div>
+            <div class="scale-row">
+              <span>点击任一画面探查像素</span>
+              <span class="num" id="windowInfo"></span>
+            </div>
+          </figure>
+        </section>
+
+        <section class="card probe" id="probeCard">
+          <div class="probe-head">
+            <h2>像素探查</h2>
+            <div class="probe-meta" id="probeMeta">尚未选择像素</div>
+          </div>
+          <div class="probe-body" id="probeBody">
+            <p class="empty">在左侧“瞬时画面”或右侧“曝光积分”中点击一个像素，查看它在该行曝光窗口内的前景、背景分段与各段贡献。</p>
+          </div>
+        </section>
+
+        <section class="card export">
+          <div class="export-head">
+            <h2>导出</h2>
+            <p class="sub">线性数据不经过 sRGB 编码；预览 PNG 为 sRGB 8 位。</p>
+          </div>
+          <div class="export-actions">
+            <label class="field-inline">
+              <span>精度</span>
+              <select id="precisionSelect">
+                <option value="f64">float64 LE</option>
+                <option value="f32">float32 LE</option>
+              </select>
+            </label>
+            <button class="btn" id="dlLinear" type="button">下载线性像素</button>
+            <button class="btn" id="dlWeights" type="button">下载权重</button>
+            <button class="btn" id="dlPng" type="button">下载预览 PNG</button>
+            <button class="btn btn-ghost" id="dlJson" type="button">下载参数 JSON</button>
+          </div>
+          <p class="hint" id="exportHint">RGB 逐像素交错，行优先；权重为每像素有效曝光量（均匀权重下即覆盖时长）。</p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="drop-overlay" id="dropOverlay" hidden><span>松开以载入 JSON</span></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

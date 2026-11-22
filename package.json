@@ -1,0 +1,13 @@
+{
+  "name": "continuous-shutter-render",
+  "version": "1.0.0",
+  "description": "快门曝光连续时间积分校验：解析覆盖/遮挡事件 + 曝光积分（纯前端，无依赖）",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node tools/test.mjs",
+    "start": "node tools/serve.mjs",
+    "dev": "node tools/serve.mjs",
+    "test:e2e": "node tools/browser-smoke.mjs"
+  }
+}
