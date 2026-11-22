@@ -1,0 +1,752 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>接力复位选点器</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+  /* 布局：左侧地图画布（桌面端吸顶），右侧结果 / 候选 / 冲突面板，窄屏单列 */
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #eceef1;
+    --fg: #1c2330;
+    --muted: #5d6a7d;
+    --line: #d8dde4;
+    --accent: #3f5efb;
+    --accent-soft: #e6ebff;
+    --ok: #15803d;
+    --ok-soft: #dcf5e4;
+    --warn: #b45309;
+    --warn-soft: #fdf0dc;
+    --bad: #b91c1c;
+    --bad-soft: #fde3e3;
+    --cell-floor: #ffffff;
+    --cell-wall: #2b3444;
+    --cell-grid: #e3e7ed;
+    --checkpoint: #d97706;
+    --font-body: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-display: 'Space Grotesk', 'Inter', system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181f;
+      --surface: #1d232e;
+      --surface-2: #262e3b;
+      --fg: #e6eaf1;
+      --muted: #93a0b4;
+      --line: #333d4d;
+      --accent: #7b90ff;
+      --accent-soft: #27305a;
+      --ok: #4ade80;
+      --ok-soft: #17351f;
+      --warn: #fbbf24;
+      --warn-soft: #3a2c10;
+      --bad: #f87171;
+      --bad-soft: #3d1a1a;
+      --cell-floor: #232a36;
+      --cell-wall: #0b0e13;
+      --cell-grid: #313a49;
+      --checkpoint: #fbbf24;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181f;
+    --surface: #1d232e;
+    --surface-2: #262e3b;
+    --fg: #e6eaf1;
+    --muted: #93a0b4;
+    --line: #333d4d;
+    --accent: #7b90ff;
+    --accent-soft: #27305a;
+    --ok: #4ade80;
+    --ok-soft: #17351f;
+    --warn: #fbbf24;
+    --warn-soft: #3a2c10;
+    --bad: #f87171;
+    --bad-soft: #3d1a1a;
+    --cell-floor: #232a36;
+    --cell-wall: #0b0e13;
+    --cell-grid: #313a49;
+    --checkpoint: #fbbf24;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 48px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    margin: 0;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    margin: 0 0 10px;
+    letter-spacing: 0.02em;
+  }
+  .page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .page-head .sub {
+    color: var(--muted);
+    font-size: 0.85rem;
+    flex-basis: 100%;
+    margin-top: -6px;
+  }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+  }
+  button, select {
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); color: #fff; }
+  button:focus-visible, select:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    main { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .grid-pane {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    position: sticky;
+    top: 16px;
+  }
+  @media (max-width: 980px) { .grid-pane { position: static; } }
+  .canvas-wrap { overflow-x: auto; }
+  canvas { display: block; touch-action: none; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .hint { color: var(--muted); font-size: 0.8rem; margin: 10px 0 0; line-height: 1.5; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; font-size: 0.78rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .sw.round { border-radius: 50%; }
+
+  .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    min-width: 0;
+  }
+  .banner {
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .banner.ok { background: var(--ok-soft); color: var(--ok); }
+  .banner.bad { background: var(--bad-soft); color: var(--bad); }
+  .banner.warn { background: var(--warn-soft); color: var(--warn); }
+  .msg-list { margin: 0 0 8px; padding-left: 18px; font-size: 0.82rem; }
+  .msg-list.err { color: var(--bad); }
+  .msg-list.warn { color: var(--warn); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 10px;
+    background: var(--surface-2);
+    cursor: pointer;
+    color: var(--fg);
+  }
+  .chip.sel { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .chip .team-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  td.reasons { white-space: normal; color: var(--bad); font-size: 0.76rem; min-width: 140px; }
+  tr.valid td { color: var(--fg); }
+  tr.invalid td { color: var(--muted); }
+  tr.picked td { background: var(--ok-soft); }
+  .mono { font-family: var(--font-mono); }
+  .totals { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .stat {
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .stat b { display: block; color: var(--fg); font-size: 1rem; font-family: var(--font-display); }
+
+  details.card summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--fg);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    resize: vertical;
+  }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .err-text { color: var(--bad); font-size: 0.78rem; }
+  .empty { color: var(--muted); font-size: 0.82rem; }
+  ul.tight { margin: 6px 0 0; padding-left: 18px; font-size: 0.82rem; line-height: 1.6; }
+</style>
+
+<header class="page-head">
+  <h1>接力复位选点器</h1>
+  <div class="toolbar">
+    <select id="scenarioSel" aria-label="场景">
+      <option value="sample">主样例</option>
+      <option value="nosol">无解变体（移除 Z）</option>
+      <option value="island">孤岛变体</option>
+      <option value="custom" hidden>自定义</option>
+    </select>
+    <button id="importBtn" type="button">导入 JSON</button>
+    <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    <button id="exportBtn" type="button" class="primary">导出诊断</button>
+    <label class="check"><input type="checkbox" id="conflictToggle" checked> 显示冲突边</label>
+  </div>
+  <p class="sub">同批回场机器人整批选点：先比最低安全分，再比总安全分，再比到各自集合点的总距离，最后按请求编号顺序比候选点编号。</p>
+</header>
+
+<main>
+  <section class="grid-pane">
+    <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+    <div class="legend" id="legend"></div>
+    <p class="hint">拖动圆点（在场机器人）和方块（候选点）到新的格子，松开后自动重算。深色格为不可通行的墙。点击右侧请求标签可高亮该请求的合规候选点。</p>
+  </section>
+
+  <div class="side">
+    <section class="card" id="resultPanel"></section>
+    <section class="card">
+      <h2>本批请求</h2>
+      <div class="chips" id="requestChips"></div>
+    </section>
+    <section class="card">
+      <h2>候选点评估 <span class="empty" id="candFor"></span></h2>
+      <div class="table-wrap"><table id="candTable"></table></div>
+    </section>
+    <section class="card" id="conflictPanel"></section>
+    <details class="card">
+      <summary>场景 JSON</summary>
+      <textarea id="jsonEdit" rows="14" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="applyJson" type="button">应用 JSON</button>
+        <span id="jsonErr" class="err-text"></span>
+      </div>
+    </details>
+    <details class="card" id="diagDetails">
+      <summary>诊断导出</summary>
+      <textarea id="diagOut" rows="12" readonly spellcheck="false"></textarea>
+      <div class="row">
+        <button id="copyDiag" type="button">复制诊断</button>
+        <button id="downloadDiag" type="button">下载 JSON</button>
+        <span id="diagMsg" class="empty"></span>
+      </div>
+    </details>
+  </div>
+</main>
+
+<script src="selector.js"></script>
+<script>
+'use strict';
+/* 内置样例（与 samples/relay-respawn-selector.json 同步；页面也会优先尝试 fetch 该文件） */
+const SAMPLE = {"format":"地图点号可走，井号不可走，坐标从0起，先列后行。请求和候选点编号唯一。","grid":["..........."],"checkpoint":[5,0],"rally":{"A":[9,0],"B":[1,0]},"active":[{"team":"A","xy":[0,0]},{"team":"B","xy":[10,0]}],"minGap":3,"requests":[{"id":"a","team":"A"},{"id":"b","team":"B"}],"sites":[{"id":"X","xy":[2,0],"teams":["A","B"]},{"id":"Y","xy":[3,0],"teams":["B"]},{"id":"Z","xy":[6,0],"teams":["A"]}],"expected":{"assign":{"a":"Z","b":"Y"},"safety":[4,3],"rallySum":5},"noSolution":{"remove":["Z"]},"island":{"grid":[".....#.."],"checkpoint":[2,0],"rally":{"A":[1,0],"B":[3,0]},"active":[{"team":"B","xy":[4,0]}],"minGap":1,"requests":[{"id":"a","team":"A"}],"sites":[{"id":"X","xy":[6,0],"teams":["A"]},{"id":"Y","xy":[0,0],"teams":["A"]}],"expected":{"a":"Y"}}};
+
+const RALLY_PENALTY = RelaySelector.RALLY_PENALTY;
+const TEAM_PALETTE = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#0891b2'];
+
+let cfg = null;
+let evalRes = null;
+let selectedReq = null;
+let teamColors = {};
+let drag = null;
+let cellSize = 16;
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const scenarioSel = document.getElementById('scenarioSel');
+const conflictToggle = document.getElementById('conflictToggle');
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function teamColor(t) {
+  if (!(t in teamColors)) teamColors[t] = TEAM_PALETTE[Object.keys(teamColors).length % TEAM_PALETTE.length];
+  return teamColors[t];
+}
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function baseScenario(sample) {
+  const c = clone(sample);
+  delete c.noSolution; delete c.island; delete c.format;
+  return c;
+}
+function scenarioFromSelect(sample, key) {
+  if (key === 'nosol') {
+    const c = baseScenario(sample);
+    const rem = (sample.noSolution && sample.noSolution.remove) || [];
+    c.sites = c.sites.filter(s => !rem.includes(s.id));
+    delete c.expected;
+    return c;
+  }
+  if (key === 'island') return clone(sample.island);
+  return baseScenario(sample);
+}
+
+function setCfg(next, scenarioKey) {
+  cfg = next;
+  teamColors = {};
+  (cfg.active || []).forEach(a => teamColor(a.team));
+  (cfg.requests || []).forEach(r => teamColor(r.team));
+  selectedReq = (cfg.requests && cfg.requests.length) ? cfg.requests[0].id : null;
+  if (scenarioKey) scenarioSel.value = scenarioKey;
+  else {
+    const opt = scenarioSel.querySelector('option[value="custom"]');
+    opt.hidden = false;
+    scenarioSel.value = 'custom';
+  }
+  recompute();
+}
+
+function recompute() {
+  evalRes = RelaySelector.computeSelection(cfg);
+  renderAll();
+}
+
+/* ---------- 画布 ---------- */
+function gridSize() {
+  const g = cfg.grid || [];
+  return { w: g.length ? g[0].length : 0, h: g.length };
+}
+
+function draw() {
+  const { w, h } = gridSize();
+  if (!w || !h) { cv.width = cv.height = 0; return; }
+  const maxSide = Math.min(680, Math.max(320, document.querySelector('.grid-pane').clientWidth - 30));
+  cellSize = Math.max(11, Math.min(44, Math.floor(maxSide / Math.max(w, h))));
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = w * cellSize * dpr;
+  cv.height = h * cellSize * dpr;
+  cv.style.width = (w * cellSize) + 'px';
+  cv.style.height = (h * cellSize) + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const cFloor = cssVar('--cell-floor'), cWall = cssVar('--cell-wall'), cGrid = cssVar('--cell-grid');
+  const cCp = cssVar('--checkpoint'), cFg = cssVar('--fg'), cMuted = cssVar('--muted');
+  const cOk = cssVar('--ok'), cBad = cssVar('--bad'), cAccent = cssVar('--accent');
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      ctx.fillStyle = cfg.grid[y][x] === '#' ? cWall : cFloor;
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+  ctx.strokeStyle = cGrid;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= w; x++) { ctx.moveTo(x * cellSize + 0.5, 0); ctx.lineTo(x * cellSize + 0.5, h * cellSize); }
+  for (let y = 0; y <= h; y++) { ctx.moveTo(0, y * cellSize + 0.5); ctx.lineTo(w * cellSize, y * cellSize + 0.5); }
+  ctx.stroke();
+
+  const center = (xy) => [(xy[0] + 0.5) * cellSize, (xy[1] + 0.5) * cellSize];
+
+  // 冲突边
+  if (conflictToggle.checked && evalRes && evalRes.conflictEdges) {
+    const siteById = {};
+    (cfg.sites || []).forEach(s => { siteById[s.id] = s; });
+    ctx.strokeStyle = cBad;
+    ctx.lineWidth = Math.max(1.5, cellSize * 0.07);
+    ctx.setLineDash([4, 4]);
+    evalRes.conflictEdges.forEach(e => {
+      const a = siteById[e.a], b = siteById[e.b];
+      if (!a || !b) return;
+      const [ax, ay] = center(a.xy), [bx, by] = center(b.xy);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+  }
+
+  // 公共接力点：菱形旗标
+  if (cfg.checkpoint) {
+    const [cx, cy] = center(cfg.checkpoint);
+    const r = cellSize * 0.3;
+    ctx.fillStyle = cCp;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
+    ctx.closePath(); ctx.fill();
+  }
+  // 各队集合点：空心圆
+  if (cfg.rally) {
+    Object.keys(cfg.rally).forEach(t => {
+      const [rx, ry] = center(cfg.rally[t]);
+      ctx.strokeStyle = teamColor(t);
+      ctx.lineWidth = Math.max(1.5, cellSize * 0.08);
+      ctx.beginPath();
+      ctx.arc(rx, ry, cellSize * 0.26, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+  }
+
+  const assigned = evalRes && evalRes.result ? evalRes.result.assign : {};
+  const assignedSites = new Set(Object.values(assigned));
+  const selEval = evalRes && evalRes.requests ? evalRes.requests.find(r => r.id === selectedReq) : null;
+  const selValid = new Set(selEval ? selEval.validCandidates.map(c => c.siteId) : []);
+
+  // 候选点：方块
+  (cfg.sites || []).forEach((s, i) => {
+    const beingDragged = drag && drag.kind === 'site' && drag.index === i;
+    const xy = beingDragged ? drag.cell : s.xy;
+    const px = xy[0] * cellSize, py = xy[1] * cellSize;
+    const inset = cellSize * 0.16;
+    const isPicked = assignedSites.has(s.id);
+    ctx.fillStyle = isPicked ? cssVar('--ok-soft') : cssVar('--surface');
+    ctx.strokeStyle = isPicked ? cOk : (selValid.has(s.id) ? cAccent : cMuted);
+    ctx.lineWidth = isPicked ? Math.max(2, cellSize * 0.1) : Math.max(1.2, cellSize * 0.06);
+    if (selEval && !selValid.has(s.id) && !isPicked) ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.roundRect(px + inset, py + inset, cellSize - inset * 2, cellSize - inset * 2, cellSize * 0.12);
+    ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = isPicked ? cOk : cFg;
+    ctx.font = `600 ${Math.floor(cellSize * 0.38)}px ui-monospace, Consolas, monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(s.id, px + cellSize / 2, py + cellSize / 2 + 0.5);
+  });
+
+  // 在场机器人：圆点
+  (cfg.active || []).forEach((a, i) => {
+    const beingDragged = drag && drag.kind === 'active' && drag.index === i;
+    const xy = beingDragged ? drag.cell : a.xy;
+    const [ax, ay] = center(xy);
+    ctx.fillStyle = teamColor(a.team);
+    ctx.beginPath();
+    ctx.arc(ax, ay, cellSize * 0.34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = `700 ${Math.floor(cellSize * 0.36)}px Inter, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(a.team, ax, ay + 0.5);
+  });
+}
+
+function eventCell(e) {
+  const rect = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) / cellSize);
+  const y = Math.floor((e.clientY - rect.top) / cellSize);
+  const { w, h } = gridSize();
+  return [Math.max(0, Math.min(w - 1, x)), Math.max(0, Math.min(h - 1, y))];
+}
+
+cv.addEventListener('pointerdown', e => {
+  const [x, y] = eventCell(e);
+  const ai = (cfg.active || []).findIndex(a => a.xy[0] === x && a.xy[1] === y);
+  if (ai >= 0) drag = { kind: 'active', index: ai, cell: [x, y] };
+  else {
+    const si = (cfg.sites || []).findIndex(s => s.xy[0] === x && s.xy[1] === y);
+    if (si >= 0) drag = { kind: 'site', index: si, cell: [x, y] };
+  }
+  if (drag) {
+    cv.setPointerCapture(e.pointerId);
+    cv.classList.add('dragging');
+    draw();
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.cell = eventCell(e);
+  draw();
+});
+cv.addEventListener('pointerup', e => {
+  if (!drag) return;
+  const target = drag.kind === 'active' ? cfg.active[drag.index] : cfg.sites[drag.index];
+  target.xy = drag.cell.slice();
+  drag = null;
+  cv.classList.remove('dragging');
+  markCustom();
+  recompute();
+});
+cv.addEventListener('pointercancel', () => { drag = null; cv.classList.remove('dragging'); draw(); });
+
+function markCustom() {
+  const opt = scenarioSel.querySelector('option[value="custom"]');
+  opt.hidden = false;
+  scenarioSel.value = 'custom';
+}
+
+/* ---------- 面板渲染 ---------- */
+function renderAll() {
+  draw();
+  renderLegend();
+  renderResult();
+  renderRequests();
+  renderCandidates();
+  renderConflicts();
+  const jsonEdit = document.getElementById('jsonEdit');
+  if (document.activeElement !== jsonEdit) jsonEdit.value = JSON.stringify(cfg, null, 2);
+}
+
+function renderLegend() {
+  const parts = [];
+  parts.push(`<span><span class="sw" style="background:${esc(cssVar('--cell-wall'))}"></span>墙（不可通行）</span>`);
+  parts.push(`<span><span class="sw" style="background:${esc(cssVar('--checkpoint'))};transform:rotate(45deg)"></span>公共接力点</span>`);
+  Object.keys(cfg.rally || {}).forEach(t => {
+    parts.push(`<span><span class="sw round" style="border:2px solid ${esc(teamColor(t))};background:transparent;box-sizing:border-box"></span>${esc(t)} 队集合点</span>`);
+  });
+  (cfg.active || []).forEach(a => {
+    parts.push(`<span><span class="sw round" style="background:${esc(teamColor(a.team))}"></span>${esc(a.team)} 队在场机器人</span>`);
+  });
+  document.getElementById('legend').innerHTML = parts.join('');
+}
+
+function expectedCheckHtml() {
+  const exp = cfg.expected;
+  if (!exp || !evalRes.result) return '';
+  const expAssign = exp.assign || exp;
+  const got = evalRes.result.assign;
+  const okAssign = Object.keys(expAssign).every(k => got[k] === expAssign[k]);
+  const okSafety = !exp.safety || JSON.stringify(exp.safety) === JSON.stringify(evalRes.result.safety);
+  const okRally = exp.rallySum == null || exp.rallySum === evalRes.result.rallySum;
+  return (okAssign && okSafety && okRally)
+    ? '<div class="banner ok">✓ 与场景期望结果一致</div>'
+    : '<div class="banner warn">✗ 与场景期望结果不一致</div>';
+}
+
+function renderResult() {
+  const el = document.getElementById('resultPanel');
+  let html = '<h2>选点结果</h2>';
+  if (evalRes.errors && evalRes.errors.length) {
+    html += '<ul class="msg-list err">' + evalRes.errors.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>';
+  }
+  if (evalRes.warnings && evalRes.warnings.length) {
+    html += '<ul class="msg-list warn">' + evalRes.warnings.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>';
+  }
+  if (evalRes.result) {
+    const r = evalRes.result;
+    html += expectedCheckHtml();
+    html += '<div class="chips">' + (cfg.requests || []).map(rq => {
+      const sid = r.assign[rq.id];
+      return `<span class="chip" style="cursor:default"><span class="team-dot" style="background:${esc(teamColor(rq.team))}"></span>${esc(rq.id)} → <b>${esc(sid)}</b></span>`;
+    }).join('') + '</div>';
+    html += `<div class="totals">
+      <span class="stat">最低安全分<b>${r.minSafety}</b></span>
+      <span class="stat">总安全分<b>${r.sumSafety}</b></span>
+      <span class="stat">集合总距离<b>${r.rallySum}</b></span>
+      <span class="stat">各落点安全分<b class="mono">${r.safety.join(' / ')}</b></span>
+    </div>`;
+  } else if (evalRes.failure) {
+    const f = evalRes.failure;
+    html += `<div class="banner bad">整批排不下：最多只能同时安置 ${f.maxPlaced} / ${f.total} 个请求</div>`;
+    f.unplaced.forEach(u => {
+      html += `<div class="banner warn" style="font-weight:500">请求 ${esc(u.id)}（${esc(u.team)} 队）：${esc(u.reason)}</div>`;
+      if (u.reasonSummary) {
+        html += '<ul class="tight">' + Object.keys(u.reasonSummary).map(k =>
+          `<li>${esc(k)}：${u.reasonSummary[k]} 个候选点</li>`).join('') + '</ul>';
+      }
+      if (u.blockedBy) {
+        html += '<ul class="tight">' + u.blockedBy.map(b => {
+          const conf = b.conflicts.map(c =>
+            `与 ${esc(c.request)} → ${esc(c.site)} 距离 ${c.dist} &lt; ${evalRes.meta.minGap}`).join('；');
+          return `<li>点 <span class="mono">${esc(b.site)}</span>（安全分 ${b.safety}）：${conf || '冲突未知'}</li>`;
+        }).join('') + '</ul>';
+      }
+    });
+    html += '<p class="empty">可拖动机器人或候选点调整布局后重试，或点「导出诊断」查看完整评估。</p>';
+  } else {
+    html += '<p class="empty">本批没有请求。</p>';
+  }
+  el.innerHTML = html;
+}
+
+function renderRequests() {
+  const el = document.getElementById('requestChips');
+  el.innerHTML = (cfg.requests || []).map(rq =>
+    `<button type="button" class="chip${rq.id === selectedReq ? ' sel' : ''}" data-req="${esc(rq.id)}">
+      <span class="team-dot" style="background:${esc(teamColor(rq.team))}"></span>${esc(rq.id)}（${esc(rq.team)} 队）
+    </button>`).join('') || '<span class="empty">无请求</span>';
+  el.querySelectorAll('[data-req]').forEach(btn => {
+    btn.addEventListener('click', () => { selectedReq = btn.dataset.req; renderAll(); });
+  });
+}
+
+function renderCandidates() {
+  const tbl = document.getElementById('candTable');
+  const label = document.getElementById('candFor');
+  const re = evalRes && evalRes.requests ? evalRes.requests.find(r => r.id === selectedReq) : null;
+  if (!re) { tbl.innerHTML = ''; label.textContent = ''; return; }
+  label.textContent = `（请求 ${re.id}，${re.team} 队）`;
+  const picked = evalRes.result ? evalRes.result.assign[re.id] : null;
+  let html = '<thead><tr><th>点号</th><th>坐标</th><th>状态</th><th>安全分</th><th>距接力点</th><th>距集合点</th></tr></thead><tbody>';
+  re.candidates.forEach(c => {
+    const cls = c.valid ? (c.siteId === picked ? 'valid picked' : 'valid') : 'invalid';
+    html += `<tr class="${cls}">
+      <td class="mono">${esc(c.siteId)}${c.siteId === picked ? ' ✓' : ''}</td>
+      <td class="mono">(${c.xy[0]},${c.xy[1]})</td>`;
+    if (c.valid) {
+      html += `<td>合规</td>
+        <td>${c.safety}</td>
+        <td>${c.distCheckpoint}</td>
+        <td>${c.rallyUnreachable ? '不可达' : c.distRally}</td>`;
+    } else {
+      html += `<td class="reasons">${esc(c.reasons.join('；'))}</td><td>—</td><td>—</td><td>—</td>`;
+    }
+    html += '</tr>';
+  });
+  tbl.innerHTML = html + '</tbody>';
+}
+
+function renderConflicts() {
+  const el = document.getElementById('conflictPanel');
+  const edges = (evalRes && evalRes.conflictEdges) || [];
+  let html = `<h2>最小距离冲突（minGap = ${evalRes && evalRes.meta ? evalRes.meta.minGap : '?'}）</h2>`;
+  if (!edges.length) html += '<p class="empty">合规候选点之间没有距离冲突。</p>';
+  else {
+    html += '<ul class="tight">' + edges.map(e =>
+      `<li><span class="mono">${esc(e.a)} ↔ ${esc(e.b)}</span>：距离 ${e.dist} &lt; ${evalRes.meta.minGap}</li>`).join('') + '</ul>';
+  }
+  el.innerHTML = html;
+}
+
+/* ---------- 诊断导出 ---------- */
+function buildDiagnostics() {
+  return {
+    generatedAt: new Date().toISOString(),
+    config: cfg,
+    errors: evalRes.errors,
+    warnings: evalRes.warnings,
+    meta: evalRes.meta,
+    requests: evalRes.requests,
+    conflictEdges: evalRes.conflictEdges,
+    result: evalRes.result,
+    failure: evalRes.failure,
+    truncated: !!evalRes.truncated
+  };
+}
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const text = JSON.stringify(buildDiagnostics(), null, 2);
+  document.getElementById('diagOut').value = text;
+  document.getElementById('diagDetails').open = true;
+  document.getElementById('diagMsg').textContent = '已生成，可复制或下载';
+});
+document.getElementById('copyDiag').addEventListener('click', () => {
+  const out = document.getElementById('diagOut');
+  if (!out.value) out.value = JSON.stringify(buildDiagnostics(), null, 2);
+  const done = () => { document.getElementById('diagMsg').textContent = '已复制到剪贴板'; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(out.value).then(done, () => { out.select(); document.getElementById('diagMsg').textContent = '复制失败，请手动全选复制'; });
+  } else { out.select(); document.getElementById('diagMsg').textContent = '请手动全选复制'; }
+});
+document.getElementById('downloadDiag').addEventListener('click', () => {
+  const text = document.getElementById('diagOut').value || JSON.stringify(buildDiagnostics(), null, 2);
+  const blob = new Blob([text], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'relay-respawn-diagnostics.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+/* ---------- 场景与导入 ---------- */
+scenarioSel.addEventListener('change', () => {
+  if (scenarioSel.value === 'custom') return;
+  setCfg(scenarioFromSelect(SAMPLE, scenarioSel.value), scenarioSel.value);
+});
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      if (!obj.grid) throw new Error('缺少 grid 字段');
+      setCfg(baseScenarioIfSample(obj));
+    } catch (err) {
+      document.getElementById('jsonErr').textContent = '导入失败：' + err.message;
+      document.getElementById('jsonEdit').closest('details').open = true;
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+});
+function baseScenarioIfSample(obj) {
+  // 导入整份样例文件时取主场景；普通场景文件原样使用
+  const c = clone(obj);
+  delete c.noSolution; delete c.island; delete c.format;
+  return c;
+}
+document.getElementById('applyJson').addEventListener('click', () => {
+  const errEl = document.getElementById('jsonErr');
+  try {
+    const obj = JSON.parse(document.getElementById('jsonEdit').value);
+    if (!obj.grid) throw new Error('缺少 grid 字段');
+    errEl.textContent = '';
+    setCfg(baseScenarioIfSample(obj));
+  } catch (err) {
+    errEl.textContent = 'JSON 解析失败：' + err.message;
+  }
+});
+
+conflictToggle.addEventListener('change', draw);
+window.addEventListener('resize', draw);
+try {
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+} catch (e) { /* 忽略 */ }
+
+/* ---------- 启动：优先读取仓库样例文件，失败则用内置样例 ---------- */
+function start(sample) { setCfg(scenarioFromSelect(sample, 'sample'), 'sample'); }
+if (location.protocol !== 'file:' && typeof fetch === 'function') {
+  fetch('samples/relay-respawn-selector.json')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(obj => { Object.assign(SAMPLE, obj); start(SAMPLE); })
+    .catch(() => start(SAMPLE));
+} else {
+  start(SAMPLE);
+}
+</script>
