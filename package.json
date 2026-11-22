@@ -1,0 +1,9 @@
+{
+  "name": "game-mod-load-order",
+  "version": "1.0.0",
+  "private": true,
+  "description": "游戏内容包装载顺序检查台：版本求解、依赖闭包、冲突与环检测、逐项覆盖来源",
+  "scripts": {
+    "test": "node tests/solver.test.js"
+  }
+}

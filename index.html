@@ -1,0 +1,906 @@
+<title>装载顺序检查台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  设计计划：
+  布局：桌面端左右双栏（勾选台 / 求解结果），窄屏堆叠为单列。
+  色彩：工程仪表风，钢青底 + 琥珀主操作色 + 语义色（可行绿/冲突红/环紫/范围橙）。
+  字体：Space Grotesk 标题，Inter 正文，IBM Plex Mono 数据与版本号。
+-->
+<style>
+:root {
+  --bg: #f5f7f8;
+  --surface: #ffffff;
+  --surface-2: #eef2f4;
+  --ink: #16202a;
+  --ink-2: #4a5a68;
+  --ink-3: #7d8c98;
+  --line: #d6dee4;
+  --accent: #b8651c;
+  --accent-soft: #f3e3d3;
+  --ok: #1f7a4d;
+  --ok-soft: #dcefe4;
+  --bad: #b3352c;
+  --bad-soft: #f6dedb;
+  --warn: #9a6a08;
+  --warn-soft: #f5ead0;
+  --violet: #6a4bb0;
+  --violet-soft: #e7e0f5;
+  --shadow: 0 1px 2px rgba(16, 28, 38, .06), 0 8px 24px rgba(16, 28, 38, .07);
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Space Grotesk", var(--sans);
+}
+:root[data-theme="dark"], :root:not([data-theme="light"]) {
+  /* dark 默认块在下方媒体查询里；此处供显式 data-theme=dark */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10171e;
+    --surface: #18222c;
+    --surface-2: #1f2c38;
+    --ink: #e4ebf1;
+    --ink-2: #a7b6c2;
+    --ink-3: #748694;
+    --line: #2c3b49;
+    --accent: #e0954f;
+    --accent-soft: #3a2a1a;
+    --ok: #57c28a;
+    --ok-soft: #173025;
+    --bad: #ef8a80;
+    --bad-soft: #3a1e1b;
+    --warn: #e2b65c;
+    --warn-soft: #382d14;
+    --violet: #b39ce8;
+    --violet-soft: #2a2240;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10171e;
+  --surface: #18222c;
+  --surface-2: #1f2c38;
+  --ink: #e4ebf1;
+  --ink-2: #a7b6c2;
+  --ink-3: #748694;
+  --line: #2c3b49;
+  --accent: #e0954f;
+  --accent-soft: #3a2a1a;
+  --ok: #57c28a;
+  --ok-soft: #173025;
+  --bad: #ef8a80;
+  --bad-soft: #3a1e1b;
+  --warn: #e2b65c;
+  --warn-soft: #382d14;
+  --violet: #b39ce8;
+  --violet-soft: #2a2240;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; }
+code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.app-header {
+  display: flex; align-items: center; gap: 14px;
+  padding-block: 18px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.app-header h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+.app-header .sub { color: var(--ink-3); font-size: 12.5px; }
+.header-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+button, .file-btn {
+  font: inherit;
+  font-family: var(--sans);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 7px 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+button:hover, .file-btn:hover { border-color: var(--ink-3); }
+button:active { transform: translateY(1px); }
+button:focus-visible, .file-btn:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+button.primary {
+  background: var(--accent); border-color: var(--accent);
+  color: #fff; font-weight: 600;
+}
+:root[data-theme="dark"] button.primary { color: #1a120a; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) button.primary { color: #1a120a; }
+}
+button.ghost { background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.file-btn { display: inline-flex; align-items: center; position: relative; overflow: hidden; }
+.file-btn input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 18px;
+  padding-block: 18px 32px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.panel-head {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: 10px;
+  background: var(--surface-2);
+}
+.panel-head h2 { font-size: 14px; margin: 0; text-transform: uppercase; letter-spacing: .08em; }
+.panel-head .hint { color: var(--ink-3); font-size: 12px; }
+.panel-body { padding: 8px 0; }
+.panel-body.pad { padding: 14px 16px; }
+
+/* ---------- 包勾选列表 ---------- */
+.pack-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.pack-row:last-child { border-bottom: none; }
+.pack-row:hover { background: var(--surface-2); }
+.pack-row input[type=checkbox] {
+  margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent);
+  cursor: pointer;
+}
+.pack-main { min-width: 0; }
+.pack-name {
+  font-family: var(--mono); font-weight: 600; font-size: 13.5px;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+}
+.pack-meta { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.pack-versions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
+.v-chip {
+  font-family: var(--mono); font-size: 11.5px;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 2px 8px; color: var(--ink-2); background: var(--surface);
+}
+.v-chip.selected {
+  border-color: var(--ok); color: var(--ok); background: var(--ok-soft); font-weight: 600;
+}
+.v-chip.direct { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.badge {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  padding: 1px 7px; border-radius: 999px; text-transform: uppercase;
+}
+.badge.root { background: var(--accent-soft); color: var(--accent); }
+.badge.dep { background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line); }
+.pack-rules { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+.rule-line { font-size: 11.5px; color: var(--ink-2); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.rule-tag {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 0 5px; border-radius: 4px; flex: none;
+}
+.rule-tag.req { background: var(--violet-soft); color: var(--violet); }
+.rule-tag.cnf { background: var(--bad-soft); color: var(--bad); }
+.rule-tag.ptc { background: var(--warn-soft); color: var(--warn); }
+
+/* ---------- 状态横幅 ---------- */
+.status-banner {
+  border-radius: 10px; padding: 13px 15px; margin-bottom: 16px;
+  display: flex; gap: 12px; align-items: flex-start;
+  border: 1px solid;
+}
+.status-banner .icon { font-size: 18px; line-height: 1.3; }
+.status-banner.ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.status-banner.bad { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.status-banner.idle { background: var(--surface-2); border-color: var(--line); color: var(--ink-2); }
+.status-banner h3 { margin: 0 0 3px; font-size: 14px; color: inherit; }
+.status-banner p { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+.status-banner.bad p { color: var(--ink); opacity: .85; }
+
+/* ---------- 统计小格 ---------- */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 10px; margin-bottom: 16px;
+}
+@media (max-width: 520px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+.stat {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px;
+}
+.stat .n { font-family: var(--display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---------- 装载顺序 ---------- */
+.order-list { display: flex; flex-direction: column; }
+.order-step {
+  display: grid; grid-template-columns: 42px minmax(0,1fr) auto;
+  gap: 12px; padding: 12px 16px; align-items: start;
+  border-bottom: 1px solid var(--line);
+}
+.order-step:last-child { border-bottom: none; }
+.step-num {
+  font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  border-right: 2px solid var(--line); padding-top: 2px;
+  align-self: stretch; display: flex; align-items: flex-start;
+}
+.step-body { min-width: 0; }
+.step-title { font-family: var(--mono); font-weight: 600; font-size: 13.5px; word-break: break-all; }
+.step-sub { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+.step-patches { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.patch-op {
+  font-family: var(--mono); font-size: 11.5px;
+  display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  background: var(--surface-2); border-radius: 6px; padding: 4px 8px;
+  width: fit-content; max-width: 100%;
+}
+.op-set { color: var(--ok); font-weight: 700; }
+.op-delete { color: var(--bad); font-weight: 700; text-decoration: line-through; }
+.op-key { color: var(--ink); }
+.op-val { color: var(--accent); }
+.step-side { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+
+/* ---------- 数据表 ---------- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 520px; }
+th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-3); font-weight: 700;
+  padding: 9px 14px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--surface-2);
+}
+td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+td.key { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+td.val { font-family: var(--mono); max-width: 220px; overflow-wrap: anywhere; }
+.val-null { color: var(--ink-3); font-style: italic; }
+.history-chain { display: flex; flex-direction: column; gap: 4px; }
+.hist-item { display: flex; gap: 7px; align-items: baseline; font-size: 11.5px; flex-wrap: wrap; }
+.hist-src { font-family: var(--mono); color: var(--violet); font-weight: 600; }
+.hist-op { font-family: var(--mono); font-weight: 700; }
+.hist-op.set { color: var(--ok); }
+.hist-op.delete { color: var(--bad); }
+.hist-op.base { color: var(--ink-3); }
+.hist-val { font-family: var(--mono); color: var(--accent); }
+.hist-final { margin-left: auto; font-size: 10px; color: var(--ok); font-weight: 700; }
+
+/* ---------- 诊断 ---------- */
+.reason-card {
+  border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: 8px; padding: 11px 13px; margin-bottom: 9px;
+  background: var(--surface);
+}
+.reason-card.range { border-left-color: var(--warn); }
+.reason-card.conflict { border-left-color: var(--bad); }
+.reason-card.cycle { border-left-color: var(--violet); }
+.reason-card.stuck { border-left-color: var(--ink-3); }
+.reason-card.unknown, .reason-card.verify { border-left-color: var(--bad); }
+.reason-kind {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  margin-bottom: 4px;
+}
+.reason-card.range .reason-kind { color: var(--warn); }
+.reason-card.conflict .reason-kind, .reason-card.unknown .reason-kind { color: var(--bad); }
+.reason-card.cycle .reason-kind { color: var(--violet); }
+.reason-card.stuck .reason-kind { color: var(--ink-3); }
+.reason-text { font-size: 12.5px; }
+.reason-text code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+.cycle-path {
+  font-family: var(--mono); font-size: 11.5px; margin-top: 6px;
+  background: var(--violet-soft); color: var(--violet);
+  border-radius: 6px; padding: 6px 9px; overflow-x: auto; white-space: nowrap;
+}
+
+.empty {
+  padding: 34px 18px; text-align: center; color: var(--ink-3); font-size: 13px;
+}
+.empty .big { font-size: 26px; display: block; margin-bottom: 8px; opacity: .7; }
+
+.section-gap { margin-top: 18px; }
+.section-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-3); font-weight: 700; margin: 0 0 9px;
+}
+
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
+  background: var(--ink); color: var(--bg);
+  padding: 9px 18px; border-radius: 999px; font-size: 12.5px;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+  z-index: 50; max-width: calc(100% - 32px); text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+textarea#export-box {
+  width: 100%; min-height: 220px;
+  font-family: var(--mono); font-size: 11.5px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2); color: var(--ink);
+  padding: 11px; resize: vertical; line-height: 1.5;
+}
+.export-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+dialog {
+  border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); color: var(--ink);
+  padding: 0; max-width: 640px; width: calc(100% - 32px);
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(8, 14, 20, .55); }
+.dialog-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.dialog-head h3 { margin: 0; font-size: 15px; }
+.dialog-body { padding: 16px 18px; }
+
+.import-error {
+  background: var(--bad-soft); color: var(--bad);
+  border-radius: 8px; padding: 10px 13px; margin-top: 10px;
+  font-size: 12.5px; white-space: pre-wrap;
+}
+.check-all-row {
+  display: flex; gap: 8px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: var(--surface-2);
+  flex-wrap: wrap;
+}
+.check-all-row button { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+.count-pill {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+  background: var(--surface-2); border: 1px solid var(--line);
+  padding: 2px 8px; border-radius: 999px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+
+<div class="app-header">
+  <div>
+    <h1>装载顺序检查台</h1>
+    <div class="sub">内容包版本求解 · 依赖闭包 · 冲突与环检测 · 逐项覆盖来源</div>
+  </div>
+  <div class="header-actions">
+    <label class="file-btn">导入 JSON
+      <input type="file" id="file-input" accept=".json,application/json">
+    </label>
+    <button id="btn-sample" type="button">载入样例</button>
+    <button id="btn-theme" type="button" class="ghost" title="切换深浅色">◐</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- 左栏：勾选 -->
+  <div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2>启用的包</h2>
+        <span class="hint" id="dataset-hint">未导入数据</span>
+      </div>
+      <div class="check-all-row">
+        <button type="button" id="btn-check-roots">全选 roots</button>
+        <button type="button" id="btn-check-all">全部勾选</button>
+        <button type="button" id="btn-clear">清空</button>
+        <span class="count-pill" id="check-count">0 项</span>
+      </div>
+      <div class="panel-body" id="pack-list">
+        <div class="empty"><span class="big">📦</span>导入基础数据文件，或点“载入样例”开始</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右栏：结果 -->
+  <div>
+    <div id="result-root">
+      <div class="status-banner idle">
+        <span class="icon">⏳</span>
+        <div>
+          <h3>等待输入</h3>
+          <p>导入数据并勾选至少一个包后，将自动求解版本、依赖与装载顺序。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dialog id="export-dialog">
+  <div class="dialog-head">
+    <h3>导出求解结果</h3>
+    <button type="button" class="ghost" id="export-close">✕</button>
+  </div>
+  <div class="dialog-body">
+    <textarea id="export-box" readonly spellcheck="false"></textarea>
+    <div class="export-actions">
+      <button type="button" class="primary" id="btn-copy">复制到剪贴板</button>
+      <button type="button" id="btn-download">下载 .json</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script src="solver.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var S = window.ModSolver;
+  var state = {
+    model: null,        // validateModel 产物
+    raw: null,          // 原始 JSON
+    checked: new Set(),
+    solution: null,
+    sim: null,
+    importError: null
+  };
+
+  // ---------- 小工具 ----------
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function showToast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+  function saveTheme(mode) {
+    try { localStorage.setItem('mod-order-theme', mode); } catch (e) {}
+  }
+  function initTheme() {
+    var mode = null;
+    try { mode = localStorage.getItem('mod-order-theme'); } catch (e) {}
+    if (mode) document.documentElement.setAttribute('data-theme', mode);
+    $('btn-theme').addEventListener('click', function () {
+      var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var current = document.documentElement.getAttribute('data-theme') || (dark ? 'dark' : 'light');
+      var next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      saveTheme(next);
+    });
+  }
+
+  // ---------- 数据导入 ----------
+  function loadData(json, sourceName) {
+    state.importError = null;
+    var result = S.validateModel(json);
+    if (!result.ok) {
+      state.importError = result.errors;
+      state.model = null; state.raw = null; state.checked = new Set();
+      state.solution = null; state.sim = null;
+      renderAll();
+      showToast('数据校验失败：' + result.errors.length + ' 处问题');
+      return;
+    }
+    state.model = result.model;
+    state.raw = json;
+    // 默认勾选 roots
+    state.checked = new Set(result.model.roots.filter(function (id) {
+      return result.model.byId.has(id);
+    }));
+    state.solution = null; state.sim = null;
+    $('dataset-hint').textContent =
+      result.model.ids.length + ' 个包 · ' + json.packs.length + ' 个版本' +
+      (sourceName ? ' · ' + sourceName : '');
+    renderAll();
+    showToast('已导入 ' + result.model.ids.length + ' 个包');
+  }
+
+  $('file-input').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        loadData(JSON.parse(reader.result), file.name);
+      } catch (err) {
+        state.importError = ['JSON 解析失败：' + err.message];
+        state.model = null;
+        renderAll();
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  $('btn-sample').addEventListener('click', function () {
+    // 内置样例（与 samples/game-mod-load-order.json 主场景一致）
+    loadData(SAMPLE_DATA, '内置样例');
+  });
+
+  // ---------- 勾选操作 ----------
+  $('btn-check-roots').addEventListener('click', function () {
+    if (!state.model) return;
+    state.checked = new Set(state.model.roots);
+    renderAll();
+  });
+  $('btn-check-all').addEventListener('click', function () {
+    if (!state.model) return;
+    state.checked = new Set(state.model.ids);
+    renderAll();
+  });
+  $('btn-clear').addEventListener('click', function () {
+    state.checked = new Set();
+    renderAll();
+  });
+
+  function togglePack(id, on) {
+    if (on) state.checked.add(id); else state.checked.delete(id);
+    renderAll();
+  }
+
+  // ---------- 渲染：左栏包列表 ----------
+  function renderPackList() {
+    var host = $('pack-list');
+    if (state.importError) {
+      host.innerHTML = '<div class="pad" style="padding:14px 16px"><div class="import-error">' +
+        esc(state.importError.join('\n')) + '</div></div>';
+      $('check-count').textContent = '0 项';
+      return;
+    }
+    if (!state.model) {
+      host.innerHTML = '<div class="empty"><span class="big">📦</span>导入基础数据文件，或点“载入样例”开始</div>';
+      $('check-count').textContent = '0 项';
+      return;
+    }
+
+    var selectedIds = state.solution ? new Set(Array.from(state.solution.selected.keys())) : new Set();
+    var html = state.model.ids.map(function (id) {
+      var group = state.model.byId.get(id);
+      var isRoot = state.model.roots.indexOf(id) >= 0;
+      var checked = state.checked.has(id);
+      var chips = group.versions.map(function (p) {
+        var cls = 'v-chip';
+        if (state.solution) {
+          var chosen = state.solution.selected.get(id);
+          if (chosen && chosen.rawV === p.rawV) {
+            cls += checked ? ' selected direct' : ' selected';
+          }
+        }
+        return '<span class="' + cls + '">' + esc(p.rawV) + '</span>';
+      }).join('');
+
+      // 规则摘要（取最高版本的 requires/conflicts/patch 数量提示）
+      var top = group.versions[0];
+      var ruleBits = [];
+      if (top.requires.length) {
+        ruleBits.push('<div class="rule-line"><span class="rule-tag req">依赖</span>' +
+          top.requires.map(function (r) {
+            return '<code>' + esc(r.id) + ' ' + esc(S.formatRange(r)) + '</code>';
+          }).join('、') + (group.versions.length > 1 ? ' 等' : '') + '</div>');
+      }
+      if (top.conflicts.length) {
+        ruleBits.push('<div class="rule-line"><span class="rule-tag cnf">冲突</span>' +
+          top.conflicts.map(function (c) {
+            return '<code>' + esc(c.id) + ' ' + esc(S.formatRange(c)) + '</code>';
+          }).join('、') + '</div>');
+      }
+      var patchCount = group.versions.reduce(function (n, p) { return n + p.patch.length; }, 0);
+      if (patchCount) {
+        ruleBits.push('<div class="rule-line"><span class="rule-tag ptc">补丁</span>' +
+          patchCount + ' 条 set/delete</div>');
+      }
+
+      return '<label class="pack-row">' +
+        '<input type="checkbox" ' + (checked ? 'checked' : '') + ' data-id="' + esc(id) + '">' +
+        '<div class="pack-main">' +
+          '<div class="pack-name">' + esc(id) +
+            '<span class="badge ' + (isRoot ? 'root' : 'dep') + '">' + (isRoot ? 'root' : '包') + '</span>' +
+          '</div>' +
+          '<div class="pack-meta">' + group.versions.length + ' 个版本' +
+            (selectedIds.has(id) && !checked ? ' · 由依赖带入' : '') + '</div>' +
+          '<div class="pack-versions">' + chips + '</div>' +
+          (ruleBits.length ? '<div class="pack-rules">' + ruleBits.join('') + '</div>' : '') +
+        '</div>' +
+        '<span class="count-pill" style="align-self:center">' +
+          (selectedIds.has(id) ? '已选' : '—') + '</span>' +
+      '</label>';
+    }).join('');
+    host.innerHTML = html;
+
+    host.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        togglePack(cb.getAttribute('data-id'), cb.checked);
+      });
+    });
+    $('check-count').textContent = state.checked.size + ' 项';
+  }
+
+  // ---------- 求解 + 右栏渲染 ----------
+  function renderResult() {
+    var root = $('result-root');
+    if (state.importError || !state.model) {
+      root.innerHTML = state.importError
+        ? '<div class="status-banner bad"><span class="icon">⚠️</span><div><h3>数据未通过校验</h3>' +
+          '<p>先修正左侧列出的问题，再进行求解。</p></div></div>'
+        : '<div class="status-banner idle"><span class="icon">⏳</span><div><h3>等待输入</h3>' +
+          '<p>导入数据并勾选至少一个包后，将自动求解版本、依赖与装载顺序。</p></div></div>';
+      return;
+    }
+    if (!state.checked.size) {
+      root.innerHTML = '<div class="status-banner idle"><span class="icon">☑️</span><div><h3>尚未勾选任何包</h3>' +
+        '<p>在左侧勾选要启用的内容包，求解结果会实时更新。</p></div></div>';
+      return;
+    }
+
+    var sol = S.solve(state.model, Array.from(state.checked));
+    state.solution = sol;
+
+    if (!sol.feasible) {
+      state.sim = null;
+      root.innerHTML = renderInfeasible(sol);
+      return;
+    }
+
+    state.sim = S.simulate(state.model, sol);
+    root.innerHTML = renderFeasible(sol, state.sim);
+    bindExport(sol, state.sim);
+  }
+
+  function renderInfeasible(sol) {
+    var groups = {};
+    sol.reasons.forEach(function (r) {
+      if (!groups[r.kind]) groups[r.kind] = [];
+      groups[r.kind].push(r);
+    });
+    var kindName = {
+      range: '版本范围不满足', conflict: '冲突禁止共存', cycle: '依赖成环',
+      stuck: '无可用版本', unknown: '包不存在', verify: '终态校验失败'
+    };
+    var cards = sol.reasons.map(function (r) {
+      var extra = '';
+      if (r.kind === 'cycle' && r.pathNodes) {
+        extra = '<div class="cycle-path">' + esc(r.pathNodes.join(' → ')) + '</div>';
+      }
+      if (r.kind === 'stuck' && r.constraints && r.constraints.length) {
+        extra = '<div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">' +
+          r.constraints.map(function (c) {
+            return '<div class="rule-line">• ' + esc(c.text) + '</div>';
+          }).join('') + '</div>';
+      }
+      return '<div class="reason-card ' + r.kind + '">' +
+        '<div class="reason-kind">' + (kindName[r.kind] || r.kind) + '</div>' +
+        '<div class="reason-text">' + esc(r.text) + '</div>' + extra + '</div>';
+    }).join('');
+
+    var stuckPkgs = sol.reasons.filter(function (r) { return r.kind === 'stuck'; })
+      .map(function (r) { return r.pkg; });
+    var summary = stuckPkgs.length
+      ? '卡在：' + Array.from(new Set(stuckPkgs)).map(esc).join('、')
+      : '没有任何版本组合能同时满足全部规则';
+
+    return '<div class="status-banner bad"><span class="icon">⛔</span><div>' +
+      '<h3>无解：' + esc(summary) + '</h3>' +
+      '<p>下面列出触发失败的具体包与规则；调整勾选或放宽版本范围后重试。</p></div></div>' +
+      '<div class="panel"><div class="panel-head"><h2>失败诊断（' + sol.reasons.length + '）</h2></div>' +
+      '<div class="panel-body pad">' + cards + '</div></div>';
+  }
+
+  function renderFeasible(sol, sim) {
+    var directCount = sol.checked.length;
+    var depCount = sol.selected.size - directCount;
+    var patchCount = sol.order.reduce(function (n, st) {
+      return n + sol.selected.get(st.id).patch.length;
+    }, 0);
+
+    var banner = '<div class="status-banner ok"><span class="icon">✅</span><div>' +
+      '<h3>求解成功 · ' + sol.selected.size + ' 个包，' + sol.order.length + ' 步装载</h3>' +
+      '<p>同名字段按装载顺序依次覆盖；最终合并数据与逐项来源见下方。</p></div></div>';
+
+    var stats = '<div class="stat-grid">' +
+      stat(sol.selected.size, '安装包') +
+      stat(directCount, '直接勾选') +
+      stat(Math.max(0, depCount), '依赖带入') +
+      stat(patchCount, '补丁操作') +
+      '</div>';
+
+    var orderHtml = '<div class="panel"><div class="panel-head"><h2>装载顺序</h2>' +
+      '<span class="hint">依赖先装，同层按包名</span></div><div class="order-list">' +
+      sol.order.map(function (step, i) {
+        var pack = sol.selected.get(step.id);
+        var patches = pack.patch.map(function (p) {
+          if (p.op === 'set') {
+            return '<span class="patch-op"><span class="op-set">set</span>' +
+              '<span class="op-key">' + esc(p.key) + '</span>' +
+              '<span class="op-val">= ' + esc(formatValue(p.value)) + '</span></span>';
+          }
+          return '<span class="patch-op"><span class="op-delete">delete</span>' +
+            '<span class="op-key">' + esc(p.key) + '</span></span>';
+        }).join('');
+        var reqText = step.requires.length
+          ? '依赖：' + step.requires.map(esc).join('、')
+          : '无依赖，可最先装载';
+        return '<div class="order-step">' +
+          '<div class="step-num">' + String(i + 1).padStart(2, '0') + '</div>' +
+          '<div class="step-body">' +
+            '<div class="step-title">' + esc(step.id + '@' + step.version) + '</div>' +
+            '<div class="step-sub">' + esc(reqText) + '</div>' +
+            (patches ? '<div class="step-patches">' + patches + '</div>' : '') +
+          '</div>' +
+          '<div class="step-side"><span class="badge ' + (step.direct ? 'root' : 'dep') + '">' +
+            (step.direct ? '勾选' : '依赖') + '</span></div>' +
+        '</div>';
+      }).join('') + '</div></div>';
+
+    var tableHtml = renderDataTable(sim);
+    var exportBtn = '<div class="export-actions" style="margin:14px 0 0">' +
+      '<button type="button" class="primary" id="btn-export">导出选定版本、顺序与合并数据</button></div>';
+
+    return banner + stats + orderHtml + tableHtml + exportBtn;
+  }
+
+  function stat(n, l) {
+    return '<div class="stat"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>';
+  }
+
+  function formatValue(v) {
+    if (v === null) return 'null';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+  }
+
+  function renderDataTable(sim) {
+    var keys = Object.keys(sim.data).sort();
+    var rows = keys.map(function (k) {
+      var v = sim.data[k];
+      var chain = (sim.history[k] || []).map(function (h, idx, arr) {
+        var isFinal = idx === arr.length - 1;
+        var opCls = 'hist-op ' + h.op;
+        var opText = h.op === 'base' ? 'base' : h.op;
+        var valPart = '';
+        if (h.op === 'set') valPart = ' <span class="hist-val">→ ' + esc(formatValue(h.value)) + '</span>';
+        if (h.op === 'delete') valPart = ' <span class="hist-op delete">移除键</span>';
+        if (h.op === 'base') valPart = ' <span class="hist-val">= ' + esc(formatValue(h.value)) + '</span>';
+        return '<div class="hist-item">' +
+          '<span class="hist-src">' + esc(h.source) + '</span>' +
+          '<span class="' + opCls + '">' + opText + '</span>' +
+          '<span>' + esc(k) + '</span>' + valPart +
+          (isFinal ? '<span class="hist-final">最终来源</span>' : '') +
+        '</div>';
+      }).join('');
+      var valCell = v === null
+        ? '<span class="val-null">null（键存在）</span>'
+        : esc(formatValue(v));
+      return '<tr><td class="key">' + esc(k) + '</td><td class="val">' + valCell + '</td>' +
+        '<td><div class="history-chain">' + chain + '</div></td></tr>';
+    }).join('');
+
+    // 被 delete 且最终不存在的键也要展示历史
+    var deletedRows = Object.keys(sim.history).sort().filter(function (k) {
+      return !(k in sim.data);
+    }).map(function (k) {
+      var chain = sim.history[k].map(function (h, idx, arr) {
+        var isFinal = idx === arr.length - 1;
+        var valPart = '';
+        if (h.op === 'set') valPart = ' <span class="hist-val">→ ' + esc(formatValue(h.value)) + '</span>';
+        if (h.op === 'delete') valPart = ' <span class="hist-op delete">移除键</span>';
+        if (h.op === 'base') valPart = ' <span class="hist-val">= ' + esc(formatValue(h.value)) + '</span>';
+        return '<div class="hist-item"><span class="hist-src">' + esc(h.source) + '</span>' +
+          '<span class="hist-op ' + h.op + '">' + h.op + '</span><span>' + esc(k) + '</span>' +
+          valPart + (isFinal ? '<span class="hist-final">最终来源</span>' : '') + '</div>';
+      }).join('');
+      return '<tr><td class="key">' + esc(k) + '</td>' +
+        '<td class="val"><span class="val-null">已删除（键不存在）</span></td>' +
+        '<td><div class="history-chain">' + chain + '</div></td></tr>';
+    }).join('');
+
+    if (!rows && !deletedRows) {
+      return '<div class="panel section-gap"><div class="panel-head"><h2>合并数据</h2></div>' +
+        '<div class="empty">没有任何数据键</div></div>';
+    }
+    return '<div class="panel section-gap"><div class="panel-head"><h2>合并数据与逐项覆盖来源</h2>' +
+      '<span class="hint">按装载顺序应用 set / delete</span></div>' +
+      '<div class="table-wrap"><table><thead><tr><th>数据键</th><th>最终值</th><th>设置 / 删除 / 覆盖来源</th>' +
+      '</tr></thead><tbody>' + rows + deletedRows + '</tbody></table></div></div>';
+  }
+
+  // ---------- 导出 ----------
+  function buildExport(sol, sim) {
+    return {
+      generatedAt: new Date().toISOString(),
+      checked: sol.checked.slice().sort(),
+      selected: sol.order.map(function (st) { return st.id + '@' + st.version; }),
+      order: sol.order.map(function (st, i) {
+        return {
+          step: i + 1,
+          pack: st.id,
+          version: st.version,
+          direct: st.direct,
+          requires: st.requires.slice()
+        };
+      }),
+      mergedData: sim.data,
+      keyHistory: Object.keys(sim.history).sort().map(function (k) {
+        return { key: k, finalExists: (k in sim.data), finalValue: (k in sim.data ? sim.data[k] : undefined),
+          trace: sim.history[k] };
+      })
+    };
+  }
+  function bindExport(sol, sim) {
+    var btn = $('btn-export');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var payload = buildExport(sol, sim);
+      $('export-box').value = JSON.stringify(payload, null, 2);
+      $('export-dialog').showModal();
+    });
+  }
+  $('export-close').addEventListener('click', function () { $('export-dialog').close(); });
+  $('btn-copy').addEventListener('click', function () {
+    var text = $('export-box').value;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { showToast('已复制到剪贴板'); })
+        .catch(function () { fallbackSelect(); });
+    } else { fallbackSelect(); }
+    function fallbackSelect() {
+      var box = $('export-box');
+      box.select();
+      try { document.execCommand('copy'); showToast('已复制到剪贴板'); }
+      catch (e) { showToast('复制失败，请手动选择文本'); }
+    }
+  });
+  $('btn-download').addEventListener('click', function () {
+    var blob = new Blob([$('export-box').value], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'mod-load-order-solution.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast('已触发下载（部分预览环境可能拦截）');
+  });
+
+  function renderAll() {
+    renderPackList();
+    renderResult();
+  }
+
+  // ---------- 内置样例 ----------
+  var SAMPLE_DATA = {
+    format: '依赖、冲突条目依次为包名、版本下界、排除的版本上界。改写项依次为操作、数据键、可选的值，set写入null时键仍然存在。',
+    roots: ['festival'],
+    base: { 'lamp.power': 2, 'lamp.old': true },
+    packs: [
+      { id: 'festival', v: '2.0.0', requires: [['lamp', '2.0.0', '3.0.0'], ['theme', '1.0.0', '2.0.0']] },
+      { id: 'festival', v: '1.0.0', requires: [['lamp', '1.0.0', '2.0.0'], ['theme', '1.0.0', '2.0.0']], patch: [['set', 'lamp.power', 9]] },
+      { id: 'lamp', v: '2.0.0' },
+      { id: 'lamp', v: '1.0.0', patch: [['set', 'lamp.power', 4]] },
+      { id: 'theme', v: '1.0.0', requires: [['lamp', '1.0.0', '2.0.0']], patch: [['delete', 'lamp.old'], ['set', 'lamp.tint', null]] }
+    ]
+  };
+
+  initTheme();
+  loadData(SAMPLE_DATA, '内置样例');
+})();
+</script>
