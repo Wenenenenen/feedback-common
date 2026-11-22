@@ -1,0 +1,15 @@
+{
+  "name": "occlusion-label-layout",
+  "version": "1.0.0",
+  "private": true,
+  "description": "三维导览标注的排版校验网页：深度遮挡、标签落位精确求解与冲突诊断",
+  "type": "module",
+  "scripts": {
+    "test": "node test/solver.test.mjs && node test/exporter.test.mjs",
+    "test:e2e": "node test/e2e.playwright.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

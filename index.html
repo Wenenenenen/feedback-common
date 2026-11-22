@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>三维导览标注排版校验</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<header>
+  <h1>三维导览标注 · 排版校验</h1>
+  <input id="fileInput" type="file" accept=".json,application/json" hidden />
+  <button id="btnLoad">导入 JSON</button>
+  <button id="btnSample" class="primary">载入样例</button>
+  <div class="spacer"></div>
+  <button id="btnExportSVG">导出 SVG</button>
+  <button id="btnExportJSON">导出落位 JSON</button>
+</header>
+
+<div class="layout">
+  <div class="main">
+    <div class="stage-wrap" id="stageWrap"><div id="stage"></div></div>
+    <div class="transport">
+      <button id="btnFirst" title="首帧">⏮</button>
+      <button id="btnPrev" title="上一帧">◀</button>
+      <button id="btnPlay" title="顺播/暂停">▶</button>
+      <button id="btnNext" title="下一帧">▶|</button>
+      <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" />
+      <span class="frame-no" id="frameNo">帧 0/0</span>
+    </div>
+    <div class="statbar" id="statbar"></div>
+    <div class="legend">
+      <span class="lg-label">标签框/连线</span>
+      <span class="lg-res">预留区</span>
+      <span class="lg-conf">冲突</span>
+      <span class="lg-depth">深度遮挡</span>
+      <span class="muted small">点标签框或右侧冲突项查看详情；回拖任意帧重现顺播结果</span>
+    </div>
+  </div>
+
+  <aside class="side">
+    <h2>显示</h2>
+    <div class="checkline"><input type="checkbox" id="chkDepth" checked /><label for="chkDepth">深度缓冲灰度</label></div>
+    <div class="checkline"><input type="checkbox" id="chkHidden" checked /><label for="chkHidden">显示被隐藏锚点</label></div>
+    <div class="checkline"><input type="checkbox" id="chkGhost" /><label for="chkGhost">显示全部候选落位（虚影）</label></div>
+    <div class="row">
+      <label for="scaleSel">画布缩放</label>
+      <select id="scaleSel">
+        <option value="4">4×</option>
+        <option value="8" selected>8×</option>
+        <option value="12">12×</option>
+        <option value="16">16×</option>
+      </select>
+    </div>
+
+    <h2>权重参数</h2>
+    <div class="row">
+      <label for="switchPenalty">换落位罚分</label>
+      <input type="number" id="switchPenalty" value="2" min="0" step="1" />
+    </div>
+    <table class="grid" id="labelTable"></table>
+
+    <h2>预留区</h2>
+    <div id="reservedList"></div>
+    <div class="row">
+      <button id="btnAddReserved" class="small">＋ 新增预留区</button>
+      <span class="muted small">也可直接在画面上拖拽移动</span>
+    </div>
+
+    <h2>冲突与诊断（当前帧）</h2>
+    <div id="conflictList"><div class="muted small">无</div></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/sample-data.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
