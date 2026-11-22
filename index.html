@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关卡共绘 · live-tile-strokes</title>
+<style>
+  :root {
+    --bg: #14161c; --panel: #1d2029; --panel2: #232634; --line: #333849;
+    --fg: #dfe3ec; --dim: #8b93a7; --accent: #5b8cff; --danger: #ff6b6b; --ok: #51cf8a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  header .spacer { flex: 1; }
+  button, select { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  button:hover, select:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px 16px; align-items: start; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .pane { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .bar .label { color: var(--dim); }
+  .stats { color: var(--dim); font-size: 12px; }
+  .stats b { color: var(--fg); }
+  .canvas-wrap { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+    background:
+      repeating-conic-gradient(#20232e 0% 25%, #191c25 0% 50%) 0 0 / 16px 16px; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; cursor: crosshair; }
+  .palette { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+  .swatch { width: 20px; height: 20px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .swatch.sel { border-color: #fff; }
+  .swatch[data-tile="0"] { background: repeating-conic-gradient(#2a2e3c 0% 25%, #1a1d27 0% 50%) 0 0 / 8px 8px; color: var(--dim); font-size: 10px; }
+  .tabs { display: flex; gap: 4px; margin-top: 10px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: none; background: none; color: var(--dim); padding: 6px 10px; border-radius: 6px 6px 0 0; }
+  .tabs button.active { color: var(--fg); background: var(--panel2); }
+  .tabpane { background: var(--panel2); border-radius: 0 0 8px 8px; padding: 8px; min-height: 120px; max-height: 260px; overflow: auto; font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 2px 8px 2px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--dim); font-weight: normal; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; }
+  .tag.applied { background: #1f3d2b; color: var(--ok); }
+  .tag.pending { background: #3d2f1f; color: #ffb454; }
+  .note { min-height: 18px; font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .note.err { color: var(--danger); }
+  .note.ok { color: var(--ok); }
+  textarea { width: 100%; height: 90px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.4 ui-monospace, monospace; }
+  .io-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+  .io-row input[type=number] { width: 64px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  #compare-result { font-size: 12.5px; }
+  kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>关卡共绘 <span class="label" style="color:var(--dim);font-size:12px">离线共绘 · 自研同步与撤销</span></h1>
+  <button id="btn-sync-both" class="primary">⇄ 互相同步</button>
+  <button id="btn-compare">对比两侧导出</button>
+  <button id="btn-load-sample">载入示例 JSON</button>
+  <span id="compare-result"></span>
+  <span class="spacer"></span>
+  <span class="label" style="color:var(--dim);font-size:12px">256×256 · 8 作者 · 断网各画，恢复后分批同步</span>
+</header>
+<main id="main"></main>
+
+<template id="pane-tpl">
+  <section class="pane">
+    <div class="bar">
+      <b class="side-name"></b>
+      <span class="label">作者</span><select class="author"></select>
+      <span class="label">模式</span>
+      <select class="mode">
+        <option value="draw">画格</option>
+        <option value="inspect">查看格子</option>
+      </select>
+      <span class="label">显示</span>
+      <select class="render-mode">
+        <option value="tile">瓦片</option>
+        <option value="winner">赢者作者</option>
+      </select>
+      <button class="undo" title="撤销自己最近一笔">↩ 撤销</button>
+      <button class="redo" title="重做最近被撤销的一笔">↪ 重做</button>
+      <button class="reset">重置</button>
+    </div>
+    <div class="bar">
+      <span class="label">瓦片</span><span class="palette"></span><span class="curtile label"></span>
+    </div>
+    <div class="bar">
+      <button class="sync primary"></button>
+      <span class="label">分批</span>
+      <select class="syncmode">
+        <option value="whole">整批送达</option>
+        <option value="each">逐条送达</option>
+        <option value="random">随机分批（乱序）</option>
+      </select>
+      <span class="stats"></span>
+    </div>
+    <div class="canvas-wrap"><canvas width="256" height="256"></canvas></div>
+    <div class="note"></div>
+    <div class="tabs">
+      <button data-tab="cell">格子详情</button>
+      <button data-tab="pending">挂起原因</button>
+      <button data-tab="log">操作日志</button>
+      <button data-tab="io">导入 / 导出</button>
+    </div>
+    <div class="tabpane"></div>
+  </section>
+</template>
+
+<script src="engine.js"></script>
+<script>
+'use strict';
+const E = TileEngine;
+const AUTHORS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const AUTHOR_COLORS = { A: '#ff5d5d', B: '#51cf8a', C: '#5b8cff', D: '#f5a623', E: '#b678ff', F: '#4fd8e0', G: '#ff7eb9', H: '#b8e04f' };
+const TILE_DEFS = [
+  [0, '橡皮/清空', null], [1, '草地', '#3fa34d'], [2, '水面', '#2d6cdf'], [3, '沙地', '#e0c341'],
+  [4, '土地', '#8b5a2b'], [5, '熔岩', '#c0392b'], [6, '石墙', '#7f8c8d'], [7, '雪地', '#f4f6f8'],
+  [8, '蘑菇', '#9b59b6'], [9, '木板', '#e67e22'], [10, '珊瑚', '#1abc9c'], [11, '深海', '#34495e'],
+  [12, '花丛', '#ff7eb9'], [13, '沼泽', '#95a56a'], [14, '金矿', '#f1c40f'], [15, '水晶', '#6c5ce7'],
+];
+function tileColor(t) {
+  if (t === 0) return null;
+  const d = TILE_DEFS[t];
+  if (d) return d[2];
+  return 'hsl(' + ((t * 47) % 360) + ',60%,55%)';
+}
+function hexRgb(hex) {
+  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+}
+
+const panes = [];
+const tpl = document.getElementById('pane-tpl');
+
+function createPane(sideName, defaultAuthor, peerAuthor) {
+  const node = tpl.content.firstElementChild.cloneNode(true);
+  document.getElementById('main').appendChild(node);
+  const $ = (sel) => node.querySelector(sel);
+  const pane = {
+    node,
+    doc: E.createDoc(256, 256),
+    author: defaultAuthor,
+    tile: 1,
+    outbox: [],
+    stroke: null,
+    selected: null,
+    tab: 'cell',
+    el: {
+      canvas: $('canvas'), author: $('.author'), mode: $('.mode'), renderMode: $('.render-mode'),
+      palette: $('.palette'), curtile: $('.curtile'), stats: $('.stats'), note: $('.note'),
+      tabpane: $('.tabpane'), sync: $('.sync'),
+    },
+  };
+  node.querySelector('.side-name').textContent = sideName;
+  pane.el.sync.textContent = '同步到对方 →';
+  pane.ctx = pane.el.canvas.getContext('2d');
+
+  for (const a of AUTHORS) {
+    const o = document.createElement('option');
+    o.value = o.textContent = a;
+    pane.el.author.appendChild(o);
+  }
+  pane.el.author.value = defaultAuthor;
+  pane.el.author.onchange = () => { pane.author = pane.el.author.value; };
+
+  for (const [t, name, color] of TILE_DEFS) {
+    const b = document.createElement('button');
+    b.className = 'swatch';
+    b.dataset.tile = t;
+    b.title = t + ' ' + name;
+    if (color) b.style.background = color; else b.textContent = '0';
+    b.onclick = () => { pane.tile = t; updatePalette(pane); };
+    pane.el.palette.appendChild(b);
+  }
+  updatePalette(pane);
+
+  pane.el.mode.onchange = () => { pane.mode = pane.el.mode.value; };
+  pane.el.renderMode.onchange = () => { pane.renderMode = pane.el.renderMode.value; render(pane); };
+  node.querySelector('.undo').onclick = () => toggleStroke(pane, E.makeUndoOp(pane.doc, pane.author), '没有可撤销的笔画');
+  node.querySelector('.redo').onclick = () => toggleStroke(pane, E.makeRedoOp(pane.doc, pane.author), '没有可重做的笔画');
+  node.querySelector('.reset').onclick = () => {
+    if (!confirm('清空本侧全部操作并重置为 256×256 空图？')) return;
+    pane.doc = E.createDoc(256, 256);
+    pane.outbox = [];
+    pane.selected = null;
+    refresh(pane);
+  };
+  pane.el.sync.onclick = () => syncTo(pane, peer(pane));
+
+  for (const b of node.querySelectorAll('.tabs button'))
+    b.onclick = () => { pane.tab = b.dataset.tab; refresh(pane); };
+
+  // 画格 / 查看
+  const cv = pane.el.canvas;
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    const [x, y] = eventCell(pane, e);
+    if (pane.mode === 'inspect') {
+      pane.selected = [x, y];
+      pane.tab = 'cell';
+      refresh(pane);
+      return;
+    }
+    cv.setPointerCapture(e.pointerId);
+    pane.stroke = new Map();
+    strokeAdd(pane, x, y);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (!pane.stroke) return;
+    const [x, y] = eventCell(pane, e);
+    strokeAdd(pane, x, y);
+  });
+  cv.addEventListener('pointerup', () => commitStroke(pane));
+  cv.addEventListener('pointercancel', () => { pane.stroke = null; render(pane); });
+
+  panes.push(pane);
+  return pane;
+}
+
+function peer(pane) { return panes[0] === pane ? panes[1] : panes[0]; }
+
+function updatePalette(pane) {
+  for (const b of pane.el.palette.children) b.classList.toggle('sel', +b.dataset.tile === pane.tile);
+  const d = TILE_DEFS[pane.tile];
+  pane.el.curtile.textContent = '当前: ' + pane.tile + (d ? ' ' + d[1] : '');
+}
+
+function eventCell(pane, e) {
+  const r = pane.el.canvas.getBoundingClientRect();
+  const x = Math.floor(((e.clientX - r.left) / r.width) * pane.doc.width);
+  const y = Math.floor(((e.clientY - r.top) / r.height) * pane.doc.height);
+  return [Math.max(0, Math.min(pane.doc.width - 1, x)), Math.max(0, Math.min(pane.doc.height - 1, y))];
+}
+
+function strokeAdd(pane, x, y) {
+  const idx = y * pane.doc.width + x;
+  if (pane.stroke.has(idx)) return; // 一笔不可重复写同一格
+  pane.stroke.set(idx, [x, y, pane.tile]);
+  drawCell(pane, x, y, pane.tile); // 落笔即所见，提交后以文档状态重绘
+}
+
+function commitStroke(pane) {
+  const cells = pane.stroke ? [...pane.stroke.values()] : [];
+  pane.stroke = null;
+  if (!cells.length) return;
+  const op = { by: pane.author, n: E.nextSeq(pane.doc, pane.author), deps: [], paint: cells };
+  const r = E.importBatch(pane.doc, [op]);
+  if (!r.ok) return note(pane, r.error, 'err');
+  pane.outbox.push(op);
+  refresh(pane);
+}
+
+function toggleStroke(pane, op, emptyMsg) {
+  if (!op) return note(pane, emptyMsg, 'err');
+  const r = E.importBatch(pane.doc, [op]);
+  if (!r.ok) return note(pane, r.error, 'err');
+  pane.outbox.push(op);
+  note(pane, (op.set[1] ? '重做 ' : '撤销 ') + op.by + '#' + op.set[0] + '（记为 ' + op.by + '#' + op.n + '，待同步）', 'ok');
+  refresh(pane);
+}
+
+function makeBatches(ops, mode) {
+  if (mode === 'whole') return [ops.slice()];
+  if (mode === 'each') return ops.map((o) => [o]);
+  const sh = ops.slice();
+  for (let i = sh.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [sh[i], sh[j]] = [sh[j], sh[i]];
+  }
+  const bs = [];
+  let i = 0;
+  while (i < sh.length) {
+    const s = 1 + Math.floor(Math.random() * Math.min(8, sh.length - i));
+    bs.push(sh.slice(i, i + s));
+    i += s;
+  }
+  return bs;
+}
+
+function deliverBatches(pane, targetDoc, batches) {
+  let added = 0, applied = 0, dup = 0;
+  for (const b of batches) {
+    const r = E.importBatch(targetDoc, b);
+    if (!r.ok) return { ok: false, error: r.error };
+    added += r.added; applied += r.applied; dup += r.duplicated;
+  }
+  return { ok: true, added, applied, dup, batches: batches.length };
+}
+
+function syncTo(pane, target) {
+  if (!pane.outbox.length) return note(pane, '没有待同步的操作', 'err');
+  const batches = makeBatches(pane.outbox, pane.node.querySelector('.syncmode').value);
+  const r = deliverBatches(pane, target.doc, batches);
+  if (!r.ok) return note(pane, '同步失败（整批已拒绝，对方状态未变）: ' + r.error, 'err');
+  const n = pane.outbox.length;
+  pane.outbox = [];
+  note(pane, '已送出 ' + n + ' 条（' + r.batches + ' 批），对方生效 ' + r.applied + ' 条、挂起 ' + target.doc.pending.size + ' 条', 'ok');
+  refresh(pane); refresh(target);
+}
+
+function note(pane, msg, cls) {
+  pane.el.note.textContent = msg;
+  pane.el.note.className = 'note ' + (cls || '');
+}
+
+// ---------- 渲染 ----------
+
+function drawCell(pane, x, y, tile) {
+  const c = tileColor(tile);
+  pane.ctx.fillStyle = c || 'rgba(0,0,0,0)';
+  if (c) pane.ctx.fillRect(x, y, 1, 1);
+  else pane.ctx.clearRect(x, y, 1, 1);
+}
+
+function render(pane) {
+  const doc = pane.doc;
+  if (pane.el.canvas.width !== doc.width) { pane.el.canvas.width = doc.width; pane.el.canvas.height = doc.height; }
+  const img = pane.ctx.createImageData(doc.width, doc.height);
+  const d = img.data;
+  for (let i = 0; i < doc.grid.length; i++) {
+    let color = null;
+    if (pane.renderMode === 'winner') {
+      const c = doc.cells[i];
+      if (c && c.winner !== null) color = AUTHOR_COLORS[doc.strokes.get(c.winner).by] || '#fff';
+    } else {
+      color = tileColor(doc.grid[i]);
+    }
+    if (!color) continue;
+    const [r, g, b] = hexRgb(color.length === 7 ? color : '#ffffff');
+    const o = i * 4;
+    d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+  }
+  pane.ctx.putImageData(img, 0, 0);
+  if (pane.selected) {
+    pane.ctx.fillStyle = '#ff00ff';
+    pane.ctx.fillRect(pane.selected[0], pane.selected[1], 1, 1);
+  }
+}
+
+function refresh(pane) {
+  render(pane);
+  const doc = pane.doc;
+  pane.el.stats.innerHTML =
+    '已记录 <b>' + doc.ops.size + '</b> · 已生效 <b>' + doc.applied.size + '</b> · ' +
+    '挂起 <b>' + doc.pending.size + '</b> · 待同步 <b>' + pane.outbox.length + '</b>';
+  for (const b of pane.node.querySelectorAll('.tabs button'))
+    b.classList.toggle('active', b.dataset.tab === pane.tab);
+  renderTab(pane);
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderTab(pane) {
+  const doc = pane.doc;
+  const el = pane.el.tabpane;
+  if (pane.tab === 'cell') {
+    if (!pane.selected) { el.innerHTML = '<span class="label">切换到「查看格子」模式后点击画布，查看每格赢者与候选笔画。</span>'; return; }
+    const [x, y] = pane.selected;
+    const info = E.cellInfo(doc, x, y);
+    let h = '<div>格子 (' + x + ', ' + y + ') · 当前瓦片 <b>' + info.tile + '</b>';
+    h += info.winner
+      ? ' · 赢者 <b style="color:' + (AUTHOR_COLORS[info.winner.by] || '#fff') + '">' + esc(info.winner.by) + '#' + info.winner.n + '</b>（时钟 ' + info.winner.clock + '）'
+      : ' · 暂无生效笔画';
+    h += '</div>';
+    if (info.candidates.length) {
+      h += '<table><tr><th></th><th>笔画</th><th>时钟</th><th>瓦片</th><th>状态</th></tr>';
+      for (const c of info.candidates)
+        h += '<tr><td>' + (c.winner ? '👑' : '') + '</td><td>' + esc(c.by) + '#' + c.n + '</td><td>' + c.clock + '</td><td>' + c.tile + '</td><td>' +
+          (c.effective ? '<span class="tag applied">生效</span>' : '<span class="tag pending">已撤销</span>') + '</td></tr>';
+      h += '</table>';
+    }
+    el.innerHTML = h;
+  } else if (pane.tab === 'pending') {
+    const list = E.pendingInfo(doc);
+    if (!list.length) { el.innerHTML = '<span class="label">没有挂起的操作。</span>'; return; }
+    let h = '<table><tr><th>操作</th><th>类型</th><th>缺失依赖（挂起原因）</th></tr>';
+    for (const p of list) {
+      const miss = p.missing.map((m) =>
+        esc(m.by) + '#' + m.n + '<span class="label">（' + (m.implicit ? '隐式·' : '显式·') + m.status + '）</span>').join('，');
+      h += '<tr><td>' + esc(p.by) + '#' + p.n + '</td><td>' + p.type + '</td><td>' + miss + '</td></tr>';
+    }
+    el.innerHTML = h + '</table>';
+  } else if (pane.tab === 'log') {
+    const ops = E.listOps(doc, 300);
+    if (!ops.length) { el.innerHTML = '<span class="label">暂无操作。</span>'; return; }
+    let h = '<div class="label">共 ' + doc.ops.size + ' 条' + (doc.ops.size > 300 ? '，仅显示前 300 条' : '') + '</div>';
+    h += '<table><tr><th>操作</th><th>内容</th><th>时钟</th><th>状态</th></tr>';
+    for (const o of ops)
+      h += '<tr><td>' + esc(o.by) + '#' + o.n + '</td><td>' + esc(o.desc) + '</td><td>' + (o.clock || '—') + '</td><td>' +
+        (o.status === '已生效' ? '<span class="tag applied">已生效</span>' : '<span class="tag pending">挂起</span>') + '</td></tr>';
+    el.innerHTML = h + '</table>';
+  } else if (pane.tab === 'io') {
+    el.innerHTML =
+      '<textarea spellcheck="false" placeholder="导出的 JSON 会显示在这里；粘贴 JSON 后可导入"></textarea>' +
+      '<div class="io-row">' +
+      '<button class="io-export">导出到文本框</button>' +
+      '<button class="io-download">下载 JSON</button>' +
+      '<button class="io-import-whole">整批导入</button>' +
+      '<button class="io-import-batch">分批导入</button>' +
+      '<span class="label">每批</span><input type="number" class="io-chunk" value="7" min="1" style="width:56px">' +
+      '<label class="label"><input type="checkbox" class="io-shuffle" checked> 乱序</label>' +
+      '<button class="io-copy-peer">从对方导出导入</button>' +
+      '</div><div class="note io-note"></div>';
+    const ta = el.querySelector('textarea');
+    const ioNote = (msg, cls) => { const n = el.querySelector('.io-note'); n.textContent = msg; n.className = 'note io-note ' + (cls || ''); };
+    el.querySelector('.io-export').onclick = () => { ta.value = E.exportJSON(doc); ioNote('已导出 ' + doc.ops.size + ' 条操作，' + ta.value.length + ' 字符', 'ok'); };
+    el.querySelector('.io-download').onclick = () => {
+      const blob = new Blob([E.exportJSON(doc)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'live-tile-strokes.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+    el.querySelector('.io-import-whole').onclick = () => {
+      const r = E.importJSON(doc, ta.value);
+      if (!r.ok) return ioNote('导入失败: ' + r.error, 'err');
+      ioNote('整批导入：新增 ' + r.added + '、去重 ' + r.duplicated + '、生效 ' + r.applied + '、挂起 ' + doc.pending.size, 'ok');
+      refresh(pane);
+    };
+    el.querySelector('.io-import-batch').onclick = () => {
+      let data;
+      try { data = JSON.parse(ta.value); } catch (e) { return ioNote('JSON 解析失败: ' + e.message, 'err'); }
+      if (!data || !Array.isArray(data.operations)) return ioNote('缺少 operations 数组', 'err');
+      const head = E.importJSON(doc, JSON.stringify({ width: data.width, height: data.height, operations: [] }));
+      if (!head.ok) return ioNote('导入失败: ' + head.error, 'err');
+      let ops = data.operations.slice();
+      if (el.querySelector('.io-shuffle').checked)
+        for (let i = ops.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [ops[i], ops[j]] = [ops[j], ops[i]];
+        }
+      const chunk = Math.max(1, +el.querySelector('.io-chunk').value || 1);
+      const batches = [];
+      for (let i = 0; i < ops.length; i += chunk) batches.push(ops.slice(i, i + chunk));
+      const r = deliverBatches(pane, doc, batches);
+      if (!r.ok) return ioNote('导入失败: ' + r.error, 'err');
+      ioNote('分 ' + r.batches + ' 批导入：新增 ' + r.added + '、去重 ' + r.dup + '、生效 ' + r.applied + '、挂起 ' + doc.pending.size, 'ok');
+      refresh(pane);
+    };
+    el.querySelector('.io-copy-peer').onclick = () => {
+      ta.value = E.exportJSON(peer(pane).doc);
+      ioNote('已把对方的导出放进文本框，可再点导入', 'ok');
+    };
+  }
+}
+
+// ---------- 头部动作 ----------
+
+document.getElementById('btn-sync-both').onclick = () => {
+  syncTo(panes[0], panes[1]);
+  syncTo(panes[1], panes[0]);
+};
+
+document.getElementById('btn-compare').onclick = () => {
+  const [L, R] = panes;
+  const e1 = E.exportJSON(L.doc), e2 = E.exportJSON(R.doc);
+  const sameExp = e1 === e2;
+  let sameGrid = L.doc.grid.length === R.doc.grid.length;
+  if (sameGrid) for (let i = 0; i < L.doc.grid.length; i++) if (L.doc.grid[i] !== R.doc.grid[i]) { sameGrid = false; break; }
+  const el = document.getElementById('compare-result');
+  el.innerHTML =
+    '导出' + (sameExp ? '<b style="color:var(--ok)">逐字节一致 ✓</b>' : '<b style="color:var(--danger)">不一致 ✗</b>') +
+    '（左 ' + L.doc.ops.size + ' 条/右 ' + R.doc.ops.size + ' 条）· 格子' +
+    (sameGrid ? '<b style="color:var(--ok)">一致 ✓</b>' : '<b style="color:var(--danger)">不一致 ✗</b>');
+};
+
+document.getElementById('btn-load-sample').onclick = async () => {
+  try {
+    const t = await (await fetch('samples/live-tile-strokes.json')).text();
+    for (const p of panes) {
+      const r = E.importJSON(p.doc, t);
+      if (!r.ok) note(p, '示例导入失败: ' + r.error, 'err');
+      refresh(p);
+    }
+  } catch (e) {
+    alert('读取 samples/live-tile-strokes.json 失败（file:// 下请用本地 HTTP 服务打开，如 python3 -m http.server）: ' + e.message);
+  }
+};
+
+// ---------- 启动 ----------
+
+createPane('左栏', 'A', 'B');
+createPane('右栏', 'B', 'A');
+for (const p of panes) refresh(p);
+</script>
+</body>
+</html>
