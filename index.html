@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>点灯对决 · Lantern Stack Duel</title>
+<style>
+  :root {
+    --bg: #160d0a;
+    --panel: #241410;
+    --panel2: #2e1a13;
+    --line: #4a2c1c;
+    --gold: #f0b429;
+    --gold-dim: #9a7420;
+    --paper: #f7e8c9;
+    --ink: #efe3d0;
+    --ink-dim: #a89880;
+    --a: #e0523c;   /* 玩家A 朱红 */
+    --b: #3ca08c;   /* 玩家B 青绿 */
+    --ok: #7bc96f;
+    --bad: #e0523c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    background: radial-gradient(ellipse at top, #2a1510 0%, var(--bg) 60%);
+    color: var(--ink);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  h1 { text-align: center; font-size: 26px; margin: 4px 0 2px; color: var(--gold); letter-spacing: 4px; }
+  .sub { text-align: center; color: var(--ink-dim); font-size: 13px; margin-bottom: 14px; }
+
+  /* 顶部状态条 */
+  #statusbar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 14px; margin: 0 auto 14px; max-width: 1180px;
+  }
+  #turnbadge { font-size: 18px; font-weight: 700; padding: 4px 16px; border-radius: 999px; }
+  #turnbadge.A { background: var(--a); color: #fff; }
+  #turnbadge.B { background: var(--b); color: #fff; }
+  #turnbadge.done { background: #555; }
+  .stat { color: var(--ink-dim); font-size: 14px; }
+  .stat b { color: var(--ink); }
+  #hint { flex-basis: 100%; text-align: center; color: var(--gold); font-size: 14px; min-height: 20px; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel2); color: var(--ink); padding: 6px 14px;
+  }
+  button:hover:not(:disabled) { border-color: var(--gold); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--gold); border-color: var(--gold); color: #2a1a00; font-weight: 700; }
+  button.danger { border-color: var(--a); color: var(--a); }
+
+  main { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 14px; max-width: 1180px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .player h2 { margin: 0 0 6px; font-size: 18px; display: flex; justify-content: space-between; align-items: baseline; }
+  .player.A h2 { color: var(--a); }
+  .player.B h2 { color: var(--b); }
+  .player { transition: box-shadow .2s; }
+  .player.active { box-shadow: 0 0 0 2px var(--gold), 0 0 24px rgba(240,180,41,.25); }
+  .score { font-size: 30px; font-weight: 800; color: var(--gold); }
+  .energy { font-size: 15px; letter-spacing: 2px; }
+  .energy .pip { color: var(--gold); }
+  .energy .pip.empty { color: #4a3a28; }
+
+  .hand { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .card {
+    text-align: left; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel2); width: 100%;
+  }
+  .card .cid { font-weight: 700; }
+  .card .ctype { color: var(--gold); margin-left: 6px; }
+  .card .cdesc { display: block; font-size: 12px; color: var(--ink-dim); margin-top: 2px; }
+  .card.playable:hover { border-color: var(--gold); }
+  .card.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+  .empty-hand { color: var(--ink-dim); font-size: 13px; padding: 6px 0; }
+
+  /* 中央：灯 + 待结算栈 */
+  #lamps { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .lamp {
+    width: 110px; padding: 12px 6px; text-align: center; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--panel2);
+  }
+  .lamp .emo { font-size: 44px; line-height: 1; filter: grayscale(1) brightness(.55); }
+  .lamp.lit .emo { filter: none; text-shadow: 0 0 18px var(--gold); }
+  .lamp.closed .emo { filter: grayscale(1) brightness(.3); }
+  .lamp .lid { font-weight: 700; margin-top: 6px; }
+  .lamp .lst { font-size: 12px; color: var(--ink-dim); }
+  .lamp.lit .lst { color: var(--gold); }
+  .lamp.closed .lst { color: var(--bad); }
+
+  .selectable { border-color: var(--gold) !important; box-shadow: 0 0 0 2px var(--gold), 0 0 16px rgba(240,180,41,.35); cursor: pointer; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 26px rgba(240,180,41,.55); } }
+
+  #pending h3, #logpanel h3 { margin: 4px 0 8px; font-size: 15px; color: var(--gold); }
+  .pitem {
+    display: flex; justify-content: space-between; gap: 8px; align-items: center;
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; margin-bottom: 6px; font-size: 14px;
+  }
+  .pitem .who { font-weight: 700; }
+  .pitem .who.A { color: var(--a); } .pitem .who.B { color: var(--b); }
+  .pitem .top-tag { color: var(--gold); font-size: 12px; }
+  .p-empty { color: var(--ink-dim); font-size: 13px; }
+
+  /* 日志与导入导出 */
+  #bottom { max-width: 1180px; margin: 14px auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { #bottom { grid-template-columns: 1fr; } }
+  #log { max-height: 220px; overflow-y: auto; font-size: 13px; }
+  #log div { padding: 2px 0; border-bottom: 1px dashed #3a2418; }
+  #log .res { color: var(--gold); }
+  #log .err { color: var(--bad); }
+
+  textarea {
+    width: 100%; min-height: 90px; background: #120a07; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 12px/1.5 monospace;
+    resize: vertical;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+
+  /* 重放控制 */
+  #replaybar { display: none; max-width: 1180px; margin: 0 auto 14px; }
+  #replaybar.on { display: block; }
+  #replaybar .panel { border-color: var(--gold); }
+  #compare { margin-top: 8px; font-size: 13px; }
+  #compare .ok { color: var(--ok); }
+  #compare .no { color: var(--bad); }
+  #banner { text-align: center; font-size: 20px; font-weight: 800; color: var(--gold); min-height: 28px; margin-bottom: 8px; }
+
+  details { max-width: 1180px; margin: 14px auto 0; color: var(--ink-dim); font-size: 13px; }
+  details summary { cursor: pointer; color: var(--gold); }
+</style>
+</head>
+<body>
+  <h1>🏮 点灯对决</h1>
+  <div class="sub">双人同屏 · 节庆点灯卡牌 · 连续两次过牌结算栈顶</div>
+
+  <div id="banner"></div>
+
+  <div id="statusbar">
+    <span id="turnbadge"></span>
+    <span class="stat">待结算 <b id="st-pending">0</b></span>
+    <span class="stat">连续过牌 <b id="st-passes">0</b></span>
+    <button id="btn-pass" class="primary">过牌</button>
+    <button id="btn-cancel-sel" style="display:none">取消选择</button>
+    <button id="btn-undo">撤销一步</button>
+    <button id="btn-new">新开一局</button>
+    <div id="hint"></div>
+  </div>
+
+  <div id="replaybar"><div class="panel">
+    <div class="row">
+      <b style="color:var(--gold)">📼 记录核对模式</b>
+      <span class="stat" id="replay-pos"></span>
+      <button id="btn-r-start">⏮ 开头</button>
+      <button id="btn-r-prev">◀ 上一步</button>
+      <button id="btn-r-next" class="primary">下一步 ▶</button>
+      <button id="btn-r-end">到末尾 ⏭</button>
+      <button id="btn-r-variant" style="display:none">运行 cancelCase 变体</button>
+      <button id="btn-r-live">用此设置开新局</button>
+      <button id="btn-r-exit" class="danger">退出核对</button>
+    </div>
+    <div class="stat" id="replay-last"></div>
+    <div id="compare"></div>
+  </div></div>
+
+  <main>
+    <section class="panel player A" id="panel-A"></section>
+    <section class="panel">
+      <div id="lamps"></div>
+      <div id="pending"><h3>待结算栈（顶部先结算）</h3><div id="pending-list"></div></div>
+    </section>
+    <section class="panel player B" id="panel-B"></section>
+  </main>
+
+  <div id="bottom">
+    <section class="panel" id="logpanel">
+      <h3>对局日志</h3>
+      <div id="log"></div>
+    </section>
+    <section class="panel">
+      <h3 style="margin:4px 0 8px;font-size:15px;color:var(--gold)">导入 / 导出动作记录</h3>
+      <div class="row">
+        <button id="btn-import-file">导入 JSON 文件…</button>
+        <input type="file" id="file-input" accept=".json,application/json" style="display:none">
+        <button id="btn-import-text">导入下方文本</button>
+        <button id="btn-export">导出当前对局</button>
+        <button id="btn-sample">载入样例记录</button>
+      </div>
+      <textarea id="io" placeholder="粘贴动作记录 JSON，或点击「导出当前对局」生成同格式记录"></textarea>
+      <div class="row"><button id="btn-copy">复制文本</button><button id="btn-download">下载 JSON</button></div>
+    </section>
+  </div>
+
+  <details>
+    <summary>规则速览</summary>
+    <ul>
+      <li>点灯（light）：点亮一盏开放且未亮的灯，得 2 分。改目标（move）：改写一张未结算「点灯」的目标灯。关灯（close）：关闭一盏灯，已记的分不回退。取消（cancel）：移除一张未结算「点灯」。</li>
+      <li>响应牌（改目标 / 关灯 / 取消）只在有待结算牌时可打出；目标在结算时复查，失效不退体力。</li>
+      <li>每次出牌后操作权交给对面；连续两次过牌结算栈顶一张；还有待结算牌时从对方继续响应。</li>
+      <li>每张有效出牌扣 1 点体力，整局不回复。待结算栈空时双方连续过牌，按比分结局。</li>
+    </ul>
+  </details>
+
+<script src="game.js"></script>
+<script>
+'use strict';
+const E = LanternEngine;
+const $ = id => document.getElementById(id);
+
+/* ---------- 内置样例（与 samples/lantern-stack-duel.json 相同设置） ---------- */
+const SAMPLE = {
+  rules: E.RULES_TEXT,
+  active: 'A',
+  lamps: ['L1', 'L2'],
+  energy: { A: 3, B: 3 },
+  hands: { A: { paint: 'light', shut: 'close', drop: 'cancel' }, B: { redirect: 'move' } },
+  actions: [['A','paint','L1'],['B','redirect',['paint','L2']],['A','shut','L2'],['B','pass'],['A','pass'],['B','pass'],['A','pass'],['B','pass'],['A','pass'],['B','pass'],['A','pass']],
+  expected: { resolution: ['shut生效','redirect失效','paint生效'], lit: ['L1'], closed: ['L2'], score: {A:2,B:0}, energy: {A:1,B:2}, finished: true },
+  cancelCase: { takeActions: 9, replaceAction: { index: 2, action: ['A','drop','paint'] }, expectedResolution: ['drop生效','redirect失效'], expectedScore: {A:0,B:0} },
+};
+const SAMPLE_CFG = { active: SAMPLE.active, lamps: SAMPLE.lamps, energy: SAMPLE.energy, hands: SAMPLE.hands };
+
+/* ---------- 全局状态 ---------- */
+let game = E.newGame(SAMPLE_CFG);   // 实时对局
+let undoStack = [];                  // 撤销快照
+let sel = null;                      // 出牌选择 {card,type,stage,moveTarget}
+let replay = null;                   // 核对模式 {cfg,actions,idx,st,expected,cancelCase,error}
+let liveLog = [];                    // 实时日志
+
+/* ---------- 工具 ---------- */
+function viewState() { return replay ? replay.st : game; }
+function log(msg, cls) {
+  liveLog.push({ msg, cls });
+  const el = $('log');
+  el.innerHTML = liveLog.map(l => `<div class="${l.cls||''}">${l.msg}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function targetText(t) { return Array.isArray(t) ? `${t[0]} → ${t[1]}` : String(t); }
+
+/* ---------- 实时对局操作 ---------- */
+function snapshot() { undoStack.push(E.clone(game)); if (undoStack.length > 200) undoStack.shift(); }
+
+function doPlay(player, card, target) {
+  snapshot();
+  const err = E.applyPlay(game, player, card, target);
+  if (err) { undoStack.pop(); log(`✗ ${err}`, 'err'); return; }
+  const info = E.TYPE_INFO[card in game.initial.hands[player] ? game.initial.hands[player][card] : ''];
+  log(`${player} 出「${card}」(${info.name})，目标 ${targetText(target)}，体力 -1`);
+  sel = null;
+  render();
+}
+
+function doPass() {
+  if (replay) return;
+  const st = game, player = st.turn;
+  const before = st.resolution.length;
+  const wasPending = st.pending.length;
+  snapshot();
+  const err = E.applyPass(st, player);
+  if (err) { undoStack.pop(); log(`✗ ${err}`, 'err'); return; }
+  log(`${player} 过牌`);
+  for (let i = before; i < st.resolution.length; i++) {
+    log(`结算：${st.resolution[i]}（栈顶牌生效判定完成）`, 'res');
+  }
+  if (st.finished && wasPending === 0) {
+    const w = st.score.A === st.score.B ? '平局' : (st.score.A > st.score.B ? 'A 获胜' : 'B 获胜');
+    log(`待结算已空且双方连过，对局结束：${w}`, 'res');
+  }
+  sel = null;
+  render();
+}
+
+function undo() {
+  if (replay || !undoStack.length) return;
+  game = undoStack.pop();
+  sel = null;
+  liveLog.push({ msg: '↩ 撤销一步', cls: '' });
+  render();
+}
+
+function newGame(cfg) {
+  game = E.newGame(cfg || SAMPLE_CFG);
+  undoStack = []; sel = null; liveLog = []; replay = null;
+  $('replaybar').classList.remove('on');
+  log('新对局开始，' + game.turn + ' 先手');
+  render();
+}
+
+/* ---------- 选择目标 ---------- */
+function clickCard(player, card) {
+  if (replay || game.finished) return;
+  if (player !== game.turn) { log(`✗ 还没轮到 ${player} 操作`, 'err'); return; }
+  if (sel && sel.card === card) { sel = null; render(); return; }
+  const type = game.hands[player][card];
+  // 仅做“能不能点”的粗检：体力 / 响应牌限制；目标合法性在 doPlay 里由引擎校验
+  if (game.energy[player] < 1) { log(`✗ ${player} 体力不足`, 'err'); return; }
+  if (E.TYPE_INFO[type].response && game.pending.length === 0) { log(`✗「${E.TYPE_INFO[type].name}」是响应牌，需要有待结算牌`, 'err'); return; }
+  sel = { card, type, stage: type === 'move' ? 1 : 0, moveTarget: null };
+  render();
+}
+function clickLamp(lampId) {
+  if (!sel || replay) return;
+  const { card, type } = sel;
+  if (type === 'light') doPlay(game.turn, card, lampId);
+  else if (type === 'close') doPlay(game.turn, card, lampId);
+  else if (type === 'move' && sel.stage === 2) doPlay(game.turn, card, [sel.moveTarget, lampId]);
+}
+
+function clickPending(cardId) {
+  if (!sel || replay) return;
+  const { card, type } = sel;
+  if (type === 'cancel') doPlay(game.turn, card, cardId);
+  else if (type === 'move' && sel.stage === 1) { sel.moveTarget = cardId; sel.stage = 2; render(); }
+}
+
+/* ---------- 渲染 ---------- */
+function render() {
+  const st = viewState();
+  // 顶条
+  const tb = $('turnbadge');
+  if (st.finished) {
+    tb.textContent = '对局结束'; tb.className = 'done';
+    $('banner').textContent = st.score.A === st.score.B ? `平局 ${st.score.A} : ${st.score.B}` :
+      `🏆 ${st.score.A > st.score.B ? '玩家 A' : '玩家 B'} 获胜  ${st.score.A} : ${st.score.B}`;
+  } else {
+    tb.textContent = (replay ? '查看中 · 轮到 ' : '当前操作：') + '玩家 ' + st.turn;
+    tb.className = st.turn;
+    $('banner').textContent = '';
+  }
+  $('st-pending').textContent = st.pending.length;
+  $('st-passes').textContent = st.passes;
+  $('btn-pass').disabled = !!replay || st.finished;
+  $('btn-undo').disabled = !!replay || !undoStack.length;
+  $('btn-cancel-sel').style.display = sel ? '' : 'none';
+
+  // 提示
+  let hint = '';
+  if (sel) {
+    const info = E.TYPE_INFO[sel.type];
+    if (sel.type === 'move') hint = sel.stage === 1 ? `「${sel.card}」改目标：第 1 步，点击待结算栈里的一张点灯牌` : `第 2 步，点击一盏开放未亮的灯作为新目标`;
+    else if (sel.type === 'cancel') hint = `「${sel.card}」取消：点击待结算栈里要移除的点灯牌`;
+    else hint = `「${sel.card}」${info.name}：点击一盏目标灯`;
+  } else if (!replay && !st.finished) hint = `玩家 ${st.turn}：点选手牌出牌，或过牌`;
+  $('hint').textContent = hint;
+
+  // 玩家面板
+  for (const p of ['A', 'B']) {
+    const el = $('panel-' + p);
+    el.classList.toggle('active', !st.finished && st.turn === p);
+    const maxE = st.initial.energy[p];
+    const pips = Array.from({ length: maxE }, (_, i) => `<span class="pip${i < st.energy[p] ? '' : ' empty'}">●</span>`).join('');
+    const cards = Object.entries(st.hands[p]).map(([cid, type]) => {
+      const info = E.TYPE_INFO[type];
+      const playable = !replay && !st.finished && st.turn === p;
+      const cls = ['card', playable ? 'playable' : '', sel && sel.card === cid ? 'selected' : ''].join(' ');
+      return `<button class="${cls}" data-act="card" data-player="${p}" data-card="${esc(cid)}">
+        <span class="cid">${esc(cid)}</span><span class="ctype">${info.icon} ${info.name}</span>
+        <span class="cdesc">${info.desc}</span></button>`;
+    }).join('');
+    el.innerHTML = `<h2>玩家 ${p}<span class="score">${st.score[p]} 分</span></h2>
+      <div class="energy" title="体力">体力 ${pips} <b>${st.energy[p]}</b>/${maxE}</div>
+      <div class="hand">${cards || '<div class="empty-hand">手牌已空</div>'}</div>`;
+  }
+
+  // 灯
+  const lampSel = sel && (sel.type === 'light' || sel.type === 'close' || (sel.type === 'move' && sel.stage === 2));
+  $('lamps').innerHTML = st.lamps.map(l => {
+    const selectable = lampSel && selLampOk(st, l);
+    const emo = l.closed ? '🏮' : '🏮';
+    return `<div class="lamp ${l.lit ? 'lit' : ''} ${l.closed ? 'closed' : ''} ${selectable ? 'selectable' : ''}" data-act="lamp" data-id="${esc(l.id)}">
+      <div class="emo">${emo}</div><div class="lid">${esc(l.id)}</div>
+      <div class="lst">${l.closed ? '✕ 已关闭' : l.lit ? '✦ 已点亮' : '开放 · 未亮'}</div></div>`;
+  }).join('');
+
+  // 待结算栈（顶在前）
+  const pendSel = sel && (sel.type === 'cancel' || (sel.type === 'move' && sel.stage === 1));
+  const items = st.pending.slice().reverse();
+  $('pending-list').innerHTML = items.length ? items.map((p, i) => {
+    const info = E.TYPE_INFO[p.type];
+    const selectable = pendSel && p.type === 'light';
+    return `<div class="pitem ${selectable ? 'selectable' : ''}" data-act="pending" data-card="${esc(p.card)}">
+      <span><span class="who ${p.player}">${p.player}</span> 的「${esc(p.card)}」${info.icon}${info.name} → ${esc(targetText(p.target))}</span>
+      ${i === 0 ? '<span class="top-tag">⬅ 下次结算</span>' : ''}</div>`;
+  }).join('') : '<div class="p-empty">（空）双方连续过牌即按比分结局</div>';
+
+  if (replay) renderReplay();
+}
+
+function selLampOk(st, l) {
+  if (!sel) return false;
+  if (sel.type === 'light') return !l.lit && !l.closed;
+  if (sel.type === 'close') return !l.closed;
+  if (sel.type === 'move' && sel.stage === 2) return !l.lit && !l.closed;
+  return false;
+}
+
+/* ---------- 核对（重放）模式 ---------- */
+function startReplay(rec) {
+  const cfg = { active: rec.active, lamps: rec.lamps, energy: rec.energy, hands: rec.hands };
+  replay = { cfg, actions: rec.actions || [], idx: 0, st: E.newGame(cfg), expected: rec.expected || null, cancelCase: rec.cancelCase || null, error: null, label: '原始记录' };
+  sel = null;
+  $('replaybar').classList.add('on');
+  $('btn-r-variant').style.display = replay.cancelCase ? '' : 'none';
+  render();
+}
+
+function replayTo(idx) {
+  replay.st = E.newGame(replay.cfg);
+  replay.error = null;
+  for (let i = 0; i < idx; i++) {
+    const err = E.applyAction(replay.st, replay.actions[i]);
+    if (err) { replay.error = `第 ${i + 1} 步 ${JSON.stringify(replay.actions[i])} 非法：${err}`; replay.idx = i; render(); return; }
+  }
+  replay.idx = idx;
+  render();
+}
+
+function renderReplay() {
+  $('replay-pos').textContent = `第 ${replay.idx} / ${replay.actions.length} 步 · ${replay.label}`;
+  $('replay-last').innerHTML = replay.error ? `<span style="color:var(--bad)">✗ ${esc(replay.error)}</span>` :
+    (replay.idx > 0 ? `上一步：${esc(JSON.stringify(replay.actions[replay.idx - 1]))}` : '尚未执行动作');
+  $('btn-r-prev').disabled = replay.idx === 0;
+  $('btn-r-next').disabled = replay.idx >= replay.actions.length;
+  if (replay.expected) {
+    const rows = E.compareExpected(replay.st, replay.expected);
+    $('compare').innerHTML = '<b>与记录中的 expected 核对：</b> ' + rows.map(r =>
+      `<div class="${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} ${r.label} —— 期望 ${esc(r.want)} ／ 当前 ${esc(r.got)}</div>`).join('');
+  } else $('compare').innerHTML = '<span class="stat">记录中没有 expected 字段，仅作逐步重放。</span>';
+}
+
+function runVariant() {
+  const cc = replay.cancelCase, base = replay.actions;
+  const actions = base.slice(0, cc.takeActions);
+  actions[cc.replaceAction.index] = cc.replaceAction.action;
+  replay = {
+    cfg: replay.cfg, actions, idx: 0, st: E.newGame(replay.cfg),
+    expected: { resolution: cc.expectedResolution, score: cc.expectedScore },
+    cancelCase: replay.cancelCase, error: null, label: 'cancelCase 变体',
+  };
+  replayTo(actions.length); // 直接跑到底，展示核对结果
+}
+
+/* ---------- 导入 / 导出 ---------- */
+function importJSON(text) {
+  let rec;
+  try { rec = JSON.parse(text); } catch (e) { alert('JSON 解析失败：' + e.message); return; }
+  for (const k of ['active', 'lamps', 'energy', 'hands']) {
+    if (!(k in rec)) { alert('记录缺少字段：' + k); return; }
+  }
+  startReplay(rec);
+}
+
+$('file-input').addEventListener('change', ev => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { $('io').value = r.result; importJSON(r.result); };
+  r.readAsText(f);
+  ev.target.value = '';
+});
+
+/* ---------- 事件 ---------- */
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-act]');
+  if (el) {
+    const act = el.dataset.act;
+    if (act === 'card') clickCard(el.dataset.player, el.dataset.card);
+    else if (act === 'lamp') clickLamp(el.dataset.id);
+    else if (act === 'pending') clickPending(el.dataset.card);
+    return;
+  }
+  switch (ev.target.id) {
+    case 'btn-pass': doPass(); break;
+    case 'btn-undo': undo(); break;
+    case 'btn-new': newGame(); break;
+    case 'btn-cancel-sel': sel = null; render(); break;
+    case 'btn-import-file': $('file-input').click(); break;
+    case 'btn-import-text': importJSON($('io').value); break;
+    case 'btn-sample': $('io').value = JSON.stringify(SAMPLE, null, 2); importJSON($('io').value); break;
+    case 'btn-export': $('io').value = JSON.stringify(E.exportRecord(game), null, 2); break;
+    case 'btn-copy': $('io').select(); document.execCommand('copy'); break;
+    case 'btn-download': {
+      const blob = new Blob([$('io').value || JSON.stringify(E.exportRecord(game), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'lantern-stack-duel-record.json'; a.click();
+      URL.revokeObjectURL(a.href); break;
+    }
+    case 'btn-r-start': replayTo(0); break;
+    case 'btn-r-prev': replayTo(replay.idx - 1); break;
+    case 'btn-r-next': replayTo(replay.idx + 1); break;
+    case 'btn-r-end': replayTo(replay.actions.length); break;
+    case 'btn-r-variant': runVariant(); break;
+    case 'btn-r-live': newGame(replay.cfg); break;
+    case 'btn-r-exit': replay = null; $('replaybar').classList.remove('on'); render(); break;
+  }
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { sel = null; render(); } });
+
+log('对局开始，' + game.turn + ' 先手。点选手牌即可出牌，目标会高亮。');
+render();
+</script>
+</body>
+</html>
