@@ -15,3 +15,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解压出的不可信样例数据（保留原始 zip）
+samples/extracted/
+# 测试产出
+/tmp/
+*.log

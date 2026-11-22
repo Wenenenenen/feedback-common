@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分片 MP4 重新分段</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>分片 MP4 重新分段</h1>
+  <div class="file-pick">
+    <input type="file" id="file-input" accept=".mp4,video/mp4">
+    <span id="file-name" class="muted">未选择文件</span>
+  </div>
+</header>
+
+<section id="status-panel" class="panel hidden">
+  <div id="parse-progress" class="muted"></div>
+  <div id="errors" class="errors"></div>
+  <div id="track-summary" class="track-summary"></div>
+</section>
+
+<section id="work-panel" class="panel hidden">
+  <div class="toolbar">
+    <div class="control-group">
+      <span class="label">轨</span>
+      <div id="track-tabs" class="tabs" role="tablist"></div>
+    </div>
+    <div class="control-group">
+      <span class="label">顺序</span>
+      <label class="radio"><input type="radio" name="order" value="decode" checked> 解码顺序</label>
+      <label class="radio"><input type="radio" name="order" value="display"> 显示顺序</label>
+    </div>
+    <div class="control-group">
+      <span class="label">切点</span>
+      <span id="cut-count" class="badge">0</span>
+      <button id="select-all-key" type="button" class="btn small">全选关键帧</button>
+      <button id="clear-cuts" type="button" class="btn small">仅保留首帧</button>
+    </div>
+  </div>
+
+  <div class="scroll-wrap" id="scroll-wrap">
+    <div class="grid-table" id="grid-table">
+      <div class="grid-head" id="grid-head">
+        <div class="cell col-check">新边界</div>
+        <div class="cell col-idx">#</div>
+        <div class="cell col-flags">标志</div>
+        <div class="cell col-key">帧类型</div>
+        <div class="cell">DTS（轨刻度）</div>
+        <div class="cell">CTS 偏移</div>
+        <div class="cell">PTS（轨刻度）</div>
+        <div class="cell">时长</div>
+        <div class="cell">大小（字节）</div>
+        <div class="cell">文件偏移</div>
+        <div class="cell">原片段</div>
+      </div>
+      <div class="grid-body" id="grid-body"></div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <div id="seg-preview" class="seg-preview muted"></div>
+    <div class="actions">
+      <button id="btn-export-original" class="btn" type="button">按原方案导出</button>
+      <button id="btn-export-new" class="btn primary" type="button">按新边界导出</button>
+      <span id="export-progress" class="muted"></span>
+    </div>
+  </div>
+</section>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

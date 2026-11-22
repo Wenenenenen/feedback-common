@@ -1,0 +1,14 @@
+{
+  "name": "fmp4-run-repacker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "纯前端分片 MP4 重新分段工具（无第三方封装库）",
+  "scripts": {
+    "test": "node tools/test_repack.mjs samples/extracted/two-tracks.mp4 && node tools/test_synth.mjs && node tools/test_negative.mjs && node tools/test_largesize.mjs && node tools/test_boundary.mjs && node tools/test_cts.mjs",
+    "perf": "node tools/test_perf.mjs",
+    "huge": "node --max-old-space-size=2048 tools/test_huge.mjs",
+    "e2e": "node tools/test_e2e.mjs samples/extracted/two-tracks.mp4",
+    "serve": "cd public && python3 -m http.server 8000"
+  }
+}
