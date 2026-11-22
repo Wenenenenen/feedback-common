@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>回放见证缩减器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* ===== 设计令牌 =====
+   布局：控制台式纵向工作区，输入 → 见证 → 缩减 → 轮次 → 事件 → 导出
+   色板：石板中性底 + 靛蓝主色，判定用语义色（接受/警告/失败）独立区分
+   字体：Inter 界面字，JetBrains Mono 数据与事件号 */
+:root {
+  --bg: #f6f8fb;
+  --panel: #ffffff;
+  --panel-2: #f1f4f8;
+  --fg: #182230;
+  --muted: #5c6b7e;
+  --faint: #8a97a8;
+  --line: #dde4ec;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --accent-soft: #eceefe;
+  --ok: #047857;
+  --ok-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #b91c1c;
+  --bad-soft: #fee2e2;
+  --crit: #c2410c;
+  --crit-soft: #ffedd5;
+  --info: #0369a1;
+  --info-soft: #e0f2fe;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --radius: 10px;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #151c26;
+    --panel-2: #1b232f;
+    --fg: #e6edf3;
+    --muted: #9aa8ba;
+    --faint: #6e7d90;
+    --line: #2a3442;
+    --accent: #818cf8;
+    --accent-fg: #14182e;
+    --accent-soft: #1e2445;
+    --ok: #34d399;
+    --ok-soft: #0c2f26;
+    --warn: #fbbf24;
+    --warn-soft: #3a2c08;
+    --bad: #f87171;
+    --bad-soft: #3d1717;
+    --crit: #fb923c;
+    --crit-soft: #3c2110;
+    --info: #7dd3fc;
+    --info-soft: #0c2d40;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --panel: #151c26;
+  --panel-2: #1b232f;
+  --fg: #e6edf3;
+  --muted: #9aa8ba;
+  --faint: #6e7d90;
+  --line: #2a3442;
+  --accent: #818cf8;
+  --accent-fg: #14182e;
+  --accent-soft: #1e2445;
+  --ok: #34d399;
+  --ok-soft: #0c2f26;
+  --warn: #fbbf24;
+  --warn-soft: #3a2c08;
+  --bad: #f87171;
+  --bad-soft: #3d1717;
+  --crit: #fb923c;
+  --crit-soft: #3c2110;
+  --info: #7dd3fc;
+  --info-soft: #0c2d40;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+
+/* ===== 顶栏 ===== */
+header.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 2px 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+header.topbar .mark {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--accent); color: var(--accent-fg);
+  display: grid; place-items: center; flex: none;
+  font-family: var(--mono); font-weight: 600; font-size: 15px;
+}
+header.topbar h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+header.topbar p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+header.topbar .spacer { flex: 1; }
+.theme-btn {
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.theme-btn:hover { border-color: var(--accent); }
+
+/* ===== 卡片 ===== */
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  margin-bottom: 16px; overflow: hidden;
+}
+.card > .hd {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.card > .hd h2 { font-size: 13.5px; margin: 0; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); }
+.card > .hd .step {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  background: var(--accent-soft); color: var(--accent);
+  border-radius: 5px; padding: 2px 7px;
+}
+.card > .bd { padding: 16px; }
+.card > .bd.tight { padding: 10px 16px; }
+
+/* ===== 表单与按钮 ===== */
+textarea.json-input {
+  width: 100%; min-height: 150px; resize: vertical;
+  font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  tab-size: 2;
+}
+textarea.json-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+button.btn {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  border-radius: 8px; padding: 9px 16px; border: 1px solid transparent;
+  transition: filter .12s ease, border-color .12s ease;
+}
+button.btn:disabled { opacity: .45; cursor: not-allowed; }
+button.btn.primary { background: var(--accent); color: var(--accent-fg); }
+button.btn.primary:not(:disabled):hover { filter: brightness(1.08); }
+button.btn.ghost { background: var(--panel); color: var(--fg); border-color: var(--line); }
+button.btn.ghost:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+button.btn.danger { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+button.btn.danger:not(:disabled):hover { filter: brightness(.97); }
+.hint { font-size: 12px; color: var(--faint); margin-top: 8px; }
+.hint code { font-family: var(--mono); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+/* ===== 状态徽标 ===== */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; border-radius: 999px;
+  padding: 3px 10px; white-space: nowrap;
+}
+.pill.idle { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.pill.run { background: var(--info-soft); color: var(--info); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.crit { background: var(--crit-soft); color: var(--crit); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.run .dot { animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+/* ===== 错误列表 ===== */
+.err-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.err-list li {
+  background: var(--bad-soft); color: var(--bad);
+  border-radius: 8px; padding: 9px 12px; font-size: 12.5px;
+  border-left: 3px solid var(--bad);
+}
+.err-list code { font-family: var(--mono); font-weight: 600; }
+
+/* ===== 见证面板 ===== */
+.witness-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kv { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.kv .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; margin-bottom: 4px; }
+.kv .v { font-family: var(--mono); font-size: 14px; font-weight: 600; word-break: break-all; }
+.kv .v.small { font-size: 12.5px; font-weight: 500; }
+.sign-badge { font-family: var(--mono); font-weight: 700; padding: 2px 9px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+.lock-check { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.lock-check .item {
+  font-size: 12px; font-family: var(--mono);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 10px;
+}
+.callout {
+  border-radius: 8px; padding: 12px 14px; font-size: 13px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.callout.info { background: var(--info-soft); color: var(--info); }
+.callout.warn { background: var(--warn-soft); color: var(--warn); }
+.callout.ok { background: var(--ok-soft); color: var(--ok); }
+
+/* ===== 进度 ===== */
+.progress { height: 8px; border-radius: 99px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .15s ease; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+.stat .n { font-family: var(--mono); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 1px; }
+
+/* ===== 轮次日志 ===== */
+.round { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.round-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; background: var(--panel-2); cursor: pointer;
+  font-size: 12.5px;
+}
+.round-head .rk { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+.round-head .meta { color: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+.round-head .spacer { flex: 1; }
+.round-body { padding: 8px 12px 12px; }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table.data { border-collapse: collapse; width: 100%; font-size: 12px; }
+table.data th {
+  text-align: left; font-weight: 600; color: var(--muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 7px 10px; background: var(--panel-2); border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.data td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+table.data tr:last-child td { border-bottom: none; }
+table.data td.mono, table.data th.mono { font-family: var(--mono); }
+.verdict-0 { color: var(--ok); font-weight: 600; }
+.verdict-1 { color: var(--bad); font-weight: 600; }
+.verdict-2 { color: var(--warn); font-weight: 600; }
+.verdict-3 { color: var(--crit); font-weight: 600; }
+.more-note { font-size: 11.5px; color: var(--faint); padding: 6px 2px; font-family: var(--mono); }
+.caret { transition: transform .15s ease; color: var(--faint); }
+.round.collapsed .caret { transform: rotate(-90deg); }
+.round.collapsed .round-body { display: none; }
+.tally { display: inline-flex; gap: 6px; font-family: var(--mono); font-size: 11px; }
+.tally b { font-weight: 700; }
+.tally .t0 { color: var(--ok); } .tally .t1 { color: var(--bad); }
+.tally .t2 { color: var(--warn); } .tally .t3 { color: var(--crit); }
+
+/* ===== 事件表 ===== */
+.ev-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ev-toolbar .page-info { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.kept-tag { color: var(--ok); font-weight: 600; }
+.del-tag { color: var(--faint); text-decoration: line-through; }
+.frame-pill { font-family: var(--mono); font-size: 11px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+
+/* ===== 导出 ===== */
+textarea.export-box {
+  width: 100%; min-height: 180px; resize: vertical;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  background: var(--panel-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+.export-meta { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.export-meta b { color: var(--fg); }
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg);
+  padding: 9px 18px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+  box-shadow: 0 6px 24px rgba(0,0,0,.25); opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease; z-index: 50;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+
+.empty {
+  padding: 26px 16px; text-align: center; color: var(--faint); font-size: 13px;
+  border: 1px dashed var(--line); border-radius: 8px;
+}
+label.file-label {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  border-radius: 8px; padding: 9px 16px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--fg);
+}
+label.file-label:hover { border-color: var(--accent); color: var(--accent); }
+input[type=file] { display: none; }
+.small-note { font-size: 11.5px; color: var(--faint); margin-top: 6px; }
+
+@media (max-width: 640px) {
+  .card > .bd { padding: 12px; }
+  table.data { font-size: 11px; }
+  table.data th, table.data td { padding: 5px 7px; }
+  header.topbar h1 { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill.run .dot { animation: none; }
+  .caret, .toast, .progress > i { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <div class="mark">RW</div>
+    <div>
+      <h1>回放见证缩减器</h1>
+      <p>双版本规则解释 · 依赖级联试删 · 三项锁定的故障复现缩减</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <!-- 1. 输入 -->
+  <section class="card" id="inputCard">
+    <div class="hd"><span class="step">01</span><h2>回放包输入</h2></div>
+    <div class="bd">
+      <textarea class="json-input" id="jsonInput" spellcheck="false" placeholder='粘贴 replay-witness 格式 JSON，或载入样本 / 导入文件'></textarea>
+      <div class="btn-row">
+        <button class="btn ghost" id="sampleBtn" type="button">载入内置样本</button>
+        <label class="file-label" for="fileInput">导入 JSON 文件</label>
+        <input type="file" id="fileInput" accept=".json,application/json">
+        <button class="btn primary" id="loadBtn" type="button">校验并锁定见证</button>
+      </div>
+      <p class="hint">支持原始回放包与本工具导出的 <code>replay-witness-shrink/1</code> 重演包；事件保留原编号与原帧。</p>
+      <div id="errBox" hidden><ul class="err-list" id="errList"></ul></div>
+    </div>
+  </section>
+
+  <!-- 2. 见证 -->
+  <section class="card" id="witnessCard" hidden>
+    <div class="hd"><span class="step">02</span><h2>基线见证（首次差异锁定）</h2><span class="pill idle" id="basePill"><span class="dot"></span>已锁定</span></div>
+    <div class="bd">
+      <div id="noDiffBox" class="callout warn" hidden>
+        <span>⚠</span><div>两版规则在全部事件后观察字段完全一致，<b>无差异可缩减</b>。请检查 old / next 程序表。</div>
+      </div>
+      <div id="witnessBox">
+        <div class="witness-grid" id="witnessGrid"></div>
+        <div class="lock-check" id="lockCheck"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 缩减控制 -->
+  <section class="card" id="shrinkCard" hidden>
+    <div class="hd"><span class="step">03</span><h2>固定分块缩减</h2><span class="pill idle" id="runPill"><span class="dot"></span>待命</span></div>
+    <div class="bd">
+      <div class="stat-row">
+        <div class="stat"><div class="n" id="stOriginal">–</div><div class="l">原始事件</div></div>
+        <div class="stat"><div class="n" id="stKept">–</div><div class="l">当前保留</div></div>
+        <div class="stat"><div class="n" id="stRounds">–</div><div class="l">轮次</div></div>
+        <div class="stat"><div class="n" id="stTrials">–</div><div class="l">试删次数</div></div>
+        <div class="stat"><div class="n" id="stAccepts">–</div><div class="l">接受次数</div></div>
+        <div class="stat"><div class="n" id="stTime">–</div><div class="l">耗时 ms</div></div>
+      </div>
+      <div class="progress"><i id="progressBar"></i></div>
+      <div class="btn-row">
+        <button class="btn primary" id="startBtn" type="button">开始缩减</button>
+        <button class="btn danger" id="cancelBtn" type="button" disabled>取消（保留上一份可重演结果）</button>
+        <button class="btn ghost" id="verifyBtn" type="button" disabled>独立重演校验</button>
+      </div>
+      <p class="hint" id="runHint">块数从 2 起，一轮全失败则翻倍至剩余长度上限；单条轮全失败即结束。取消随时生效，已接受的缩减结果不会回滚。</p>
+      <div id="verifyBox" style="margin-top:10px" hidden></div>
+    </div>
+  </section>
+
+  <!-- 4. 轮次日志 -->
+  <section class="card" id="roundsCard" hidden>
+    <div class="hd"><span class="step">04</span><h2>逐轮试删日志</h2>
+      <span class="hint" style="margin:0">每轮显示试删范围（原事件号）、级联删除数、判定与两版差异</span></div>
+    <div class="bd tight" id="roundsBody"><div class="empty">尚无轮次记录</div></div>
+  </section>
+
+  <!-- 5. 事件表 -->
+  <section class="card" id="eventsCard" hidden>
+    <div class="hd"><span class="step">05</span><h2>事件清单（原编号 / 原帧）</h2></div>
+    <div class="bd">
+      <div class="ev-toolbar">
+        <button class="btn ghost" id="prevPage" type="button">‹ 上一页</button>
+        <span class="page-info" id="pageInfo">–</span>
+        <button class="btn ghost" id="nextPage" type="button">下一页 ›</button>
+        <span class="spacer" style="flex:1"></span>
+        <span class="page-info"><span class="kept-tag">■ 保留</span> &nbsp; <span class="del-tag">删除</span></span>
+      </div>
+      <div class="tbl-wrap">
+        <table class="data" id="evTable">
+          <thead><tr>
+            <th>原事件号</th><th>id</th><th>帧</th><th>kind</th><th>deps</th><th>状态</th>
+          </tr></thead>
+          <tbody id="evBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. 导出 -->
+  <section class="card" id="exportCard" hidden>
+    <div class="hd"><span class="step">06</span><h2>导出可独立重演的缩减结果</h2>
+      <span class="pill idle" id="exportPill"><span class="dot"></span>未导出</span></div>
+    <div class="bd">
+      <div class="export-meta" id="exportMeta"></div>
+      <textarea class="export-box" id="exportBox" readonly spellcheck="false"></textarea>
+      <div class="btn-row">
+        <button class="btn primary" id="buildExportBtn" type="button">生成重演包</button>
+        <button class="btn ghost" id="copyExportBtn" type="button" disabled>复制 JSON</button>
+        <button class="btn ghost" id="downloadBtn" type="button" disabled>下载 .json</button>
+      </div>
+      <p class="small-note">部分预览环境会拦截浏览器下载，此时请用「复制 JSON」保存；重演包内含完整 initial / observe / old / next 规则与缩减事件，可直接重新导入本页独立重演。</p>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const R = window.RWS;
+
+  // 内置样本（与 samples/replay-witness.json 内容一致）
+  const SAMPLE = {"rules":["events的id为唯一ASCII串，frame为非负整数，同帧按输入顺序。deps只能指向执行顺序中严格更早存在的事件。","旧版old与新版next从相同initial状态运行。program按事件kind选择列表，顺序执行[可空条件,操作,字段,整数]。条件是[字段,eq或lt,整数]，set赋值，add叠加并按有符号32位回绕，事件无匹配规则时保持状态。","observe声明比较字段的优先顺序。逐事件比较结束后的两版状态，差值符号按数学差值，不做32位回绕。","缩减时从2块开始，块数最多为剩余长度。按执行序均分为连续块，较长块靠前，按从前到后试删。首次成功即使用剩余列表重新从2块开始，一轮全失败则块数翻倍，上限为剩余长度，单条试删轮全失败即结束。无差异直接提示。"],"initial":{"score":0,"token":0},"observe":["score"],"old":{"bonus":[[null,"add","score",2]],"tag":[[null,"set","token",1]]},"next":{"bonus":[[null,"add","score",3]],"tag":[[null,"set","token",1]]},"events":[{"id":"t","frame":0,"kind":"tag","deps":[]},{"id":"b","frame":2,"kind":"bonus","deps":["t"]},{"id":"x","frame":3,"kind":"idle","deps":[]}]};
+
+  // ---------- 全局状态 ----------
+  const state = {
+    doc: null, model: null, base: null,
+    result: null,             // 最近一次 shrink 结果（取消时也是上一份可重演结果）
+    running: false, cancelFlag: false,
+    keptSet: null,            // Int32Array/Set：当前保留的原事件号
+    exportText: '',
+    page: 0, pageSize: 50,
+    roundEls: new Map(),
+  };
+
+  // ---------- 主题 ----------
+  try {
+    const t = localStorage.getItem('rws-theme');
+    if (t) document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+  $('themeBtn').addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('rws-theme', next); } catch (e) {}
+  });
+
+  // ---------- toast ----------
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function setPill(el, cls, text) {
+    el.className = 'pill ' + cls;
+    el.innerHTML = '<span class="dot"></span>' + text;
+  }
+
+  // ---------- 输入处理 ----------
+  $('sampleBtn').addEventListener('click', () => {
+    $('jsonInput').value = JSON.stringify(SAMPLE, null, 2);
+    toast('已载入内置样本');
+  });
+
+  $('fileInput').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { $('jsonInput').value = String(reader.result || ''); toast('已读取 ' + f.name); };
+    reader.onerror = () => toast('文件读取失败');
+    reader.readAsText(f);
+    e.target.value = '';
+  });
+
+  $('loadBtn').addEventListener('click', () => {
+    let parsed;
+    const raw = $('jsonInput').value.trim();
+    if (!raw) { showErrors([{ message: '输入为空，请先粘贴 JSON 或载入样本' }]); return; }
+    try { parsed = JSON.parse(raw); }
+    catch (e) { showErrors([{ message: 'JSON 解析失败：' + e.message }]); return; }
+
+    let doc = parsed;
+    if (R.isExport(parsed)) {
+      doc = R.exportToSource(parsed);
+      toast('识别为重演包，已还原为回放格式');
+    }
+    const v = R.validate(doc);
+    if (!v.ok) { showErrors(v.errors); return; }
+    $('errBox').hidden = true;
+
+    state.doc = doc;
+    state.model = R.buildModel(doc);
+    state.base = R.baseline(state.model);
+    state.result = null; state.keptSet = null; state.exportText = '';
+    state.page = 0;
+    renderBaseline();
+  });
+
+  function showErrors(errors) {
+    const box = $('errBox'), list = $('errList');
+    list.innerHTML = '';
+    for (const er of errors) {
+      const li = document.createElement('li');
+      const where = er.eventIndex >= 0 ? '事件 #' + er.eventIndex + (er.eventId ? '（id <code>' + escapeHtml(er.eventId) + '</code>）' : '') : '文档';
+      const dep = er.depId != null ? '，坏依赖 <code>' + escapeHtml(er.depId) + '</code>' : '';
+      li.innerHTML = where + dep + '：' + escapeHtml(er.message);
+      list.appendChild(li);
+    }
+    box.hidden = false;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---------- 基线渲染 ----------
+  function renderBaseline() {
+    $('witnessCard').hidden = false;
+    $('shrinkCard').hidden = false;
+    $('roundsCard').hidden = false;
+    $('eventsCard').hidden = false;
+    $('exportCard').hidden = false;
+    const w = state.base.witness;
+    if (!w) {
+      $('noDiffBox').hidden = false;
+      $('witnessBox').hidden = true;
+      setPill($('basePill'), 'warn', '无差异');
+      $('startBtn').disabled = true;
+      return;
+    }
+    $('noDiffBox').hidden = true;
+    $('witnessBox').hidden = false;
+    setPill($('basePill'), 'ok', '见证已锁定');
+    $('startBtn').disabled = false;
+
+    const grid = $('witnessGrid');
+    grid.innerHTML = '';
+    const items = [
+      ['原事件号', '#' + w.eventIndex],
+      ['事件 id', w.eventId],
+      ['原帧', 'frame ' + state.doc.events[w.eventIndex].frame],
+      ['观察字段', w.field],
+      ['差值符号（新−旧）', '<span class="sign-badge">' + w.sign + '</span>'],
+      ['旧版 → 新版值', w.oldValue + ' → ' + w.nextValue],
+    ];
+    for (const [k, val] of items) {
+      const d = document.createElement('div');
+      d.className = 'kv';
+      d.innerHTML = '<div class="k">' + k + '</div><div class="v' + (k === '事件 id' ? ' small' : '') + '">' + val + '</div>';
+      grid.appendChild(d);
+    }
+    const lc = $('lockCheck');
+    lc.innerHTML = '';
+    [['事件号 #' + w.eventIndex], ['字段 ' + w.field], ['符号 ' + w.sign]].forEach(([t]) => {
+      const it = document.createElement('span');
+      it.className = 'item';
+      it.textContent = '🔒 ' + t;
+      lc.appendChild(it);
+    });
+
+    $('stOriginal').textContent = state.model.n;
+    resetStats();
+    $('verifyBtn').disabled = true;
+    $('cancelBtn').disabled = true;
+    $('roundsBody').innerHTML = '<div class="empty">尚无轮次记录，点击「开始缩减」</div>';
+    state.roundEls = new Map();
+    renderEventTable(null);
+    $('exportBox').value = '';
+    $('exportMeta').innerHTML = '';
+    setPill($('exportPill'), 'idle', '未导出');
+    $('copyExportBtn').disabled = true; $('downloadBtn').disabled = true;
+    setPill($('runPill'), 'idle', '待命');
+  }
+
+  function resetStats() {
+    $('stKept').textContent = state.model.n;
+    $('stRounds').textContent = '0';
+    $('stTrials').textContent = '0';
+    $('stAccepts').textContent = '0';
+    $('stTime').textContent = '0';
+    $('progressBar').style.width = '0%';
+    $('verifyBox').hidden = true;
+  }
+
+  // ---------- 缩减 ----------
+  $('startBtn').addEventListener('click', startShrink);
+  $('cancelBtn').addEventListener('click', () => {
+    if (state.running) { state.cancelFlag = true; toast('已请求取消，等待当前试删结束…'); }
+  });
+
+  // 时间片让出：按批次检查，避免高频试删下每次都产生 setTimeout 宏任务开销
+  // （5 万链约 11.5 万次试删；每 2000 次才评估一次让出，取消仍在试删入口即时生效）
+  let lastYield = 0;
+  let yieldCounter = 0;
+  const YIELD_BATCH = 2000;
+  const hooks = {
+    isCancelled: () => state.cancelFlag,
+    shouldYield: () => {
+      yieldCounter++;
+      if ((yieldCounter % YIELD_BATCH) !== 0) return false;
+      return (performance.now() - lastYield) > 24;
+    },
+    doYield: () => { lastYield = performance.now(); return new Promise((res) => setTimeout(res, 0)); },
+    onRound: (round) => addRoundEl(round),
+    onTrial: () => { /* 节流渲染在 flush 中处理 */ },
+  };
+
+  async function startShrink() {
+    if (state.running) return;
+    state.running = true; state.cancelFlag = false;
+    $('startBtn').disabled = true;
+    $('cancelBtn').disabled = false;
+    $('verifyBtn').disabled = true;
+    setPill($('runPill'), 'run', '缩减中');
+    resetStats();
+    $('roundsBody').innerHTML = '';
+    state.roundEls = new Map();
+    lastYield = performance.now();
+    yieldCounter = 0;
+
+    // 进度估算用：以剩余长度变化驱动；定时刷新统计
+    const flushTimer = setInterval(flushUi, 140);
+    try {
+      const res = await R.shrink(state.model, state.base, hooks);
+      state.result = res;
+      state.keptSet = new Set(Array.from(res.alive));
+      finalizeUi(res);      if (res.status === 'cancelled') {
+        setPill($('runPill'), 'warn', '已取消 · 保留上一份可重演结果');
+        toast('已取消，保留 ' + res.alive.length + ' 个事件的可重演结果');
+      } else if (res.status === 'no-diff') {
+        setPill($('runPill'), 'warn', '无差异');
+      } else {
+        setPill($('runPill'), 'ok', '缩减完成');
+        toast('缩减完成：保留 ' + res.alive.length + ' / ' + state.model.n + ' 个事件');
+      }
+    } finally {
+      clearInterval(flushTimer);
+      state.running = false;
+      $('cancelBtn').disabled = true;
+      $('startBtn').disabled = false;
+      $('verifyBtn').disabled = false;
+      flushUi();
+    }
+  }
+
+  function flushUi() {
+    if (!state.result) {
+      // 运行中：round 引用与 addRoundEl 时一致，增量补齐试删行并刷新统计
+      let trials = 0, accepts = 0;
+      for (const [round, rec] of state.roundEls) {
+        fillRound(round, rec);
+        trials += rec.trials; accepts += rec.accepts;
+      }
+      $('stRounds').textContent = String(state.roundEls.size);
+      $('stTrials').textContent = String(trials);
+      $('stAccepts').textContent = String(accepts);
+    }
+  }
+
+  function finalizeUi(res) {
+    $('stKept').textContent = res.alive.length;
+    $('stRounds').textContent = String(res.rounds.length);
+    $('stTrials').textContent = String(res.trials);
+    $('stAccepts').textContent = String(res.accepts);
+    $('stTime').textContent = String(res.elapsedMs);
+    const removed = state.model.n - res.alive.length;
+    $('progressBar').style.width = (state.model.n ? Math.min(100, (removed / state.model.n) * 100) : 0) + '%';
+    // DOM 在运行中已增量构建；此处只做最终补齐（链场景单轮可能有上万试删，受 RENDER_CAP 限制）
+    for (const [round, rec] of state.roundEls) fillRound(round, rec);
+    renderEventTable(state.keptSet);
+  }
+
+  // ---------- 轮次 DOM（每轮独立节点，试删行限渲染，避免 5 万级 DOM 爆炸）----------
+  const RENDER_CAP = 40; // 每轮最多渲染的试删行数
+  function addRoundEl(round) {
+    const wrap = document.createElement('div');
+    wrap.className = 'round';
+    wrap.innerHTML =
+      '<div class="round-head"><span class="rk">k=' + round.k + '</span>' +
+      '<span class="meta">剩余 ' + round.mStart + ' · ' + round.sizes.length + ' 块</span>' +
+      '<span class="tally"></span><span class="spacer"></span>' +
+      '<span class="caret">▾</span></div>' +
+      '<div class="round-body"><div class="tbl-wrap"><table class="data"><thead><tr>' +
+      '<th>块</th><th>试删范围（原事件号）</th><th>级联删除</th><th>判定</th>' +
+      '<th class="mono">首次差异 #</th><th>字段</th><th>符号</th><th class="mono">旧 → 新</th>' +
+      '</tr></thead><tbody></tbody></table></div><div class="more-note" hidden></div></div>';
+    wrap.querySelector('.round-head').addEventListener('click', () => wrap.classList.toggle('collapsed'));
+    $('roundsBody').appendChild(wrap);
+    state.roundEls.set(round, { el: wrap, trials: 0, accepts: 0, rendered: 0, counted: 0, tally: [0, 0, 0, 0] });
+  }
+
+  function fillRound(round, rec) {
+    const tbody = rec.el.querySelector('tbody');
+    const note = rec.el.querySelector('.more-note');
+    const total = round.trials.length;
+    const drawTo = Math.min(total, RENDER_CAP);
+    let added = false;
+    while (rec.rendered < drawTo) {
+      const t = round.trials[rec.rendered];
+      tbody.appendChild(trialRow(rec.rendered, round, t));
+      rec.tally[t[3]] = (rec.tally[t[3]] || 0) + 1;
+      rec.rendered++;
+      added = true;
+    }
+    // 超出渲染上限的试删只累计计数，不建 DOM；已渲染的行在上面计过，避免双重计数
+    rec.counted = Math.max(rec.counted, rec.rendered);
+    while (rec.counted < total) {
+      rec.tally[round.trials[rec.counted][3]] = (rec.tally[round.trials[rec.counted][3]] || 0) + 1;
+      rec.counted++;
+      added = true;
+    }
+    if (total > RENDER_CAP) {
+      note.hidden = false;
+      note.textContent = '… 本轮共 ' + total + ' 次试删，仅渲染前 ' + RENDER_CAP + ' 行；完整数据以导出包为准';
+    }
+    rec.trials = total;
+    rec.accepts = round.accepted ? 1 : 0;
+    if (added) {
+      const head = rec.el.querySelector('.tally');
+      head.innerHTML =
+        '<span class="t0">接受 <b>' + rec.tally[0] + '</b></span>' +
+        '<span class="t1">吞见证 <b>' + rec.tally[1] + '</b></span>' +
+        '<span class="t2">无差异 <b>' + rec.tally[2] + '</b></span>' +
+        '<span class="t3">漂移 <b>' + rec.tally[3] + '</b></span>';
+      if (round.accepted) rec.el.querySelector('.round-head .rk').textContent = 'k=' + round.k + ' ✓';
+    }
+  }
+
+  function trialRow(bi, round, t) {
+    const [lo, hi, removed, verdict, evIdx, field, sign, oldV, newV] = t;
+    const range = round.ranges[bi];
+    const tr = document.createElement('tr');
+    const diffCell = evIdx >= 0
+      ? '#' + evIdx + ' <span style="color:var(--faint)">(' + escapeHtml(state.doc.events[evIdx].id) + ')</span>'
+      : '<span style="color:var(--faint)">—</span>';
+    const valCell = evIdx >= 0 ? escapeHtml(oldV) + ' → ' + escapeHtml(newV) : '<span style="color:var(--faint)">无差异</span>';
+    tr.innerHTML =
+      '<td class="mono">' + bi + '</td>' +
+      '<td class="mono">#' + range[0] + ' – #' + range[1] + ' <span style="color:var(--faint)">(' + (hi - lo) + ' 条种子)</span></td>' +
+      '<td class="mono">' + removed + '</td>' +
+      '<td class="verdict-' + verdict + '">' + R.VERDICT_LABEL[verdict].split('：')[1] + '</td>' +
+      '<td class="mono">' + diffCell + '</td>' +
+      '<td class="mono">' + (field ? escapeHtml(field) : '—') + '</td>' +
+      '<td class="mono">' + (sign ? '<span class="sign-badge">' + sign + '</span>' : '—') + '</td>' +
+      '<td class="mono">' + valCell + '</td>';
+    return tr;
+  }
+
+  // ---------- 事件表（分页）----------
+  function renderEventTable(keptSet) {
+    const n = state.model.n;
+    const pages = Math.max(1, Math.ceil(n / state.pageSize));
+    state.page = Math.min(state.page, pages - 1);
+    const start = state.page * state.pageSize;
+    const end = Math.min(n, start + state.pageSize);
+    const body = $('evBody');
+    body.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (let i = start; i < end; i++) {
+      const ev = state.doc.events[i];
+      const kept = !keptSet || keptSet.has(i);
+      const depsText = ev.deps.length ? ev.deps.map((d) => escapeHtml(d)).join(', ') : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="mono">#' + i + '</td>' +
+        '<td class="mono">' + escapeHtml(ev.id) + '</td>' +
+        '<td><span class="frame-pill">' + ev.frame + '</span></td>' +
+        '<td class="mono">' + escapeHtml(ev.kind) + '</td>' +
+        '<td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          depsText + '</td>' +
+        '<td>' + (kept ? '<span class="kept-tag">保留</span>' : '<span class="del-tag">删除</span>') + '</td>';
+      frag.appendChild(tr);
+    }
+    body.appendChild(frag);
+    $('pageInfo').textContent = '第 ' + (state.page + 1) + ' / ' + pages + ' 页 · #' + start + '–#' + (end - 1) + '（共 ' + n + '）';
+  }
+  $('prevPage').addEventListener('click', () => { if (state.page > 0) { state.page--; renderEventTable(state.keptSet); } });
+  $('nextPage').addEventListener('click', () => {
+    const pages = Math.max(1, Math.ceil(state.model.n / state.pageSize));
+    if (state.page < pages - 1) { state.page++; renderEventTable(state.keptSet); }
+  });
+
+  // ---------- 重演校验 ----------
+  $('verifyBtn').addEventListener('click', () => {
+    if (!state.result) return;
+    const rep = R.replayReduced(state.model, state.result.alive);
+    const w = state.base.witness;
+    const box = $('verifyBox');
+    box.hidden = false;
+    if (!rep.firstDiff) {
+      box.className = 'callout bad';
+      box.innerHTML = '<span>✕</span><div>独立重演未出现任何差异，缩减结果无法复现故障。</div>';
+      return;
+    }
+    const ok = rep.firstDiff.eventIndex === w.eventIndex &&
+      rep.firstDiff.field === w.field && rep.firstDiff.sign === w.sign;
+    box.className = 'callout ' + (ok ? 'ok' : 'bad');
+    box.innerHTML = (ok ? '<span>✓</span><div>' : '<span>✕</span><div>') +
+      '独立重演首次差异：事件 <b>#' + rep.firstDiff.eventIndex + '</b>（' + escapeHtml(rep.firstDiff.eventId) +
+      '）字段 <b>' + escapeHtml(rep.firstDiff.field) + '</b> 符号 <b>' + rep.firstDiff.sign +
+      '</b>，' + rep.firstDiff.oldValue + ' → ' + rep.firstDiff.nextValue +
+      (ok ? '，与锁定见证三项完全一致。' : '，与锁定见证不一致。') + '</div>';
+  });
+
+  // ---------- 导出 ----------
+  $('buildExportBtn').addEventListener('click', () => {
+    if (!state.result) return;
+    const exp = R.buildExport(state.model, state.result.alive, state.base.witness, {
+      status: state.result.status,
+      rounds: state.result.rounds.length,
+      trials: state.result.trials,
+      accepts: state.result.accepts,
+      elapsedMs: state.result.elapsedMs,
+    });
+    state.exportText = JSON.stringify(exp, null, 2);
+    $('exportBox').value = state.exportText;
+    const bytes = new Blob([state.exportText]).size;
+    $('exportMeta').innerHTML =
+      '<span>schema <b>' + exp.schema + '</b></span>' +
+      '<span>事件 <b>' + exp.events.length + ' / ' + exp.shrink.originalCount + '</b></span>' +
+      '<span>见证 <b>#' + exp.witness.eventIndex + ' · ' + escapeHtml(exp.witness.field) + ' · ' + exp.witness.sign + '</b></span>' +
+      '<span>大小 <b>' + (bytes / 1024).toFixed(1) + ' KB</b></span>' +
+      '<span>重演校验 <b style="color:' + (exp.verification.witnessReproduced ? 'var(--ok)' : 'var(--bad)') + '">' +
+        (exp.verification.witnessReproduced ? '通过' : '失败') + '</b></span>';
+    setPill($('exportPill'), exp.verification.witnessReproduced ? 'ok' : 'bad',
+      exp.verification.witnessReproduced ? '重演包已就绪' : '见证未复现');
+    $('copyExportBtn').disabled = false;
+    $('downloadBtn').disabled = false;
+    toast('重演包已生成');
+  });
+
+  $('copyExportBtn').addEventListener('click', async () => {
+    if (!state.exportText) return;
+    try {
+      await navigator.clipboard.writeText(state.exportText);
+      toast('JSON 已复制到剪贴板');
+    } catch (e) {
+      const ta = $('exportBox');
+      ta.focus(); ta.select();
+      toast('剪贴板不可用，已全选文本，请手动复制');
+    }
+  });
+
+  $('downloadBtn').addEventListener('click', () => {
+    if (!state.exportText) return;
+    const blob = new Blob([state.exportText], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'replay-witness-reduced-' + Date.now() + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('已触发下载（若被拦截请改用复制）');
+  });
+
+  // ---------- 热更新 ----------
+  try {
+    if (window.claude && window.claude.hot && window.claude.hot.ready) {
+      window.claude.hot.ready(() => {});
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
