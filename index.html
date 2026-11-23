@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>PQ 曝光校片台</title>
+  <link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+  <a class="skip" href="#main">跳到主内容</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">PQ</span>
+      <div class="brand-text">
+        <h1>曝光校片台</h1>
+        <p>HDR · PQ / BT.2020 → SDR 逐帧曝光</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="btn primary" for="file-zip">
+        导入 ZIP
+        <input id="file-zip" type="file" accept=".zip,application/zip" hidden>
+      </label>
+      <label class="btn" for="file-raw">
+        导入文件…
+        <input id="file-raw" type="file" multiple accept=".json,.rgb10" hidden>
+      </label>
+      <button id="load-sample" class="btn" type="button">载入示例</button>
+      <button id="theme-toggle" class="btn icon" type="button" title="切换明暗" aria-label="切换明暗主题">
+        <span aria-hidden="true">◐</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" role="alert" hidden>
+    <span class="banner-icon" aria-hidden="true">▲</span>
+    <div class="banner-body">
+      <strong id="banner-title"></strong><span id="banner-text"></span>
+      <ul id="banner-list" hidden></ul>
+    </div>
+    <div class="banner-actions" id="banner-actions"></div>
+  </div>
+
+  <main id="main">
+    <section class="card preview-card" aria-labelledby="h-preview">
+      <div class="card-head">
+        <h2 id="h-preview">SDR 对照</h2>
+        <div class="legend-inline" aria-label="颜色图例">
+          <span class="chip"><i class="sw sw-suggested"></i>建议曝光</span>
+          <span class="chip"><i class="sw sw-actual"></i>实际曝光</span>
+        </div>
+        <div class="head-actions">
+          <button id="png-suggested" class="btn sm" type="button" disabled>建议帧 PNG</button>
+          <button id="png-actual" class="btn sm" type="button" disabled>实际帧 PNG</button>
+        </div>
+      </div>
+
+      <div class="canvas-pair">
+        <figure>
+          <div class="canvas-frame"><canvas id="cv-suggested" role="img" aria-label="按建议曝光的 SDR 画面"></canvas></div>
+          <figcaption><span>建议曝光 <b id="cap-sugg">—</b></span><span id="cap-note" class="cap-note"></span></figcaption>
+        </figure>
+        <figure>
+          <div class="canvas-frame"><canvas id="cv-actual" role="img" aria-label="按实际曝光的 SDR 画面"></canvas></div>
+          <figcaption>实际曝光 <b id="cap-act">—</b></figcaption>
+        </figure>
+      </div>
+
+      <div class="transport">
+        <button id="prev-shot" class="btn icon" type="button" title="上一镜头 ( [ )" aria-label="上一镜头">⏮</button>
+        <button id="prev" class="btn icon" type="button" title="上一帧 ( ← )" aria-label="上一帧">◀</button>
+        <input id="scrub" class="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="帧位置">
+        <button id="next" class="btn icon" type="button" title="下一帧 ( → )" aria-label="下一帧">▶</button>
+        <button id="next-shot" class="btn icon" type="button" title="下一镜头 ( ] )" aria-label="下一镜头">⏭</button>
+        <div class="frame-jump">
+          <label for="frame-input">帧</label>
+          <input id="frame-input" type="number" min="0" step="1" value="0" inputmode="numeric">
+          <span class="muted">/ <b id="frame-total">0</b></span>
+        </div>
+      </div>
+
+      <dl class="meta-grid" id="frame-meta">
+        <div><dt>时间</dt><dd id="m-time">—</dd></div>
+        <div><dt>原 PTS</dt><dd id="m-pts">—</dd></div>
+        <div><dt>帧持续</dt><dd id="m-dur">—</dd></div>
+        <div><dt>P95</dt><dd id="m-p95">—</dd></div>
+        <div><dt>建议</dt><dd id="m-sugg">—</dd></div>
+        <div><dt>实际</dt><dd id="m-act">—</dd></div>
+        <div><dt>偏差 Δ</dt><dd id="m-delta">—</dd></div>
+        <div><dt>镜头</dt><dd id="m-shot">—</dd></div>
+      </dl>
+
+      <div class="edit-row">
+        <span class="edit-label">本帧</span>
+        <label>权重 <input id="weight-input" type="number" min="1" max="100" step="1" value="1" inputmode="numeric"></label>
+        <button id="weight-apply" class="btn sm" type="button">应用权重</button>
+        <span class="sep" aria-hidden="true"></span>
+        <label>锁值 <input id="lock-input" type="number" min="-96" max="96" step="1" inputmode="numeric"></label>
+        <button id="lock-apply" class="btn sm" type="button">锁定本帧</button>
+        <button id="lock-clear" class="btn sm ghost" type="button">解除</button>
+      </div>
+
+      <div class="edit-row">
+        <span class="edit-label">批量</span>
+        <label>权重 <input id="wr-from" type="number" min="0" step="1" inputmode="numeric" placeholder="起"></label>
+        <span class="muted">–</span>
+        <label class="sr-only" for="wr-to">止帧</label>
+        <input id="wr-to" type="number" min="0" step="1" inputmode="numeric" placeholder="止">
+        <span class="muted">=</span>
+        <label class="sr-only" for="wr-val">权重值</label>
+        <input id="wr-val" type="number" min="1" max="100" step="1" value="1" inputmode="numeric">
+        <button id="wr-apply" class="btn sm" type="button">应用范围</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button id="cut-here" class="btn sm" type="button">在帧 0 切分</button>
+      </div>
+    </section>
+
+    <section class="card curve-card" aria-labelledby="h-curve">
+      <div class="card-head">
+        <h2 id="h-curve">曝光曲线</h2>
+        <div class="legend" aria-label="图例">
+          <span class="chip"><i class="sw sw-suggested"></i>建议</span>
+          <span class="chip"><i class="sw sw-actual"></i>实际</span>
+          <span class="chip"><i class="sw sw-lock"></i>锁定</span>
+          <span class="chip"><i class="sw sw-cut"></i>切点</span>
+        </div>
+        <div class="stat"><span class="muted">目标值</span><b id="objective">—</b></div>
+      </div>
+      <div class="chart-wrap" id="chart-wrap">
+        <svg id="curve" role="img" tabindex="0" aria-label="逐帧曝光曲线，可用方向键逐帧移动"></svg>
+        <div id="tooltip" class="tooltip" hidden></div>
+      </div>
+      <div class="weight-strip">
+        <span class="axis-label">权重</span>
+        <svg id="weights" aria-hidden="true"></svg>
+      </div>
+      <div class="shots" id="shots" aria-label="镜头列表"></div>
+    </section>
+
+    <section class="card table-card" aria-labelledby="h-table">
+      <div class="card-head">
+        <h2 id="h-table">曝光表</h2>
+        <span class="muted" id="table-note">尚未导入片段</span>
+        <div class="head-actions">
+          <button id="export-json" class="btn sm primary" type="button" disabled>下载曝光表 JSON</button>
+        </div>
+      </div>
+      <div class="table-scroll" id="table-scroll">
+        <table id="exposure-table">
+          <caption class="sr-only">全片逐帧曝光表，PTS 与帧持续时间保持源文件数值</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="num">帧</th>
+              <th scope="col" class="num">原 PTS (µs)</th>
+              <th scope="col" class="num">帧持续 (µs)</th>
+              <th scope="col" class="num">P95 (mN)</th>
+              <th scope="col" class="num">建议</th>
+              <th scope="col" class="num">实际</th>
+              <th scope="col" class="num">Δ</th>
+              <th scope="col" class="num">权重</th>
+              <th scope="col" class="num">锁</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="muted">←/→ 逐帧 · Shift 加速 · [ ] 镜头 · L 锁定 · P 实际帧 PNG · E 曝光表</span>
+    <span class="foot-right">
+      <span id="status" class="status" role="status" aria-live="polite">就绪</span>
+      <span id="timing" class="muted"></span>
+    </span>
+  </footer>
+
+  <script src="src/core.js"></script>
+  <script src="src/zip.js"></script>
+  <script src="src/sample.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
