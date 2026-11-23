@@ -1,0 +1,1 @@
+{"types":{"map":{"points":1,"tickets":0,"badges":["route"]},"camp":{"points":0,"tickets":1,"badges":[]},"seal":{"points":2,"tickets":-1,"badges":["seal"]}},"unknown":{"map":2,"camp":2,"seal":1},"tail":[],"start":{"points":0,"tickets":0,"badges":[]},"rounds":3,"goal":{"points":2,"badges":["seal"]},"rules":"无牌或拍数耗尽且尚未达标则失败；揭示数固定为 min(2,当下总剩余张数)。选择按位置，下标从0开始。"}
