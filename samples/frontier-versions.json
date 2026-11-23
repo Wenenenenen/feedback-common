@@ -1,0 +1,1 @@
+{"rows":["AAAA","A..A","ABBA","AAAA"],"edits":[{"parent":0,"x":1,"y":0,"value":"."},{"parent":0,"x":1,"y":2,"value":"A"}],"queries":[{"version":0,"x":1,"y":1},{"version":1,"x":1,"y":1}]}
