@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨区演练台 · zone handoff</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171c22; --panel2: #1e252d; --line: #2c3641;
+    --text: #e6edf3; --muted: #8b98a5; --accent: #6ea8fe; --ok: #4cc38a;
+    --warn: #e0b341; --bad: #f0716b; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: baseline;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .04em; font-weight: 600; }
+  header .hint { color: var(--muted); font-size: 12px; }
+  .pill {
+    font: 12px var(--mono); padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel2); color: var(--muted);
+  }
+  .pill.on { border-color: var(--warn); color: var(--warn); }
+  .pill.good { border-color: var(--ok); color: var(--ok); }
+  .pill.bad { border-color: var(--bad); color: var(--bad); }
+  main { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 16px; padding: 16px 20px 32px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  section.panel > h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel2);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  section.panel > .body { padding: 14px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  input, select, button { font: inherit; }
+  input, select {
+    width: 100%; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line);
+    background: #0c1014; color: var(--text); font-family: var(--mono); font-size: 13px;
+  }
+  input:focus, select:focus { outline: 2px solid #2f4a6d; outline-offset: 0; }
+  .grid { display: grid; gap: 10px; }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  button {
+    padding: 7px 12px; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--panel2); color: var(--text); cursor: pointer; font-size: 13px;
+    transition: background .12s, border-color .12s;
+  }
+  button:hover:not(:disabled) { background: #26303a; border-color: #3b4a59; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: #24456f; border-color: #35608f; }
+  button.primary:hover:not(:disabled) { background: #2b5183; }
+  button.danger { background: #4a2426; border-color: #6d3336; }
+  button.danger:hover:not(:disabled) { background: #5a2b2d; }
+  button.warn { background: #4a3d1c; border-color: #6d5a28; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 auto; }
+  .row.tight > * { flex: 0 0 auto; }
+  table { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #232c35; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--panel); }
+  tbody tr:hover { background: #1b222a; }
+  .scroll { overflow: auto; max-height: 320px; }
+  .badge { font: 11px var(--mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  .badge.frozen { color: var(--warn); border-color: #6d5a28; background: #2a2413; }
+  .badge.confirmed { color: var(--accent); border-color: #35507a; background: #16233a; }
+  .badge.committed { color: var(--ok); border-color: #2d6b4f; background: #142a20; }
+  .badge.aborted, .badge.ended { color: var(--muted); }
+  .badge.begun { color: var(--accent); }
+  .console {
+    font: 12px/1.55 var(--mono); background: #0b0e12; border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px; max-height: 240px; overflow: auto; white-space: pre-wrap;
+  }
+  .console .t { color: #5a6875; }
+  .console .ok { color: var(--ok); }
+  .console .err { color: var(--bad); }
+  .console .warn { color: var(--warn); }
+  .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 3px 0; color: var(--muted); }
+  .kv b { color: var(--text); font-weight: 500; font-family: var(--mono); }
+  .offline { position: fixed; inset: auto 16px 16px auto; background: #4a2426; border: 1px solid #6d3336;
+    padding: 10px 14px; border-radius: 9px; font-size: 12px; max-width: 380px; display: none; }
+  .offline.show { display: block; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { flex: 1 1 0; }
+  .seg button.active { border-color: var(--warn); color: var(--warn); background: #2a2413; }
+  code { font-family: var(--mono); color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>跨区演练台</h1>
+  <span class="hint">冻结 → 确认 → 提交 · 提交换归属+纪元 · 取消只在提交前 · 同序号重试幂等</span>
+  <span class="pill" id="pillConn">连接中…</span>
+  <span class="pill" id="pillJournal">日志 0 B</span>
+  <span class="pill" id="pillCrash">崩溃点：无</span>
+  <span class="pill" id="pillRecovery" hidden></span>
+</header>
+
+<main>
+  <div class="grid" style="align-content:start">
+    <section class="panel">
+      <h2>动作 <span class="pill" id="pillNextSeq">seq –</span></h2>
+      <div class="body grid">
+        <div class="grid g2">
+          <div>
+            <label for="aEntity">实体</label>
+            <select id="aEntity"></select>
+          </div>
+          <div>
+            <label for="aZone">归属区</label>
+            <select id="aZone"><option>east</option><option>west</option><option>north</option><option>south</option></select>
+          </div>
+        </div>
+        <div class="grid g3">
+          <div>
+            <label for="aEpoch">纪元 epoch</label>
+            <input id="aEpoch" type="number" min="0" value="0">
+          </div>
+          <div>
+            <label for="aSeq">序号 seq</label>
+            <input id="aSeq" type="number" min="1" value="1">
+          </div>
+          <div>
+            <label for="aDelta">增量 ±1000000</label>
+            <input id="aDelta" type="number" value="1">
+          </div>
+        </div>
+        <div class="row tight">
+          <button class="primary" id="btnAction">发送动作</button>
+          <button id="btnRetryFrozen" disabled title="用冻结时保留的同一序号重试">重试冻结序号</button>
+          <button id="btnFill">填入当前归属/纪元/下一序号</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>切区 <span class="pill" id="pillMoveStatus">–</span></h2>
+      <div class="body grid">
+        <div class="grid g2">
+          <div>
+            <label for="mEntity">实体</label>
+            <select id="mEntity"></select>
+          </div>
+          <div>
+            <label for="mMove">迁移号</label>
+            <input id="mMove" value="h1">
+          </div>
+        </div>
+        <div>
+          <label for="mTo">目标区</label>
+          <select id="mTo"><option>west</option><option>east</option><option>north</option><option>south</option></select>
+        </div>
+        <div class="seg">
+          <button id="btnBegin" class="primary">冻结 begin</button>
+          <button id="btnConfirm">确认 confirm</button>
+          <button id="btnCommit" class="warn">提交 commit</button>
+          <button id="btnAbort" class="danger">取消 abort</button>
+        </div>
+        <div class="hint" style="color:var(--muted);font-size:12px">
+          同一实体只允许一笔进行中的切区；已终结的迁移号不能复用，重试返回原步骤结果。
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>模拟进程中断</h2>
+      <div class="body grid">
+        <div class="hint" style="color:var(--muted);font-size:12px">
+          选定步骤后，下一次该步骤<b>落盘成功、应答发出前</b>进程直接退出。重启后应恢复到该步骤已完成的状态。
+        </div>
+        <div class="seg" id="crashSeg">
+          <button data-crash="">关闭</button>
+          <button data-crash="begin">冻结后</button>
+          <button data-crash="confirm">确认后</button>
+          <button data-crash="commit">提交后</button>
+          <button data-crash="action">动作后</button>
+        </div>
+        <div class="row tight">
+          <button id="btnRestartHint" title="查看重启命令">重启命令</button>
+        </div>
+        <div class="console" id="restartHint" hidden>自动恢复（推荐，崩溃后由守护进程重启）：
+  ./scripts/dev.sh supervise
+手动重启：
+  ./scripts/dev.sh restart
+前台直接运行：
+  ./scripts/dev.sh run</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>实体 <button id="btnRefresh" style="padding:2px 8px;font-size:11px">刷新</button></h2>
+      <div class="body scroll" style="padding:0">
+        <table>
+          <thead><tr><th>实体</th><th>区</th><th>纪元</th><th>序号</th><th>值</th><th>状态</th></tr></thead>
+          <tbody id="entitiesBody"><tr><td colspan="6" style="color:var(--muted)">–</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>迁移</h2>
+      <div class="body scroll" style="padding:0">
+        <table>
+          <thead><tr><th>迁移</th><th>实体</th><th>从</th><th>到</th><th>状态</th></tr></thead>
+          <tbody id="movesBody"><tr><td colspan="5" style="color:var(--muted)">–</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid" style="align-content:start">
+    <section class="panel">
+      <h2>应答 <span class="pill" id="pillLast">–</span></h2>
+      <div class="body"><div class="console" id="console"></div></div>
+    </section>
+
+    <section class="panel">
+      <h2>日志 <span class="pill" id="pillLogCount">0 帧</span>
+        <span class="row tight" style="gap:6px">
+          <button id="btnLogTail" style="padding:2px 8px;font-size:11px">尾页</button>
+          <button id="btnLogOlder" style="padding:2px 8px;font-size:11px">前一页</button>
+          <button id="btnLogNewer" style="padding:2px 8px;font-size:11px">后一页</button>
+        </span>
+      </h2>
+      <div class="body" style="padding:0">
+        <div class="scroll" style="max-height:440px">
+          <table>
+            <thead><tr><th>#</th><th>op</th><th>实体</th><th>迁移</th><th>seq</th><th>区</th><th>纪元</th><th>值</th><th>delta</th><th>状态</th><th>ts</th></tr></thead>
+            <tbody id="logBody"><tr><td colspan="11" style="color:var(--muted)">–</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>恢复信息</h2>
+      <div class="body" id="recoveryBody"></div>
+    </section>
+  </div>
+</main>
+
+<div class="offline" id="offline">
+  <b>服务不可达</b><br>
+  若刚触发模拟中断，进程已按设计退出（落盘成功、应答未发）。
+  用 <code>./scripts/dev.sh supervise</code> 启动可自动重启并恢复到对应阶段；
+  手动重启用 <code>./scripts/dev.sh restart</code>。页面会自动重连。
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const state = { entities: [], moves: [], crashPoint: "", logFrom: -1, logFollow: true, logPageSize: 200, frozen: null, lastReply: null };
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function fmtTime(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  return d.toLocaleTimeString("zh-CN", { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
+}
+function fmtBytes(n) {
+  if (n == null) return "–";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KiB";
+  return (n / 1048576).toFixed(2) + " MiB";
+}
+
+const consoleEl = $("console");
+function logLine(kind, text) {
+  const el = document.createElement("div");
+  el.innerHTML = `<span class="t">${fmtTime(Date.now())}</span> <span class="${kind}">${esc(text)}</span>`;
+  consoleEl.prepend(el);
+  while (consoleEl.childElementCount > 200) consoleEl.lastElementChild.remove();
+}
+
+function setConn(ok) {
+  const p = $("pillConn");
+  p.textContent = ok ? "已连接" : "不可达";
+  p.className = "pill " + (ok ? "good" : "bad");
+  $("offline").classList.toggle("show", !ok);
+}
+
+async function api(path, opts) {
+  let res;
+  try {
+    res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+  } catch (e) {
+    // Network failure is expected right after a simulated crash; callers treat
+    // it as an unreachable server.
+    return { status: 0, ok: false, network: true, data: { error: { code: "unreachable", message: String(e) } } };
+  }
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+  return { status: res.status, ok: res.ok, data };
+}
+
+async function sendAction(req) {
+  const r = await api("/api/action", { method: "POST", body: JSON.stringify(req) });
+  handleActionReply(req, r);
+  refreshAll();
+  return r;
+}
+function handleActionReply(req, r) {
+  if (r.ok) {
+    state.frozen = null;
+    $("btnRetryFrozen").disabled = true;
+    const d = r.data;
+    logLine("ok", `action ${d.id} seq=${d.seq} ${d.zone}/${d.epoch} value=${d.value} (delta ${d.delta >= 0 ? "+" : ""}${d.delta})`);
+    $("pillLast").textContent = `seq ${d.seq}`;
+    state.lastReply = d;
+  } else {
+    const e = r.data?.error;
+    if (e?.code === "entity_frozen") {
+      state.frozen = { id: req.id, zone: req.zone, epoch: req.epoch, seq: req.seq, delta: req.delta };
+      $("btnRetryFrozen").disabled = false;
+      logLine("warn", `action ${req.id} seq=${req.seq} 被冻结拒绝（可重试），保留序号 ${e.expected_seq ?? req.seq}`);
+      if (e.expected_seq != null) $("aSeq").value = req.seq;
+    } else if (e) {
+      logLine("err", `${e.code}: ${e.message}${e.retryable ? "（可重试）" : ""}`);
+    } else {
+      logLine("err", `HTTP ${r.status} ${JSON.stringify(r.data)}`);
+    }
+  }
+}
+
+async function refreshAll() {
+  try {
+    const from = state.logFollow ? -1 : state.logFrom;
+    const [s, l] = await Promise.all([
+      api("/api/state"),
+      api(`/api/log?from=${from}&limit=${state.logPageSize}`),
+    ]);
+    if (!s.ok) throw new Error("state");
+    applyState(s.data);
+    if (l.ok) applyLog(l.data);
+    setConn(true);
+    return true;
+  } catch (e) {
+    setConn(false);
+    return false;
+  }
+}
+
+function applyState(d) {
+  state.entities = d.entities || [];
+  state.moves = d.moves || [];
+  state.crashPoint = d.crash_point || "";
+  $("pillJournal").textContent = "日志 " + fmtBytes(d.journal_bytes);
+  const pc = $("pillCrash");
+  pc.textContent = "崩溃点：" + (state.crashPoint || "无");
+  pc.className = "pill " + (state.crashPoint ? "on" : "");
+  for (const b of $("crashSeg").querySelectorAll("button")) {
+    b.classList.toggle("active", (b.dataset.crash || "") === state.crashPoint);
+  }
+  const rec = d.recovery || {};
+  const pr = $("pillRecovery");
+  if (rec.torn_tail) {
+    pr.hidden = false;
+    pr.textContent = `已丢弃残尾 ${rec.truncated_bytes} B`;
+    pr.className = "pill on";
+  } else { pr.hidden = true; }
+  $("recoveryBody").innerHTML = `
+    <div class="kv"><span>重放帧数</span><b>${rec.frames ?? 0}</b></div>
+    <div class="kv"><span>实体数</span><b>${rec.entities ?? 0}</b></div>
+    <div class="kv"><span>残尾</span><b>${rec.torn_tail ? "已截断 " + rec.truncated_bytes + " B" : "无"}</b></div>
+    <div class="kv"><span>日志字节</span><b>${fmtBytes(d.journal_bytes)}</b></div>
+    <div class="kv"><span>运行时长</span><b>${d.uptime_seconds ?? 0}s</b></div>`;
+
+  fillEntitySelects();
+  renderEntities();
+  renderMoves();
+  syncFrozenRetry();
+  syncActionDefaults();
+}
+
+function fillEntitySelects() {
+  for (const id of ["aEntity", "mEntity"]) {
+    const sel = $(id);
+    const prev = sel.value;
+    sel.innerHTML = state.entities.map((e) => `<option value="${esc(e.id)}">${esc(e.id)}</option>`).join("");
+    if (prev && state.entities.some((e) => e.id === prev)) sel.value = prev;
+  }
+}
+
+function entityById(id) { return state.entities.find((e) => e.id === id); }
+
+function syncActionDefaults() {
+  const en = entityById($("aEntity").value);
+  if (!en) return;
+  $("pillNextSeq").textContent = "seq " + (en.seq + 1);
+  $("aZone").value = en.zone;
+  $("aEpoch").value = en.epoch;
+  const cur = Number($("aSeq").value || 0);
+  if (!cur || cur <= en.seq) $("aSeq").value = en.seq + 1;
+}
+
+function renderEntities() {
+  const tb = $("entitiesBody");
+  if (!state.entities.length) { tb.innerHTML = `<tr><td colspan="6" style="color:var(--muted)">–</td></tr>`; return; }
+  tb.innerHTML = state.entities.map((e) => `
+    <tr>
+      <td>${esc(e.id)}</td><td>${esc(e.zone)}</td><td>${e.epoch}</td><td>${e.seq}</td><td>${e.value}</td>
+      <td>${e.frozen ? `<span class="badge frozen">冻结 ${esc(e.move)}</span>` : `<span class="badge">可写</span>`}</td>
+    </tr>`).join("");
+}
+
+function renderMoves() {
+  const tb = $("movesBody");
+  if (!state.moves.length) { tb.innerHTML = `<tr><td colspan="5" style="color:var(--muted)">–</td></tr>`; return; }
+  tb.innerHTML = state.moves.map((m) => `
+    <tr><td>${esc(m.id)}</td><td>${esc(m.entity)}</td><td>${esc(m.from)}</td><td>${esc(m.to)}</td>
+      <td><span class="badge ${esc(m.status)}">${esc(m.status)}</span></td></tr>`).join("");
+}
+
+function currentMove() {
+  const id = $("mEntity").value, mv = $("mMove").value.trim();
+  return state.moves.find((m) => m.entity === id && m.id === mv) || null;
+}
+
+function syncFrozenRetry() {
+  const m = currentMove();
+  const p = $("pillMoveStatus");
+  if (!m) { p.textContent = "无迁移"; p.className = "pill"; return; }
+  p.textContent = m.status;
+  p.className = "pill " + (m.status === "committed" ? "good" : m.status === "aborted" ? "" : "on");
+}
+
+function applyLog(d) {
+  const recs = d.records || [];
+  $("pillLogCount").textContent = `${d.total} 帧`;
+  state.logFrom = d.from ?? 0;
+  const tb = $("logBody");
+  if (!recs.length) { tb.innerHTML = `<tr><td colspan="11" style="color:var(--muted)">暂无日志</td></tr>`; return; }
+  tb.innerHTML = recs.map(({ index, record: r }) => `
+    <tr>
+      <td>${index}</td>
+      <td>${esc(r.op)}</td>
+      <td>${esc(r.id ?? "")}</td>
+      <td>${esc(r.move ?? "")}</td>
+      <td>${r.seq ?? ""}</td>
+      <td>${esc(r.zone ?? "")}</td>
+      <td>${r.epoch ?? ""}</td>
+      <td>${r.value ?? ""}</td>
+      <td>${r.delta ?? ""}</td>
+      <td><span class="badge ${esc(r.status || r.op)}">${esc(r.status || r.op)}</span></td>
+      <td>${fmtTime(r.ts)}</td>
+    </tr>`).join("");
+}
+
+// ---- action form ----
+$("btnAction").onclick = () => {
+  const req = {
+    id: $("aEntity").value,
+    zone: $("aZone").value,
+    epoch: Number($("aEpoch").value),
+    seq: Number($("aSeq").value),
+    delta: Number($("aDelta").value),
+  };
+  logLine("", `→ action ${req.id} seq=${req.seq} ${req.zone}/${req.epoch} delta=${req.delta}`);
+  sendAction(req);
+};
+$("btnRetryFrozen").onclick = () => {
+  if (!state.frozen) return;
+  // The seq is preserved, but ownership may have moved: retry from whatever
+  // zone/epoch the entity has now.
+  const en = entityById(state.frozen.id);
+  const req = {
+    id: state.frozen.id,
+    zone: en ? en.zone : state.frozen.zone,
+    epoch: en ? en.epoch : state.frozen.epoch,
+    seq: state.frozen.seq,
+    delta: state.frozen.delta,
+  };
+  logLine("", `→ 重试冻结的 action ${req.id} seq=${req.seq} @ ${req.zone}/${req.epoch}`);
+  sendAction(req);
+};
+$("btnFill").onclick = () => { syncActionDefaults(); };
+$("aEntity").addEventListener("change", () => { $("aSeq").value = ""; syncActionDefaults(); syncFrozenRetry(); });
+for (const id of ["mEntity", "mMove"]) {
+  $(id).addEventListener("input", syncFrozenRetry);
+  $(id).addEventListener("change", syncFrozenRetry);
+}
+
+// ---- move buttons ----
+async function sendMove(op) {
+  const req = { op, id: $("mEntity").value, move: $("mMove").value.trim(), to: $("mTo").value };
+  logLine("", `→ ${op} ${req.id} ${req.move}${op === "begin" ? " → " + req.to : ""}`);
+  const r = await api("/api/move", { method: "POST", body: JSON.stringify(req) });
+  if (r.ok) {
+    const d = r.data;
+    const en = d.entity;
+    logLine("ok", `${d.op} ${d.move.id}: ${d.move.status} · ${en.zone}/${en.epoch} seq=${en.seq}${en.frozen ? " 冻结中" : ""}`);
+    $("pillLast").textContent = `${d.op} ${d.move.status}`;
+  } else if (r.data?.error) {
+    const e = r.data.error;
+    logLine("err", `${e.code}: ${e.message}${e.retryable ? "（可重试）" : ""}`);
+  } else {
+    logLine("err", `HTTP ${r.status}`);
+  }
+  refreshAll();
+}
+$("btnBegin").onclick = () => sendMove("begin");
+$("btnConfirm").onclick = () => sendMove("confirm");
+$("btnCommit").onclick = () => sendMove("commit");
+$("btnAbort").onclick = () => sendMove("abort");
+
+// ---- crash simulation ----
+$("crashSeg").onclick = async (ev) => {
+  const b = ev.target.closest("button[data-crash]");
+  if (!b) return;
+  const op = b.dataset.crash || "";
+  const r = await api("/api/crash", { method: "POST", body: JSON.stringify({ op }) });
+  if (r.ok) {
+    state.crashPoint = r.data.crash_point || "";
+    logLine(state.crashPoint ? "warn" : "ok", state.crashPoint
+      ? `已布置崩溃点：下一次「${state.crashPoint}」落盘后、应答前退出进程`
+      : "已关闭崩溃点");
+    refreshAll();
+  } else {
+    logLine("err", "布置崩溃点失败");
+  }
+};
+$("btnRestartHint").onclick = () => { const el = $("restartHint"); el.hidden = !el.hidden; };
+
+// ---- log paging ----
+$("btnLogTail").onclick = async () => {
+  state.logFollow = true;
+  const r = await api(`/api/log?from=-1&limit=${state.logPageSize}`);
+  if (r.ok) { $("pillLogCount").textContent = `${r.data.total} 帧`; applyLog(r.data); }
+};
+$("btnLogOlder").onclick = async () => {
+  state.logFollow = false;
+  state.logFrom = Math.max(0, (state.logFrom ?? 0) - state.logPageSize);
+  refreshAll();
+};
+$("btnLogNewer").onclick = async () => {
+  state.logFrom = (state.logFrom ?? 0) + state.logPageSize;
+  const r = await api(`/api/log?from=${state.logFrom}&limit=${state.logPageSize}`);
+  if (r.ok && Array.isArray(r.data.records) && r.data.records.length) {
+    state.logFollow = r.data.from + state.logPageSize >= r.data.total;
+    applyLog(r.data);
+  } else {
+    state.logFollow = true;
+    state.logFrom = -1;
+    refreshAll();
+  }
+};
+$("btnRefresh").onclick = () => refreshAll();
+
+// ---- boot ----
+logLine("ok", "演练台已就绪。动作按 seq 顺序提交；冻结时保留序号，待提交后重试同一序号。");
+refreshAll();
+setInterval(refreshAll, 2000);
+</script>
+</body>
+</html>

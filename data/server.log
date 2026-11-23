@@ -1,0 +1,124 @@
+zone-handoff 2026/11/23 10:42:27.688163 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:42:27.688288 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:42:43.642473 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:42:43.723265 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:42:43.723497 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:42:47.699409 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:42:47.778900 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:42:47.779116 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:42:52.434517 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:42:52.718731 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 20000 frames, entities=1, torn_tail=false truncated=0B, size=5853481B
+zone-handoff 2026/11/23 10:42:52.718866 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:42:58.366387 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:42:58.542795 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:42:58.542914 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:42:58.941945 simulated crash at "begin": frame durable, exiting without reply
+zone-handoff 2026/11/23 10:42:59.324829 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 2 frames, entities=1, torn_tail=false truncated=0B, size=600B
+zone-handoff 2026/11/23 10:42:59.324980 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:43:04.151617 simulated crash at "commit": frame durable, exiting without reply
+zone-handoff 2026/11/23 10:43:04.431387 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 4 frames, entities=1, torn_tail=false truncated=0B, size=1263B
+zone-handoff 2026/11/23 10:43:04.431520 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:43:43.377085 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:43:43.684951 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:43:43.685213 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:44:06.359197 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:44:06.433073 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:44:06.433179 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:44:35.380926 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:44:35.734188 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 4 frames, entities=1, torn_tail=false truncated=0B, size=1263B
+zone-handoff 2026/11/23 10:44:35.734395 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:45:19.919800 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:45:19.998481 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:45:19.998673 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:45:25.339305 simulated crash at "action": frame durable, exiting without reply
+zone-handoff 2026/11/23 10:45:28.488122 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 6 frames, entities=1, torn_tail=false truncated=0B, size=1833B
+zone-handoff 2026/11/23 10:45:28.488361 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:55:52.244606 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:55:52.637596 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:55:52.637760 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:56:44.764894 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:56:44.960779 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:56:44.961043 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:57:05.217767 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:57:05.396576 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:57:05.396708 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:57:46.708123 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:57:47.125420 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:57:47.125630 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 10:59:40.774645 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 10:59:40.961158 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 10:59:40.961377 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:00:24.082925 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:00:24.263392 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:00:24.263568 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:00:34.935679 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:00:35.115117 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:00:35.115243 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:00:56.368185 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:00:56.544897 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:00:56.545162 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:04:56.301459 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:04:56.704574 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:04:56.704800 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:07:27.564120 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:07:28.006577 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:07:28.006710 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:07:28.574936 simulated crash at "confirm": frame durable, exiting without reply
+zone-handoff 2026/11/23 11:07:28.851092 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 3 frames, entities=1, torn_tail=false truncated=0B, size=933B
+zone-handoff 2026/11/23 11:07:28.851378 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:07:29.487343 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:07:29.557302 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 4 frames, entities=1, torn_tail=true truncated=3B, size=1263B
+zone-handoff 2026/11/23 11:07:29.557580 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:07:42.046533 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:07:42.124644 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:07:42.124773 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:07:43.121245 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:07:43.285596 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:07:43.285717 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:07:44.121233 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:07:44.409306 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 20000 frames, entities=1, torn_tail=false truncated=0B, size=5853481B
+zone-handoff 2026/11/23 11:07:44.409469 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:08:12.188672 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:08:12.353339 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:08:12.353430 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:11:00.854936 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:11:01.332917 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:11:01.333102 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:11:42.253583 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:12:18.358798 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:12:18.359134 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:12:23.798196 simulated crash at "action": frame durable, exiting without reply
+zone-handoff 2026/11/23 11:12:27.065767 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 6 frames, entities=1, torn_tail=false truncated=0B, size=1833B
+zone-handoff 2026/11/23 11:12:27.066048 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:12:41.009377 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:12:41.449025 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 7 frames, entities=1, torn_tail=false truncated=0B, size=2118B
+zone-handoff 2026/11/23 11:12:41.449137 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:13:26.257997 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:13:26.343937 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:13:26.344250 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:13:31.797804 simulated crash at "action": frame durable, exiting without reply
+zone-handoff 2026/11/23 11:13:35.032955 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 6 frames, entities=1, torn_tail=false truncated=0B, size=1833B
+zone-handoff 2026/11/23 11:13:35.033363 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:15:20.081061 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:15:20.563163 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:15:20.563403 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:15:21.178606 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:15:21.281803 recover journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: wal: corrupt frame in middle of log at offset 550: crc 943a89db != 7fa20a1c
+zone-handoff 2026/11/23 11:15:31.484525 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:15:31.484776 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:15:32.019432 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:15:36.373211 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:15:36.373399 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:15:36.718823 stopped cleanly; journal 825 bytes
+zone-handoff 2026/11/23 11:16:10.016292 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:16:10.016491 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:16:15.036930 stopped cleanly; journal 5853481 bytes
+zone-handoff 2026/11/23 11:16:15.271720 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:16:15.271989 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:16:30.929184 stopped cleanly; journal 0 bytes
+zone-handoff 2026/11/23 11:16:31.366201 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 0 frames, entities=1, torn_tail=false truncated=0B, size=0B
+zone-handoff 2026/11/23 11:16:31.366315 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:16:32.501368 stopped cleanly; journal 5853481 bytes
+zone-handoff 2026/11/23 11:16:32.804146 journal /home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal: replayed 20000 frames, entities=1, torn_tail=false truncated=0B, size=5853481B
+zone-handoff 2026/11/23 11:16:32.804345 listening on :8080 (journal=/home/wendy/jianzhi/feedback-tasks/zone-handoff-recovery/data/journal.wal)
+zone-handoff 2026/11/23 11:16:38.786692 stopped cleanly; journal 5853481 bytes
