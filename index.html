@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>法线高度恢复台</title>
+<style>
+/* ---------------------------------------------------------------
+   设计计划（工程仪表台，深色优先）
+   颜色：深石板底 + 青蓝主色 + 琥珀警示 + 品红/翠绿语义色
+   字体：系统 UI 字体族，数据列 tabular-nums
+   布局：左控制栏 / 中央画布 / 右检视栏，窄屏纵向堆叠
+---------------------------------------------------------------- */
+:root {
+  --bg: #0e141b;
+  --bg-raise: #151d27;
+  --bg-card: #1a2430;
+  --border: #283544;
+  --fg: #dce4ec;
+  --fg-dim: #8fa0b2;
+  --fg-faint: #5f7185;
+  --accent: #39c2c9;
+  --accent-strong: #5bd9e0;
+  --warn: #e8a84a;
+  --bad: #f0648a;
+  --good: #55d48f;
+  --res-pos: #f0648a;
+  --res-neg: #5aa0f0;
+  --hole: #0a0f15;
+  --shadow: 0 6px 22px rgba(0, 0, 0, .35);
+  --radius: 10px;
+  --font: "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f3f5f8;
+    --bg-raise: #ffffff;
+    --bg-card: #ffffff;
+    --border: #d4dce5;
+    --fg: #1c2836;
+    --fg-dim: #56677a;
+    --fg-faint: #8495a6;
+    --accent: #0f8f96;
+    --accent-strong: #0b7a80;
+    --warn: #b97a1e;
+    --bad: #d23b66;
+    --good: #1f9d5b;
+    --res-pos: #d23b66;
+    --res-neg: #2f6fd0;
+    --hole: #dfe5ec;
+    --shadow: 0 6px 20px rgba(20, 40, 60, .12);
+    color-scheme: light;
+  }
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] {
+  --bg: #f3f5f8; --bg-raise: #fff; --bg-card: #fff; --border: #d4dce5;
+  --fg: #1c2836; --fg-dim: #56677a; --fg-faint: #8495a6;
+  --accent: #0f8f96; --accent-strong: #0b7a80; --warn: #b97a1e;
+  --bad: #d23b66; --good: #1f9d5b; --res-pos: #d23b66; --res-neg: #2f6fd0;
+  --hole: #dfe5ec;
+  --shadow: 0 6px 20px rgba(20,40,60,.12);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- 顶栏 ---------- */
+.app-header {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.app-title { font-size: 17px; font-weight: 650; letter-spacing: .2px; margin: 0; }
+.app-sub { color: var(--fg-dim); font-size: 12.5px; }
+.header-spacer { flex: 1; }
+.theme-btn {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer; color: var(--fg-dim);
+}
+.theme-btn:hover { color: var(--fg); border-color: var(--accent); }
+
+/* ---------- 三栏布局 ---------- */
+.app-grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 16px 0 28px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .app-grid { grid-template-columns: 1fr; }
+}
+.panel {
+  background: var(--bg-raise);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.panel + .panel { margin-top: 14px; }
+.panel h2 {
+  font-size: 12px; font-weight: 650; text-transform: uppercase;
+  letter-spacing: .9px; color: var(--fg-dim);
+  margin: 0 0 10px;
+}
+.field { margin-bottom: 12px; min-width: 0; }
+.field-label {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-size: 12.5px; color: var(--fg-dim); margin-bottom: 5px;
+}
+.field-label .hint { color: var(--fg-faint); }
+input[type="number"], input[type="text"] {
+  width: 100%;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 9px; outline: none;
+  font-variant-numeric: tabular-nums;
+}
+input:focus { border-color: var(--accent); }
+input.invalid { border-color: var(--bad); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check-row { display: flex; align-items: center; gap: 8px; }
+.check-row input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; cursor: pointer;
+  color: var(--fg); font-size: 13px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #062326; font-weight: 650; }
+.btn.primary:hover { background: var(--accent-strong); }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover { border-color: var(--bad); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row .btn { flex: 1 1 auto; }
+.btn.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* ---------- 错误条 ---------- */
+.error-banner {
+  background: color-mix(in srgb, var(--bad) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bad) 55%, transparent);
+  border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 12px;
+  color: var(--fg); font-size: 13px;
+}
+.error-banner .err-title { color: var(--bad); font-weight: 650; margin-bottom: 4px; }
+.error-banner ul { margin: 0; padding-left: 18px; }
+.error-banner li { margin: 2px 0; }
+.error-banner .kept-note { color: var(--fg-dim); margin-top: 6px; font-size: 12px; }
+
+/* ---------- 中央画布 ---------- */
+.view-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.canvas-wrap {
+  position: relative;
+  background: var(--hole);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  line-height: 0;
+}
+.canvas-wrap canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.canvas-stack { position: relative; }
+.canvas-stack canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+}
+.canvas-stack canvas.base { position: static; }
+.legend {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 10px; font-size: 12px; color: var(--fg-dim);
+}
+.legend-bar { width: 150px; height: 10px; border-radius: 5px; border: 1px solid var(--border); }
+.legend .mono { color: var(--fg); }
+
+/* ---------- 状态行 ---------- */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+.stat .k { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .6px; }
+.stat .v { font-family: var(--mono); font-size: 14px; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 650;
+}
+.pill.good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.pill.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+.pill.busy { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.pill.idle { background: color-mix(in srgb, var(--fg-faint) 16%, transparent); color: var(--fg-dim); }
+
+/* ---------- 锁点列表 ---------- */
+.pin-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.pin-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 8px;
+}
+.pin-item .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; font-weight: 650; }
+.tag.user { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.tag.auto { background: color-mix(in srgb, var(--fg-faint) 20%, transparent); color: var(--fg-dim); }
+.pin-item .cell-id { font-family: var(--mono); min-width: 52px; }
+.pin-item input { width: 92px; padding: 4px 7px; font-size: 12.5px; }
+.pin-item .del { margin-left: auto; }
+.pin-empty { color: var(--fg-faint); font-size: 12.5px; padding: 6px 2px; }
+
+/* ---------- 检视数据 ---------- */
+.inspect-block { font-size: 12.5px; }
+.inspect-block .kv {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 4px 0; border-bottom: 1px dashed var(--border);
+}
+.inspect-block .kv:last-child { border-bottom: 0; }
+.inspect-block .k { color: var(--fg-dim); }
+.inspect-block .v { font-family: var(--mono); text-align: right; word-break: break-all; }
+.inspect-empty { color: var(--fg-faint); font-size: 12.5px; }
+.edge-table-wrap { max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+table.edge-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.edge-table th, .edge-table td {
+  padding: 5px 8px; text-align: right; font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.edge-table th { position: sticky; top: 0; background: var(--bg-card); color: var(--fg-dim); font-weight: 600; }
+.edge-table td:first-child, .edge-table th:first-child { text-align: left; }
+.edge-table tr:hover td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* 文件输入 */
+input[type="file"] { width: 100%; font-size: 12.5px; color: var(--fg-dim); }
+input[type="file"]::file-selector-button {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 7px; padding: 6px 10px; margin-right: 8px;
+  color: var(--fg); cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { border-color: var(--accent); }
+
+.note { font-size: 11.5px; color: var(--fg-faint); line-height: 1.45; }
+.section-gap { margin-top: 16px; }
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 9px; padding: 9px 16px; box-shadow: var(--shadow);
+  font-size: 13px; z-index: 50;
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1 class="app-title">法线高度恢复台</h1>
+  <span class="app-sub">加权最小二乘 · 周期接边 · 逐边带符号残差</span>
+  <span class="header-spacer"></span>
+  <span id="statusPill" class="pill idle">待计算</span>
+  <button id="themeBtn" class="theme-btn" type="button" title="切换深浅色">切换主题</button>
+</header>
+
+<div class="app-grid">
+
+  <!-- ================= 左栏：输入与参数 ================= -->
+  <div class="col-left">
+    <section class="panel">
+      <h2>数据输入</h2>
+      <div class="field">
+        <div class="field-label"><span>载入 JSON</span></div>
+        <input id="fileInput" type="file" accept=".json,application/json">
+      </div>
+      <div class="btn-row">
+        <button id="loadSampleBtn" class="btn" type="button">载入样例</button>
+        <button id="genBtn" class="btn" type="button">生成 384² 测试场</button>
+      </div>
+      <p class="note section-gap">
+        字段：width/height、spacing[dx,dy]（0.25–4）、wrap[横,纵]（周期轴≥3 格）、
+        samples 按行 [nx,ny,nz,置信度]，null 为孔；pins 为 [格号, 高度]。
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>网格参数</h2>
+      <div class="field">
+        <div class="field-label"><span>网格</span><span class="hint" id="gridSizeHint">—</span></div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <div class="field-label"><span>横向间距 dx</span></div>
+          <input id="dxInput" type="number" step="0.05" min="0.25" max="4">
+        </div>
+        <div class="field">
+          <div class="field-label"><span>纵向间距 dy</span></div>
+          <input id="dyInput" type="number" step="0.05" min="0.25" max="4">
+        </div>
+      </div>
+      <div class="field check-row">
+        <input id="wrapXInput" type="checkbox">
+        <label for="wrapXInput">横向周期接边（右边界绕回左边界）</label>
+      </div>
+      <div class="field check-row">
+        <input id="wrapYInput" type="checkbox">
+        <label for="wrapYInput">纵向周期接边（下边界绕回上边界）</label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>锁点</h2>
+      <div class="btn-row" style="margin-bottom:10px">
+        <button id="addPinModeBtn" class="btn" type="button">＋ 点格加锁模式</button>
+      </div>
+      <div id="pinList" class="pin-list"></div>
+      <p class="note section-gap">
+        每个无用户锁点的连通块自动把最小编号格锁到 0；用户锁点高度原样保留。
+        锁点必须指向非孔格、不可重复、|高度| ≤ 10000。
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>导出</h2>
+      <div class="btn-row" style="margin-bottom:8px">
+        <button id="exportInputBtn" class="btn" type="button">输入 JSON</button>
+        <button id="exportHeightsBtn" class="btn" type="button">高度 JSON</button>
+      </div>
+      <div class="btn-row" style="margin-bottom:8px">
+        <button id="exportPngBtn" class="btn primary" type="button">高度 PNG</button>
+        <button id="exportCsvBtn" class="btn" type="button">逐边残差 CSV</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 中栏：画布 ================= -->
+  <div class="col-main">
+    <div id="errorBanner" class="error-banner" hidden>
+      <div class="err-title" id="errorTitle">输入不合法，已保留当前结果</div>
+      <ul id="errorList"></ul>
+      <div class="kept-note" id="errorKept" hidden>当前画布与导出仍为上一次有效计算的结果。</div>
+    </div>
+
+    <section class="panel">
+      <h2>结果视图</h2>
+      <div class="view-tabs">
+        <button id="tabHeight" class="btn active" type="button">高度场</button>
+        <button id="tabResH" class="btn" type="button">水平边残差</button>
+        <button id="tabResV" class="btn" type="button">垂直边残差</button>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <div class="canvas-stack" id="canvasStack">
+          <canvas id="baseCanvas" class="base"></canvas>
+          <canvas id="residualCanvas"></canvas>
+          <canvas id="overlayCanvas"></canvas>
+        </div>
+      </div>
+      <div class="legend">
+        <span id="legendName">高度</span>
+        <canvas id="legendCanvas" class="legend-bar" width="150" height="10"></canvas>
+        <span class="mono" id="legendMin">—</span>
+        <span class="mono" id="legendMax">—</span>
+        <span id="legendZeroNote" class="note"></span>
+      </div>
+    </section>
+
+    <section class="panel section-gap">
+      <h2>求解状态</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">验收（未锁格 |有向和|/权重和 ≤ 1e-7）</div>
+          <div class="v" id="statVerify">—</div></div>
+        <div class="stat"><div class="k">最差格 / 比值</div>
+          <div class="v" id="statWorst">—</div></div>
+        <div class="stat"><div class="k">边数 / 自由格</div>
+          <div class="v" id="statSizes">—</div></div>
+        <div class="stat"><div class="k">PCG 迭代</div>
+          <div class="v" id="statIters">—</div></div>
+        <div class="stat"><div class="k">加权 RMS 残差</div>
+          <div class="v" id="statWrms">—</div></div>
+        <div class="stat"><div class="k">最大 |残差| 边</div>
+          <div class="v" id="statMaxRes">—</div></div>
+        <div class="stat"><div class="k">建模 / 求解耗时</div>
+          <div class="v" id="statTime">—</div></div>
+        <div class="stat"><div class="k">用户锁点 / 自动锁点</div>
+          <div class="v" id="statPins">—</div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 右栏：检视 ================= -->
+  <div class="col-right">
+    <section class="panel">
+      <h2>格检视（悬停画布）</h2>
+      <div id="inspectCell" class="inspect-block">
+        <div class="inspect-empty">将鼠标移到画布上查看单格数据。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>关联边（带符号残差）</h2>
+      <div id="inspectEdges" class="inspect-block">
+        <div class="inspect-empty">悬停格后列出其向右、向下（含回绕）的边。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>残差最大的边</h2>
+      <div class="edge-table-wrap">
+        <table class="edge-table">
+          <thead><tr><th>边</th><th>方向</th><th>g</th><th>w</th><th>残差 r</th></tr></thead>
+          <tbody id="worstEdgesBody"></tbody>
+        </table>
+      </div>
+      <p class="note section-gap">
+        残差约定 r = h(终点) − h(起点) − g；周期边沿正方向回绕。
+        权重 w 为两端置信度的较小值，零权重与孔不产生边。
+      </p>
+    </section>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="js/solver-core.js"></script>
+<script src="js/worker-body.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
