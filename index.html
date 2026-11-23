@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阵列逆滤波台</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M2 13.5c2.2 0 2.2-7 4.4-7s2.2 7 4.4 7 2.2-7 4.4-7 2.2 7 2.8 7" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="2" cy="13.5" r="1.1" fill="#fff" opacity=".55"/>
+        <circle cx="18" cy="6.5" r="1.1" fill="#fff" opacity=".55"/>
+      </svg>
+    </span>
+    <div>
+      <h1>阵列逆滤波台</h1>
+      <p>展厅扬声器阵列 · 带限幅拟合与逐样本核查</p>
+    </div>
+  </div>
+  <div class="topmeta">
+    <div class="chips" id="topChips">
+      <span class="chip"><span class="k">测点</span><b id="chipM">—</b></span>
+      <span class="chip"><span class="k">扬声器</span><b id="chipP">—</b></span>
+      <span class="chip"><span class="k">节目</span><b id="chipQ">—</b></span>
+      <span class="chip"><span class="k">N</span><b id="chipN">—</b></span>
+    </div>
+    <span class="status" id="statusPill"><span class="dot"></span><span id="statusText">未载入</span></span>
+    <div class="theme" role="group" aria-label="主题">
+      <button type="button" data-t="light" aria-pressed="false">浅</button>
+      <button type="button" data-t="dark" aria-pressed="false">深</button>
+      <button type="button" data-t="auto" aria-pressed="true">自动</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- left rail -->
+  <aside class="rail">
+    <!-- 01 case -->
+    <section class="card" id="caseCard">
+      <h2><span class="step">01</span>测量与目标</h2>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="导入 ZIP 测量包">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="big">导入 array-inverse-cases.zip</div>
+        <div class="small">或拖放至此处 · 含 project.json 与 signals.f32</div>
+        <input type="file" id="fileInput" accept=".zip,application/zip" hidden>
+      </div>
+      <div class="caseinfo" id="caseInfo">
+        <div class="name"><span class="badge">CASE</span><span id="caseName">—</span></div>
+        <div class="grid">
+          <span>采样率</span><span><b>48 kHz</b></span>
+          <span>h_lengths</span><span><b id="ciH">—</b></span>
+          <span>t_lengths</span><span><b id="ciT">—</b></span>
+          <span>样本数</span><span><b id="ciS">—</b></span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn sm ghost" id="btnClearCase" type="button">清除</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm" id="btnSample" type="button">载入示例</button>
+        <span class="note" style="align-self:center">示例取自 samples/array-inverse-cases.zip</span>
+      </div>
+      <div id="caseErrors"></div>
+    </section>
+
+    <!-- 02 parameters -->
+    <section class="card" id="paramCard">
+      <h2><span class="step">02</span>参数</h2>
+      <div class="subhead"><span>测点权重 w</span><span class="aside" id="wRange">0.25–4</span></div>
+      <div class="fieldgrid" id="weightGrid"></div>
+
+      <div class="subhead"><span>扬声器抽头上限 G</span><span class="aside" id="gRange">0.001–2</span></div>
+      <div class="fieldgrid" id="limitGrid"></div>
+
+      <div class="slider-field">
+        <div class="top">
+          <span class="lab">正则强度 λ</span>
+          <input type="number" id="lambdaInput" step="0.05" min="0.05" max="4" value="0.2" aria-label="正则强度">
+        </div>
+        <input type="range" id="lambdaSlider" min="0.05" max="4" step="0.05" value="0.2" aria-label="正则强度滑块">
+      </div>
+      <div class="fieldgrid" style="margin-top:10px">
+        <label class="field">
+          <span class="lab">延迟 delay<span class="hint">样本</span></span>
+          <input type="number" id="delayInput" step="1" min="0" max="4095" value="1">
+        </label>
+        <label class="field">
+          <span class="lab">抽头 taps<span class="hint">个</span></span>
+          <input type="number" id="tapsInput" step="1" min="1" max="4096" value="16">
+        </label>
+      </div>
+      <div class="meter" id="energyMeter" hidden>
+        <div class="top"><span>加权能量 <span class="mono">Σ w·Σₚ(Σ|h|)²</span></span><b id="energyVal">—</b></div>
+        <div class="track"><div class="fill" id="energyFill" style="width:0%"></div><div class="mark" style="left:100%" title="上限 16"></div></div>
+      </div>
+      <div id="paramErrors"></div>
+    </section>
+
+    <!-- 03 solve -->
+    <section class="card" id="solveCard">
+      <h2><span class="step">03</span>求解</h2>
+      <div class="row">
+        <button class="btn primary" id="btnSolve" type="button" disabled>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 2.5v11l9-5.5-9-5.5z" fill="currentColor"/></svg>
+          <span id="solveLabel">求解</span>
+        </button>
+        <button class="btn" id="btnCancel" type="button" disabled>取消</button>
+        <span class="grow"></span>
+        <button class="btn ghost sm" id="btnRevert" type="button" hidden>恢复上次有效</button>
+      </div>
+      <div class="progress" id="progress">
+        <div class="line"><span class="spinner" aria-hidden="true"></span><span id="progressText">准备算子…</span></div>
+        <div class="stages" id="progressStages"></div>
+      </div>
+      <div class="summary" id="summary">
+        <div class="stats" id="summaryStats"></div>
+        <div class="cert" id="certBox">
+          <svg class="icon" viewBox="0 0 16 16" fill="none" aria-hidden="true" id="certIcon"></svg>
+          <span class="txt" id="certText">—</span>
+          <span class="val" id="certVal">—</span>
+        </div>
+        <div class="stale" id="staleNote">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex:none;margin-top:1px"><path d="M8 5v3.5M8 11h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span><b>结果已过期</b>：参数已修改。下方显示的是上次有效解；重新求解以更新。</span>
+        </div>
+      </div>
+      <div id="solveErrors"></div>
+    </section>
+  </aside>
+
+  <!-- right workspace -->
+  <section class="workspace">
+    <div class="tabs" id="tabs" role="tablist" aria-label="视图" style="display:none">
+      <button role="tab" data-view="curves" aria-selected="true" id="tab-curves" aria-controls="view-curves">曲线核查</button>
+      <button role="tab" data-view="filters" aria-selected="false" id="tab-filters" aria-controls="view-filters">滤波器</button>
+      <button role="tab" data-view="report" aria-selected="false" id="tab-report" aria-controls="view-report">报告与导出</button>
+    </div>
+
+    <div id="emptyState" class="empty">
+      <div>
+        <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect x="6" y="10" width="7" height="28" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="35" y="10" width="7" height="28" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M16 24c2.2-6.5 4.4 6.5 6.6 0s4.4 6.5 6.6 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="24" cy="24" r="1.6" fill="currentColor"/>
+        </svg>
+        <div class="big">导入测量包开始</div>
+        <div class="sm">导入 ZIP（project.json + signals.f32）或点“载入示例”。随后可调权重、限值、λ、延迟与抽头数，按测点与节目通道核查目标 / 预测 / 残差曲线。</div>
+      </div>
+    </div>
+
+    <!-- curves view -->
+    <div class="view" id="view-curves" role="tabpanel" aria-labelledby="tab-curves">
+      <div class="toolbar">
+        <label class="field" style="min-width:104px">
+          <span class="lab">测点</span>
+          <select id="measSelect"></select>
+        </label>
+        <div class="field">
+          <span class="lab">节目通道</span>
+          <div class="seg" id="programSeg" role="group" aria-label="节目通道"></div>
+        </div>
+        <div class="field">
+          <span class="lab">显示</span>
+          <div class="seg" id="seriesSeg" role="group" aria-label="显示曲线"></div>
+        </div>
+        <div class="field grow" style="min-width:150px">
+          <span class="lab">样本定位</span>
+          <div class="row" style="flex-wrap:nowrap">
+            <input type="range" id="sampleSlider" min="0" max="0" step="1" value="0" aria-label="样本定位">
+          </div>
+        </div>
+        <label class="field" style="width:104px">
+          <span class="lab">样本 n</span>
+          <input type="number" id="sampleInput" min="0" max="0" step="1" value="0">
+        </label>
+        <div class="row" style="margin-left:auto;gap:4px">
+          <button class="btn sm" id="btnPrev" type="button" aria-label="上一个样本">−1</button>
+          <button class="btn sm" id="btnNext" type="button" aria-label="下一个样本">+1</button>
+        </div>
+      </div>
+
+      <div class="chartcard">
+        <div class="charthead">
+          <div>
+            <h3 id="mainChartTitle">目标 / 预测 / 残差</h3>
+            <div class="sub" id="mainChartSub">—</div>
+          </div>
+          <div class="legend" id="mainLegend"></div>
+        </div>
+        <div class="chartwrap" id="mainChartWrap" tabindex="0" role="img" aria-label="目标、预测与残差曲线">
+          <canvas id="mainChart"></canvas>
+          <div class="tip" id="mainTip" hidden></div>
+        </div>
+      </div>
+
+      <div class="datagrid">
+        <div class="card inspector">
+          <h3 class="sect">逐样本读数 <span class="aside" id="readAside">n = 0</span></h3>
+          <div class="sample-split">
+            <div class="sample-read" id="sampleRead"></div>
+            <div>
+              <table class="data" id="sampleTable">
+                <thead><tr><th>测点</th><th>目标</th><th>预测</th><th>残差</th><th>|残差| 峰值</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 class="sect">全部测点（当前节目） <span class="aside" id="miniAside">—</span></h3>
+          <div class="minigrid" id="miniGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- filters view -->
+    <div class="view" id="view-filters" role="tabpanel" aria-labelledby="tab-filters">
+      <div class="filters-head">
+        <div>
+          <div class="t">滤波器抽头</div>
+          <div class="s">每个抽头均在 [−G, G] 内；投影梯度由导出 JSON 重新解算核定。</div>
+        </div>
+        <div class="row">
+          <div class="seg" id="filterProgramSeg" role="group" aria-label="滤波器节目通道"></div>
+          <button class="btn sm" id="btnDownloadFilters" type="button">下载滤波器 JSON</button>
+        </div>
+      </div>
+      <div id="filterCards"></div>
+      <div class="empty" id="filterEmpty" style="min-height:200px">
+        <div><div class="big">尚无滤波器</div><div class="sm">完成一次求解后，这里会按扬声器列出全部抽头与限值盒。</div></div>
+      </div>
+    </div>
+
+    <!-- report view -->
+    <div class="view" id="view-report" role="tabpanel" aria-labelledby="tab-report">
+      <div class="stat-cards" id="reportStats"></div>
+      <div class="card" style="margin-bottom:14px">
+        <h3 class="sect">各测点曲线 <span class="aside" id="reportCurvesAside">目标 / 预测 / 残差</span></h3>
+        <div id="reportCurves"></div>
+      </div>
+      <div class="report-grid">
+        <div class="card">
+          <h3 class="sect">每通道残差 <span class="aside">加权 SSE</span></h3>
+          <div id="reportPerChannel"></div>
+        </div>
+        <div class="card">
+          <h3 class="sect">核查与几何 <span class="aside" id="reportGeoAside">—</span></h3>
+          <div class="kv" id="reportKv"></div>
+        </div>
+        <div class="card">
+          <h3 class="sect" style="display:block">导出</h3>
+          <p class="note" style="margin:0 0 10px">JSON 字段：sample_rate · taps · delay · lambda · objective · projected_residual · filters</p>
+          <div class="export-list">
+            <div class="item">
+              <div><div class="nm">filters.json</div><div class="ds" id="exportSize">—</div></div>
+              <div class="act"><button class="btn sm primary" id="btnDownloadAgain" type="button">下载</button></div>
+            </div>
+            <div class="item">
+              <div><div class="nm">核查报告（HTML 打印）</div><div class="ds">按测点与节目列出目标 / 预测 / 残差与核查结论</div></div>
+              <div class="act"><button class="btn sm" id="btnPrint" type="button">打印</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <h3 class="sect">导出 JSON 预览 <span class="aside" id="jsonPreviewAside">—</span></h3>
+        <pre class="json" id="jsonPreview">—</pre>
+      </div>
+      <div class="card">
+        <h3 class="sect">逐测点误差</h3>
+        <div class="tablewrap">
+        <table class="data" id="reportTable">
+          <thead><tr><th>测点</th><th>权重</th><th>节目</th><th>SSE</th><th>RMS</th><th>峰值</th><th>λ·Σ抽头²</th><th>目标能量</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        </div>
+        <p class="note" style="margin-top:10px">残差长度 N = max(max(h)+taps−1, delay+max(t))。延迟后目标超出卷积末端的样本计入代价；所有缺样按 0 处理。</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="sr-only" id="liveRegion" aria-live="polite"></div>
+
+<script src="src/core.js"></script>
+<script src="src/inflate.js"></script>
+<script src="src/report.js"></script>
+<script src="src/worker-source.js"></script>
+<script src="src/chart.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
