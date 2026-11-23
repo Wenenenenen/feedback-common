@@ -1,0 +1,14 @@
+{
+  "name": "speaker-simplex-mixer",
+  "version": "1.0.0",
+  "description": "环绕展项扬声器单纯形声像校验：凸包正锥增益、单位能量归一、多声道 float32 WAV 导出",
+  "private": true,
+  "scripts": {
+    "test": "node tests/engine.test.js && node tests/property.test.js && node tests/perf.test.js && node tests/sample.test.js",
+    "test:browser": "node tests/browser.smoke.js",
+    "serve": "node tests/serve.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

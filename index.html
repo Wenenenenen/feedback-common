@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>扬声器单纯形声像校验台</title>
+<style>
+/* 布局：顶栏 + 左三维/右数据两栏，窄屏堆叠。工程仪表风格，冷灰底 + 青色强调 */
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --fg: #16202a;
+  --muted: #5b6b7a;
+  --line: #d8dee5;
+  --accent: #0e7fa8;
+  --accent-soft: #d7eef6;
+  --source: #c2410c;
+  --danger: #b91c1c;
+  --warn: #92600a;
+  --ok: #15803d;
+  --speaker: #334155;
+  --speaker-ring: #ffffff;
+  --origin: #0e7fa8;
+  --face-fill: rgba(14, 127, 168, 0.07);
+  --face-edge: rgba(14, 127, 168, 0.45);
+  --face-hot: rgba(14, 127, 168, 0.22);
+  --grid: rgba(90, 105, 120, 0.22);
+  --bar: #cbd5e1;
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a;
+    --panel: #171e26;
+    --fg: #e3e9ef;
+    --muted: #93a3b3;
+    --line: #2a3540;
+    --accent: #4cc0ea;
+    --accent-soft: #13323f;
+    --source: #fb923c;
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --ok: #4ade80;
+    --speaker: #cbd5e1;
+    --speaker-ring: #0f141a;
+    --origin: #4cc0ea;
+    --face-fill: rgba(76, 192, 234, 0.08);
+    --face-edge: rgba(76, 192, 234, 0.4);
+    --face-hot: rgba(76, 192, 234, 0.24);
+    --grid: rgba(148, 163, 184, 0.2);
+    --bar: #334155;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #171e26; --fg: #e3e9ef; --muted: #93a3b3;
+  --line: #2a3540; --accent: #4cc0ea; --accent-soft: #13323f; --source: #fb923c;
+  --danger: #f87171; --warn: #fbbf24; --ok: #4ade80; --speaker: #cbd5e1;
+  --speaker-ring: #0f141a; --origin: #4cc0ea;
+  --face-fill: rgba(76,192,234,.08); --face-edge: rgba(76,192,234,.4);
+  --face-hot: rgba(76,192,234,.24); --grid: rgba(148,163,184,.2); --bar: #334155;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding-block: 16px 12px;
+}
+h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+.sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 24px;
+}
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  min-width: 0;
+}
+.panel h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--muted); margin: 0 0 10px; font-weight: 600;
+}
+#dropzone {
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--muted);
+  transition: border-color .15s, background .15s;
+  margin-bottom: 14px;
+}
+#dropzone.drag, #dropzone:hover { border-color: var(--accent); background: var(--accent-soft); }
+#dropzone strong { color: var(--fg); display: block; margin-bottom: 4px; }
+#view3d {
+  width: 100%; height: 420px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 100% 100%,
+    var(--panel);
+  touch-action: none;
+  display: block;
+}
+@media (max-width: 600px) { #view3d { height: 320px; } }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+button {
+  font: inherit; font-weight: 600;
+  border: 1px solid var(--accent);
+  background: var(--accent); color: #fff;
+  border-radius: 8px; padding: 8px 16px; cursor: pointer;
+}
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.status {
+  margin-top: 12px; padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; border: 1px solid var(--line); background: var(--bg);
+  font-family: var(--mono);
+}
+.status.ok { color: var(--ok); border-color: var(--ok); }
+.status.warn { color: var(--warn); border-color: var(--warn); }
+.status.error { color: var(--danger); border-color: var(--danger); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; margin-bottom: 12px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); min-width: 0; word-break: break-all; }
+.tables { display: grid; gap: 16px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+#gainBody tr.active { background: var(--accent-soft); }
+#gainBody tr.active td { color: var(--accent); font-weight: 700; }
+td.bar { width: 40%; }
+.barfill { height: 8px; border-radius: 4px; background: var(--accent); min-width: 2px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>扬声器单纯形声像校验台</h1>
+    <div class="sub">凸包正锥增益 · 单位能量归一 · 多声道 float32 导出（48 kHz / 单声道 16-bit 输入）</div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- 左栏：导入 + 三维 -->
+  <section class="panel">
+    <div id="dropzone" tabindex="0">
+      <strong>点击选择或拖入文件</strong>
+      speaker-simplex-cases.zip，或 layout.json + source.wav
+      <input type="file" id="fileInput" multiple accept=".zip,.json,.wav" hidden>
+    </div>
+
+    <h2>三维声像（拖拽旋转 · 滚轮缩放 · 点选面片/扬声器）</h2>
+    <canvas id="view3d" aria-label="扬声器凸包三维视图"></canvas>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--accent)"></i>当前面片/激活声道</span>
+      <span><i class="dot" style="background:var(--speaker)"></i>扬声器（数字为 id）</span>
+      <span><i class="dot" style="background:var(--source)"></i>源方向</span>
+      <span><i class="dot" style="background:var(--origin)"></i>听者（原点）</span>
+    </div>
+
+    <div class="controls">
+      <button id="playBtn" class="secondary" disabled>播放</button>
+      <input type="range" id="frameSlider" min="0" max="0" value="0" aria-label="帧位置">
+      <button id="exportBtn" disabled>导出多声道 WAV</button>
+    </div>
+    <div class="hint">帧 <span id="frameNum" class="num">0</span> · 时间 <span id="frameTime" class="num">0.0000 s</span></div>
+    <div id="status" class="status">等待导入数据。</div>
+  </section>
+
+  <!-- 右栏：数据 -->
+  <section class="tables">
+    <div class="panel">
+      <h2>当前帧</h2>
+      <dl class="kv">
+        <dt>插值方向</dt><dd id="dirVal">—</dd>
+        <dt>所在面片</dt><dd id="faceVal">—</dd>
+      </dl>
+      <h2>各声道增益（按 id 升序）</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>id</th><th class="num">增益</th><th>幅度</th></tr></thead>
+          <tbody id="gainBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>扬声器布局</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>id</th><th class="num">xyz</th><th class="num">半径</th></tr></thead>
+          <tbody id="speakerBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>轨迹关键点</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th class="num">frame</th><th class="num">xyz</th><th class="num">时间</th></tr></thead>
+          <tbody id="pathBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="src/engine.js"></script>
+<script src="src/wav.js"></script>
+<script src="src/view3d.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
