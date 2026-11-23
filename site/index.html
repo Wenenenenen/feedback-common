@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>脚锁动作格子 · Footlock Lattice</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <h1>脚锁动作格子</h1>
+      <span class="sub">根轨迹定拍 · 支撑脚世界落点锁死 · 跳转冷却 · 全局最低代价</span>
+    </div>
+    <div class="top-actions">
+      <span id="statusPill" class="pill" title="求解状态"><span class="dot"></span><span id="statusText">待求解</span></span>
+      <button id="themeBtn" class="btn ghost icon" type="button" title="切换明暗主题" aria-label="切换明暗主题">◐</button>
+      <button id="solveBtn" class="btn primary" type="button">重新求解</button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ========== 左栏：数据与轨迹 ========== -->
+  <div class="col">
+
+    <section class="card">
+      <h2>数据导入 <span class="tag" id="dataTag">样例</span></h2>
+      <div class="stack">
+        <div class="row">
+          <button id="loadSampleBtn" class="btn small" type="button">载入样例</button>
+          <button id="loadLargeBtn" class="btn small" type="button">载入满额基准</button>
+        </div>
+        <label class="field">
+          打开本地 JSON 文件
+          <input id="fileInput" type="file" accept=".json,application/json">
+        </label>
+        <details id="pastePanel">
+          <summary>直接粘贴 JSON</summary>
+          <textarea id="jsonInput" rows="8" style="margin-top:8px" placeholder='{"samples":[...],"edges":[...],"ticks":[...]}'></textarea>
+          <button id="applyJsonBtn" class="btn small" type="button" style="margin-top:8px">应用粘贴的 JSON</button>
+        </details>
+        <div id="dataWarn" class="small" style="color:var(--warm)"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>根轨迹编辑 <span class="tag" id="tickTag">拍 1 / 1</span></h2>
+      <div class="stack">
+        <div class="tick-nav">
+          <button id="firstBtn" class="btn small step-btn" type="button" title="首拍">|‹</button>
+          <button id="prevBtn" class="btn small step-btn" type="button" title="上一拍">‹</button>
+          <button id="nextBtn" class="btn small step-btn" type="button" title="下一拍">›</button>
+          <button id="lastBtn" class="btn small step-btn" type="button" title="末拍">›|</button>
+          <span class="muted small">当前</span>
+          <input id="tickGoto" type="number" min="1" step="1" style="width:74px" aria-label="跳转到拍">
+        </div>
+        <div class="row3">
+          <label class="field">根 X<input id="rootX" type="number" step="1" inputmode="numeric"></label>
+          <label class="field">根 Y<input id="rootY" type="number" step="1" inputmode="numeric"></label>
+          <label class="field">朝向<input id="angleInput" type="number" step="90" inputmode="numeric" list="angleList"></label>
+        </div>
+        <datalist id="angleList"><option value="0"><option value="90"><option value="180"><option value="270"></datalist>
+        <div class="row" id="angleChips">
+          <span class="muted small">朝向：</span>
+          <button class="angle-chip" data-angle="0" type="button">0°</button>
+          <button class="angle-chip" data-angle="90" type="button">90°</button>
+          <button class="angle-chip" data-angle="180" type="button">180°</button>
+          <button class="angle-chip" data-angle="270" type="button">270°</button>
+        </div>
+        <div class="hint">也可在右侧场地上直接拖动当前拍的根标记。改动后需点顶栏「重新求解」才会更新选段。</div>
+        <div class="row">
+          <button id="resetTrackBtn" class="btn small" type="button">撤销轨迹编辑</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>本拍候选姿势 <span class="tag" id="candTag">0</span></h2>
+      <div class="hint" id="candHint">点击时间轴或场地上的拍，查看该拍在 costs 内列出的候选。</div>
+      <div id="candList" style="margin-top:8px"></div>
+    </section>
+
+    <section class="card">
+      <h2>规则说明</h2>
+      <ul class="rule-list">
+        <li>样本的脚为 <code>[局部x, 局部y, 是否支撑]</code>；世界落点 = 根 + R(朝向)·局部，R 为逆时针整数旋转。</li>
+        <li>相邻两拍若同一只脚都支撑，世界落点必须完全相等；支撑→离地不受限。</li>
+        <li>只能走给定的有向衔接边。一次跳转后的连续两条边不能再跳；首拍起始无冷却。</li>
+        <li>费用为十进制整数，逐项 BigInt 精确相加。总价最小，同价取样本编号序列字典序最小。</li>
+        <li>无解时标出首个不可达拍（界面 1 基）。上限 240 拍 / 4096 样本 / 6 万条边。</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <!-- ========== 右栏：场地 / 时间轴 / 明细 ========== -->
+  <div class="col">
+
+    <section class="card">
+      <h2>场地与脚印 <span class="tag" id="fieldTag">拖动根标记改轨迹</span>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button id="viewAllBtn" class="btn small" type="button" title="显示整条根轨迹与全部候选">全域</button>
+          <button id="viewTickBtn" class="btn small" type="button" title="放大当前拍的双脚与根">当前拍</button>
+        </span>
+      </h2>
+      <div id="failureBanner" class="banner bad" hidden></div>
+      <div class="field-wrap" style="margin-top:10px">
+        <svg id="fieldSvg" class="field" role="img" aria-label="根轨迹、当前拍双脚世界落点与朝向"></svg>
+      </div>
+      <div class="field-legend">
+        <span class="k"><span class="sw support"></span>支撑脚</span>
+        <span class="k"><span class="sw air"></span>离地</span>
+        <span class="k"><span class="sw support" style="background:transparent;border-style:dashed;opacity:.5"></span>上一拍脚印</span>
+        <span class="k"><span class="sw" style="border-radius:50%;border-color:var(--accent);background:var(--accent)"></span>根</span>
+      </div>
+
+      <div class="player">
+        <button id="playBtn" class="btn primary" type="button">▶ 播放</button>
+        <button id="prevTickBtn" class="btn small" type="button">‹ 上一拍</button>
+        <button id="nextTickBtn" class="btn small" type="button">下一拍 ›</button>
+        <span class="readout" id="playReadout">拍 — / —</span>
+        <span class="spacer"></span>
+        <label>速度
+          <select id="speedSelect">
+            <option value="1300">慢</option>
+            <option value="850" selected>正常</option>
+            <option value="420">快</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>时间轴 <span class="tag" id="tlTag">点击选拍</span></h2>
+      <div class="tl-scroll">
+        <div class="timeline" id="timeline"></div>
+        <div class="tl-axis"><span>拍 1</span><span id="tlAxisEnd">拍 1</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>汇总</h2>
+      <div class="tiles" id="summaryTiles"></div>
+    </section>
+
+    <section class="card">
+      <h2>逐拍明细 <span class="tag">费用精确到整数</span></h2>
+      <div id="detailEmpty" class="hint">尚无解。载入数据并求解后显示每拍的样本、脚锁状态、转场与累计代价。</div>
+      <div class="table-scroll" id="detailWrap" hidden>
+        <table class="detail">
+          <thead>
+            <tr>
+              <th>拍</th>
+              <th>样本</th>
+              <th>根 / 朝向</th>
+              <th>转场</th>
+              <th>左脚</th>
+              <th>右脚</th>
+              <th class="num">姿势费</th>
+              <th class="num">衔接费</th>
+              <th class="num">累计</th>
+            </tr>
+          </thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>导出 / 重导核算</h2>
+      <div class="stack">
+        <div class="row">
+          <button id="exportBtn" class="btn primary" type="button">生成导出序列</button>
+          <button id="copyBtn" class="btn small" type="button" disabled>复制 JSON</button>
+          <button id="downloadBtn" class="btn small" type="button" disabled>下载 .json</button>
+        </div>
+        <textarea id="exportBox" class="export-box mono" spellcheck="false" placeholder="点击「生成导出序列」后出现带内嵌输入、逐拍明细和总价的 replay JSON"></textarea>
+        <div class="sep"></div>
+        <div class="row">
+          <button id="importBtn" class="btn" type="button">导回并核算</button>
+          <span class="hint">粘贴 replay JSON（或裸数据包），会重新求解并逐拍核验脚锁、冷却、边与费用。</span>
+        </div>
+        <div id="verifyResult" class="banner" hidden></div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="engine.js"></script>
+<script src="sample-data.js"></script>
+<script src="large-case.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 截图临时目录
+.qa/
+tmp-shots/

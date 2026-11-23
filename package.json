@@ -1,0 +1,13 @@
+{
+  "name": "motion-footlock-lattice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "脚锁动作格子：按脚部世界落点锁定与衔接边约束，全局最低代价选段",
+  "scripts": {
+    "test": "node --test tests/engine.test.mjs tests/capacity.test.mjs",
+    "smoke": "node tests/browser-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
