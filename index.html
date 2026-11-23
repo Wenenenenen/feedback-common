@@ -1,0 +1,987 @@
+<title>立体角立方图重采样</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ---------- 设计令牌：深色技术工作台，冷灰底 + 青蓝主色 + 琥珀告警 ---------- */
+:root {
+  --bg: #0e1116;
+  --bg-2: #151a22;
+  --bg-3: #1c232e;
+  --panel: #12171f;
+  --line: #26303d;
+  --line-2: #33404f;
+  --fg: #e6ebf2;
+  --fg-dim: #9aa8b8;
+  --fg-mute: #65748a;
+  --accent: #4cc2ff;
+  --accent-2: #1f6f9f;
+  --ok: #46d18b;
+  --warn: #f0b34e;
+  --bad: #ff6b6b;
+  --hole: #05070a;
+  --radius: 10px;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f6f9; --bg-2: #ffffff; --bg-3: #eef2f7; --panel: #ffffff;
+    --line: #d8e0ea; --line-2: #c2cdda;
+    --fg: #16202c; --fg-dim: #46566a; --fg-mute: #7888a0;
+    --accent: #0b74b8; --accent-2: #bfe4fb;
+    --ok: #128a55; --warn: #b06d10; --bad: #d23b3b; --hole: #05070a;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f9; --bg-2: #ffffff; --bg-3: #eef2f7; --panel: #ffffff;
+  --line: #d8e0ea; --line-2: #c2cdda;
+  --fg: #16202c; --fg-dim: #46566a; --fg-mute: #7888a0;
+  --accent: #0b74b8; --accent-2: #bfe4fb;
+  --ok: #128a55; --warn: #b06d10; --bad: #d23b3b; --hole: #05070a;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-weight: 650; text-wrap: balance; margin: 0; }
+h1 { font-size: 19px; letter-spacing: .2px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .9px; color: var(--fg-mute); }
+h3 { font-size: 13px; color: var(--fg-dim); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, input, select, textarea {
+  font: inherit; color: inherit; border-radius: 8px;
+  border: 1px solid var(--line-2); background: var(--bg-3);
+}
+button {
+  padding: 7px 14px; cursor: pointer; font-weight: 550;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+button:hover { border-color: var(--accent); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #04121c; font-weight: 650; }
+button.ghost { background: transparent; }
+button.small { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
+input, select, textarea { padding: 6px 9px; width: 100%; min-width: 0; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-2); outline-offset: 0; border-color: var(--accent); }
+label { display: block; font-size: 12px; color: var(--fg-dim); margin-bottom: 4px; }
+.wrap { max-width: 1440px; margin: 0 auto; padding-block: 18px 40px; }
+.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px;
+}
+.topbar .sub { color: var(--fg-mute); font-size: 12.5px; }
+.spacer { flex: 1; }
+.pill {
+  font-family: var(--mono); font-size: 11.5px; padding: 3px 9px; border-radius: 99px;
+  border: 1px solid var(--line-2); color: var(--fg-dim); white-space: nowrap;
+}
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+.pill.run { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.grid { display: grid; gap: 16px; }
+.layout { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); align-items: start; }
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px;
+}
+.panel + .panel { margin-top: 16px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > * { min-width: 0; }
+.field { flex: 1 1 90px; }
+.field.grow { flex: 2 1 160px; }
+.stack { display: grid; gap: 10px; }
+.qgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.egrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.section-gap { margin-top: 14px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.progress {
+  height: 6px; border-radius: 99px; background: var(--bg-3); overflow: hidden;
+  border: 1px solid var(--line); margin-top: 10px;
+}
+.progress > i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width .12s linear; }
+.errors {
+  border: 1px solid color-mix(in srgb, var(--bad) 55%, transparent);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-radius: var(--radius); padding: 10px 12px; margin-bottom: 14px;
+  max-height: 210px; overflow: auto; font-size: 12.5px;
+}
+.errors[hidden] { display: none !important; }
+.errors .e { display: flex; gap: 8px; padding: 3px 0; align-items: baseline; }
+.errors .tag {
+  font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 5px;
+  background: color-mix(in srgb, var(--bad) 22%, transparent); color: var(--bad);
+  white-space: nowrap; flex: none;
+}
+.errors .tag.rot { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.faces-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.faces-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.face-card { position: relative; border: 1px solid var(--line); border-radius: 9px; padding: 8px; background: var(--bg-2); }
+.face-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.face-card.err { border-color: var(--bad); }
+.sel-marker {
+  position: absolute; border: 2px solid var(--warn); border-radius: 3px;
+  pointer-events: none; display: none; z-index: 2;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.45);
+}
+.face-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; }
+.face-title .nm { font-family: var(--mono); color: var(--fg-dim); }
+canvas.face {
+  display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated;
+  border-radius: 6px; cursor: crosshair; background: var(--hole);
+}
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--fg-mute); margin-top: 8px; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+.stat .k { font-size: 11px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: .6px; }
+.stat .v { font-family: var(--mono); font-size: 15px; margin-top: 2px; }
+.stat .v.small { font-size: 12.5px; }
+table.contrib { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--mono); }
+table.contrib th, table.contrib td {
+  text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+table.contrib th:first-child, table.contrib td:first-child { text-align: left; }
+table.contrib th { color: var(--fg-mute); font-weight: 550; font-size: 11px; position: sticky; top: 0; background: var(--panel); }
+table.contrib tr.miss td { color: var(--fg-mute); }
+.table-scroll { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.inspect-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; margin-bottom: 8px; }
+.swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line-2); display: inline-block; vertical-align: -3px; }
+textarea.json {
+  font-family: var(--mono); font-size: 12px; min-height: 120px; resize: vertical;
+  white-space: pre; overflow-wrap: normal; overflow-x: auto;
+}
+details.adv { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--bg-2); }
+details.adv summary { cursor: pointer; color: var(--fg-dim); font-size: 12.5px; }
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--bg-3); border: 1px solid var(--line-2); color: var(--fg);
+  padding: 9px 16px; border-radius: 99px; font-size: 13px; z-index: 50;
+  box-shadow: 0 8px 30px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+.muted { color: var(--fg-mute); }
+.dim { color: var(--fg-dim); }
+.ok-t { color: var(--ok); } .warn-t { color: var(--warn); } .bad-t { color: var(--bad); }
+.hr { height: 1px; background: var(--line); margin: 12px 0; }
+.modebar { display: flex; gap: 6px; flex-wrap: wrap; }
+.modebar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>立体角立方图重采样</h1>
+      <div class="sub">半空间裁剪 · Van Oosterom 球面立体角 · 缺测覆盖率独立计权</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill" id="statusPill">未运行</span>
+    <button class="small ghost" id="themeBtn" type="button">切换主题</button>
+  </div>
+
+  <div class="errors" id="errorBox" hidden></div>
+
+  <div class="grid layout">
+    <!-- ================= 左：控制区 ================= -->
+    <div>
+      <div class="panel">
+        <h2>1 · 输入</h2>
+        <div class="row section-gap">
+          <div class="field">
+            <label for="nIn">源边长 n（1–64）</label>
+            <input id="nIn" type="number" min="1" max="64" step="1" value="8">
+          </div>
+          <div class="field">
+            <label for="outIn">目标边长 out（1–64）</label>
+            <input id="outIn" type="number" min="1" max="64" step="1" value="8">
+          </div>
+        </div>
+        <div class="actions section-gap">
+          <button class="small ghost" id="loadSampleBtn" type="button">载入样本</button>
+          <button class="small ghost" id="loadLampBtn" type="button">顶灯跨缝场景</button>
+          <button class="small ghost" id="importBtn" type="button">导入 JSON…</button>
+          <input type="file" id="fileIn" accept=".json,application/json" hidden>
+        </div>
+        <details class="adv section-gap">
+          <summary>直接粘贴 / 编辑输入 JSON（含 faces、q）</summary>
+          <div class="stack section-gap">
+            <textarea class="json" id="jsonIn" spellcheck="false"></textarea>
+            <div class="actions">
+              <button class="small" id="applyJsonBtn" type="button">应用 JSON 到表单</button>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="panel">
+        <h2>2 · 旋转（源方向 → 目标方向，右手主动）</h2>
+        <div class="section-gap">
+          <label>四元数 q = (x, y, z, w)，内部自动归一化</label>
+          <div class="qgrid">
+            <input id="qx" type="text" spellcheck="false" value="0">
+            <input id="qy" type="text" spellcheck="false" value="0">
+            <input id="qz" type="text" spellcheck="false" value="0">
+            <input id="qw" type="text" spellcheck="false" value="1">
+          </div>
+        </div>
+        <div class="section-gap">
+          <label>欧拉角（度，外旋 XYZ，与四元数双向同步）</label>
+          <div class="egrid">
+            <input id="ex" type="text" spellcheck="false" value="0">
+            <input id="ey" type="text" spellcheck="false" value="0">
+            <input id="ez" type="text" spellcheck="false" value="0">
+          </div>
+        </div>
+        <div class="actions section-gap">
+          <button class="small ghost" data-preset="id" type="button">恒等</button>
+          <button class="small ghost" data-preset="z90" type="button">绕 Z 90°</button>
+          <button class="small ghost" data-preset="y45" type="button">绕 Y 45°</button>
+          <button class="small ghost" data-preset="tilt" type="button">斜轴 60°</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>3 · 运行</h2>
+        <div class="actions section-gap">
+          <button class="primary" id="runBtn" type="button">生成重采样</button>
+          <button id="cancelBtn" type="button" disabled>取消</button>
+        </div>
+        <div class="progress" id="progWrap" hidden><i id="progBar"></i></div>
+        <p class="muted section-gap" style="font-size:12px;margin-bottom:0">
+          取消会作废当前计算并保留上一份完整结果；64×64 六面约 24,576 个目标纹素，典型耗时 1 秒内。
+        </p>
+        <div class="hr"></div>
+        <h2>导出</h2>
+        <div class="actions section-gap">
+          <button class="small" id="copyBtn" type="button" disabled>复制结果 JSON</button>
+          <button class="small" id="downloadBtn" type="button" disabled>下载结果 JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 右：可视化与检查 ================= -->
+    <div>
+      <div class="panel">
+        <div class="faces-head">
+          <h2 style="text-transform:none;letter-spacing:0;color:var(--fg);font-size:15px">源立方图（点格编辑颜色 / 标缺测）</h2>
+          <span class="spacer" style="flex:1"></span>
+          <div class="modebar">
+            <button class="small" id="holeBtn" type="button" aria-pressed="false">标缺测模式：关</button>
+          </div>
+        </div>
+        <div class="faces-grid" id="srcFaces"></div>
+        <div class="legend">
+          <span><i style="background:#dfe6ee"></i>线性 RGB（0–1）</span>
+          <span><i style="background:#05070a;border:1px solid var(--line-2)"></i>null 缺测</span>
+          <span><i style="background:var(--bad)"></i>校验错误纹素</span>
+        </div>
+      </div>
+
+      <div class="panel section-gap" style="margin-top:16px">
+        <div class="faces-head">
+          <h2 style="text-transform:none;letter-spacing:0;color:var(--fg);font-size:15px">目标立方图（点纹素查看立体角贡献）</h2>
+          <span class="spacer" style="flex:1"></span>
+          <div class="modebar" role="group" aria-label="目标显示模式">
+            <button class="small" data-dmode="rgb" aria-pressed="true" type="button">RGB</button>
+            <button class="small" data-dmode="coverage" aria-pressed="false" type="button">覆盖率</button>
+          </div>
+        </div>
+        <div class="faces-grid" id="dstFaces"></div>
+        <div class="legend">
+          <span><i style="background:#dfe6ee"></i>重采样 RGB</span>
+          <span><i style="background:var(--accent)"></i>覆盖率 0→1 映射</span>
+          <span><i style="background:var(--warn)"></i>当前选中纹素</span>
+        </div>
+      </div>
+
+      <div class="panel section-gap" style="margin-top:16px">
+        <h2 style="text-transform:none;letter-spacing:0;color:var(--fg);font-size:15px">质量指标</h2>
+        <div class="stats section-gap" id="statsBox"></div>
+      </div>
+
+      <div class="panel section-gap" style="margin-top:16px">
+        <h2 style="text-transform:none;letter-spacing:0;color:var(--fg);font-size:15px">纹素检查器</h2>
+        <div id="inspectEmpty" class="muted section-gap" style="font-size:12.5px">
+          点击任意目标纹素，查看参与积分的源面、(行,列)、uv 中心、立体角权重与缺测标记。
+        </div>
+        <div id="inspectBody" hidden>
+          <div class="inspect-head section-gap">
+            <strong id="insName" class="mono"></strong>
+            <span class="swatch" id="insSwatch"></span>
+            <span id="insRgb" class="mono dim"></span>
+          </div>
+          <div class="stats" style="margin-bottom:12px">
+            <div class="stat"><div class="k">整块立体角 ωT</div><div class="v small mono" id="insOmega"></div></div>
+            <div class="stat"><div class="k">权重合计</div><div class="v small mono" id="insWSum"></div></div>
+            <div class="stat"><div class="k">分割残差</div><div class="v small mono" id="insResid"></div></div>
+            <div class="stat"><div class="k">有效覆盖率</div><div class="v small mono" id="insCov"></div></div>
+            <div class="stat"><div class="k">参与源纹素</div><div class="v small mono" id="insCount"></div></div>
+          </div>
+          <div class="table-scroll">
+            <table class="contrib">
+              <thead><tr><th>源面 / (行,列)</th><th>uv 中心</th><th>立体角权重 ω</th><th>份额 ω/ωT</th><th>状态</th></tr></thead>
+              <tbody id="contribBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="remap-core.js"></script>
+<script>
+'use strict';
+const C = window.CubemapRemap;
+const FACE_NAMES = C.FACE_NAMES;
+const $ = (id) => document.getElementById(id);
+
+/* ---------- 应用状态 ---------- */
+const state = {
+  n: 8, out: 8,
+  q: [0, 0, 0, 1],
+  faces: null,                 // 6 × n²，元素 [r,g,b] 或 null
+  result: null,                // 最近一份完整结果
+  resultInput: null,           // 结果对应的输入快照（导出用）
+  resultStale: false,          // 输入在结果生成后又被改动
+  running: false,
+  gen: 0,
+  selected: null,              // {f,row,col}
+  dmode: 'rgb',
+  holeMode: false,
+  errorCells: new Set(),       // "f:row:col"
+  worker: null,
+};
+
+function makeFaces(n, fill) {
+  const out = [];
+  for (let f = 0; f < 6; f++) {
+    const face = [];
+    for (let i = 0; i < n * n; i++) face.push(fill ? fill(f, i) : [0.2, 0.25, 0.32]);
+    out.push(face);
+  }
+  return out;
+}
+
+/* ---------- 持久化（仅便利，失败静默） ---------- */
+function saveDraft() {
+  try {
+    localStorage.setItem('cubemap-remap-draft', JSON.stringify({
+      n: state.n, out: state.out, q: state.q, faces: state.faces,
+    }));
+  } catch (_) { /* 忽略 */ }
+}
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem('cubemap-remap-draft');
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (d && Array.isArray(d.faces) && d.faces.length === 6) {
+      state.n = d.n; state.out = d.out; state.q = d.q; state.faces = d.faces;
+      return true;
+    }
+  } catch (_) { /* 忽略 */ }
+  return false;
+}
+
+/* ---------- 表单与状态同步 ---------- */
+function syncFormFromState() {
+  $('nIn').value = state.n;
+  $('outIn').value = state.out;
+  $('qx').value = fmt(state.q[0]); $('qy').value = fmt(state.q[1]);
+  $('qz').value = fmt(state.q[2]); $('qw').value = fmt(state.q[3]);
+  syncEulerFromQ();
+}
+function fmt(x) { return Number(x).toPrecision(10).replace(/\.?0+$/, ''); }
+function syncEulerFromQ() {
+  try {
+    const [a, b, g] = C.eulerFromQuat(state.q);
+    const rad2deg = 180 / Math.PI;
+    $('ex').value = fmt(a * rad2deg); $('ey').value = fmt(b * rad2deg); $('ez').value = fmt(g * rad2deg);
+  } catch (_) { /* q 无效时保留旧值 */ }
+}
+function readQInputs() {
+  const vals = [$('qx').value, $('qy').value, $('qz').value, $('qw').value].map(Number);
+  return vals;
+}
+
+/* ---------- 输入变更：标记旧结果过期 ---------- */
+function markStale() {
+  if (!state.result) return;
+  state.resultStale = true;
+  setStatus('输入已变更 · 结果待重算', 'warn');
+}
+/* ---------- Toast ---------- */
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---------- 主题 ---------- */
+$('themeBtn').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.getAttribute('data-theme') !== 'light' &&
+    (root.getAttribute('data-theme') === 'dark' ||
+      matchMedia('(prefers-color-scheme: dark)').matches);
+  root.setAttribute('data-theme', dark ? 'light' : 'dark');
+});
+
+/* ---------- Canvas 面绘制 ---------- */
+function makeFaceCard(containerId, f, kind) {
+  const card = document.createElement('div');
+  card.className = 'face-card';
+  card.dataset.face = f;
+  const title = document.createElement('div');
+  title.className = 'face-title';
+  title.innerHTML = '<span class="nm">' + f + ' · ' + FACE_NAMES[f] + '</span><span class="dim mono" id="' +
+    (kind === 'src' ? 'srcmeta' : 'dstmeta') + f + '"></span>';
+  const cv = document.createElement('canvas');
+  cv.className = 'face';
+  cv.dataset.face = f;
+  cv.dataset.kind = kind;
+  const wrap = document.createElement('div');
+  wrap.className = 'face-wrap';
+  wrap.style.position = 'relative';
+  wrap.appendChild(cv);
+  if (kind === 'dst') {
+    const marker = document.createElement('div');
+    marker.className = 'sel-marker';
+    marker.dataset.face = f;
+    wrap.appendChild(marker);
+  }
+  card.appendChild(title);
+  card.appendChild(wrap);
+  $(containerId).appendChild(card);
+  return cv;
+}
+
+function drawSrcFace(f) {
+  const cv = document.querySelector('#srcFaces canvas[data-face="' + f + '"]');
+  const n = state.n;
+  cv.width = n; cv.height = n;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(n, n);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const i = r * n + c, p = i * 4;
+    const t = state.faces[f][i];
+    if (t === null) {
+      img.data[p] = 5; img.data[p + 1] = 7; img.data[p + 2] = 10;
+    } else {
+      img.data[p] = Math.round(clamp01(t[0]) * 255);
+      img.data[p + 1] = Math.round(clamp01(t[1]) * 255);
+      img.data[p + 2] = Math.round(clamp01(t[2]) * 255);
+    }
+    img.data[p + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const card = cv.closest('.face-card');
+  card.classList.toggle('err', [...state.errorCells].some(k => k.startsWith(f + ':')));
+}
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+
+function drawDstFace(f) {
+  const cv = document.querySelector('#dstFaces canvas[data-face="' + f + '"]');
+  const out = state.out;
+  cv.width = out; cv.height = out;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(out, out);
+  const res = state.result;
+  const resOut = res ? res.out : 0;
+  for (let r = 0; r < out; r++) for (let c = 0; c < out; c++) {
+    const ip = (r * out + c) * 4;
+    // 结果尺寸与当前 out 不一致（改了目标边长尚未重算）：整格占位色，不越界读旧结果
+    if (!res || resOut !== out) {
+      img.data[ip] = 24; img.data[ip + 1] = 29; img.data[ip + 2] = 37; img.data[ip + 3] = 255;
+      continue;
+    }
+    const gi = f * out * out + r * out + c, p = gi * 3;
+    let R, G, B;
+    if (state.dmode === 'coverage') {
+      [R, G, B] = covColor(res.coverage[gi]);
+    } else {
+      R = Math.round(clamp01(res.rgb[p]) * 255);
+      G = Math.round(clamp01(res.rgb[p + 1]) * 255);
+      B = Math.round(clamp01(res.rgb[p + 2]) * 255);
+    }
+    img.data[ip] = R; img.data[ip + 1] = G; img.data[ip + 2] = B; img.data[ip + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  // 选中标记用绝对定位浮层，避免在低分辨率像素化 canvas 上画描边导致坐标错位
+  const card = cv.closest('.face-card');
+  const marker = card.querySelector('.sel-marker');
+  const sameSize = res && res.out === out;
+  if (state.selected && state.selected.f === f && sameSize && marker) {
+    card.classList.add('sel');
+    const { row, col } = state.selected;
+    const pct = 100 / out;
+    marker.style.display = 'block';
+    marker.style.left = (col * pct) + '%';
+    marker.style.top = (row * pct) + '%';
+    marker.style.width = pct + '%';
+    marker.style.height = pct + '%';
+  } else {
+    card.classList.remove('sel');
+    if (marker) marker.style.display = 'none';
+  }
+}
+function covColor(v) {
+  // 深青 -> 亮青蓝 的覆盖率渐变
+  const t = clamp01(v);
+  return [Math.round(12 + 64 * t), Math.round(34 + 160 * t), Math.round(52 + 203 * t)];
+}
+
+function redrawAllSrc() { for (let f = 0; f < 6; f++) drawSrcFace(f); }
+function redrawAllDst() { for (let f = 0; f < 6; f++) drawDstFace(f); }
+
+/* ---------- 画布点击：源编辑 / 目标检查 ---------- */
+function eventCell(ev, cv) {
+  const rect = cv.getBoundingClientRect();
+  const size = Number(cv.dataset.kind === 'src' ? state.n : state.out);
+  const col = Math.min(size - 1, Math.max(0, Math.floor((ev.clientX - rect.left) / rect.width * size)));
+  const row = Math.min(size - 1, Math.max(0, Math.floor((ev.clientY - rect.top) / rect.height * size)));
+  return { row, col };
+}
+$('#srcFaces').addEventListener('click', (ev) => {
+  const cv = ev.target.closest('canvas');
+  if (!cv) return;
+  const f = Number(cv.dataset.face);
+  const { row, col } = eventCell(ev, cv);
+  const i = row * state.n + col;
+  if (state.holeMode) {
+    state.faces[f][i] = state.faces[f][i] === null ? [0.2, 0.25, 0.32] : null;
+  } else {
+    const cur = state.faces[f][i] || [0.5, 0.5, 0.5];
+    // 简易拾色：循环取一组检查用颜色，保证无外部依赖
+    const palette = [
+      [1, 0.95, 0.8], [0.95, 0.25, 0.2], [0.2, 0.85, 0.45], [0.25, 0.45, 0.95],
+      [0.85, 0.4, 0.9], [0.95, 0.7, 0.2], [0.9, 0.9, 0.92], [0.08, 0.1, 0.14],
+    ];
+    const idx = palette.findIndex(p => p.every((v, k) => Math.abs(v - cur[k]) < 1e-9));
+    state.faces[f][i] = palette[(idx + 1) % palette.length];
+  }
+  state.errorCells.delete(f + ':' + row + ':' + col);
+  drawSrcFace(f);
+  saveDraft();
+  markStale();
+});
+$('#dstFaces').addEventListener('click', (ev) => {
+  const cv = ev.target.closest('canvas');
+  if (!cv || !state.result) return;
+  const f = Number(cv.dataset.face);
+  const { row, col } = eventCell(ev, cv);
+  state.selected = { f, row, col };
+  redrawAllDst();
+  renderInspector();
+});
+
+$('holeBtn').addEventListener('click', () => {
+  state.holeMode = !state.holeMode;
+  const b = $('holeBtn');
+  b.setAttribute('aria-pressed', String(state.holeMode));
+  b.textContent = '标缺测模式：' + (state.holeMode ? '开（点格切 null）' : '关');
+});
+
+document.querySelectorAll('[data-dmode]').forEach(b => b.addEventListener('click', () => {
+  state.dmode = b.dataset.dmode;
+  document.querySelectorAll('[data-dmode]').forEach(x =>
+    x.setAttribute('aria-pressed', String(x === b)));
+  redrawAllDst();
+}));
+
+/* ---------- 检查器 ---------- */
+function renderInspector() {
+  if (!state.selected || !state.result || !state.resultInput) {
+    $('inspectEmpty').hidden = false; $('inspectBody').hidden = true; return;
+  }
+  const { f, row, col } = state.selected;
+  const out = state.resultInput.out;
+  // 选中纹素不属于当前结果网格（改了 out 尚未重算）时不渲染明细
+  if (f < 0 || f > 5 || row < 0 || row >= out || col < 0 || col >= out) {
+    $('inspectEmpty').hidden = false; $('inspectBody').hidden = true; return;
+  }
+  // 检查器必须对应"生成这份结果时的输入"，避免结果生成后又改了参数造成错位
+  const params = C.buildParams(state.resultInput);
+  const detail = C.resampleTexel(params, f, row, col);
+  $('inspectEmpty').hidden = true;
+  $('inspectBody').hidden = false;
+  $('insName').textContent = '目标 ' + f + ' · ' + FACE_NAMES[f] + ' (行' + row + ', 列' + col + ')' +
+    (state.resultStale ? ' · 过期结果' : '');
+  const gi = f * out * out + row * out + col;
+  const rgb = [state.result.rgb[gi * 3], state.result.rgb[gi * 3 + 1], state.result.rgb[gi * 3 + 2]];
+  $('insSwatch').style.background = 'rgb(' + rgb.map(v => Math.round(clamp01(v) * 255)).join(',') + ')';
+  $('insRgb').textContent = 'RGB=(' + rgb.map(v => v.toExponential(6)).join(', ') + ')';
+  $('insOmega').textContent = detail.omegaT.toExponential(10);
+  $('insWSum').textContent = detail.weightSum.toExponential(10);
+  $('insResid').textContent = Math.abs(detail.weightSum - detail.omegaT).toExponential(3);
+  $('insCov').textContent = detail.coverage.toExponential(10);
+  $('insCount').textContent = detail.contributions.length;
+  const body = $('contribBody');
+  body.innerHTML = '';
+  for (const k of detail.contributions) {
+    const tr = document.createElement('tr');
+    if (k.missing) tr.className = 'miss';
+    tr.innerHTML =
+      '<td>' + k.face + ' · ' + FACE_NAMES[k.face] + ' (' + k.row + ',' + k.col + ')</td>' +
+      '<td>(' + k.u.toFixed(4) + ', ' + k.v.toFixed(4) + ')</td>' +
+      '<td>' + k.weight.toExponential(8) + '</td>' +
+      '<td>' + (k.weight / detail.omegaT).toExponential(6) + '</td>' +
+      '<td>' + (k.missing ? '<span class="warn-t">null 缺测（按零）</span>' : '有效') + '</td>';
+    body.appendChild(tr);
+  }
+}
+
+/* ---------- 输入装配与校验 ---------- */
+function currentInput() {
+  return { n: state.n, out: state.out, q: state.q.slice(), faces: state.faces };
+}
+function showErrors(errors) {
+  const box = $('errorBox');
+  if (!errors || !errors.length) { box.hidden = true; box.innerHTML = ''; state.errorCells.clear(); return; }
+  state.errorCells = new Set();
+  box.innerHTML = '';
+  for (const e of errors) {
+    const d = document.createElement('div');
+    d.className = 'e';
+    const tag = document.createElement('span');
+    tag.className = 'tag' + (e.kind === 'rotation' ? ' rot' : '');
+    tag.textContent = e.kind === 'rotation' ? '旋转' : (e.kind === 'face' ? '源面' + (e.face ?? '') : '参数');
+    const msg = document.createElement('span');
+    msg.textContent = e.message;
+    d.appendChild(tag); d.appendChild(msg);
+    box.appendChild(d);
+    if (e.kind === 'face' && Number.isInteger(e.row) && Number.isInteger(e.col)) {
+      state.errorCells.add(e.face + ':' + e.row + ':' + e.col);
+    }
+  }
+  box.hidden = false;
+}
+
+/* ---------- Worker 编排 ---------- */
+function ensureWorker() {
+  if (state.worker) return state.worker;
+  state.worker = new Worker('remap-worker.js');
+  state.worker.onmessage = (ev) => {
+    const m = ev.data;
+    if (m.generation !== state.gen) return; // 旧代消息一律丢弃
+    if (m.type === 'progress') {
+      $('progBar').style.width = Math.round(m.progress * 100) + '%';
+    } else if (m.type === 'error') {
+      finishRun(false);
+      showErrors(m.errors);
+      setStatus('输入有误', 'bad');
+    } else if (m.type === 'cancelled') {
+      finishRun(false);
+      setStatus('已取消 · 保留上一份结果', 'warn');
+      toast('已取消，上一份完整结果仍可检查');
+    } else if (m.type === 'done') {
+      state.result = {
+        n: m.result.n, out: m.result.out,
+        rgb: new Float64Array(m.result.rgb),
+        coverage: new Float64Array(m.result.coverage),
+        stats: m.result.stats,
+      };
+      state.resultInput = currentInput();
+      state.resultStale = false;
+      finishRun(true);
+      setStatus('完成', 'ok');
+      redrawAllDst();
+      renderStats();
+      if (state.selected) renderInspector();
+      $('copyBtn').disabled = false; $('downloadBtn').disabled = false;
+      toast('重采样完成，耗时 ' + Math.round(state.result.stats.elapsedMs) + ' ms');
+    }
+  };
+  state.worker.onerror = (e) => {
+    // Worker 构造 / 脚本加载失败等极端情况：回退主线程同步计算
+    console.warn('worker error, fallback to main thread', e);
+    state.gen--; // 回退路径不占用代次，避免后续正常消息被判为旧代
+    runInline();
+  };
+  return state.worker;
+}
+function setStatus(text, cls) {
+  const p = $('statusPill');
+  p.textContent = text;
+  p.className = 'pill' + (cls ? ' ' + cls : '');
+}
+function finishRun(ok) {
+  state.running = false;
+  $('runBtn').disabled = false;
+  $('cancelBtn').disabled = true;
+  $('progWrap').hidden = true;
+  $('progBar').style.width = '0%';
+}
+function startRun() {
+  showErrors([]);
+  // 先在主线程做一次校验，尽早标出错误格
+  const check = C.validateInput(currentInput());
+  if (!check.valid) {
+    showErrors(check.errors);
+    setStatus('输入有误', 'bad');
+    redrawAllSrc();
+    return;
+  }
+  state.gen++;
+  state.running = true;
+  $('runBtn').disabled = true;
+  $('cancelBtn').disabled = false;
+  $('progWrap').hidden = false;
+  setStatus('计算中…', 'run');
+  try {
+    ensureWorker().postMessage({ type: 'run', generation: state.gen, input: currentInput() });
+  } catch (e) {
+    runInline();
+  }
+}
+function runInline() {
+  // 无 Worker 环境的回退路径（同步，约 0.3–1 s）
+  const res = C.resampleCubemap(currentInput());
+  if (!res.ok) { showErrors(res.errors); setStatus('输入有误', 'bad'); finishRun(false); return; }
+  state.result = res; state.resultInput = currentInput();
+  state.resultStale = false;
+  finishRun(true); setStatus('完成（主线程）', 'ok');
+  redrawAllDst(); renderStats();
+  $('copyBtn').disabled = false; $('downloadBtn').disabled = false;
+}
+$('runBtn').addEventListener('click', startRun);
+$('cancelBtn').addEventListener('click', () => {
+  state.gen++;
+  if (state.worker) state.worker.postMessage({ type: 'cancel', generation: state.gen });
+});
+
+/* ---------- 统计 ---------- */
+function renderStats() {
+  const s = state.result.stats;
+  const box = $('statsBox');
+  const diff = Math.max(...s.conservationDiff);
+  const rows = [
+    ['耗时', Math.round(s.elapsedMs) + ' ms'],
+    ['每通道加权总量最大差', diff.toExponential(2), diff <= 1e-6],
+    ['权重分割最大残差', s.maxAbsResidual.toExponential(2), s.maxAbsResidual <= 1e-9],
+    ['覆盖率范围', s.minCoverage.toFixed(4) + ' – ' + s.maxCoverage.toFixed(4)],
+    ['六面立体角合计', s.weightTotal.toExponential(10) + ' / 4π'],
+    ['源加权总量 R,G,B', s.srcTotal.map(v => v.toFixed(4)).join(' ')],
+    ['目标加权总量 R,G,B', s.dstTotal.map(v => v.toFixed(4)).join(' ')],
+  ];
+  box.innerHTML = '';
+  for (const [k, v, ok] of rows) {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = '<div class="k">' + k + '</div><div class="v small mono ' +
+      (ok === true ? 'ok-t' : ok === false ? 'bad-t' : '') + '">' + v + '</div>';
+    box.appendChild(d);
+  }
+}
+
+/* ---------- 尺寸变更 ---------- */
+function resizeFaces(newN) {
+  const old = state.faces, oldN = state.n;
+  const faces = makeFaces(newN);
+  if (old) {
+    for (let f = 0; f < 6; f++) for (let r = 0; r < newN; r++) for (let c = 0; c < newN; c++) {
+      if (r < oldN && c < oldN) faces[f][r * newN + c] = old[f][r * oldN + c];
+    }
+  }
+  state.faces = faces;
+  state.n = newN;
+  rebuildSrcCanvases();
+  redrawAllSrc();
+}
+function rebuildSrcCanvases() {
+  $('srcFaces').innerHTML = '';
+  for (let f = 0; f < 6; f++) makeFaceCard('srcFaces', f, 'src');
+}
+function rebuildDstCanvases() {
+  $('dstFaces').innerHTML = '';
+  for (let f = 0; f < 6; f++) makeFaceCard('dstFaces', f, 'dst');
+}
+$('nIn').addEventListener('change', () => {
+  const v = Number($('nIn').value);
+  if (Number.isInteger(v) && v >= 1 && v <= 64) { resizeFaces(v); saveDraft(); markStale(); }
+});
+$('outIn').addEventListener('change', () => {
+  const v = Number($('outIn').value);
+  if (Number.isInteger(v) && v >= 1 && v <= 64) {
+    state.out = v;
+    state.selected = null;
+    rebuildDstCanvases(); redrawAllDst(); saveDraft(); markStale();
+  }
+});
+
+/* ---------- 旋转控件 ---------- */
+['qx', 'qy', 'qz', 'qw'].forEach(id => $(id).addEventListener('change', () => {
+  const q = readQInputs();
+  if (q.some(v => !Number.isFinite(v))) { setStatus('旋转参数无效', 'bad'); return; }
+  if (Math.hypot(...q) < 1e-12) { setStatus('四元数模长为 0', 'bad'); return; }
+  state.q = q;
+  syncEulerFromQ();
+  setStatus('就绪', '');
+  markStale();
+}));
+['ex', 'ey', 'ez'].forEach(id => $(id).addEventListener('change', () => {
+  const deg = [$('ex').value, $('ey').value, $('ez').value].map(Number);
+  if (deg.some(v => !Number.isFinite(v))) return;
+  const k = Math.PI / 180;
+  state.q = C.eulerToQuat(deg[0] * k, deg[1] * k, deg[2] * k);
+  $('qx').value = fmt(state.q[0]); $('qy').value = fmt(state.q[1]);
+  $('qz').value = fmt(state.q[2]); $('qw').value = fmt(state.q[3]);
+  markStale();
+}));
+document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+  const p = b.dataset.preset;
+  const d = Math.PI / 180;
+  const q = p === 'id' ? [0, 0, 0, 1]
+    : p === 'z90' ? [0, 0, Math.SQRT1_2, Math.SQRT1_2]
+    : p === 'y45' ? [0, Math.sin(22.5 * d), 0, Math.cos(22.5 * d)]
+    : (() => { const qq = C.eulerToQuat(30 * d, 45 * d, 20 * d); return qq; })();
+  state.q = q;
+  syncFormFromState();
+  markStale();
+}));
+
+/* ---------- 场景与导入导出 ---------- */
+function lampScene() {
+  const n = 8;
+  state.n = n; state.out = 8;
+  state.faces = makeFaces(n, (f) => {
+    // 暗墙 + 顶灯：+Y 面顶边一排亮斑，压在与 +Z/-Z/+X/-X 的交界缝上
+    if (f === 2) return [0.85, 0.82, 0.72];
+    return [0.06, 0.07, 0.09];
+  });
+  // 顶灯沿 +Y 面边缘（行 0 与行 n-1 即 v=±1 缝）
+  for (let c = 2; c < 6; c++) {
+    state.faces[2][0 * n + c] = [1, 0.96, 0.82];
+    state.faces[2][(n - 1) * n + c] = [1, 0.96, 0.82];
+  }
+  // 一面黑墙上放缺测区，演示"缺测≠黑墙"
+  for (let r = 2; r < 5; r++) for (let c = 3; c < 6; c++) state.faces[5][r * n + c] = null;
+  state.q = C.eulerToQuat(0, 35 * Math.PI / 180, 20 * Math.PI / 180);
+  state.out = 8;
+  $('nIn').value = n; $('outIn').value = 8;
+  rebuildSrcCanvases(); redrawAllSrc(); syncFormFromState();
+  markStale();
+}
+$('loadLampBtn').addEventListener('click', () => { lampScene(); saveDraft(); toast('已载入顶灯跨缝场景'); });
+
+$('loadSampleBtn').addEventListener('click', async () => {
+  try {
+    const resp = await fetch('solid-angle-cubemap.json');
+    applyInputObject(await resp.json());
+    toast('已载入样本文件');
+  } catch (_) {
+    applyInputObject({ n: 1, out: 2, q: [0, 0, 0, 1],
+      faces: [[[1, 0.2, 0]], [[0.2, 0.2, 0.2]], [[0, 0.7, 0.2]], [[0.1, 0.1, 0.1]], [[0.3, 0.5, 1]], [[null]]] });
+    toast('样本 fetch 失败，已用内置等价数据');
+  }
+});
+function applyInputObject(d) {
+  state.n = d.n; state.out = d.out; state.q = d.q.slice();
+  state.faces = d.faces.map(face => face.map(t => t === null ? null : t.slice()));
+  state.resultStale = true; // 新输入与上一份结果不再对应
+  state.selected = null;
+  $('nIn').value = state.n; $('outIn').value = state.out;
+  rebuildSrcCanvases(); rebuildDstCanvases();
+  redrawAllSrc(); redrawAllDst(); syncFormFromState();
+  $('jsonIn').value = JSON.stringify(d, null, 1);
+  saveDraft();
+}
+$('importBtn').addEventListener('click', () => $('fileIn').click());
+$('fileIn').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  try {
+    const d = JSON.parse(await file.text());
+    const check = C.validateInput(d);
+    if (!check.valid) { showErrors(check.errors); setStatus('导入文件有误', 'bad'); redrawAllSrc(); return; }
+    applyInputObject(d);
+    showErrors([]); setStatus('已导入', 'ok');
+  } catch (e) {
+    showErrors([{ kind: 'param', message: 'JSON 解析失败：' + e.message }]);
+    setStatus('导入失败', 'bad');
+  }
+  ev.target.value = '';
+});
+$('applyJsonBtn').addEventListener('click', () => {
+  let d;
+  try { d = JSON.parse($('jsonIn').value); }
+  catch (e) { showErrors([{ kind: 'param', message: 'JSON 解析失败：' + e.message }]); return; }
+  const check = C.validateInput(d);
+  if (!check.valid) { showErrors(check.errors); setStatus('JSON 内容有误', 'bad'); redrawAllSrc(); return; }
+  applyInputObject(d); showErrors([]); setStatus('已应用 JSON', 'ok');
+});
+
+/* ---------- 导出 ---------- */
+function exportText() {
+  return JSON.stringify(C.resultToJSON(state.resultInput, state.result), null, 1);
+}
+$('copyBtn').addEventListener('click', async () => {
+  const text = exportText();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('结果 JSON 已复制（' + text.length + ' 字符）');
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('已复制（兼容路径）'); }
+    catch (_2) { toast('复制被浏览器拒绝，请改用下载'); }
+    ta.remove();
+  }
+});
+$('downloadBtn').addEventListener('click', () => {
+  const blob = new Blob([exportText()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cubemap-remap-out-n' + state.resultInput.n + '-out' + state.resultInput.out + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+
+/* ---------- 热更新与启动 ---------- */
+if (window.claude && window.claude.hot && typeof window.claude.hot.snapshot === 'function') {
+  const prevSnapshot = window.claude.hot.snapshot;
+  window.claude.hot.snapshot = function () {
+    try { prevSnapshot(); } catch (_) { /* 保留宿主原有钩子 */ }
+    return { draft: true };
+  };
+} else {
+  window.claude = window.claude || {};
+  window.claude.hot = window.claude.hot || {};
+  window.claude.hot.snapshot = () => ({ draft: true });
+}
+function boot() {
+  rebuildSrcCanvases();
+  rebuildDstCanvases();
+  let restored = loadDraft();
+  // 恢复的草稿可能来自旧版本或损坏，跑一次校验，不合法就回退到内置场景
+  if (restored) {
+    const check = C.validateInput(currentInput());
+    if (!check.valid) { restored = false; lampScene(); }
+  }
+  if (!restored && !state.faces) lampScene();
+  syncFormFromState();
+  redrawAllSrc();
+  redrawAllDst();
+  $('jsonIn').value = JSON.stringify(currentInput(), null, 1);
+  setStatus('就绪', '');
+}
+if (window.claude && window.claude.hot && window.claude.hot.ready) {
+  window.claude.hot.ready(boot);
+} else {
+  boot();
+}
+</script>
