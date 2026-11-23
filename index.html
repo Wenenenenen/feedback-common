@@ -1,0 +1,1802 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>争地版本校验台</title>
+<style>
+/* 布局：左栏地图与版本树，右栏单元格详情与批查询，窄屏堆叠 */
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --fg: #1c2330;
+  --muted: #64708a;
+  --line: #d9dee7;
+  --accent: #2f6fed;
+  --accent-soft: #e3ecff;
+  --good: #1e8e5a;
+  --warn: #b8860b;
+  --bad: #c0392b;
+  --empty: #eef0f3;
+  --empty-dark: #262b34;
+  --hl: #ffcf3f;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 4px 14px rgba(20, 30, 50, .06);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171d; --panel: #1d222b; --panel-2: #242a35;
+    --fg: #e6eaf1; --muted: #97a1b3; --line: #333c49;
+    --accent: #6d9bff; --accent-soft: #22304d;
+    --good: #4cc38a; --warn: #e0b748; --bad: #ef7a6c;
+    --empty: #262b34; --hl: #e6b93a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171d; --panel: #1d222b; --panel-2: #242a35;
+  --fg: #e6eaf1; --muted: #97a1b3; --line: #333c49;
+  --accent: #6d9bff; --accent-soft: #22304d;
+  --good: #4cc38a; --warn: #e0b748; --bad: #ef7a6c;
+  --empty: #262b34; --hl: #e6b93a;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 1440px; margin: 0 auto; padding-block: 18px 28px; }
+header.top {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+header.top h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+header.top .sub { color: var(--muted); font-size: 12.5px; }
+.spacer { flex: 1; }
+button, select, input {
+  font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px;
+}
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px; min-width: 0;
+}
+.panel + .panel { margin-top: 16px; }
+.panel h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--muted); margin: 0 0 10px; font-weight: 650;
+}
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row.tight { gap: 6px; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px; font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.tag.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+
+.canvas-wrap { display: flex; justify-content: center; overflow: auto; }
+canvas#map {
+  image-rendering: pixelated; touch-action: none; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--empty); max-width: 100%;
+}
+.legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.legend .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+
+/* 版本树虚拟列表 */
+.tree { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.tree-item {
+  display: flex; align-items: center; gap: 8px; padding: 5px 9px;
+  cursor: pointer; border-left: 3px solid transparent; font-size: 13px;
+}
+.tree-item:hover { background: var(--panel-2); }
+.tree-item.active { background: var(--accent-soft); border-left-color: var(--accent); }
+.tree-item .ver { font-family: var(--mono); font-weight: 650; min-width: 34px; }
+.tree-item .edit { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+/* 查询表 */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.table-scroll { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.scroll-x { overflow-x: auto; }
+.pill { padding: 1px 7px; border-radius: 999px; font-size: 11.5px; font-family: var(--mono); }
+.pill.empty { background: var(--panel-2); color: var(--muted); }
+.pill.terr { background: var(--accent-soft); color: var(--accent); }
+
+#drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius);
+  padding: 22px; text-align: center; color: var(--muted); cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+#drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+#errors {
+  background: color-mix(in srgb, var(--bad) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line));
+  border-radius: 8px; padding: 10px 12px; margin-top: 12px;
+}
+#errors ul { margin: 6px 0 0; padding-left: 18px; }
+#errors li { font-family: var(--mono); font-size: 12.5px; margin: 3px 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hidden { display: none !important; }
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 999px;
+  font-size: 13px; box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s; z-index: 50;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+.trace-line { font-family: var(--mono); font-size: 12px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.trace-line .flag { margin-left: 8px; }
+.small { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>争地版本校验台</h1>
+      <div class="sub">四邻领地 · 八邻空地 · 版本树改格溯源</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="small muted">主题
+      <select id="theme">
+        <option value="system">跟随系统</option>
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+      </select>
+    </label>
+  </header>
+
+  <!-- 导入区：无效导入只报错，不替换当前项目 -->
+  <section class="panel" id="import-panel">
+    <h2>导入项目 JSON</h2>
+    <div id="drop">
+      点击选择，或把 <span class="mono">frontier-versions.json</span> 拖到这里
+      <input type="file" id="file" accept=".json,application/json" class="hidden">
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="load-sample" class="ghost">载入内置样例</button>
+      <span id="project-meta" class="muted small"></span>
+    </div>
+    <div id="errors" class="hidden"></div>
+  </section>
+
+  <div id="workspace" class="hidden">
+    <div class="layout">
+      <!-- 左：地图 + 版本树 -->
+      <div>
+        <section class="panel">
+          <h2>地图 <span id="map-ver" class="mono" style="text-transform:none;letter-spacing:0"></span></h2>
+          <div class="canvas-wrap"><canvas id="map" width="512" height="512" tabindex="0"></canvas></div>
+          <div class="row" style="margin-top:10px;justify-content:space-between">
+            <div class="legend" id="legend"></div>
+            <div class="row tight">
+              <button id="zoom-in" class="ghost" title="放大">＋</button>
+              <button id="zoom-out" class="ghost" title="缩小">－</button>
+              <button id="zoom-fit" class="ghost">适应</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>版本树（<span id="version-count"></span> 个版本）</h2>
+          <div class="tree" id="tree"></div>
+        </section>
+      </div>
+
+      <!-- 右：详情 + 编辑 + 查询 -->
+      <div>
+        <section class="panel">
+          <h2>当前版本改格</h2>
+          <div class="row tight">
+            <label class="small">值
+              <select id="edit-value"></select>
+            </label>
+            <button id="do-edit" class="primary">在选中格改格（生成新版本）</button>
+          </div>
+          <p class="muted small" style="margin:8px 0 0">先在地图上点选一格；新版本挂在当前版本之下，兄弟分支互不影响。</p>
+        </section>
+
+        <section class="panel">
+          <h2>单元格详情</h2>
+          <div id="cell-empty" class="muted">点选地图上的任意格查看所在整块。</div>
+          <div id="cell-info" class="hidden">
+            <dl class="kv" id="cell-kv"></dl>
+            <div class="row tight" style="margin-top:10px">
+              <button id="add-query-here" class="ghost">把此格加入批查询</button>
+              <button id="trace-enclave" class="ghost">飞地溯源</button>
+            </div>
+            <div id="trace" class="hidden" style="margin-top:10px"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>批查询（<span id="query-count"></span> 条，按提交顺序）</h2>
+          <div class="row tight" style="margin-bottom:10px">
+            <button id="run-batch" class="primary">运行批查询</button>
+            <button id="export-json" class="ghost" disabled>导出结果 JSON</button>
+            <button id="clear-queries" class="ghost">清空</button>
+          </div>
+          <div class="table-scroll">
+            <table id="query-table">
+              <thead><tr>
+                <th class="num">#</th><th class="num">版本</th><th class="num">x</th><th class="num">y</th>
+                <th>类型</th><th class="num">面积</th><th class="num">周长</th><th>飞地</th><th>归属</th><th></th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- 引擎与应用逻辑（内联，保证单文件可离线打开） -->
+<script>
+// 争地赛季地图版本校验 —— 核心拓扑引擎（纯算法，无 DOM 依赖）
+//
+// 模型：
+//   版本 0 为底图；edits[i] 产生版本 i+1，parent 指向某个更早版本，每次只改一格。
+//   同色领地按四邻相连；空地(".")按八邻相连。
+//   领地分量报告 area / perimeter（贴地图边、贴异色格的边都算周长）。
+//   空地分量报告 area / enclave（整块都不接地图外边才为 true）/
+//     owner（共边阵营恰有一个时为该阵营，否则 null）。
+//
+// 满额规模：512×512 格、12 万改格、3 万查询。
+// 离线做法：版本树 DFS 线性化 → 每条邻接边/归属关系的激活区间 →
+//   时间线段树 + 可回滚并查集（按大小合并，无路径压缩）。
+// 复杂度 O((段数 + Q) log V)。
+
+'use strict';
+
+// ---------------------------------------------------------------------------
+// 常量与校验
+// ---------------------------------------------------------------------------
+
+const MAX_SIDE = 512;
+const MAX_EDITS = 120000;
+const MAX_QUERIES = 30000;
+const EMPTY = '.';
+
+const isNonEmptyString = (v) => typeof v === 'string' && v.length > 0;
+const isSingleCodeUnit = (s) => typeof s === 'string' && s.length === 1;
+
+/**
+ * 校验导入 JSON。记录号从 1 开始，错误信息中标注 edits/queries 第 n 条。
+ * @returns {{ok:true, project:object} | {ok:false, errors:string[]}}
+ */
+function validateProject(input) {
+  const errors = [];
+
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, errors: ['根节点必须是 JSON 对象，包含 rows / edits / queries 字段'] };
+  }
+
+  // ---- rows ----
+  let width = 0;
+  let height = 0;
+  const allowedValues = new Set([EMPTY]);
+  if (!Array.isArray(input.rows)) {
+    errors.push('rows 必须是字符串数组');
+  } else if (input.rows.length === 0 || input.rows.length > MAX_SIDE) {
+    errors.push(`rows 行数须在 1..${MAX_SIDE} 之间，实际为 ${input.rows.length}`);
+  } else {
+    height = input.rows.length;
+    width = input.rows[0].length;
+    if (width === 0 || width > MAX_SIDE) {
+      errors.push(`每行长度须在 1..${MAX_SIDE} 之间，首行长度为 ${width}`);
+      width = 0;
+    }
+    if (width > 0) {
+      for (let i = 0; i < height; i++) {
+        const row = input.rows[i];
+        if (!isNonEmptyString(row)) {
+          errors.push(`rows[${i}] 必须是非空字符串`);
+          break;
+        }
+        if (row.length !== width) {
+          errors.push(`rows[${i}] 长度 ${row.length} 与首行长度 ${width} 不一致（地图必须为矩形）`);
+          break;
+        }
+        for (let j = 0; j < width; j++) {
+          const ch = row[j];
+          if (!isSingleCodeUnit(ch)) {
+            errors.push(`rows[${i}] 含多码位字符，每格只允许单个字符`);
+            break;
+          }
+          allowedValues.add(ch);
+        }
+      }
+    }
+  }
+
+  const inBounds = (x, y) => Number.isInteger(x) && Number.isInteger(y)
+    && x >= 0 && y >= 0 && x < width && y < height;
+
+  // ---- edits（缺省视为空数组）----
+  const edits = Array.isArray(input.edits) ? input.edits
+    : (input.edits === undefined ? [] : null);
+  if (edits === null) {
+    errors.push('edits 必须是数组');
+  } else if (edits.length > MAX_EDITS) {
+    errors.push(`edits 最多 ${MAX_EDITS} 条，实际 ${edits.length} 条`);
+  } else {
+    for (let i = 0; i < edits.length; i++) {
+      const rec = edits[i];
+      const tag = `edits 第 ${i + 1} 条`;
+      if (rec === null || typeof rec !== 'object' || Array.isArray(rec)) {
+        errors.push(`${tag}：必须是对象`);
+        continue;
+      }
+      if (!Number.isInteger(rec.parent) || rec.parent < 0 || rec.parent > i) {
+        errors.push(`${tag}：parent 必须是 [0, ${i}] 内的整数（只能引用更早版本），实际为 ${JSON.stringify(rec.parent)}`);
+      }
+      if (!inBounds(rec.x, rec.y)) {
+        errors.push(`${tag}：坐标 (${rec.x}, ${rec.y}) 越界，地图范围 x∈[0,${width - 1}] y∈[0,${height - 1}]`);
+      }
+      if (!isSingleCodeUnit(rec.value) || !allowedValues.has(rec.value)) {
+        errors.push(`${tag}：value 必须是底图中出现过的单字符或 "."，实际为 ${JSON.stringify(rec.value)}`);
+      }
+    }
+  }
+
+  // ---- queries ----
+  const editCount = edits ? edits.length : 0;
+  const versionCount = editCount + 1;
+  const queries = Array.isArray(input.queries) ? input.queries
+    : (input.queries === undefined ? [] : null);
+  if (queries === null) {
+    errors.push('queries 必须是数组');
+  } else if (queries.length > MAX_QUERIES) {
+    errors.push(`queries 最多 ${MAX_QUERIES} 条，实际 ${queries.length} 条`);
+  } else {
+    for (let i = 0; i < queries.length; i++) {
+      const rec = queries[i];
+      const tag = `queries 第 ${i + 1} 条`;
+      if (rec === null || typeof rec !== 'object' || Array.isArray(rec)) {
+        errors.push(`${tag}：必须是对象`);
+        continue;
+      }
+      if (!Number.isInteger(rec.version) || rec.version < 0 || rec.version >= versionCount) {
+        errors.push(`${tag}：version 必须是 [0, ${versionCount - 1}] 内的整数，实际为 ${JSON.stringify(rec.version)}`);
+      }
+      if (!inBounds(rec.x, rec.y)) {
+        errors.push(`${tag}：坐标 (${rec.x}, ${rec.y}) 越界，地图范围 x∈[0,${width - 1}] y∈[0,${height - 1}]`);
+      }
+    }
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    project: {
+      rows: input.rows.slice(),
+      edits: edits.map((e) => ({ parent: e.parent, x: e.x, y: e.y, value: e.value })),
+      queries: queries.map((q) => ({ version: q.version, x: q.x, y: q.y })),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 分块整数数组：避免单 TypedArray 长度上限，push/random access 均 O(1)
+// ---------------------------------------------------------------------------
+
+class ChunkInts {
+  constructor(chunkShift = 16) {
+    this.shift = chunkShift;
+    this.chunkSize = 1 << chunkShift;
+    this.chunks = [];
+    this.length = 0;
+  }
+  push(...values) {
+    for (const v of values) {
+      const i = this.length++;
+      const ci = i >> this.shift;
+      const off = i & (this.chunkSize - 1);
+      if (off === 0) this.chunks.push(new Int32Array(this.chunkSize));
+      this.chunks[ci][off] = v;
+    }
+  }
+  set(i, v) {
+    this.chunks[i >> this.shift][i & (this.chunkSize - 1)] = v;
+  }
+  get(i) {
+    return this.chunks[i >> this.shift][i & (this.chunkSize - 1)];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 交互态工具：版本取图 / 泛洪取整块
+// ---------------------------------------------------------------------------
+
+/** 沿 parent 链重放，得到 version 时刻的整图（码值数组，'.'=0） */
+function materializeGrid(project, version, charToCode) {
+  const { rows, edits } = project;
+  const h = rows.length;
+  const w = rows[0].length;
+  const grid = new Int32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) grid[y * w + x] = charToCode(rows[y][x]);
+  }
+  const chain = [];
+  let v = version;
+  while (v > 0) {
+    chain.push(v - 1);
+    v = edits[v - 1].parent;
+  }
+  for (let k = chain.length - 1; k >= 0; k--) {
+    const e = edits[chain[k]];
+    grid[e.y * w + e.x] = charToCode(e.value);
+  }
+  return grid;
+}
+
+const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const DIRS8 = DIRS4.concat([[1, 1], [1, -1], [-1, 1], [-1, -1]]);
+
+/**
+ * 泛洪取 (x,y) 所在分量（交互/参考实现用）。
+ * connectivity: 4（同色领地）或 8（空地，调用方保证起点为空地）。
+ */
+function floodBlock(project, version, x, y, connectivity, charToCode) {
+  const { rows } = project;
+  const h = rows.length;
+  const w = rows[0].length;
+  const grid = materializeGrid(project, version, charToCode);
+  const start = y * w + x;
+  const target = grid[start];
+  const isEmptyRun = target === 0;
+  const dirs = connectivity === 8 ? DIRS8 : DIRS4;
+
+  const seen = new Uint8Array(w * h);
+  const stack = [start];
+  const cells = [];
+  seen[start] = 1;
+  let touchesBoundary = false;
+  let perimeter = 0;
+  const ownerSet = new Set();
+
+  while (stack.length) {
+    const c = stack.pop();
+    cells.push(c);
+    const cx = c % w;
+    const cy = (c - cx) / w;
+    if (cx === 0 || cy === 0 || cx === w - 1 || cy === h - 1) touchesBoundary = true;
+
+    for (const [dx, dy] of DIRS4) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) {
+        perimeter++;
+      } else {
+        const nv = grid[ny * w + nx];
+        if (nv !== target) {
+          perimeter++;
+          if (isEmptyRun && nv !== 0) ownerSet.add(nv);
+        }
+      }
+    }
+
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const nc = ny * w + nx;
+      if (seen[nc] || grid[nc] !== target) continue;
+      seen[nc] = 1;
+      stack.push(nc);
+    }
+  }
+
+  return {
+    cells: Int32Array.from(cells),
+    area: cells.length,
+    perimeter,
+    touchesBoundary,
+    enclave: isEmptyRun ? !touchesBoundary : false,
+    ownerCodes: ownerSet,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 可回滚并查集
+// 栈帧（变长，首字为 tag）：
+//   合并帧 [0, ra, rb, sizeRa, perimRa, touchRa, ownerRa]
+//   边调整帧 [1, root, delta] —— 同色边无论是否触发合并都要扣周长
+// ---------------------------------------------------------------------------
+
+class RollbackDSU {
+  constructor(numNodes) {
+    this.parent = new Int32Array(numNodes);
+    this.size = new Int32Array(numNodes);
+    for (let i = 0; i < numNodes; i++) {
+      this.parent[i] = i;
+      this.size[i] = 1;
+    }
+    this.area = new Int32Array(numNodes);
+    this.perim = new Int32Array(numNodes);
+    this.touch = new Uint8Array(numNodes);
+    this.ownerState = new Int8Array(numNodes); // -1 多方, 0 无主, >0 阵营码
+    this.stack = new ChunkInts();
+  }
+  find(x) {
+    while (this.parent[x] !== x) x = this.parent[x];
+    return x;
+  }
+  checkpoint() { return this.stack.length; }
+  /** 合并两个分量；ownerCode 仅用于 token 合并时显式给出阵营 */
+  union(a, b, ownerCode) {
+    let ra = this.find(a);
+    let rb = this.find(b);
+    if (ra === rb) return;
+    if (this.size[ra] < this.size[rb]) { const t = ra; ra = rb; rb = t; }
+    // 定长 7 字帧，tag=0 在栈顶：[0, ra, rb, sizeRa, perimRa, touchRa, ownerRa]
+    this.stack.push(0, ra, rb, this.size[ra], this.perim[ra], this.touch[ra], this.ownerState[ra]);
+    this.parent[rb] = ra;
+    this.size[ra] += this.size[rb];
+    this.area[ra] = this.size[ra];
+    this.perim[ra] += this.perim[rb];
+    this.touch[ra] = this.touch[ra] | this.touch[rb];
+    const oa = this.ownerState[ra];
+    const ob = ownerCode !== undefined ? ownerCode : this.ownerState[rb];
+    let merged;
+    if (oa === -1 || ob === -1) merged = -1;
+    else if (oa === 0) merged = ob;
+    else if (ob === 0) merged = oa;
+    else merged = (oa === ob ? oa : -1);
+    this.ownerState[ra] = merged;
+  }
+  /** 一条同色边激活：两端分量周长各减 1（合并后整体减 2），no-op 也要计 */
+  applyColorEdge(u) {
+    const root = this.find(u);
+    this.perim[root] -= 2;
+    // 定长 7 字帧，tag=1 在帧首（栈底方向）：[1, root, -2, 0, 0, 0, 0]
+    this.stack.push(1, root, -2, 0, 0, 0, 0);
+  }
+  rollback(cp) {
+    const st = this.stack;
+    let len = st.length;
+    while (len > cp) {
+      const tag = st.get(len - 7); // 定长帧：tag 固定在帧首
+      if (tag === 1) {
+        // [1, root, delta, ...]
+        const root = st.get(len - 6);
+        const delta = st.get(len - 5);
+        len -= 7;
+        this.perim[root] -= delta; // delta=-2 → 回滚 +2
+      } else {
+        // [0, ra, rb, sizeRa, perimRa, touchRa, ownerRa]
+        const ra = st.get(len - 6);
+        const rb = st.get(len - 5);
+        const sizeRa = st.get(len - 4);
+        const perimRa = st.get(len - 3);
+        const touchRa = st.get(len - 2);
+        const ownerRa = st.get(len - 1);
+        len -= 7;
+        this.parent[rb] = rb;
+        this.size[ra] = sizeRa;
+        this.area[ra] = sizeRa;
+        this.perim[ra] = perimRa;
+        this.touch[ra] = touchRa;
+        this.ownerState[ra] = ownerRa;
+      }
+    }
+    st.length = len;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 离线批处理
+// ---------------------------------------------------------------------------
+
+function runBatch(project) {
+  const { rows, edits, queries } = project;
+  const h = rows.length;
+  const w = rows[0].length;
+  const n = w * h;
+  const V = edits.length + 1;
+
+  // 字符码：0 固定给空地
+  const charToCodeMap = new Map([[EMPTY, 0]]);
+  let nextCode = 1;
+  const charToCode = (ch) => {
+    let c = charToCodeMap.get(ch);
+    if (c === undefined) {
+      c = nextCode++;
+      charToCodeMap.set(ch, c);
+    }
+    return c;
+  };
+  let codeToChar = null; // 所有码分配完后建立（见 runBatch 后段）
+
+  const initialGrid = new Int32Array(n);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) initialGrid[y * w + x] = charToCode(rows[y][x]);
+  }
+
+  // 版本树
+  const children = new Array(V);
+  for (let i = 0; i < V; i++) children[i] = [];
+  for (let i = 0; i < edits.length; i++) children[edits[i].parent].push(i + 1);
+
+  // 邻接边：4 邻（右、下）+ 8 邻补充（两个对角）
+  const e4u = new ChunkInts();
+  const e4v = new ChunkInts();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = y * w + x;
+      if (x + 1 < w) { e4u.push(c); e4v.push(c + 1); }
+      if (y + 1 < h) { e4u.push(c); e4v.push(c + w); }
+    }
+  }
+  const E4 = e4u.length;
+  const e8u = new ChunkInts();
+  const e8v = new ChunkInts();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = y * w + x;
+      if (x + 1 < w && y + 1 < h) { e8u.push(c); e8v.push(c + w + 1); }
+      if (x - 1 >= 0 && y + 1 < h) { e8u.push(c); e8v.push(c + w - 1); }
+    }
+  }
+  const E8extra = e8u.length;
+  const edgeEndU = (eid) => (eid < E4 ? e4u.get(eid) : e8u.get(eid - E4));
+  const edgeEndV = (eid) => (eid < E4 ? e4v.get(eid) : e8v.get(eid - E4));
+
+  // 每格关联边表（CSR 扁平结构，避免海量 JS 小数组对象）：
+  // inc4Offset[c]..inc4Offset[c+1] 为格 c 的 4 邻边 id；inc8 同理
+  function buildIncident(includeDiagonal) {
+    const deg = new Int32Array(n + 1);
+    for (let eid = 0; eid < E4; eid++) {
+      deg[e4u.get(eid) + 1]++;
+      deg[e4v.get(eid) + 1]++;
+    }
+    if (includeDiagonal) {
+      for (let k = 0; k < E8extra; k++) {
+        deg[e8u.get(k) + 1]++;
+        deg[e8v.get(k) + 1]++;
+      }
+    }
+    const offset = new Int32Array(n + 1);
+    for (let c = 0; c < n; c++) offset[c + 1] = offset[c] + deg[c + 1];
+    const total = offset[n];
+    const edges = new Int32Array(total);
+    const cursor = Int32Array.from(offset);
+    for (let eid = 0; eid < E4; eid++) {
+      const u = e4u.get(eid);
+      const v = e4v.get(eid);
+      edges[cursor[u]++] = eid;
+      edges[cursor[v]++] = eid;
+    }
+    if (includeDiagonal) {
+      for (let k = 0; k < E8extra; k++) {
+        const eid = E4 + k;
+        const u = e8u.get(k);
+        const v = e8v.get(k);
+        edges[cursor[u]++] = eid;
+        edges[cursor[v]++] = eid;
+      }
+    }
+    return { offset, edges };
+  }
+  const inc4 = buildIncident(false);
+  const inc8 = buildIncident(true);
+
+  // 查询分桶
+  const queriesByVersion = new Array(V);
+  for (let i = 0; i < V; i++) queriesByVersion[i] = [];
+  for (let i = 0; i < queries.length; i++) queriesByVersion[queries[i].version].push(i);
+  const queryCellCode = new Int32Array(queries.length);
+
+  // -----------------------------------------------------------------------
+  // 版本树 DFS（迭代，非破坏式）：entry/exit 时间戳 + 工作格重放/回滚
+  // -----------------------------------------------------------------------
+  const entry = new Int32Array(V);
+  const exitT = new Int32Array(V);
+  const versionAtTime = new Int32Array(V); // DFS 时间戳 -> 版本号
+
+  function traverseTree(enterNode, exitNode) {
+    const work = new Int32Array(initialGrid);
+    const stack = [0];
+    const stage = new Uint8Array(V);       // 1=已进入 2=孩子处理完
+    const childIdx = new Int32Array(V);
+    const savedCode = new Int32Array(V);
+    let timer = 0;
+    entry[0] = timer;
+    versionAtTime[timer] = 0;
+    enterNode(0, -1, work);
+    timer++;
+    stage[0] = 1;
+    while (stack.length) {
+      const node = stack[stack.length - 1];
+      if (stage[node] === 1) {
+        const kids = children[node];
+        if (childIdx[node] < kids.length) {
+          const child = kids[childIdx[node]++];
+          const ed = edits[child - 1];
+          const cell = ed.y * w + ed.x;
+          savedCode[child] = work[cell];
+          work[cell] = charToCode(ed.value);
+          entry[child] = timer;
+          versionAtTime[timer] = child;
+          enterNode(child, cell, work);
+          timer++;
+          stage[child] = 1;
+          stack.push(child);
+        } else {
+          stage[node] = 2;
+        }
+      } else {
+        stack.pop();
+        exitT[node] = timer - 1;
+        const exitCell = node === 0 ? -1 : edits[node - 1].y * w + edits[node - 1].x;
+        if (node !== 0) {
+          const ed = edits[node - 1];
+          work[ed.y * w + ed.x] = savedCode[node]; // 先回滚格值
+        }
+        exitNode(node, exitCell, work);             // 再回调，保证读到父状态
+      }
+    }
+    return timer;
+  }
+
+  // 第一遍：查询时刻格值码（区分空地/阵营查询）
+  traverseTree((node, cell, work) => {
+    const qs = queriesByVersion[node];
+    for (let qi = 0; qi < qs.length; qi++) {
+      const qidx = qs[qi];
+      const q = queries[qidx];
+      queryCellCode[qidx] = work[q.y * w + q.x];
+    }
+  }, () => {});
+
+  // -----------------------------------------------------------------------
+  // 边激活区间收集
+  // -----------------------------------------------------------------------
+  function buildEdgeSegments(edgeCount, inc, activeTest, outRefs, outL, outR) {
+    // activeStart[e]：边 e 当前激活段的起点（-1 表示未激活）。
+    // 进入子节点：应用改格 → 同步 incident 边；退出子节点：回滚改格 → 再次同步恢复。
+    const activeStart = new Int32Array(edgeCount).fill(-1);
+
+    const sync = (eid, timePoint, work) => {
+      const nowOn = activeTest(work, edgeEndU(eid), edgeEndV(eid));
+      const wasOn = activeStart[eid] !== -1;
+      if (nowOn && !wasOn) {
+        activeStart[eid] = timePoint;
+      } else if (!nowOn && wasOn) {
+        outRefs.push(eid);
+        outL.push(activeStart[eid]);
+        outR.push(timePoint - 1);
+        activeStart[eid] = -1;
+      }
+    };
+    const syncCell = (cell, timePoint, work) => {
+      for (let p = inc.offset[cell]; p < inc.offset[cell + 1]; p++) {
+        sync(inc.edges[p], timePoint, work);
+      }
+    };
+
+    traverseTree((node, cell, work) => {
+      if (node === 0) {
+        for (let eid = 0; eid < edgeCount; eid++) {
+          if (activeTest(work, edgeEndU(eid), edgeEndV(eid))) activeStart[eid] = 0;
+        }
+      } else {
+        syncCell(cell, entry[node], work);
+      }
+    }, (node, cell, work) => {
+      if (node === 0) {
+        for (let eid = 0; eid < edgeCount; eid++) {
+          if (activeStart[eid] !== -1) {
+            outRefs.push(eid);
+            outL.push(activeStart[eid]);
+            outR.push(exitT[0]);
+            activeStart[eid] = -1;
+          }
+        }
+      } else {
+        syncCell(cell, exitT[node] + 1, work);
+      }
+    });
+  }
+
+  // 4 邻：同色且非空地
+  const seg4Ref = new ChunkInts();
+  const seg4L = new ChunkInts();
+  const seg4R = new ChunkInts();
+  buildEdgeSegments(
+    E4, inc4,
+    (g, u, v) => g[u] !== 0 && g[u] === g[v],
+    seg4Ref, seg4L, seg4R
+  );
+
+  // 8 邻：两端皆空地
+  const seg8Ref = new ChunkInts();
+  const seg8L = new ChunkInts();
+  const seg8R = new ChunkInts();
+  buildEdgeSegments(
+    E4 + E8extra, inc8,
+    (g, u, v) => g[u] === 0 && g[v] === 0,
+    seg8Ref, seg8L, seg8R
+  );
+
+  // -----------------------------------------------------------------------
+  // 归属 token：某空地格 c 与阵营 f 共边的时间段
+  // token 在创建时分配槽位（tokCell/tokFaction 立即落位，R 收尾时回填）
+  // -----------------------------------------------------------------------
+  const tokCell = new ChunkInts();
+  const tokFaction = new ChunkInts();
+  const tokL = new ChunkInts();
+  const tokR = new ChunkInts();
+  let tokenCount = 0;
+
+  const localSets = new Array(n);
+  for (let c = 0; c < n; c++) localSets[c] = new Map(); // faction -> tokenIdx
+  const tokenStart = new Map();                          // c*BIG+f -> start time
+  const BIG = nextCode + 2;
+  const keyOf = (c, f) => c * BIG + f;
+
+  function neighborFactions(work, c) {
+    const cx = c % w;
+    const cy = (c - cx) / w;
+    const set = new Set();
+    if (cx + 1 < w) { const v = work[c + 1]; if (v) set.add(v); }
+    if (cx - 1 >= 0) { const v = work[c - 1]; if (v) set.add(v); }
+    if (cy + 1 < h) { const v = work[c + w]; if (v) set.add(v); }
+    if (cy - 1 >= 0) { const v = work[c - w]; if (v) set.add(v); }
+    return set;
+  }
+
+  function closeToken(c, f, endTime) {
+    const key = keyOf(c, f);
+    const start = tokenStart.get(key);
+    const idx = localSets[c].get(f);
+    tokR.set(idx, endTime);
+    tokenStart.delete(key);
+    localSets[c].delete(f);
+  }
+  function openToken(c, f, startTime) {
+    const idx = tokenCount++;
+    tokCell.push(c);
+    tokFaction.push(f);
+    tokL.push(startTime);
+    tokR.push(-1);
+    localSets[c].set(f, idx);
+    tokenStart.set(keyOf(c, f), startTime);
+  }
+
+  // 把某格 c 的共边阵营集合同步成 work 现状；timePoint 为变化生效的时间点
+  function syncCellTokens(c, timePoint, work) {
+    if (work[c] !== 0) {
+      // 非空地：其全部 token 在此前结束
+      for (const f of Array.from(localSets[c].keys())) closeToken(c, f, timePoint - 1);
+      return;
+    }
+    const want = neighborFactions(work, c);
+    for (const f of Array.from(localSets[c].keys())) {
+      if (!want.has(f)) closeToken(c, f, timePoint - 1);
+    }
+    for (const f of want) {
+      if (!localSets[c].has(f)) openToken(c, f, timePoint);
+    }
+  }
+
+  traverseTree((node, cell, work) => {
+    if (node === 0) {
+      for (let c = 0; c < n; c++) syncCellTokens(c, 0, work);
+    } else {
+      const cx = cell % w;
+      const cy = (cell - cx) / w;
+      syncCellTokens(cell, entry[node], work);
+      if (cx + 1 < w) syncCellTokens(cell + 1, entry[node], work);
+      if (cx - 1 >= 0) syncCellTokens(cell - 1, entry[node], work);
+      if (cy + 1 < h) syncCellTokens(cell + w, entry[node], work);
+      if (cy - 1 >= 0) syncCellTokens(cell - w, entry[node], work);
+    }
+  }, (node, cell, work) => {
+    if (node === 0) {
+      for (let c = 0; c < n; c++) {
+        for (const f of Array.from(localSets[c].keys())) {
+          tokR.set(localSets[c].get(f), exitT[0]);
+        }
+        localSets[c].clear();
+      }
+      tokenStart.clear();
+    } else {
+      // work 已回滚到父状态；受影响格同样是改格本身 + 四邻
+      const cx = cell % w;
+      const cy = (cell - cx) / w;
+      const tp = exitT[node] + 1;
+      syncCellTokens(cell, tp, work);
+      if (cx + 1 < w) syncCellTokens(cell + 1, tp, work);
+      if (cx - 1 >= 0) syncCellTokens(cell - 1, tp, work);
+      if (cy + 1 < h) syncCellTokens(cell + w, tp, work);
+      if (cy - 1 >= 0) syncCellTokens(cell - w, tp, work);
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // 时间线段树（迭代树型，S=V 个叶子对应 DFS 时刻）
+  // head[node] 为链表头；ref>=0 邻接边，ref<0 token（-(idx+1)）
+  // -----------------------------------------------------------------------
+  function buildSegmentBuckets(refs, ls, rs) {
+    const S = V;
+    const head = new ChunkInts();
+    for (let i = 0; i < 2 * S; i++) head.push(-1);
+    const next = new ChunkInts();
+    const segRef = new ChunkInts();
+    const segCount = refs.length;
+    for (let si = 0; si < segCount; si++) {
+      let l = ls.get(si) + S;
+      let r = rs.get(si) + S;
+      const ref = refs.get(si);
+      while (l <= r) {
+        if (l & 1) {
+          next.push(head.get(l));
+          segRef.push(ref);
+          head.set(l, segRef.length - 1);
+          l++;
+        }
+        if (!(r & 1)) {
+          next.push(head.get(r));
+          segRef.push(ref);
+          head.set(r, segRef.length - 1);
+          r--;
+        }
+        l >>= 1;
+        r >>= 1;
+      }
+    }
+    return { head, next, segRef, S };
+  }
+
+  function solve(mode, buckets, dsu, totalRefs) {
+    const { head, next, segRef, S } = buckets;
+    const results = new Array(queries.length);
+
+    const applyRef = (ref) => {
+      if (ref >= 0) {
+        const u = edgeEndU(ref);
+        const v = edgeEndV(ref);
+        if (mode === 'color') {
+          dsu.union(u, v);
+          dsu.applyColorEdge(u); // 即使 no-op 也扣 2
+        } else {
+          dsu.union(u, v);
+        }
+      } else {
+        const tidx = -ref - 1;
+        dsu.union(tokCell.get(tidx), n + tidx, tokFaction.get(tidx));
+      }
+    };
+
+    const dfs = (node) => {
+      const cp = dsu.checkpoint();
+      for (let p = head.get(node); p !== -1; p = next.get(p)) applyRef(segRef.get(p));
+      if (node >= S) {
+        const version = versionAtTime[node - S]; // 叶子是 DFS 时间戳，反查版本号
+        for (const qidx of queriesByVersion[version]) {
+          const q = queries[qidx];
+          const cell = q.y * w + q.x;
+          const root = dsu.find(cell);
+          if (mode === 'color') {
+            if (queryCellCode[qidx] === 0) continue;
+            results[qidx] = {
+              type: 'territory',
+              version: q.version,
+              x: q.x,
+              y: q.y,
+              faction: codeToChar[queryCellCode[qidx]],
+              area: dsu.area[root],
+              perimeter: dsu.perim[root],
+            };
+          } else {
+            if (queryCellCode[qidx] !== 0) continue;
+            const os = dsu.ownerState[root];
+            results[qidx] = {
+              type: 'empty',
+              version: q.version,
+              x: q.x,
+              y: q.y,
+              area: dsu.area[root],
+              enclave: dsu.touch[root] === 0,
+              owner: os > 0 ? codeToChar[os] : null,
+            };
+          }
+        }
+      } else {
+        if (node * 2 < 2 * S) dfs(node * 2);
+        if (node * 2 + 1 < 2 * S) dfs(node * 2 + 1);
+      }
+      dsu.rollback(cp);
+    };
+    dfs(1);
+    return results;
+  }
+
+  // 所有 charToCode 调用（底图 + 全部 edit）此时已完成，建立反查表
+  codeToChar = new Array(nextCode);
+  for (const [ch, code] of charToCodeMap) codeToChar[code] = ch;
+
+  // ---- 领地遍 ----
+  const dsu4 = new RollbackDSU(n);
+  for (let c = 0; c < n; c++) {
+    dsu4.area[c] = 1;
+    dsu4.perim[c] = 4;
+  }
+  const buckets4 = buildSegmentBuckets(seg4Ref, seg4L, seg4R);
+  const resultsColor = solve('color', buckets4, dsu4);
+
+  // ---- 空地遍（边区间 + token 区间合并为同一 ref 流）----
+  const allRef = new ChunkInts();
+  const allL = new ChunkInts();
+  const allR = new ChunkInts();
+  for (let i = 0; i < seg8Ref.length; i++) {
+    allRef.push(seg8Ref.get(i));
+    allL.push(seg8L.get(i));
+    allR.push(seg8R.get(i));
+  }
+  for (let t = 0; t < tokenCount; t++) {
+    allRef.push(-(t + 1));
+    allL.push(tokL.get(t));
+    allR.push(tokR.get(t));
+  }
+  const dsu8 = new RollbackDSU(n + tokenCount);
+  for (let c = 0; c < n; c++) {
+    dsu8.area[c] = 1;
+    const cx = c % w;
+    const cy = (c - cx) / w;
+    dsu8.touch[c] = (cx === 0 || cy === 0 || cx === w - 1 || cy === h - 1) ? 1 : 0;
+    dsu8.ownerState[c] = 0;
+  }
+  for (let t = 0; t < tokenCount; t++) {
+    // token 是面积为 0 的附属节点；size=0 保证按大小合并时它永远作为孩子挂到格点根下
+    dsu8.size[n + t] = 0;
+    dsu8.area[n + t] = 0;
+    dsu8.ownerState[n + t] = tokFaction.get(t);
+  }
+  const buckets8 = buildSegmentBuckets(allRef, allL, allR);
+  const resultsEmpty = solve('empty', buckets8, dsu8);
+
+  const finalResults = new Array(queries.length);
+  for (let i = 0; i < queries.length; i++) {
+    finalResults[i] = resultsColor[i] || resultsEmpty[i];
+  }
+  return finalResults;
+}
+
+// ---------------------------------------------------------------------------
+// 导出
+// ---------------------------------------------------------------------------
+
+const engine = {
+  EMPTY,
+  MAX_SIDE,
+  MAX_EDITS,
+  MAX_QUERIES,
+  validateProject,
+  materializeGrid,
+  floodBlock,
+  runBatch,
+};
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = engine;
+}
+if (typeof window !== 'undefined') {
+  window.FrontierEngine = engine;
+}
+
+</script>
+<script>
+// 争地地图版本校验 —— 网页应用层（依赖 engine.js 的 window.FrontierEngine）
+'use strict';
+
+(function () {
+  const E = window.FrontierEngine;
+
+  // -------------------------------------------------------------------------
+  // 应用状态
+  // -------------------------------------------------------------------------
+  const state = {
+    project: null,          // {rows, edits, queries}
+    currentVersion: 0,
+    selectedCell: null,     // {x,y}
+    highlightCells: null,   // Int32Array | null
+    queryDraft: [],         // 待批查询（可在导入 queries 之外手工增删）
+    useImportedQueries: true,
+    charToCode: null,
+    codeToChar: null,
+    palette: null,
+    fileName: '',
+  };
+
+  // 阵营字符 -> 稳定颜色（空地固定中性色）
+  function buildPalette(project) {
+    const chars = new Set();
+    for (const row of project.rows) for (const ch of row) if (ch !== '.') chars.add(ch);
+    for (const e of project.edits) if (e.value !== '.') chars.add(e.value);
+    const hues = [214, 27, 142, 38, 168, 280, 95, 330, 200, 60, 0, 120];
+    const map = new Map();
+    let i = 0;
+    for (const ch of chars) {
+      const hue = hues[i % hues.length];
+      map.set(ch, {
+        light: `hsl(${hue} 62% 58%)`,
+        dark: `hsl(${hue} 58% 52%)`,
+        soft: `hsl(${hue} 70% 92%)`,
+        softDark: `hsl(${hue} 40% 24%)`,
+      });
+      i++;
+    }
+    return map;
+  }
+
+  function buildCodeMaps(project) {
+    const c2m = new Map([['.', 0]]);
+    let code = 1;
+    const seen = new Set();
+    for (const row of project.rows) for (const ch of row) {
+      if (ch !== '.' && !seen.has(ch)) { seen.add(ch); c2m.set(ch, code++); }
+    }
+    for (const e of project.edits) {
+      if (e.value !== '.' && !c2m.has(e.value)) c2m.set(e.value, code++);
+    }
+    const m2c = new Array(code);
+    for (const [ch, c] of c2m) m2c[c] = ch;
+    return { charToCode: (ch) => c2m.get(ch), codeToChar: m2c };
+  }
+
+  function loadProject(input, fileName) {
+    const result = E.validateProject(input);
+    if (!result.ok) return result;
+    state.project = result.project;
+    state.fileName = fileName || '';
+    state.currentVersion = 0;
+    state.selectedCell = null;
+    state.highlightCells = null;
+    state.queryDraft = result.project.queries.map((q) => ({ ...q }));
+    state.useImportedQueries = true;
+    const maps = buildCodeMaps(result.project);
+    state.charToCode = maps.charToCode;
+    state.codeToChar = maps.codeToChar;
+    state.palette = buildPalette(result.project);
+    return { ok: true };
+  }
+
+  function gridAt(version) {
+    return E.materializeGrid(state.project, version, state.charToCode);
+  }
+
+  function dims() {
+    return { w: state.project.rows[0].length, h: state.project.rows.length };
+  }
+
+  // -------------------------------------------------------------------------
+  // 版本树：父子关系与祖先链
+  // -------------------------------------------------------------------------
+  function versionTree() {
+    const V = state.project.edits.length + 1;
+    const children = Array.from({ length: V }, () => []);
+    state.project.edits.forEach((e, i) => children[e.parent].push(i + 1));
+    return children;
+  }
+
+  function ancestorChain(version) {
+    const chain = [];
+    let v = version;
+    while (v > 0) { chain.push(v); v = state.project.edits[v - 1].parent; }
+    chain.push(0);
+    return chain.reverse();
+  }
+
+  /** 在当前版本改一格，产生新版本（挂在 currentVersion 下） */
+  function editCell(x, y, value) {
+    const p = state.project;
+    const newVersion = p.edits.length + 1;
+    p.edits.push({ parent: state.currentVersion, x, y, value });
+    // 新字符可能引入新阵营码/颜色
+    if (value !== '.' && !state.palette.has(value)) {
+      const hues = [214, 27, 142, 38, 168, 280, 95, 330, 200, 60, 0, 120];
+      const hue = hues[state.palette.size % hues.length];
+      state.palette.set(value, {
+        light: `hsl(${hue} 62% 58%)`, dark: `hsl(${hue} 58% 52%)`,
+        soft: `hsl(${hue} 70% 92%)`, softDark: `hsl(${hue} 40% 24%)`,
+      });
+    }
+    const maps = buildCodeMaps(p);
+    state.charToCode = maps.charToCode;
+    state.codeToChar = maps.codeToChar;
+    state.currentVersion = newVersion;
+    return newVersion;
+  }
+
+  function addQuery(q) {
+    state.queryDraft.push({ version: q.version, x: q.x, y: q.y });
+  }
+  function removeQuery(index) {
+    state.queryDraft.splice(index, 1);
+  }
+
+  /** 跑批查询，返回结果（按提交顺序） */
+  function runQueries() {
+    const p = state.project;
+    const snapshot = {
+      rows: p.rows,
+      edits: p.edits.map((e) => ({ ...e })),
+      queries: state.queryDraft.map((q) => ({ ...q })),
+    };
+    const valid = E.validateProject(snapshot);
+    if (!valid.ok) return valid;
+    return { ok: true, results: E.runBatch(valid.project) };
+  }
+
+  /** 点格：取所在整块用于高亮，并返回详情 */
+  function inspectCell(x, y) {
+    const version = state.currentVersion;
+    const grid = gridAt(version);
+    const cell = y * dims().w + x;
+    const isEmpty = grid[cell] === 0;
+    const block = E.floodBlock(
+      state.project, version, x, y, isEmpty ? 8 : 4, state.charToCode
+    );
+    state.selectedCell = { x, y };
+    state.highlightCells = block.cells;
+    return {
+      isEmpty,
+      value: state.codeToChar[grid[cell]],
+      area: block.area,
+      perimeter: block.perimeter,
+      enclave: block.enclave,
+      touchesBoundary: block.touchesBoundary,
+      ownerCodes: block.ownerCodes,
+    };
+  }
+
+  /**
+   * 飞地溯源：沿当前版本祖先链回退，找出最早让该空地分量成为飞地的版本。
+   * 飞地取决于分量是否接触"全局"地图边界，远处改格堵住出口也会改变它，
+   * 因此不能用局部邻接跳过，每个相关版本都要真实泛洪。
+   * 加速：回退中一旦遇到非飞地版本即停止（该版本就是成因边界）；
+   * 并设检查上限避免极端深链长时间阻塞，超限会在结果里标注 truncated。
+   */
+  const TRACE_MAX_VERSIONS = 600;
+  function traceEnclave(x, y) {
+    const p = state.project;
+    const chain = ancestorChain(state.currentVersion); // 含版本0，自底向上
+    const trace = [];
+    let becameEnclaveAt = null;
+    let truncated = false;
+    let checked = 0;
+
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (checked >= TRACE_MAX_VERSIONS) { truncated = true; break; }
+      const ver = chain[i];
+      const edit = ver > 0 ? p.edits[ver - 1] : null;
+      const grid = E.materializeGrid(p, ver, state.charToCode);
+
+      if (grid[y * dims().w + x] !== 0) {
+        trace.push({ version: ver, status: 'not-empty', edit });
+        checked++;
+        continue;
+      }
+
+      const blk = E.floodBlock(p, ver, x, y, 8, state.charToCode);
+      checked++;
+      trace.push({ version: ver, area: blk.area, enclave: blk.enclave, reused: false, edit });
+      if (blk.enclave) {
+        if (becameEnclaveAt === null) becameEnclaveAt = ver;
+      } else if (i < chain.length - 1) {
+        break; // 回退中首次非飞地：成因边界已确定
+      }
+    }
+    return { trace: trace.reverse(), becameEnclaveAt, truncated, checked };
+  }
+
+  window.FrontierApp = {
+    state,
+    loadProject,
+    gridAt,
+    dims,
+    versionTree,
+    ancestorChain,
+    editCell,
+    addQuery,
+    removeQuery,
+    runQueries,
+    inspectCell,
+    traceEnclave,
+  };
+})();
+
+</script>
+<script>
+// 争地地图版本校验台 —— DOM 绑定与画布渲染
+'use strict';
+
+(function () {
+  const App = window.FrontierApp;
+  const $ = (id) => document.getElementById(id);
+  // id（kebab）-> 代码里使用的 camelCase 键，统一在此对齐
+  const idMap = {
+    theme: 'theme', drop: 'drop', file: 'file', 'load-sample': 'loadSample',
+    'project-meta': 'projectMeta', errors: 'errors', workspace: 'workspace',
+    map: 'map', 'map-ver': 'mapVer', legend: 'legend', 'zoom-in': 'zoomIn',
+    'zoom-out': 'zoomOut', 'zoom-fit': 'zoomFit', tree: 'tree',
+    'version-count': 'versionCount', 'edit-value': 'editValue', 'do-edit': 'doEdit',
+    'cell-empty': 'cellEmpty', 'cell-info': 'cellInfo', 'cell-kv': 'cellKv',
+    'add-query-here': 'addQueryHere', 'trace-enclave': 'traceEnclave', trace: 'trace',
+    'query-count': 'queryCount', 'run-batch': 'runBatch', 'export-json': 'exportJson',
+    'clear-queries': 'clearQueries', 'query-table': 'queryTable', toast: 'toast',
+  };
+  const els = {};
+  for (const [id, key] of Object.entries(idMap)) els[key] = $(id);
+
+  // -------------------------------------------------------------------------
+  // 主题
+  // -------------------------------------------------------------------------
+  function applyTheme(t) {
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    try { localStorage.setItem('frontier-theme', t); } catch { /* 忽略 */ }
+    if (App.state.project) render();
+  }
+  let savedTheme = 'system';
+  try { savedTheme = localStorage.getItem('frontier-theme') || 'system'; } catch { /* 忽略 */ }
+  els.theme.value = savedTheme;
+  applyTheme(savedTheme);
+  els.theme.addEventListener('change', () => applyTheme(els.theme.value));
+
+  // -------------------------------------------------------------------------
+  // 通用提示
+  // -------------------------------------------------------------------------
+  let toastTimer = null;
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2200);
+  }
+
+  // -------------------------------------------------------------------------
+  // 导入（无效导入保留当前项目）
+  // -------------------------------------------------------------------------
+  function showErrors(errors) {
+    els.errors.innerHTML = '<strong>导入失败，当前项目保持不变：</strong><ul>' +
+      errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('') + '</ul>';
+    els.errors.classList.remove('hidden');
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function ingest(text, fileName) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      showErrors(['JSON 解析失败：' + err.message]);
+      return;
+    }
+    const result = App.loadProject(parsed, fileName);
+    if (!result.ok) {
+      showErrors(result.errors);
+      return;
+    }
+    els.errors.classList.add('hidden');
+    els.workspace.classList.remove('hidden');
+    lastResults = null;
+    els.exportJson.disabled = true;
+    render();
+    toast('导入成功');
+  }
+
+  els.file.addEventListener('change', (ev) => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => ingest(reader.result, f.name);
+    reader.readAsText(f);
+  });
+  els.drop.addEventListener('click', () => els.file.click());
+  ['dragover', 'dragenter'].forEach((ev) => els.drop.addEventListener(ev, (e) => {
+    e.preventDefault(); els.drop.classList.add('drag');
+  }));
+  ['dragleave', 'drop'].forEach((ev) => els.drop.addEventListener(ev, (e) => {
+    e.preventDefault(); els.drop.classList.remove('drag');
+  }));
+  els.drop.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => ingest(reader.result, f.name);
+    reader.readAsText(f);
+  });
+
+  // 内置样例（与 samples/frontier-versions.json 一致）
+  const SAMPLE = {
+    rows: ['AAAA', 'A..A', 'ABBA', 'AAAA'],
+    edits: [
+      { parent: 0, x: 1, y: 0, value: '.' },
+      { parent: 0, x: 1, y: 2, value: 'A' },
+    ],
+    queries: [
+      { version: 0, x: 1, y: 1 },
+      { version: 1, x: 1, y: 1 },
+    ],
+  };
+  els.loadSample.addEventListener('click', () => ingest(JSON.stringify(SAMPLE), 'sample'));
+
+  // -------------------------------------------------------------------------
+  // 画布
+  // -------------------------------------------------------------------------
+  const canvas = els.map;
+  const ctx = canvas.getContext('2d');
+  let cellPx = 16;
+  let hoverCell = null;
+
+  function cellColor(code) {
+    const { palette, codeToChar } = App.state;
+    if (code === 0) {
+      return getComputedStyle(document.documentElement).getPropertyValue('--empty').trim() || '#eef0f3';
+    }
+    const ch = codeToChar[code];
+    const c = palette.get(ch);
+    if (!c) return '#888';
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (!document.documentElement.getAttribute('data-theme') &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    return dark ? c.dark : c.light;
+  }
+
+  function drawMap() {
+    const { w, h } = App.dims();
+    const grid = App.gridAt(App.state.currentVersion);
+    const hl = App.state.highlightCells;
+    const hlSet = hl ? new Set(hl) : null;
+    cellPx = Math.max(2, Math.floor(cellPx));
+    canvas.width = w * cellPx;
+    canvas.height = h * cellPx;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        ctx.fillStyle = cellColor(grid[idx]);
+        ctx.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
+      }
+    }
+    // 高亮整块
+    if (hlSet) {
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hl').trim() || '#ffcf3f';
+      ctx.globalAlpha = 0.55;
+      for (const idx of hlSet) {
+        const x = idx % w, y = (idx - x) / w;
+        ctx.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // 选中框 + 悬停框
+    const sel = App.state.selectedCell;
+    if (sel) drawOutline(sel.x, sel.y, '#111', 2);
+    if (hoverCell && (!sel || hoverCell.x !== sel.x || hoverCell.y !== sel.y)) {
+      drawOutline(hoverCell.x, hoverCell.y, getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), 1.5);
+    }
+    // 网格线（放大时）
+    if (cellPx >= 8) {
+      ctx.strokeStyle = 'rgba(128,128,128,.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x <= w; x++) { ctx.moveTo(x * cellPx + .5, 0); ctx.lineTo(x * cellPx + .5, h * cellPx); }
+      for (let y = 0; y <= h; y++) { ctx.moveTo(0, y * cellPx + .5); ctx.lineTo(w * cellPx, y * cellPx + .5); }
+      ctx.stroke();
+    }
+  }
+
+  function drawOutline(x, y, color, lw) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.strokeRect(x * cellPx + 1, y * cellPx + 1, cellPx - 2, cellPx - 2);
+  }
+
+  function eventCell(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const { w, h } = App.dims();
+    const px = (ev.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (ev.clientY - rect.top) * (canvas.height / rect.height);
+    const x = Math.floor(px / cellPx);
+    const y = Math.floor(py / cellPx);
+    if (x < 0 || y < 0 || x >= w || y >= h) return null;
+    return { x, y };
+  }
+
+  canvas.addEventListener('click', (ev) => {
+    const c = eventCell(ev);
+    if (!c) return;
+    const info = App.inspectCell(c.x, c.y);
+    renderCellInfo(c, info);
+    drawMap();
+  });
+  canvas.addEventListener('mousemove', (ev) => {
+    const c = eventCell(ev);
+    if ((c && (!hoverCell || c.x !== hoverCell.x || c.y !== hoverCell.y)) || (!c && hoverCell)) {
+      hoverCell = c;
+      drawMap();
+    }
+  });
+  canvas.addEventListener('mouseleave', () => { hoverCell = null; drawMap(); });
+
+  els.zoomIn.addEventListener('click', () => { cellPx = Math.min(64, cellPx * 1.4); drawMap(); });
+  els.zoomOut.addEventListener('click', () => { cellPx = Math.max(2, cellPx / 1.4); drawMap(); });
+  els.zoomFit.addEventListener('click', () => {
+    const wrap = canvas.parentElement.getBoundingClientRect().width;
+    const { w, h } = App.dims();
+    cellPx = Math.max(2, Math.floor(Math.min(wrap / w, 520 / h)));
+    drawMap();
+  });
+
+  // -------------------------------------------------------------------------
+  // 图例
+  // -------------------------------------------------------------------------
+  function renderLegend() {
+    const { palette } = App.state;
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (!document.documentElement.getAttribute('data-theme') &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+    let html = '<span class="chip"><span class="swatch" style="background:var(--empty)"></span>. 空地</span>';
+    for (const [ch, c] of palette) {
+      html += `<span class="chip"><span class="swatch" style="background:${dark ? c.dark : c.light}"></span>${escapeHtml(ch)}</span>`;
+    }
+    els.legend.innerHTML = html;
+  }
+
+  // -------------------------------------------------------------------------
+  // 版本树
+  // -------------------------------------------------------------------------
+  function renderTree() {
+    const p = App.state.project;
+    els.versionCount.textContent = p.edits.length + 1;
+    const children = App.versionTree();
+    // DFS 展开，缩进体现层级
+    const lines = [];
+    (function walk(v, depth) {
+      const edit = v > 0 ? p.edits[v - 1] : null;
+      const editTxt = edit ? `(${edit.x},${edit.y})→${edit.value} ←v${edit.parent}` : '底图';
+      lines.push(`<div class="tree-item ${v === App.state.currentVersion ? 'active' : ''}" data-v="${v}"
+        style="padding-left:${9 + depth * 14}px">
+        <span class="ver">v${v}</span><span class="edit">${escapeHtml(editTxt)}</span></div>`);
+      for (const c of children[v]) walk(c, depth + 1);
+    })(0, 0);
+    els.tree.innerHTML = lines.join('');
+    els.tree.querySelectorAll('.tree-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        App.state.currentVersion = Number(item.dataset.v);
+        App.state.selectedCell = null;
+        App.state.highlightCells = null;
+        els.cellInfo.classList.add('hidden');
+        els.cellEmpty.classList.remove('hidden');
+        els.trace.classList.add('hidden');
+        render();
+      });
+    });
+    // 滚动到当前版本
+    const active = els.tree.querySelector('.tree-item.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  // -------------------------------------------------------------------------
+  // 单元格详情
+  // -------------------------------------------------------------------------
+  function renderCellInfo(c, info) {
+    els.cellEmpty.classList.add('hidden');
+    els.cellInfo.classList.remove('hidden');
+    els.trace.classList.add('hidden');
+    const { codeToChar } = App.state;
+    let html = `<dt>坐标</dt><dd>(${c.x}, ${c.y})</dd>`;
+    if (info.isEmpty) {
+      const owner = info.ownerCodes.size === 0 ? null :
+        (info.ownerCodes.size === 1 ? codeToChar[[...info.ownerCodes][0]] : '多方（无主）');
+      html += `<dt>类型</dt><dd>空地</dd>
+        <dt>面积</dt><dd>${info.area}</dd>
+        <dt>贴地图外边</dt><dd>${info.touchesBoundary ? '是' : '否'}</dd>
+        <dt>飞地</dt><dd>${info.enclave ? '<span class="tag bad">是（整块不接外边）</span>' : '<span class="tag good">否</span>'}</dd>
+        <dt>归属</dt><dd>${owner === null ? '<span class="tag">无主（无共边阵营）</span>' : owner === '多方（无主）' ? '<span class="tag warn">多方（无主）</span>' : `<span class="tag good">${escapeHtml(owner)}</span>`}</dd>`;
+    } else {
+      html += `<dt>类型</dt><dd>阵营 ${escapeHtml(info.value)}</dd>
+        <dt>面积</dt><dd>${info.area}</dd>
+        <dt>周长</dt><dd>${info.perimeter}</dd>`;
+    }
+    els.cellKv.innerHTML = html;
+  }
+
+  els.addQueryHere.addEventListener('click', () => {
+    const sel = App.state.selectedCell;
+    if (!sel) return;
+    App.addQuery({ version: App.state.currentVersion, x: sel.x, y: sel.y });
+    renderQueryTable();
+    toast('已加入批查询');
+  });
+
+  els.traceEnclave.addEventListener('click', () => {
+    const sel = App.state.selectedCell;
+    if (!sel) return;
+    const { trace, becameEnclaveAt, truncated, checked } = App.traceEnclave(sel.x, sel.y);
+    let html = `<div class="muted small" style="margin-bottom:6px">沿祖先链回退（检查 ${checked} 个该格为空地的版本，遇首个非飞地即停）：</div>`;
+    for (const rec of trace) {
+      if (rec.status === 'not-empty') continue;
+      const editTxt = rec.edit ? `改格 (${rec.edit.x},${rec.edit.y})→${escapeHtml(rec.edit.value)}` : '底图';
+      html += `<div class="trace-line">v${rec.version} · 面积 ${rec.area} · ${editTxt}
+        <span class="flag ${rec.enclave ? 'tag bad' : 'tag good'}">${rec.enclave ? '飞地' : '非飞地'}</span></div>`;
+    }
+    if (becameEnclaveAt !== null) {
+      html += `<div class="small" style="margin-top:8px">当前这段飞地始于 <strong class="mono">v${becameEnclaveAt}</strong>，对应改格即封死出口的那次操作。</div>`;
+    } else {
+      html += '<div class="small" style="margin-top:8px">检查范围内该分量未形成飞地。</div>';
+    }
+    if (truncated) {
+      html += '<div class="small tag warn" style="margin-top:6px">祖先链过长，仅展示最近 600 个相关版本；更早成因未纳入。</div>';
+    }
+    els.trace.innerHTML = html;
+    els.trace.classList.remove('hidden');
+  });
+
+  // -------------------------------------------------------------------------
+  // 改格
+  // -------------------------------------------------------------------------
+  function renderEditValues() {
+    const { codeToChar } = App.state;
+    let html = '';
+    for (let code = 0; code < codeToChar.length; code++) {
+      if (code === 0) html += '<option value=".">. （空地）</option>';
+      else html += `<option value="${escapeHtml(codeToChar[code])}">${escapeHtml(codeToChar[code])}</option>`;
+    }
+    els.editValue.innerHTML = html;
+  }
+
+  els.doEdit.addEventListener('click', () => {
+    const sel = App.state.selectedCell;
+    if (!sel) { toast('请先在地图上点选一格'); return; }
+    const value = els.editValue.value;
+    const nv = App.editCell(sel.x, sel.y, value);
+    renderEditValues();
+    render();
+    toast(`已生成 v${nv}`);
+  });
+
+  // -------------------------------------------------------------------------
+  // 批查询表
+  // -------------------------------------------------------------------------
+  let lastResults = null;
+
+  function renderQueryTable() {
+    const tbody = els.queryTable.querySelector('tbody');
+    const qd = App.state.queryDraft;
+    els.queryCount.textContent = qd.length;
+    let html = '';
+    for (let i = 0; i < qd.length; i++) {
+      const q = qd[i];
+      const r = lastResults && lastResults[i];
+      html += `<tr>
+        <td class="num">${i + 1}</td>
+        <td class="num">${q.version}</td>
+        <td class="num">${q.x}</td>
+        <td class="num">${q.y}</td>
+        <td>${r ? (r.type === 'empty' ? '<span class="pill empty">空地</span>' : `<span class="pill terr">${escapeHtml(r.faction)}</span>`) : '—'}</td>
+        <td class="num">${r ? r.area : '—'}</td>
+        <td class="num">${r && r.type === 'territory' ? r.perimeter : '—'}</td>
+        <td class="num">${r && r.type === 'empty' ? (r.enclave ? '是' : '否') : '—'}</td>
+        <td class="num">${r && r.type === 'empty' ? (r.owner ? escapeHtml(r.owner) : '无主') : '—'}</td>
+        <td><button class="ghost small" data-del="${i}">删</button></td>
+      </tr>`;
+    }
+    tbody.innerHTML = html;
+    tbody.querySelectorAll('[data-del]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        App.removeQuery(Number(btn.dataset.del));
+        lastResults = null;
+        els.exportJson.disabled = true;
+        renderQueryTable();
+      });
+    });
+  }
+
+  els.runBatch.addEventListener('click', () => {
+    if (App.state.queryDraft.length === 0) { toast('没有查询'); return; }
+    const out = App.runQueries();
+    if (!out.ok) { showErrors(out.errors); return; }
+    lastResults = out.results;
+    els.exportJson.disabled = false;
+    renderQueryTable();
+    toast(`完成 ${out.results.length} 条查询`);
+  });
+
+  els.clearQueries.addEventListener('click', () => {
+    App.state.queryDraft.length = 0;
+    lastResults = null;
+    els.exportJson.disabled = true;
+    renderQueryTable();
+  });
+
+  // 导出结果 JSON（按提交顺序）。普通浏览器走文件下载；
+  // 受限沙箱拦截下载时依次回退到剪贴板、新标签可拷贝文本。
+  els.exportJson.addEventListener('click', async () => {
+    if (!lastResults) return;
+    const payload = JSON.stringify(lastResults, null, 2);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const fileName = `frontier-results-${stamp}.json`;
+    // 1) 标准下载
+    try {
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('结果 JSON 已开始下载');
+      return;
+    } catch { /* 落到回退 */ }
+    // 2) 剪贴板
+    try {
+      await navigator.clipboard.writeText(payload);
+      toast('下载被拦截，结果 JSON 已复制到剪贴板');
+      return;
+    } catch { /* 继续回退 */ }
+    // 3) 新标签展示
+    const w = window.open('', '_blank');
+    if (w) { w.document.body.innerText = payload; toast('已在新标签打开，可全选复制'); }
+    else toast('导出失败，请检查浏览器权限');
+  });
+
+  // -------------------------------------------------------------------------
+  // 总渲染
+  // -------------------------------------------------------------------------
+  function render() {
+    const p = App.state.project;
+    if (!p) return;
+    const { w, h } = App.dims();
+    els.projectMeta.textContent =
+      `${App.state.fileName || '未命名'} · ${w}×${h} 格 · ${p.edits.length} 改格 · ${p.edits.length + 1} 版本 · ${p.queries.length} 导入查询`;
+    els.mapVer.textContent = `· 当前 v${App.state.currentVersion}`;
+    renderLegend();
+    renderTree();
+    renderEditValues();
+    renderQueryTable();
+    drawMap();
+  }
+})();
+
+</script>
+</body>
+</html>

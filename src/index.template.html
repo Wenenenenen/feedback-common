@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>争地版本校验台</title>
+<style>
+/* 布局：左栏地图与版本树，右栏单元格详情与批查询，窄屏堆叠 */
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --fg: #1c2330;
+  --muted: #64708a;
+  --line: #d9dee7;
+  --accent: #2f6fed;
+  --accent-soft: #e3ecff;
+  --good: #1e8e5a;
+  --warn: #b8860b;
+  --bad: #c0392b;
+  --empty: #eef0f3;
+  --empty-dark: #262b34;
+  --hl: #ffcf3f;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 4px 14px rgba(20, 30, 50, .06);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171d; --panel: #1d222b; --panel-2: #242a35;
+    --fg: #e6eaf1; --muted: #97a1b3; --line: #333c49;
+    --accent: #6d9bff; --accent-soft: #22304d;
+    --good: #4cc38a; --warn: #e0b748; --bad: #ef7a6c;
+    --empty: #262b34; --hl: #e6b93a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171d; --panel: #1d222b; --panel-2: #242a35;
+  --fg: #e6eaf1; --muted: #97a1b3; --line: #333c49;
+  --accent: #6d9bff; --accent-soft: #22304d;
+  --good: #4cc38a; --warn: #e0b748; --bad: #ef7a6c;
+  --empty: #262b34; --hl: #e6b93a;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 1440px; margin: 0 auto; padding-block: 18px 28px; }
+header.top {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+header.top h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: .2px; }
+header.top .sub { color: var(--muted); font-size: 12.5px; }
+.spacer { flex: 1; }
+button, select, input {
+  font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px;
+}
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px; min-width: 0;
+}
+.panel + .panel { margin-top: 16px; }
+.panel h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--muted); margin: 0 0 10px; font-weight: 650;
+}
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.row.tight { gap: 6px; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px; font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.tag.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+
+.canvas-wrap { display: flex; justify-content: center; overflow: auto; }
+canvas#map {
+  image-rendering: pixelated; touch-action: none; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--empty); max-width: 100%;
+}
+.legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.legend .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+
+/* 版本树虚拟列表 */
+.tree { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.tree-item {
+  display: flex; align-items: center; gap: 8px; padding: 5px 9px;
+  cursor: pointer; border-left: 3px solid transparent; font-size: 13px;
+}
+.tree-item:hover { background: var(--panel-2); }
+.tree-item.active { background: var(--accent-soft); border-left-color: var(--accent); }
+.tree-item .ver { font-family: var(--mono); font-weight: 650; min-width: 34px; }
+.tree-item .edit { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+/* 查询表 */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.table-scroll { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.scroll-x { overflow-x: auto; }
+.pill { padding: 1px 7px; border-radius: 999px; font-size: 11.5px; font-family: var(--mono); }
+.pill.empty { background: var(--panel-2); color: var(--muted); }
+.pill.terr { background: var(--accent-soft); color: var(--accent); }
+
+#drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius);
+  padding: 22px; text-align: center; color: var(--muted); cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+#drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+#errors {
+  background: color-mix(in srgb, var(--bad) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line));
+  border-radius: 8px; padding: 10px 12px; margin-top: 12px;
+}
+#errors ul { margin: 6px 0 0; padding-left: 18px; }
+#errors li { font-family: var(--mono); font-size: 12.5px; margin: 3px 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hidden { display: none !important; }
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 999px;
+  font-size: 13px; box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s; z-index: 50;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+.trace-line { font-family: var(--mono); font-size: 12px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.trace-line .flag { margin-left: 8px; }
+.small { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>争地版本校验台</h1>
+      <div class="sub">四邻领地 · 八邻空地 · 版本树改格溯源</div>
+    </div>
+    <div class="spacer"></div>
+    <label class="small muted">主题
+      <select id="theme">
+        <option value="system">跟随系统</option>
+        <option value="light">浅色</option>
+        <option value="dark">深色</option>
+      </select>
+    </label>
+  </header>
+
+  <!-- 导入区：无效导入只报错，不替换当前项目 -->
+  <section class="panel" id="import-panel">
+    <h2>导入项目 JSON</h2>
+    <div id="drop">
+      点击选择，或把 <span class="mono">frontier-versions.json</span> 拖到这里
+      <input type="file" id="file" accept=".json,application/json" class="hidden">
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="load-sample" class="ghost">载入内置样例</button>
+      <span id="project-meta" class="muted small"></span>
+    </div>
+    <div id="errors" class="hidden"></div>
+  </section>
+
+  <div id="workspace" class="hidden">
+    <div class="layout">
+      <!-- 左：地图 + 版本树 -->
+      <div>
+        <section class="panel">
+          <h2>地图 <span id="map-ver" class="mono" style="text-transform:none;letter-spacing:0"></span></h2>
+          <div class="canvas-wrap"><canvas id="map" width="512" height="512" tabindex="0"></canvas></div>
+          <div class="row" style="margin-top:10px;justify-content:space-between">
+            <div class="legend" id="legend"></div>
+            <div class="row tight">
+              <button id="zoom-in" class="ghost" title="放大">＋</button>
+              <button id="zoom-out" class="ghost" title="缩小">－</button>
+              <button id="zoom-fit" class="ghost">适应</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>版本树（<span id="version-count"></span> 个版本）</h2>
+          <div class="tree" id="tree"></div>
+        </section>
+      </div>
+
+      <!-- 右：详情 + 编辑 + 查询 -->
+      <div>
+        <section class="panel">
+          <h2>当前版本改格</h2>
+          <div class="row tight">
+            <label class="small">值
+              <select id="edit-value"></select>
+            </label>
+            <button id="do-edit" class="primary">在选中格改格（生成新版本）</button>
+          </div>
+          <p class="muted small" style="margin:8px 0 0">先在地图上点选一格；新版本挂在当前版本之下，兄弟分支互不影响。</p>
+        </section>
+
+        <section class="panel">
+          <h2>单元格详情</h2>
+          <div id="cell-empty" class="muted">点选地图上的任意格查看所在整块。</div>
+          <div id="cell-info" class="hidden">
+            <dl class="kv" id="cell-kv"></dl>
+            <div class="row tight" style="margin-top:10px">
+              <button id="add-query-here" class="ghost">把此格加入批查询</button>
+              <button id="trace-enclave" class="ghost">飞地溯源</button>
+            </div>
+            <div id="trace" class="hidden" style="margin-top:10px"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>批查询（<span id="query-count"></span> 条，按提交顺序）</h2>
+          <div class="row tight" style="margin-bottom:10px">
+            <button id="run-batch" class="primary">运行批查询</button>
+            <button id="export-json" class="ghost" disabled>导出结果 JSON</button>
+            <button id="clear-queries" class="ghost">清空</button>
+          </div>
+          <div class="table-scroll">
+            <table id="query-table">
+              <thead><tr>
+                <th class="num">#</th><th class="num">版本</th><th class="num">x</th><th class="num">y</th>
+                <th>类型</th><th class="num">面积</th><th class="num">周长</th><th>飞地</th><th>归属</th><th></th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- 引擎与应用逻辑（内联，保证单文件可离线打开） -->
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+/*__APP__*/
+</script>
+<script>
+/*__UI__*/
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "frontier-version-surveyor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "争地赛季地图版本校验：版本树改格溯源、四邻领地与八邻空地拓扑分析",
+  "scripts": {
+    "build": "node tools/build.js",
+    "test": "node tools/test.js",
+    "fuzz": "node tools/fuzz.js",
+    "test-trace": "node tools/test-trace.js",
+    "e2e": "node tools/e2e.js",
+    "bench": "node --expose-gc tools/benchmark.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
