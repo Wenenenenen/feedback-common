@@ -1,0 +1,11 @@
+{
+  "name": "spectator-snapshot-channel",
+  "version": "1.0.0",
+  "description": "游戏观战快照分片通道联调页：确定性收发状态机与网络故障编排",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/",
+    "serve": "python3 -m http.server 8080"
+  }
+}

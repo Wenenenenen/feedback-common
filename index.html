@@ -1,0 +1,123 @@
+<title>观战快照通道联调台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="css/app.css">
+
+<div class="wrap">
+  <header class="app-header">
+    <div class="brand">
+      <h1>观战快照通道联调台</h1>
+      <span class="sub">u32/u16 片头 · CRC32/IEEE · 256B 载荷 · 每席留 8 份</span>
+    </div>
+    <div class="header-controls">
+      <label class="field">
+        <span>场景</span>
+        <select id="scenario-select">
+          <option value="sample">样例（spectator-channel.json）</option>
+          <option value="generated" selected>生成世界（2048 实体 / 2 万帧）</option>
+          <option value="import">导入安排文件…</option>
+        </select>
+      </label>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+      <button class="btn" id="btn-run" title="跑到末尾">▶ 跑到末尾</button>
+      <button class="btn icon" id="btn-step" title="前进一帧">⏭ 帧</button>
+      <button class="btn icon" id="btn-reset" title="重置">↺ 重置</button>
+      <button class="btn" id="btn-export">导出安排</button>
+      <button class="btn ghost icon" id="btn-theme" title="切换主题">◐</button>
+    </div>
+  </header>
+
+  <!-- 双席屏幕 -->
+  <section class="grid-seats" id="seats-grid"></section>
+
+  <!-- 时间轴 -->
+  <section class="panel timeline-panel">
+    <div class="panel-head">
+      <h2>帧时间轴</h2>
+      <span class="spacer"></span>
+      <span class="badge" id="hash-badge">提交指纹 —</span>
+    </div>
+    <div class="panel-body">
+      <div class="timeline-controls">
+        <button class="btn icon" id="btn-prev">◀</button>
+        <div class="scrubber">
+          <input type="range" id="scrub" min="0" max="20000" value="0" step="1">
+          <span class="tick-readout mono" id="tick-readout">tick 0 / 20000</span>
+        </div>
+        <button class="btn icon" id="btn-next">▶</button>
+      </div>
+      <div class="strip" id="strip"></div>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>全量帧</span>
+        <span><i style="background:var(--ok)"></i>已提交</span>
+        <span><i style="background:var(--bad)"></i>作废</span>
+        <span><i style="background:var(--warn)"></i>故障动作</span>
+        <span><i style="background:var(--violet)"></i>保留窗口（8 份）</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 调度 / 包 / 事件 -->
+  <section class="bottom-grid">
+    <div class="panel">
+      <div class="panel-head"><h2>网络安排</h2><span class="spacer"></span><span class="badge" id="action-count">0 条</span></div>
+      <div class="panel-body">
+        <form class="action-form" id="action-form">
+          <label class="field"><span>类型</span>
+            <select id="af-type">
+              <option value="drop">drop 丢失</option>
+              <option value="corrupt">corrupt 损坏</option>
+              <option value="duplicate">duplicate 重复</option>
+              <option value="delay">delay 乱序/延迟</option>
+              <option value="ack-delay">ack-delay 延迟确认</option>
+            </select>
+          </label>
+          <label class="field"><span>席位</span><select id="af-seat"><option>1</option><option>2</option></select></label>
+          <label class="field"><span>作用 tick</span><input class="input" id="af-at" type="number" min="1" placeholder="at"></label>
+          <label class="field"><span>目标帧 tick</span><input class="input" id="af-tick" type="number" min="1" placeholder="tick（ack-delay 留空）"></label>
+          <label class="field"><span>分片 index（留空=全部）</span><input class="input" id="af-index" type="number" min="0" placeholder="index"></label>
+          <label class="field"><span id="af-extra-label">延迟到 tick（to）</span><input class="input" id="af-extra" type="number" min="1" placeholder="to / ticks / at2"></label>
+          <button class="btn primary wide" type="submit">添加安排</button>
+        </form>
+        <div class="table-scroll" style="margin-top:12px">
+          <table>
+            <thead><tr><th>at</th><th>席</th><th>类型</th><th>目标</th><th></th></tr></thead>
+            <tbody id="action-rows"></tbody>
+          </table>
+        </div>
+        <p class="empty-note" id="action-empty" hidden>暂无网络安排，链路为干净基线。</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>包内容</h2>
+        <span class="spacer"></span>
+        <select id="packet-seat" style="padding:4px 8px"><option value="0">席位 1</option><option value="1">席位 2</option></select>
+      </div>
+      <div class="panel-body">
+        <div class="packet-list" id="packet-list"></div>
+        <p class="empty-note" id="packet-empty">该 tick 此席没有已发送的帧。</p>
+        <div class="reason-box" id="packet-detail" hidden>
+          <div class="rt">选中分片解析</div>
+          <div id="packet-detail-body" class="mono" style="font-size:11.5px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>事件与提交理由</h2><span class="spacer"></span>
+        <select id="event-seat" style="padding:4px 8px"><option value="-1">全部席</option><option value="0">席位 1</option><option value="1">席位 2</option></select>
+      </div>
+      <div class="panel-body">
+        <div class="event-log" id="event-log"></div>
+        <div class="reason-box" id="commit-reason">
+          <div class="rt">当前帧提交理由</div>
+          <div id="commit-reason-body">尚未提交任何帧。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+<script type="module" src="js/app.js"></script>
