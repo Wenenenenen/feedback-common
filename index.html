@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>水彩墨量输运</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>水彩墨量输运</h1>
+  <div class="controls">
+    <label class="btn">加载 JSON<input type="file" id="file" accept=".json,application/json" hidden></label>
+    <button id="loadSample" class="secondary">载入示例</button>
+    <label>总步数 <input type="number" id="totalSteps" value="600" min="1" max="5000"></label>
+    <button id="exportJson" class="secondary">导出帧 JSON</button>
+    <button id="exportPng" class="secondary">导出 PNG</button>
+    <button id="verifyBtn" class="secondary">校验当前帧</button>
+  </div>
+</header>
+<main>
+  <section id="stage">
+    <div id="canvasWrap"><canvas id="view" width="640" height="640"></canvas></div>
+    <div id="transport">
+      <button id="first" title="回到帧0">⏮</button>
+      <button id="prev" title="上一帧">◀</button>
+      <button id="play" title="播放/暂停（空格）">▶</button>
+      <button id="next" title="单步（→）">▶|</button>
+      帧 <input type="number" id="frameInput" min="0" value="0"> / <span id="frameTotal">600</span>
+      <button id="jump" class="secondary">跳转</button>
+      速度 <select id="speed">
+        <option>5</option><option selected>15</option><option>30</option><option>60</option>
+      </select> 帧/秒
+    </div>
+    <div id="status">请加载 JSON 配置，或点击「载入示例」。</div>
+    <div id="errors"></div>
+  </section>
+  <aside>
+    <section class="panel" id="cellPanel">
+      <h2>单格明细</h2>
+      <div id="cellInfo">点击画布选择格子，查看本步分配与进出明细。</div>
+    </section>
+    <section class="panel">
+      <h2>事件编辑（可撤销 / 重做）</h2>
+      <div class="row">
+        <button id="undo" class="secondary" disabled>撤销</button>
+        <button id="redo" class="secondary" disabled>重做</button>
+        <span id="historyInfo" class="muted"></span>
+      </div>
+      <div id="editOps" class="muted">选中格子后，可在指定步对其加墙 / 拆墙 / 设置流向。</div>
+      <div id="eventList"></div>
+    </section>
+  </aside>
+</main>
+<script src="sim.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
