@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>共用提示校验台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* ---- 设计令牌：信号控制室配色，中性蓝灰 + 琥珀信号色 + 语义色 ---- */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --line: #d7dde4;
+  --fg: #1b242e;
+  --fg-2: #55636f;
+  --fg-3: #84929e;
+  --accent: #b4631f;          /* 信号琥珀 */
+  --accent-soft: #f6e7d6;
+  --good: #2e7d4f;
+  --good-soft: #dcefe3;
+  --bad: #b03434;
+  --bad-soft: #f6dede;
+  --warn: #9a6b00;
+  --warn-soft: #f6ecd0;
+  --info: #2f5d8a;
+  --info-soft: #dde9f4;
+  --shadow: 0 1px 2px rgba(20,30,40,.06), 0 4px 14px rgba(20,30,40,.06);
+  --radius: 10px;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "Noto Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+:root:not([data-theme="light"]) {
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d;
+      --surface: #1a2129;
+      --surface-2: #222b34;
+      --line: #303b46;
+      --fg: #e7edf2;
+      --fg-2: #a7b4bf;
+      --fg-3: #74818d;
+      --accent: #e0954f;
+      --accent-soft: #3a2a1c;
+      --good: #6fc592;
+      --good-soft: #1e3528;
+      --bad: #e58a8a;
+      --bad-soft: #3a2323;
+      --warn: #d9b257;
+      --warn-soft: #382f18;
+      --info: #84b0d8;
+      --info-soft: #1d2c3d;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+    }
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171d;
+  --surface: #1a2129;
+  --surface-2: #222b34;
+  --line: #303b46;
+  --fg: #e7edf2;
+  --fg-2: #a7b4bf;
+  --fg-3: #74818d;
+  --accent: #e0954f;
+  --accent-soft: #3a2a1c;
+  --good: #6fc592;
+  --good-soft: #1e3528;
+  --bad: #e58a8a;
+  --bad-soft: #3a2323;
+  --warn: #d9b257;
+  --warn-soft: #382f18;
+  --info: #84b0d8;
+  --info-soft: #1d2c3d;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.28);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 18px 60px; }
+h1,h2,h3,h4 { margin: 0; font-weight: 700; text-wrap: balance; }
+button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+
+/* ---- 顶栏 ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 19px; letter-spacing: .2px; }
+.brand .sub { color: var(--fg-3); font-size: 12px; }
+.topbar .spacer { flex: 1; }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button {
+  border: 0; background: transparent; padding: 7px 13px; cursor: pointer; color: var(--fg-2);
+  font-weight: 500;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+.icon-btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 7px 11px; cursor: pointer; color: var(--fg-2);
+}
+.icon-btn:hover { color: var(--fg); border-color: var(--fg-3); }
+
+/* ---- 标签页 ---- */
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg-2);
+  padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: 500;
+  border-bottom: none;
+}
+.tab[aria-selected="true"] { color: var(--accent); background: var(--surface); box-shadow: var(--shadow); }
+.panel { display: none; animation: fade .18s ease; }
+.panel.active { display: block; }
+@keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* ---- 卡片与网格 ---- */
+.grid { display: grid; gap: 14px; }
+.grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 860px) { .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; box-shadow: var(--shadow); min-width: 0;
+}
+.card > h3 { font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.card > h3 .hint-tag { font-weight: 400; color: var(--fg-3); font-size: 12px; }
+
+/* ---- 状态徽标 ---- */
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.badge.good { background: var(--good-soft); color: var(--good); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.info { background: var(--info-soft); color: var(--info); }
+.badge.accent { background: var(--accent-soft); color: var(--accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+/* ---- 结论横幅 ---- */
+.verdict { border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; border: 1px solid var(--line); display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.verdict.good { background: var(--good-soft); border-color: transparent; }
+.verdict.bad { background: var(--bad-soft); border-color: transparent; }
+.verdict .v-title { font-size: 16px; font-weight: 700; }
+.verdict.good .v-title { color: var(--good); }
+.verdict.bad .v-title { color: var(--bad); }
+.verdict .v-body { color: var(--fg-2); margin-top: 2px; }
+.verdict .spacer { flex: 1; }
+
+/* ---- 候选状态芯片 ---- */
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px;
+  background: var(--surface-2); border: 1px solid var(--line); font-family: var(--mono); font-size: 13px;
+}
+.chip.goal { border-color: var(--good); }
+.chip .goal-flag { color: var(--good); font-weight: 600; }
+.chip .st-id { font-weight: 600; }
+.chip .st-hint { color: var(--fg-2); font-family: var(--sans); }
+body[data-role="player"] .tester-only { display: none !important; }
+body[data-role="tester"] .player-only { display: none !important; }
+
+/* ---- 动作表 ---- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table-scroll { overflow-x: auto; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--fg-3); font-weight: 500; font-size: 12px; white-space: nowrap; }
+tr.chosen { background: var(--accent-soft); }
+tr.chosen td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.act-name { font-weight: 600; }
+.act-id { color: var(--fg-3); font-family: var(--mono); font-size: 12px; }
+.reason { color: var(--fg-2); font-size: 12px; }
+.reason.bad { color: var(--bad); }
+.branch-pills { display: flex; flex-direction: column; gap: 4px; }
+.branch-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; padding: 3px 8px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); width: fit-content; }
+.branch-pill.win { border-color: var(--good); }
+.branch-pill.fail { border-color: var(--bad); }
+.branch-pill .b-hint { font-weight: 600; }
+.branch-pill .b-cost { color: var(--fg-3); font-family: var(--mono); }
+
+/* ---- 按钮 ---- */
+.btn {
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 500;
+}
+.btn:hover { border-color: var(--fg-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 5px 10px; font-size: 13px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- 时间线 / 拍数 ---- */
+.beatbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.beat { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; font-family: var(--mono); font-size: 13px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg-3); }
+.beat.used { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.beat.current { outline: 2px solid var(--accent); outline-offset: 1px; color: var(--fg); }
+
+/* ---- 观察分支选择 ---- */
+.obs-grid { display: flex; flex-direction: column; gap: 8px; }
+.obs-btn {
+  text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 9px;
+  padding: 11px 13px; cursor: pointer; display: flex; align-items: center; gap: 12px; width: 100%;
+}
+.obs-btn:hover { border-color: var(--accent); }
+.obs-btn .o-hint { font-weight: 700; font-size: 15px; }
+.obs-btn .o-meta { color: var(--fg-3); font-size: 12px; }
+.obs-btn .o-arrow { margin-left: auto; color: var(--fg-3); }
+
+/* ---- 反例 ---- */
+.trace { border-left: 2px solid var(--bad); padding-left: 14px; display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.trace-step { position: relative; }
+.trace-step::before { content: ""; position: absolute; left: -20px; top: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+.trace-step .ts-act { font-weight: 600; }
+.trace-step .ts-hint { display: inline-block; margin-top: 3px; background: var(--bad-soft); color: var(--bad); padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+.trace-step .ts-belief { color: var(--fg-2); font-size: 12px; margin-top: 3px; font-family: var(--mono); }
+
+/* ---- 策略树 ---- */
+.tree { font-size: 13px; }
+.tree-node { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--surface); }
+.tree-node.term { background: var(--good-soft); border-color: var(--good); }
+.tree-children { margin-left: 18px; padding-left: 16px; border-left: 1px dashed var(--line); display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.tree-edge { font-size: 12px; color: var(--fg-3); margin-bottom: 4px; }
+.tree-edge .e-hint { background: var(--info-soft); color: var(--info); padding: 1px 7px; border-radius: 6px; font-weight: 600; }
+.tree-act { font-weight: 700; color: var(--accent); }
+.tree-meta { color: var(--fg-3); font-size: 12px; margin-top: 3px; font-family: var(--mono); }
+
+/* ---- 表单与编辑器 ---- */
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.field label { font-size: 12px; color: var(--fg-2); font-weight: 500; }
+input[type="text"], input[type="number"], select, textarea {
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--surface); min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 12.5px; resize: vertical; }
+.succ-box { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.succ-pick { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 7px; padding: 3px 8px; cursor: pointer; font-family: var(--mono); font-size: 12px; background: var(--surface-2); }
+.succ-pick input { margin: 0; }
+.editor-row { display: grid; grid-template-columns: 70px 1fr 1fr auto; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 640px) { .editor-row { grid-template-columns: 1fr 1fr; } }
+.msg { padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+.msg.error { background: var(--bad-soft); color: var(--bad); }
+.msg.warn { background: var(--warn-soft); color: var(--warn); }
+.msg.ok { background: var(--good-soft); color: var(--good); }
+.msg ul { margin: 4px 0 0; padding-left: 18px; }
+.muted { color: var(--fg-3); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+.kv dt { color: var(--fg-3); }
+.kv dd { margin: 0; font-family: var(--mono); }
+.rule-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: var(--fg-2); }
+.pulse { animation: pulse .35s ease; }
+@keyframes pulse { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+</style>
+</head>
+<body data-role="tester">
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <h1>共用提示校验台</h1>
+      <span class="sub">双人引导关 · 信念集策略求解</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" role="group" aria-label="视角切换">
+      <button id="role-tester" aria-pressed="true">测试员视角</button>
+      <button id="role-player" aria-pressed="false">玩家视角</button>
+    </div>
+    <button class="icon-btn" id="theme-toggle" type="button">主题</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" data-tab="workbench" aria-selected="true">推演工作台</button>
+    <button class="tab" data-tab="policy" aria-selected="false">保证策略</button>
+    <button class="tab" data-tab="editor" aria-selected="false">数据编辑</button>
+  </nav>
+
+  <!-- ============ 工作台 ============ -->
+  <section class="panel active" id="panel-workbench">
+    <div id="verdict-slot"></div>
+
+    <div class="grid cols-3" style="margin-bottom:14px">
+      <div class="card">
+        <h3>当前共用提示 <span class="hint-tag">玩家可见</span></h3>
+        <div id="wb-hint" style="font-size:22px;font-weight:700"></div>
+        <div class="muted mono" id="wb-beat-label" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <h3>拍数预算</h3>
+        <div class="beatbar" id="wb-beats"></div>
+      </div>
+      <div class="card">
+        <h3>候选状态 <span class="hint-tag tester-only">隐藏态 · 仅测试员</span></h3>
+        <div class="tester-only">
+          <div id="wb-belief-count" style="font-size:22px;font-weight:700"></div>
+          <div class="muted" id="wb-belief-note" style="margin-top:6px"></div>
+        </div>
+        <p class="muted" id="wb-player-card-note" hidden>玩家只依据共用提示决策，看不到候选状态数量与身份。</p>
+      </div>
+    </div>
+
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>候选状态明细 <span class="hint-tag tester-only">测试员可见隐藏状态</span></h3>
+        <div id="wb-belief" class="chips tester-only"></div>
+        <p class="muted" id="wb-belief-player-note" hidden>玩家视角只显示共用提示，隐藏状态已收起。切到测试员视角可查看每个候选状态及其终点标记。</p>
+      </div>
+      <div class="card">
+        <h3>动作选择</h3>
+        <div class="btn-row" style="margin-bottom:10px">
+          <button class="btn small" id="wb-reset" type="button">↺ 回到起点</button>
+          <button class="btn small ghost" id="wb-back" type="button">← 上一步</button>
+        </div>
+        <p class="muted" id="wb-act-hint" style="font-size:12.5px"></p>
+        <div class="table-scroll">
+          <table id="wb-actions"><thead>
+            <tr><th>动作</th><th>状态</th><th>观察分支 / 淘汰原因</th><th></th></tr>
+          </thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:14px">
+      <div class="card">
+        <h3>单步选观察 <span class="hint-tag">按出动作后，每个允许后继都可能发生</span></h3>
+        <div id="wb-obs"><p class="muted">先在右侧选择一个合法动作。</p></div>
+      </div>
+      <div class="card" id="counter-card">
+        <h3>反例推演 <span class="hint-tag">无保证方案时使用</span></h3>
+        <div id="wb-counter"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 策略 ============ -->
+  <section class="panel" id="panel-policy">
+    <div id="policy-verdict"></div>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>策略树（按观察分支重放）</h3>
+        <div id="policy-tree" class="tree"></div>
+      </div>
+      <div class="card">
+        <h3>导出 / 重放</h3>
+        <p class="muted" style="font-size:12.5px">导出的 JSON 自包含状态、动作与完整分支树，可在另一会话按观察序列逐步重放。</p>
+        <div class="btn-row" style="margin:10px 0">
+          <button class="btn primary" id="export-btn" type="button">复制策略 JSON</button>
+          <button class="btn" id="download-btn" type="button">下载 .json 文件</button>
+        </div>
+        <div id="export-msg"></div>
+        <h4 style="margin:16px 0 8px">重放器</h4>
+        <div id="replay"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 编辑器 ============ -->
+  <section class="panel" id="panel-editor">
+    <div id="editor-msgs"></div>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>导入 / 导出原始 JSON</h3>
+        <div class="btn-row" style="margin-bottom:10px">
+          <button class="btn small" id="load-sample" type="button">载入样例</button>
+          <label class="btn small" style="cursor:pointer">导入文件
+            <input type="file" id="file-input" accept=".json,application/json" hidden>
+          </label>
+          <button class="btn small" id="json-apply" type="button">应用文本</button>
+          <button class="btn small ghost" id="json-sync" type="button">从当前模型填充</button>
+        </div>
+        <textarea id="json-text" spellcheck="false"></textarea>
+      </div>
+      <div class="card">
+        <h3>结构化编辑</h3>
+        <div class="field">
+          <label>时限 horizon（1–12 拍）</label>
+          <input type="number" id="ed-horizon" min="1" max="12">
+        </div>
+
+        <h4 style="margin:6px 0 8px">状态（≤128）</h4>
+        <div class="table-scroll" style="margin-bottom:14px">
+          <table id="ed-states"><thead><tr><th>id</th><th>提示 hint</th><th>终点</th><th>初始</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <button class="btn small" id="ed-add-state" type="button">+ 状态</button>
+
+        <h4 style="margin:16px 0 8px">联合动作（≤16）</h4>
+        <div class="table-scroll" style="margin-bottom:14px">
+          <table id="ed-actions"><thead><tr><th>id</th><th>名称</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <button class="btn small" id="ed-add-action" type="button">+ 动作</button>
+
+        <h4 style="margin:16px 0 8px">转移表 [状态, 动作 → 后继集合]</h4>
+        <div id="ed-trans" class="table-scroll"></div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn small" id="ed-add-trans" type="button">+ 转移</button>
+          <button class="btn primary" id="ed-rebuild" type="button">应用编辑并重算</button>
+        </div>
+        <div class="rule-box" style="margin-top:14px" id="ed-rules"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script src="assets/solver.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
