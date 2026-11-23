@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>四面体笼变形 · 碎片剖分</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <div>
+        <h1>四面体笼变形 · 碎片剖分</h1>
+        <p class="sub">沿单元边界精确裁分 · 最小单元归属 · 逆转置法线</p>
+      </div>
+    </div>
+    <div class="actions">
+      <label class="btn primary">
+        导入 JSON
+        <input id="file-input" type="file" accept=".json,application/json" hidden />
+      </label>
+      <button id="load-sample" class="btn">样本</button>
+      <button id="load-perf" class="btn">满额场景</button>
+      <button id="btn-export-deformed" class="btn ok">导出变形碎片</button>
+      <button id="btn-export-rest" class="btn">导出原始碎片</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="card">
+        <h2>视图</h2>
+        <div class="seg">
+          <button id="view-deformed" class="active">变形笼</button>
+          <button id="view-rest">原笼</button>
+        </div>
+        <label class="check"><input type="checkbox" id="toggle-cage" checked /> 显示笼线框与笼点</label>
+        <label class="check"><input type="checkbox" id="toggle-normals" /> 显示法线</label>
+        <label class="slider">碎片不透明度
+          <input type="range" id="opacity" min="0.15" max="1" step="0.05" value="1" />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>统计</h2>
+        <div id="summary" class="summary"><div class="muted">等待数据…</div></div>
+      </section>
+
+      <section class="card grow">
+        <h2>问题与归属</h2>
+        <div id="issue-list" class="issue-list"></div>
+        <div id="inspector" class="inspector"></div>
+      </section>
+    </aside>
+
+    <section class="viewport-wrap">
+      <div id="viewport" class="viewport"></div>
+      <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+      <div id="status" class="status">就绪</div>
+      <div class="hint">左键拖拽旋转 · 滚轮缩放 · 右键平移 · 拖动黄色笼点改变姿态 · 点击碎片查看归属</div>
+    </section>
+  </main>
+
+  <script src="vendor/three.min.js"></script>
+  <script src="vendor/OrbitControls.js"></script>
+  <script src="js/geom/exact.js"></script>
+  <script src="js/geom/intersect.js"></script>
+  <script src="js/geom/cage.js"></script>
+  <script src="js/geom/fragmenter.js"></script>
+  <script src="js/app/export.js"></script>
+  <script src="js/app/scene.js"></script>
+  <script src="js/app/main.js"></script>
+</body>
+</html>

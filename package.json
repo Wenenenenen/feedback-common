@@ -1,0 +1,14 @@
+{
+  "name": "tetra-cage-fragmenter",
+  "version": "1.0.0",
+  "description": "四面体笼变形网页：沿单元边界精确裁分三角面，最小单元归属，逆转置法线",
+  "private": true,
+  "scripts": {
+    "test": "node test/kernel.test.js",
+    "perf": "node test/perf.test.js",
+    "e2e": "node test/e2e.test.js",
+    "gen-perf": "node tools/gen-perf.js",
+    "serve": "node tools/serve.js"
+  },
+  "license": "MIT"
+}
