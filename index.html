@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考图缓冲回放</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1c2129; --panel2: #232a34; --border: #323b48;
+    --fg: #d7dde6; --dim: #8a94a3; --accent: #4da3ff; --ok: #3fb96f;
+    --warn: #e0a13e; --bad: #e05e5e; --poll: #c586e8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.5 "SF Mono", Consolas, "Courier New", monospace; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 12px 0 0; }
+  button, .filebtn { background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  button:hover, .filebtn:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  input[type=number], input[type=text] { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font: inherit; width: 90px; }
+  #summary { display: flex; gap: 18px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+  #summary .stat b { color: var(--accent); font-size: 15px; }
+  #errbanner { display: none; width: 100%; background: #3a2226; border: 1px solid var(--bad); color: #f0b8b8; padding: 6px 10px; border-radius: 5px; }
+  main { display: flex; height: calc(100vh - 96px); }
+  #left { width: 340px; min-width: 340px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--panel); }
+  #tabs { display: flex; border-bottom: 1px solid var(--border); }
+  #tabs button { flex: 1; border: none; border-radius: 0; padding: 8px; background: transparent; color: var(--dim); }
+  #tabs button.on { color: var(--fg); background: var(--panel2); box-shadow: inset 0 -2px 0 var(--accent); }
+  #nav { display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); align-items: center; flex-wrap: wrap; }
+  #listwrap { flex: 1; overflow-y: auto; position: relative; }
+  #listspacer { position: relative; }
+  .row { position: absolute; left: 0; right: 0; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+  .row:hover { background: var(--panel2); }
+  .row.sel { background: #2a3448; }
+  .row .ln { color: var(--dim); width: 58px; flex: none; }
+  .row .poc { width: 76px; flex: none; }
+  .badge { display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 11px; margin-right: 3px; }
+  .b-reset { background: #2c3e55; color: #9fc2ef; }
+  .b-keep { background: #23402e; color: #7fd6a0; }
+  .b-bad { background: #40262a; color: #ef9a9a; }
+  .b-poll { background: #37284a; color: var(--poll); }
+  .b-err { background: var(--bad); color: #fff; }
+  .b-out { background: #23402e; color: #7fd6a0; }
+  .b-drop { background: #40262a; color: #ef9a9a; }
+  .b-eof { background: #3a3f2a; color: #d6d69a; }
+  #detail { flex: 1; overflow-y: auto; padding: 14px 18px; }
+  .sec { margin-bottom: 16px; }
+  .sec h3 { margin: 0 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+  .kv { display: flex; gap: 8px; }
+  .kv .k { color: var(--dim); min-width: 90px; }
+  .chip { display: inline-block; background: var(--panel2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; margin: 2px 3px 2px 0; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+  .chip.polluted { border-color: var(--poll); color: var(--poll); }
+  .chip.min { outline: 2px solid var(--warn); }
+  .chip.static { cursor: default; }
+  #slots { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  .slot { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; text-align: center; min-height: 42px; }
+  .slot .sn { color: var(--dim); font-size: 11px; }
+  .slot.full { border-color: var(--accent); cursor: pointer; }
+  .chain { border-left: 2px solid var(--poll); padding-left: 10px; margin: 4px 0; }
+  .chain .cnode { margin: 3px 0; }
+  .dim { color: var(--dim); }
+  .err-text { color: var(--bad); }
+  .ok-text { color: var(--ok); }
+  .warn-text { color: var(--warn); }
+  a.link { color: var(--accent); cursor: pointer; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+  pre.raw { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 8px; overflow-x: auto; margin: 0; }
+  #empty { color: var(--dim); text-align: center; margin-top: 60px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>参考图缓冲回放</h1>
+  <label class="filebtn">导入跟踪文件<input type="file" id="file" accept=".json" style="display:none"></label>
+  <button id="sample">载入示例</button>
+  <button id="export" disabled>导出回放报告 JSON</button>
+  <span id="fname" class="dim"></span>
+</header>
+<div id="summary" style="display:none">
+  <span class="stat">解码 <b id="c-dec">0</b></span>
+  <span class="stat">出图 <b id="c-out">0</b></span>
+  <span class="stat">丢弃 <b id="c-drop">0</b></span>
+  <span class="stat">污染 <b id="c-poll">0</b></span>
+  <span class="stat">参数 <b id="c-hdr"></b></span>
+  <span class="stat dim" id="c-time"></span>
+  <div id="errbanner"></div>
+</div>
+<main id="main" style="display:none">
+  <div id="left">
+    <div id="tabs">
+      <button id="tab-decode" class="on">解码序</button>
+      <button id="tab-output">出图序</button>
+    </div>
+    <div id="nav">
+      <button id="prev">◀</button><button id="next">▶</button>
+      <input type="number" id="jumpline" placeholder="行号" min="0"><button id="goline">跳转</button>
+      <input type="number" id="jumppoc" placeholder="POC"><button id="gopoc">定位</button>
+    </div>
+    <input type="range" id="slider" min="0" max="0" value="0" style="margin:6px 10px;width:calc(100% - 20px)">
+    <div id="listwrap"><div id="listspacer"></div></div>
+  </div>
+  <div id="detail"></div>
+</main>
+<div id="empty">导入符合 samples/picture-buffer.json 格式的跟踪文件, 或点击「载入示例」。<br>上限 10 万条记录, 缓冲最多 32 张。</div>
+
+<script src="simulator.js"></script>
+<script>
+'use strict';
+var SAMPLE = {"spec":"内置示例(同 samples/picture-buffer.json)","M":16,"capacity":6,"reorder":2,"records":[{"lsb":0,"keep":true,"refs":[],"ops":[],"reset":"drain"},{"lsb":2,"keep":true,"refs":[{"poc":0}],"ops":[["move",0,1]]},{"lsb":1,"keep":false,"refs":[{"slot":1}],"ops":[]},{"lsb":3,"keep":false,"refs":[{"poc":2}],"ops":[]}]};
+
+var SIM = null, REPORT = null, RECORDS = [];
+var sel = 0, tab = 'decode';
+var outList = []; // 出图序: [{step, kind, id, reason}]
+var pocIndex = new Map(); // poc -> [picId...]
+var ROW_H = 30;
+
+var $ = function (id) { return document.getElementById(id); };
+
+function loadTrace(trace, name) {
+  var t0 = performance.now();
+  SIM = PicBufferSim.simulate(trace);
+  RECORDS = (trace.records || []).slice(0, PicBufferSim.MAX_RECORDS);
+  REPORT = PicBufferSim.buildReport(SIM);
+  var ms = performance.now() - t0;
+
+  outList = [];
+  SIM.steps.forEach(function (s, si) {
+    s.ev.forEach(function (e) { outList.push({ step: si, kind: e.t, id: e.id, reason: e.reason }); });
+  });
+  pocIndex = new Map();
+  SIM.pics.forEach(function (p) {
+    if (!pocIndex.has(p.poc)) pocIndex.set(p.poc, []);
+    pocIndex.get(p.poc).push(p.id);
+  });
+
+  $('fname').textContent = name || '';
+  $('summary').style.display = 'flex';
+  $('main').style.display = 'flex';
+  $('empty').style.display = 'none';
+  $('c-dec').textContent = REPORT.counts.decoded;
+  $('c-out').textContent = REPORT.counts.outputs;
+  $('c-drop').textContent = REPORT.counts.drops;
+  $('c-poll').textContent = REPORT.counts.polluted;
+  $('c-hdr').textContent = 'M=' + SIM.M + ' capacity=' + SIM.capacity + ' reorder=' + SIM.reorder;
+  $('c-time').textContent = '模拟+报告 ' + ms.toFixed(0) + 'ms' + (SIM.truncated ? ' · 已截断至10万条' : '');
+  var eb = $('errbanner');
+  if (SIM.headerError) { eb.style.display = 'block'; eb.textContent = '头部错误: ' + SIM.headerError; }
+  else if (SIM.firstError) { eb.style.display = 'block'; eb.textContent = '首个错误行 #' + SIM.firstError.line + ': ' + SIM.firstError.reason + ' —— 整行未生效, 停在出错前状态'; }
+  else { eb.style.display = 'none'; }
+  $('export').disabled = !!SIM.headerError;
+  $('slider').max = Math.max(0, SIM.steps.length - 1);
+  select(SIM.firstError ? SIM.firstError.line : 0);
+}
+
+// ---------- 列表(虚拟滚动) ----------
+function rowCount() { return tab === 'decode' ? SIM.steps.length : outList.length; }
+
+function renderList() {
+  var wrap = $('listwrap'), spacer = $('listspacer');
+  var total = rowCount();
+  spacer.style.height = total * ROW_H + 'px';
+  var first = Math.max(0, Math.floor(wrap.scrollTop / ROW_H) - 5);
+  var last = Math.min(total - 1, first + Math.ceil(wrap.clientHeight / ROW_H) + 10);
+  var html = '';
+  for (var i = first; i <= last; i++) html += rowHtml(i);
+  spacer.innerHTML = html;
+}
+
+function rowHtml(i) {
+  var top = i * ROW_H, cls = 'row' + (i === sel ? ' sel' : ''), inner;
+  if (tab === 'decode') {
+    var s = SIM.steps[i];
+    if (s.eof) {
+      inner = '<span class="ln">EOF</span><span class="poc"></span><span class="badge b-eof">结尾排空</span>' + evBadges(s);
+    } else {
+      var badges = '';
+      if (s.reset) badges += '<span class="badge b-reset">R:' + s.reset + '</span>';
+      if (s.line < SIM.pics.length) {
+        var pic = SIM.pics[picIdAtLine(s.line)];
+        if (pic.keep) badges += '<span class="badge b-keep">K</span>';
+        if (pic.bad) badges += '<span class="badge b-bad">B</span>';
+        if (pic.polluted) badges += '<span class="badge b-poll">污</span>';
+      }
+      if (s.err) badges += '<span class="badge b-err">错</span>';
+      inner = '<span class="ln">#' + s.line + '</span><span class="poc">POC ' + (s.poc === null ? '—' : s.poc) + '</span>' + badges + evBadges(s);
+    }
+  } else {
+    var o = outList[i], pic2 = SIM.pics[o.id];
+    inner = '<span class="ln">' + (o.kind === 'out' ? '出图' : '丢弃') + '</span><span class="poc">POC ' + pic2.poc + '</span>' +
+      '<span class="badge ' + (o.kind === 'out' ? 'b-out' : 'b-drop') + '">' + (o.kind === 'out' ? '出图' : (o.reason === 'late' ? '迟到' : '重置丢弃')) + '</span>' +
+      '<span class="dim">行#' + pic2.line + ' @' + (SIM.steps[o.step].eof ? 'EOF' : '步' + SIM.steps[o.step].line) + '</span>';
+  }
+  return '<div class="' + cls + '" data-i="' + i + '" style="top:' + top + 'px">' + inner + '</div>';
+}
+
+function evBadges(s) {
+  var out = 0, drop = 0;
+  s.ev.forEach(function (e) { e.t === 'out' ? out++ : drop++; });
+  var h = '';
+  if (out) h += '<span class="badge b-out">出' + out + '</span>';
+  if (drop) h += '<span class="badge b-drop">弃' + drop + '</span>';
+  return h;
+}
+
+function picIdAtLine(line) {
+  // pics 按行号顺序生成且 id 连续; 错误行之后的行无图
+  // 二分: pics[id].line === line
+  var lo = 0, hi = SIM.pics.length - 1;
+  while (lo <= hi) {
+    var mid = (lo + hi) >> 1;
+    if (SIM.pics[mid].line === line) return mid;
+    if (SIM.pics[mid].line < line) lo = mid + 1; else hi = mid - 1;
+  }
+  return -1;
+}
+
+// ---------- 详情 ----------
+function picChip(id, extra) {
+  var p = SIM.pics[id];
+  return '<span class="chip' + (p.polluted ? ' polluted' : '') + (extra ? ' ' + extra : '') + '" data-jump="' + p.line + '">POC ' + p.poc + '<span class="dim"> #' + p.line + '</span></span>';
+}
+
+function chainHtml(picId, depth, seen) {
+  var pic = SIM.pics[picId];
+  if (depth > 60) return '<div class="cnode dim">…(链过长已截断)</div>';
+  if (seen.has(picId)) return '<div class="cnode dim">…(循环)</div>';
+  seen.add(picId);
+  var h = '<div class="cnode">图 <a class="link" data-jump="' + pic.line + '">POC ' + pic.poc + ' 行#' + pic.line + '</a>';
+  if (!pic.polluted) return h + ' <span class="ok-text">干净</span></div>';
+  h += '<div class="chain">';
+  pic.reasons.forEach(function (r) {
+    if (r.k === 'self') h += '<div class="cnode">• 自身 bad 标记</div>';
+    else if (r.k === 'missing') h += '<div class="cnode">• 缺失引用 ' + viaText(r.via) + '</div>';
+    else {
+      h += '<div class="cnode">• 引用受污染图 (' + viaText(r.via) + '):</div>' + chainHtml(r.t, depth + 1, seen);
+    }
+  });
+  return h + '</div></div>';
+}
+
+function viaText(via) { return via.poc !== undefined ? 'poc=' + via.poc : 'slot=' + via.slot; }
+
+function renderDetail() {
+  var s = SIM.steps[sel], d = $('detail');
+  if (!s) { d.innerHTML = ''; return; }
+  var h = '';
+
+  // 行头
+  h += '<div class="sec"><h2 style="margin:0 0 4px">' + (s.eof ? '文件尾排空' : '行 #' + s.line) + ' ';
+  if (s.reset) h += '<span class="badge b-reset">reset: ' + s.reset + '</span>';
+  if (s.err) h += '<span class="badge b-err">错误</span>';
+  h += '</h2>';
+  if (s.err) h += '<div class="err-text">⚠ ' + esc(s.err) + ' —— 整行未生效, 以下为该行之前的状态</div>';
+  h += '</div>';
+
+  // 原始记录 + POC 计算
+  if (!s.eof) {
+    h += '<div class="sec"><h3>原始记录</h3><pre class="raw">' + esc(JSON.stringify(RECORDS[s.line])) + '</pre></div>';
+    if (s.wrap) {
+      var w = s.wrap;
+      h += '<div class="sec"><h3>POC 计算(回绕基准 = 最近成功 keep 行)</h3><div class="card">' +
+        '<div class="kv"><span class="k">基准高位 h</span><span>' + w.h + '</span></div>' +
+        '<div class="kv"><span class="k">基准低位 p</span><span>' + w.p + '</span></div>' +
+        '<div class="kv"><span class="k">当前低位 q</span><span>' + w.q + '</span></div>' +
+        '<div class="kv"><span class="k">调整</span><span>' + (w.adj > 0 ? 'p−q ≥ M/2 → h+M' : w.adj < 0 ? 'q−p > M/2 → h−M' : '不变') + '</span></div>' +
+        '<div class="kv"><span class="k">完整 POC</span><span><b>' + w.poc + '</b></span></div></div></div>';
+    }
+  }
+
+  // 引用解析
+  if (s.refsR && s.refsR.length) {
+    h += '<div class="sec"><h3>引用解析(步首参考)</h3><div class="card">';
+    s.refsR.forEach(function (rr) {
+      h += '<div class="kv"><span class="k">' + viaText(rr.ref) + '</span><span>' +
+        (rr.status === 'missing'
+          ? '<span class="err-text">缺失 → 污染当前图</span>'
+          : '命中 ' + picChip(rr.target) + (SIM.pics[rr.target].polluted ? ' <span class="warn-text">目标已污染 → 传播</span>' : '<span class="ok-text">干净</span>')) +
+        '</span></div>';
+    });
+    h += '</div></div>';
+  }
+
+  // 标记操作
+  if (s.opsR && s.opsR.length) {
+    h += '<div class="sec"><h3>标记操作</h3><div class="card">';
+    s.opsR.forEach(function (o) {
+      h += '<div class="kv"><span class="k">' + esc(JSON.stringify(o.op)) + '</span><span class="ok-text">成功</span></div>';
+    });
+    h += '</div></div>';
+  }
+
+  // 当前图 + 污染链
+  if (!s.eof) {
+    var pid = picIdAtLine(s.line);
+    if (pid >= 0) {
+      var pic = SIM.pics[pid];
+      h += '<div class="sec"><h3>当前图</h3><div class="card">' +
+        '<div class="kv"><span class="k">POC</span><span><b>' + pic.poc + '</b> (lsb=' + pic.lsb + ')</span></div>' +
+        '<div class="kv"><span class="k">标记</span><span>' + (pic.keep ? '<span class="badge b-keep">keep 短参考</span>' : '') + (pic.bad ? '<span class="badge b-bad">bad</span>' : '') + '</span></div>' +
+        '<div class="kv"><span class="k">污染</span><span>' + (pic.polluted ? '<span class="warn-text">是</span>' : '<span class="ok-text">否</span>') + '</span></div>';
+      if (pic.polluted) h += '<div style="margin-top:6px"><span class="dim">污染原因链:</span>' + chainHtml(pid, 0, new Set()) + '</div>';
+      h += '</div></div>';
+    } else if (s.err) {
+      h += '<div class="sec"><h3>当前图</h3><div class="card dim">整行未生效, 未生成图</div></div>';
+    }
+  }
+
+  // 本步事件
+  if (s.ev.length) {
+    h += '<div class="sec"><h3>本步出图 / 丢弃</h3><div class="card">';
+    s.ev.forEach(function (e) {
+      var p2 = SIM.pics[e.id];
+      h += '<div class="kv"><span class="k">' + (e.t === 'out' ? '<span class="ok-text">出图</span>' : '<span class="err-text">丢弃</span>') + '</span><span>' +
+        picChip(e.id) + (e.reason ? ' <span class="dim">' + (e.reason === 'late' ? '迟到的低序号图' : '重置丢弃旧队列') + '</span>' : '') + '</span></div>';
+    });
+    h += '</div></div>';
+  }
+
+  // 缓冲状态
+  h += '<div class="sec"><h3>缓冲状态(' + (s.eof ? '排空后' : s.err ? '出错前' : '本步后') + ')</h3><div class="card">';
+  h += '<div class="kv"><span class="k">回绕基准</span><span>h=' + s.h + ' p=' + s.p + '</span></div>';
+  h += '<div class="kv"><span class="k">最后出图 POC</span><span>' + (s.lo === null ? '—' : s.lo) + '</span></div>';
+  h += '<div style="margin-top:6px"><span class="dim">短参考 (' + s.s.length / 2 + '):</span><br>';
+  if (!s.s.length) h += '<span class="dim">(空)</span>';
+  for (var i = 0; i < s.s.length; i += 2) h += picChip(s.s[i + 1]);
+  h += '</div>';
+  h += '<div style="margin-top:6px"><span class="dim">待显队列 (' + s.q.length + ', 按到达序, 框出者为最小 POC):</span><br>';
+  if (!s.q.length) h += '<span class="dim">(空)</span>';
+  else {
+    var minId = s.q[0];
+    s.q.forEach(function (id) { if (SIM.pics[id].poc < SIM.pics[minId].poc) minId = id; });
+    s.q.forEach(function (id) { h += picChip(id, id === minId ? 'min' : ''); });
+  }
+  h += '</div>';
+  h += '<div style="margin-top:8px"><span class="dim">长期槽 (0–31):</span><div id="slots" style="margin-top:4px">';
+  var lmap = {};
+  for (i = 0; i < s.l.length; i += 2) lmap[s.l[i]] = s.l[i + 1];
+  for (i = 0; i < 32; i++) {
+    if (lmap[i] !== undefined) {
+      var lp = SIM.pics[lmap[i]];
+      h += '<div class="slot full" data-jump="' + lp.line + '"><div class="sn">slot ' + i + '</div>POC ' + lp.poc + '</div>';
+    } else {
+      h += '<div class="slot"><div class="sn">slot ' + i + '</div><span class="dim">—</span></div>';
+    }
+  }
+  h += '</div></div></div></div>';
+
+  d.innerHTML = h;
+}
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ---------- 导航 ----------
+function select(i) {
+  var max = SIM.steps.length - 1;
+  sel = Math.max(0, Math.min(max, i));
+  $('slider').value = sel;
+  renderList();
+  renderDetail();
+  var wrap = $('listwrap');
+  var top = sel * ROW_H;
+  if (top < wrap.scrollTop || top > wrap.scrollTop + wrap.clientHeight - ROW_H) {
+    wrap.scrollTop = Math.max(0, top - wrap.clientHeight / 2);
+  }
+}
+
+function jumpToLine(line) {
+  // 行号 == 步索引(EOF 步除外)
+  if (line >= 0 && line < SIM.steps.length) select(line);
+}
+
+$('listwrap').addEventListener('scroll', renderList);
+$('listspacer').addEventListener('click', function (e) {
+  var row = e.target.closest('.row');
+  if (row) {
+    if (tab === 'decode') select(+row.dataset.i);
+    else select(outList[+row.dataset.i].step); // 出图序点击 → 跳到出图发生的步
+  }
+});
+$('detail').addEventListener('click', function (e) {
+  var j = e.target.closest('[data-jump]');
+  if (j) { setTab('decode'); jumpToLine(+j.dataset.jump); }
+});
+$('prev').onclick = function () { select(sel - 1); };
+$('next').onclick = function () { select(sel + 1); };
+$('slider').oninput = function () { select(+this.value); };
+$('goline').onclick = function () { setTab('decode'); jumpToLine(+$('jumpline').value); };
+$('gopoc').onclick = function () {
+  var ids = pocIndex.get(+$('jumppoc').value);
+  if (ids && ids.length) { setTab('decode'); jumpToLine(SIM.pics[ids[0]].line); }
+};
+document.addEventListener('keydown', function (e) {
+  if (!SIM || e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowLeft') select(sel - 1);
+  if (e.key === 'ArrowRight') select(sel + 1);
+});
+
+function setTab(t) {
+  tab = t;
+  $('tab-decode').className = t === 'decode' ? 'on' : '';
+  $('tab-output').className = t === 'output' ? 'on' : '';
+  renderList();
+}
+$('tab-decode').onclick = function () { setTab('decode'); };
+$('tab-output').onclick = function () { setTab('output'); };
+
+// ---------- 导入 / 导出 ----------
+$('file').addEventListener('change', function (e) {
+  var f = e.target.files[0];
+  if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function () {
+    try { loadTrace(JSON.parse(rd.result), f.name); }
+    catch (err) { alert('JSON 解析失败: ' + err.message); }
+  };
+  rd.readAsText(f);
+  e.target.value = '';
+});
+$('sample').onclick = function () {
+  fetch('samples/picture-buffer.json').then(function (r) { return r.json(); })
+    .then(function (j) { loadTrace(j, 'samples/picture-buffer.json'); })
+    .catch(function () { loadTrace(SAMPLE, '内置示例'); });
+};
+$('export').onclick = function () {
+  var blob = new Blob([JSON.stringify(REPORT, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'replay-report.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+</script>
+</body>
+</html>
