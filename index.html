@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>分块重绘校验台</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>分块重绘校验台</h1>
+        <p class="brand-sub">保留瓦片合成 · 增量脏区对照 · 线性像素审计</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="btn btn-ghost file-btn">
+        导入场景
+        <input type="file" id="file-input" accept=".json,application/json" hidden>
+      </label>
+      <button class="btn btn-ghost" id="btn-load-sample" type="button">载入样例</button>
+      <button class="btn btn-primary" id="btn-export-png" type="button">导出 PNG</button>
+      <button class="btn btn-ghost" id="btn-export-log" type="button">导出重绘日志</button>
+      <div class="theme-switch" role="group" aria-label="配色主题">
+        <button type="button" data-theme-v="light" class="theme-opt">浅</button>
+        <button type="button" data-theme-v="dark" class="theme-opt">深</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 状态栏 -->
+  <div class="statusbar" id="statusbar">
+    <span class="status-item" id="st-scene">未载入场景</span>
+    <span class="status-sep">·</span>
+    <span class="status-item" id="st-nodes"></span>
+    <span class="status-sep">·</span>
+    <span class="status-item" id="st-tile"></span>
+    <span class="status-sep">·</span>
+    <span class="status-item" id="st-seq"></span>
+    <span class="status-spacer"></span>
+    <span class="status-item" id="st-diff" hidden></span>
+    <span class="status-item" id="st-perf"></span>
+  </div>
+
+  <main class="workspace">
+
+    <!-- 左栏：图层树 + 编辑面板 -->
+    <aside class="panel panel-left">
+      <section class="card">
+        <header class="card-head">
+          <h2>图层节点</h2>
+          <span class="chip" id="node-count-chip">0/128</span>
+        </header>
+        <div class="tree-wrap" id="tree-wrap">
+          <div class="empty-hint">导入场景或载入样例后显示图层树</div>
+        </div>
+      </section>
+
+      <section class="card" id="inspector-card">
+        <header class="card-head"><h2>节点检视与编辑</h2></header>
+        <div class="card-body" id="inspector-body">
+          <div class="empty-hint">在图层树或画布中点选一个组节点</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h2>批次队列</h2>
+          <span class="chip" id="queue-count">0 个补丁</span>
+        </header>
+        <div class="card-body">
+          <div class="queue-list" id="queue-list">
+            <div class="empty-hint small">把编辑加入队列，成批提交为一次重绘事务</div>
+          </div>
+          <div class="queue-actions">
+            <button class="btn btn-primary btn-block" id="btn-apply-batch" type="button" disabled>应用批次（单步）</button>
+            <div class="btn-row">
+              <button class="btn btn-ghost" id="btn-clear-queue" type="button" disabled>清空</button>
+              <button class="btn btn-ghost" id="btn-replay-sample" type="button">回放样例编辑</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- 中栏：画布 -->
+    <section class="panel panel-center">
+      <div class="canvas-toolbar">
+        <div class="view-switch" role="tablist" aria-label="画布视图">
+          <button class="view-opt is-active" data-view="incremental" role="tab" type="button">增量图</button>
+          <button class="view-opt" data-view="full" role="tab" type="button">独立全量图</button>
+          <button class="view-opt" data-view="diff" role="tab" type="button">差异对照</button>
+          <button class="view-opt" data-view="tiles" role="tab" type="button">重绘瓦片</button>
+        </div>
+        <div class="canvas-tools">
+          <label class="tool-check"><input type="checkbox" id="chk-grid" checked> 瓦片网格</label>
+          <label class="tool-check"><input type="checkbox" id="chk-damage" checked> 脏区描边</label>
+          <label class="tool-check"><input type="checkbox" id="chk-boxes"> 节点包围盒</label>
+          <div class="zoom-control">
+            <button type="button" id="zoom-out" aria-label="缩小">−</button>
+            <span id="zoom-label">100%</span>
+            <button type="button" id="zoom-in" aria-label="放大">+</button>
+            <button type="button" id="zoom-fit" class="zoom-fit">适配</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-stage" id="canvas-stage">
+        <canvas id="canvas-view" aria-label="合成画布"></canvas>
+        <canvas id="overlay-view" aria-hidden="true"></canvas>
+        <div class="canvas-hint" id="canvas-hint">拖动组节点可直接平移；单击查看该像素的线性值</div>
+      </div>
+
+      <div class="legend-row" id="legend-row">
+        <span class="legend"><i class="sw sw-damage"></i>本批脏区</span>
+        <span class="legend"><i class="sw sw-recompute"></i>实际重算瓦片</span>
+        <span class="legend"><i class="sw sw-reuse"></i>复用缓存瓦片</span>
+        <span class="legend"><i class="sw sw-diff"></i>增量/全量差异像素</span>
+      </div>
+    </section>
+
+    <!-- 右栏：时间线 + 像素探针 + 统计 -->
+    <aside class="panel panel-right">
+      <section class="card">
+        <header class="card-head"><h2>重绘事务时间线</h2></header>
+        <div class="timeline-actions">
+          <button class="btn btn-ghost btn-sm" id="btn-undo" type="button" disabled>↶ 撤销</button>
+          <button class="btn btn-ghost btn-sm" id="btn-redo" type="button" disabled>↷ 重做</button>
+        </div>
+        <div class="timeline" id="timeline">
+          <div class="empty-hint small">尚无重绘事务</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-head">
+          <h2>本批瓦片统计</h2>
+          <span class="chip" id="stat-group-chip">全部组</span>
+        </header>
+        <div class="card-body">
+          <div class="stat-grid">
+            <div class="stat"><span class="stat-num" id="num-damaged">0</span><span class="stat-label">失效瓦片</span></div>
+            <div class="stat"><span class="stat-num" id="num-recomputed">0</span><span class="stat-label">重算瓦片</span></div>
+            <div class="stat"><span class="stat-num" id="num-reused">0</span><span class="stat-label">复用缓存</span></div>
+          </div>
+          <div class="group-stats" id="group-stats"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <header class="card-head"><h2>像素探针</h2></header>
+        <div class="card-body">
+          <div class="probe-head" id="probe-head">
+            <div class="empty-hint small">在画布上单击任意像素</div>
+          </div>
+          <div class="probe-table-wrap" id="probe-table-wrap" hidden></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div class="toast-wrap" id="toast-wrap" aria-live="polite"></div>
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
