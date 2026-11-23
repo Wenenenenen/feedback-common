@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>厂线总线时序台</title>
+<style>
+/* ---- 设计令牌：工程仪表风格，中性冷灰 + 四值语义色 ---- */
+:root {
+  --bg: #f4f5f7;
+  --surface: #fcfcfb;
+  --surface-2: #eceef1;
+  --border: #d6d9de;
+  --fg: #14161a;
+  --fg-2: #52555c;
+  --fg-3: #82868e;
+  --accent: #2a78d6;
+  --accent-soft: #e3eefb;
+  --v0: #2a78d6;   /* 逻辑低 蓝 */
+  --v1: #1baf7a;   /* 逻辑高 绿 */
+  --vx: #eb6834;   /* 未知/冲突 橙红 */
+  --vz: #82868e;   /* 高阻 灰 */
+  --danger: #d23b3b;
+  --danger-soft: #fbe7e7;
+  --ok: #1baf7a;
+  --shadow: 0 1px 2px rgba(20,22,26,.06), 0 4px 14px rgba(20,22,26,.05);
+  --mono: "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #151618; --surface: #1d1e21; --surface-2: #26282d; --border: #34373d;
+    --fg: #f0efec; --fg-2: #c2c4c9; --fg-3: #8a8d94;
+    --accent: #3987e5; --accent-soft: #1f2c3d;
+    --v0: #5aa0ec; --v1: #36c490; --vx: #ef7d52; --vz: #9aa0a8;
+    --danger: #e66767; --danger-soft: #3a2323;
+    --ok: #36c490;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151618; --surface: #1d1e21; --surface-2: #26282d; --border: #34373d;
+  --fg: #f0efec; --fg-2: #c2c4c9; --fg-3: #8a8d94;
+  --accent: #3987e5; --accent-soft: #1f2c3d;
+  --v0: #5aa0ec; --v1: #36c490; --vx: #ef7d52; --vz: #9aa0a8;
+  --danger: #e66767; --danger-soft: #3a2323;
+  --ok: #36c490;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+  border-radius: 7px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { background: transparent; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+h2 { font-size: 13px; margin: 0 0 8px; color: var(--fg-2); font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+header.app {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  padding-block: 10px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+header.app .sub { color: var(--fg-3); font-size: 12px; }
+.spacer { flex: 1; }
+main { padding-block: 16px 40px; display: grid; gap: 14px; }
+.grid { display: grid; gap: 14px; }
+@media (min-width: 980px) { .grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; box-shadow: var(--shadow); min-width: 0;
+}
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.tight { gap: 6px; }
+label.fld { display: grid; gap: 4px; font-size: 12px; color: var(--fg-2); min-width: 0; }
+input, select, textarea {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 7px; padding: 6px 9px; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+textarea { width: 100%; resize: vertical; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--fg-3); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; }
+td.wrap, th.wrap { white-space: normal; }
+.table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-family: var(--mono); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+.badge { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--border); color: var(--fg-2); }
+.alert { border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.alert.err { background: var(--danger-soft); border: 1px solid var(--danger); color: var(--danger); }
+.alert.ok { background: color-mix(in srgb, var(--ok) 12%, var(--surface)); border: 1px solid var(--ok); color: var(--ok); }
+.alert.info { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); }
+.muted { color: var(--fg-3); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12.5px; }
+.kv dt { color: var(--fg-3); }
+.kv dd { margin: 0; font-family: var(--mono); min-width: 0; overflow-wrap: anywhere; }
+canvas { display: block; width: 100%; border-radius: 7px; background: var(--surface-2); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); }
+.legend span { display: inline-flex; gap: 5px; align-items: center; font-family: var(--mono); }
+.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); width: 0; transition: width .15s; }
+.scrollx { overflow-x: auto; }
+.steps input[type=range] { flex: 1; min-width: 160px; }
+.tickbtn { padding: 6px 10px; }
+.write-row td input { width: 100%; }
+.write-row td .mono { font-size: 12px; }
+.netlist { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+.netlist .item { padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+.netlist .item:hover { background: var(--surface-2); }
+.netlist .item.sel { background: var(--accent-soft); }
+.src-line { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 12.5px; }
+.src-line:last-child { border-bottom: 0; }
+.src-line .t { color: var(--fg-3); font-family: var(--mono); min-width: 52px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 50; box-shadow: var(--shadow); }
+[hidden] { display: none !important; }
+.small { font-size: 12px; }
+details summary { cursor: pointer; color: var(--fg-2); font-size: 12.5px; padding: 4px 0; }
+</style>
+</head>
+<body>
+<header class="app">
+  <div>
+    <h1>厂线总线时序台</h1>
+    <div class="sub">四值逻辑（0/1/X/Z）· 惯性延迟 · 事件驱动时序内核</div>
+  </div>
+  <div class="spacer"></div>
+  <button id="btn-sample" class="ghost">载入样例</button>
+  <label class="btn ghost" style="border:1px solid var(--border);border-radius:7px;padding:6px 12px;cursor:pointer">
+    打开 JSON <input id="file" type="file" accept=".json,application/json" hidden>
+  </label>
+  <button id="btn-theme" class="ghost" title="切换深浅色">◐</button>
+</header>
+
+<main>
+  <!-- 模型输入 -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">模型</h2>
+      <div class="row tight">
+        <button id="btn-run" class="primary">运行仿真</button>
+        <button id="btn-replay" disabled>重演校验</button>
+      </div>
+    </div>
+    <div class="grid two" style="margin-top:10px">
+      <label class="fld">
+        模型 JSON（nets / ports / gates / writes / until）
+        <textarea id="model-text" rows="10" spellcheck="false"></textarea>
+      </label>
+      <div style="display:grid;gap:10px;min-width:0">
+        <div id="model-alert"></div>
+        <div class="row tight">
+          <button id="btn-validate">仅校验</button>
+          <span class="small muted" id="model-meta"></span>
+        </div>
+        <div class="progress" hidden id="prog-wrap"><div id="prog-bar"></div></div>
+        <div id="run-stats" class="small muted"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 仿真结果区 -->
+  <div id="results" hidden>
+    <div class="grid" style="margin-bottom:14px">
+      <section class="card">
+        <h2>逐时刻跳转</h2>
+        <div class="row steps" style="margin-top:8px">
+          <button class="tickbtn" id="btn-first" title="第一个时刻">⏮</button>
+          <button class="tickbtn" id="btn-prev" title="上一事件时刻">◀</button>
+          <button class="tickbtn" id="btn-back" title="后退 1 tick">−1</button>
+          <button class="tickbtn" id="btn-fwd" title="前进 1 tick">+1</button>
+          <button class="tickbtn" id="btn-next" title="下一事件时刻">▶</button>
+          <button class="tickbtn" id="btn-last" title="最后时刻">⏭</button>
+          <input type="range" id="time-slider" min="0" max="0" value="0">
+          <span class="mono" id="time-label">t=0</span>
+        </div>
+        <div class="small muted" style="margin-top:6px">
+          事件时刻 <span id="event-idx">0/0</span> · 仅在有外部写入或门事件的时刻产生记录，空档自动跳过
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>导出实际变值波形</h2>
+        <div class="row" style="margin-top:8px">
+          <button id="btn-vcd" disabled>导出 VCD</button>
+          <button id="btn-json" disabled>导出 JSON</button>
+          <span class="small muted">只含发生变化的时刻；导出内容与从头重演逐条一致</span>
+        </div>
+        <div id="replay-alert" style="margin-top:10px"></div>
+      </section>
+    </div>
+
+    <div class="grid two">
+      <!-- 波形 -->
+      <section class="card">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">波形（当前游标）</h2>
+          <div class="row tight">
+            <label class="small muted">缩放
+              <input type="range" id="zoom" min="10" max="120" value="46" style="width:90px">
+            </label>
+          </div>
+        </div>
+        <div class="legend" style="margin:8px 0">
+          <span><i style="background:var(--v0)"></i>0 低</span>
+          <span><i style="background:var(--v1)"></i>1 高</span>
+          <span><i style="background:var(--vx)"></i>X 未知/冲突</span>
+          <span><i style="background:var(--vz)"></i>Z 高阻</span>
+        </div>
+        <div class="scrollx"><canvas id="wave-canvas" height="320"></canvas></div>
+        <div class="small muted" style="margin-top:6px">点击波形定位游标；总线按位展开，每位独立着色并标注字符</div>
+      </section>
+
+      <!-- 线网与驱动来源 -->
+      <section class="card">
+        <h2>线网与驱动来源</h2>
+        <label class="fld" style="margin:8px 0">
+          筛选线网
+          <input id="net-filter" placeholder="按名称过滤…">
+        </label>
+        <div class="grid two" style="grid-template-columns: 1fr 1.2fr">
+          <div class="netlist" id="net-list"></div>
+          <div id="net-detail" style="min-width:0">
+            <div class="muted small">选择左侧线网，查看当前时刻各驱动来源与解算结果</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 单次写入编辑 -->
+    <section class="card" style="margin-top:14px">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">单次端口写入</h2>
+        <span class="small muted">改动在模型副本上生效，旧波形保留直到再次运行；校验失败会指出原因且不覆盖当前结果</span>
+      </div>
+      <div class="table-wrap" style="margin-top:10px">
+        <table id="write-table">
+          <thead><tr><th>时刻</th><th>端口</th><th>四值串</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row tight" style="margin-top:10px">
+        <button id="btn-add-write">新增写入</button>
+        <button id="btn-apply-writes" class="primary">应用并重跑</button>
+        <span id="write-alert"></span>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="engine.js"></script>
+<script src="exporter.js"></script>
+<script>
+'use strict';
+/* global FactoryBus, FactoryBusExport */
+const FB = FactoryBus;
+const EXP = FactoryBusExport;
+const $ = (id) => document.getElementById(id);
+const FOUR = ['Z', 'X', '0', '1'];
+const VAL_COLOR = { '0': 'var(--v0)', '1': 'var(--v1)', 'X': 'var(--vx)', 'Z': 'var(--vz)' };
+
+// ---------- 全局状态 ----------
+const state = {
+  model: null,          // 当前已解析模型
+  result: null,         // 最近一次成功 run 的结果
+  draftWrites: null,    // 编辑中的写入副本
+  cursor: 0,            // 当前游标时刻
+  selectedNet: 0,
+  pxPerTick: 46,
+  theme: null,
+};
+
+// ---------- 工具 ----------
+function toast(msg) {
+  const el = $('toast'); el.textContent = msg; el.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => { el.hidden = true; }, 2200);
+}
+function setAlert(el, kind, msg) {
+  if (!msg) { el.innerHTML = ''; el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<div class="alert ${kind}">${msg}</div>`;
+}
+function saveModel() {
+  try { localStorage.setItem('fb-model', $('model-text').value); } catch (_) {}
+}
+function loadSavedModel() {
+  try { return localStorage.getItem('fb-model') || ''; } catch (_) { return ''; }
+}
+function fmtNetVal(wf, t) {
+  // 取线网在 t 时刻的四值串
+  const v = FB.valueAt({ times: wf.times, lo: wf.lo, hi: wf.hi }, t);
+  if (!v) return 'Z'.repeat(wf.width); // 早于首条记录（理论上 t>=0 都有初态）
+  return FB.formatValue(v.lo, v.hi, wf.width);
+}
+
+// ---------- 主题 ----------
+function applyTheme() {
+  if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+  else document.documentElement.removeAttribute('data-theme');
+  if (state.result) drawWave();
+}
+$('btn-theme').addEventListener('click', () => {
+  const dark = getComputedStyle(document.documentElement).colorScheme === 'dark';
+  state.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('fb-theme', state.theme); } catch (_) {}
+  applyTheme();
+});
+
+// ---------- 模型载入 ----------
+const SAMPLE = {
+  until: 12,
+  nets: { src: 2, en: 1, bus: 2 },
+  ports: { p: 'src', e: 'en' },
+  gates: [{ id: 'gate', op: 'TRI', in: ['src', 'en'], out: 'bus', delay: 2 }],
+  writes: [[0, 'p', '01'], [0, 'e', '1'], [6, 'p', '10']],
+};
+$('btn-sample').addEventListener('click', () => {
+  $('model-text').value = JSON.stringify(SAMPLE, null, 2);
+  saveModel(); parseModel(true);
+});
+$('file').addEventListener('change', async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  $('model-text').value = text;
+  saveModel(); parseModel(true);
+  ev.target.value = '';
+});
+$('model-text').addEventListener('input', () => { saveModel(); });
+
+function parseModel(silent) {
+  let obj;
+  try { obj = JSON.parse($('model-text').value); }
+  catch (e) {
+    setAlert($('model-alert'), 'err', `JSON 解析失败：${e.message}`);
+    $('model-meta').textContent = '';
+    state.model = null;
+    return false;
+  }
+  const errors = FB.validateModel(obj);
+  if (errors.length) {
+    setAlert($('model-alert'), 'err',
+      '校验未通过：<ul style="margin:6px 0 0;padding-left:18px">' +
+      errors.map(e => `<li>${e.gateId ? `门 <b>${e.gateId}</b>：` : ''}${e.message}</li>`).join('') + '</ul>');
+    $('model-meta').textContent = '';
+    state.model = null;
+    return false;
+  }
+  state.model = obj;
+  state.draftWrites = obj.writes.map(w => w.slice());
+  const G = (obj.gates || []).length, W = (obj.writes || []).length, N = Object.keys(obj.nets).length;
+  setAlert($('model-alert'), 'ok', `模型合法：${N} 条线网 · ${G} 个门 · ${W} 次写入 · until=${obj.until}`);
+  $('model-meta').textContent = '';
+  if (!silent) toast('模型校验通过');
+  return true;
+}
+$('btn-validate').addEventListener('click', () => parseModel(false));
+
+// ---------- 仿真（分块，避免大模型卡 UI）----------
+function runAsync(model) {
+  return new Promise((resolve) => {
+    // 先校验，非法直接返回（旧结果由调用方保留）
+    const errors = FB.validateModel(model);
+    if (errors.length) return resolve({ ok: false, errors });
+    // 用宏任务分片执行 onProgress，让进度条能绘制
+    let result = null;
+    const t0 = performance.now();
+    // run 本身同步但很快（压测 ~3s）；用一次 await 让 UI 先刷进度条
+    $('prog-wrap').hidden = false; $('prog-bar').style.width = '8%';
+    setTimeout(() => {
+      try {
+        result = FB.run(model, { onProgress: (p) => { $('prog-bar').style.width = (8 + p * 90).toFixed(1) + '%'; } });
+        result._elapsedMs = performance.now() - t0;
+        $('prog-bar').style.width = '100%';
+        setTimeout(() => { $('prog-wrap').hidden = true; $('prog-bar').style.width = '0'; }, 250);
+        resolve(result);
+      } catch (e) {
+        $('prog-wrap').hidden = true;
+        resolve({ ok: false, errors: [{ gateId: null, message: '内核异常：' + e.message }] });
+      }
+    }, 30);
+  });
+}
+
+$('btn-run').addEventListener('click', async () => {
+  if (!parseModel(true)) { toast('模型校验未通过，未运行'); return; }
+  const model = structuredClone(state.model);
+  model.writes = state.draftWrites.map(w => w.slice());
+  $('btn-run').disabled = true;
+  const r = await runAsync(model);
+  $('btn-run').disabled = false;
+  if (!r.ok) {
+    setAlert($('model-alert'), 'err',
+      '运行被拒（旧波形保留）：<ul style="margin:6px 0 0;padding-left:18px">' +
+      r.errors.map(e => `<li>${e.gateId ? `门 <b>${e.gateId}</b>：` : ''}${e.message}</li>`).join('') + '</ul>');
+    return;
+  }
+  state.result = r;
+  state.model = model;
+  state.cursor = 0;
+  presentResult();
+  toast('仿真完成');
+});
+
+$('btn-replay').addEventListener('click', () => {
+  if (!state.result) return;
+  const vr = FB.verifyReplay(state.model, state.result);
+  setAlert($('replay-alert'), vr.ok ? 'ok' : 'err',
+    vr.ok ? '重演校验通过：从头重演的每条变值与当前波形完全一致' : '重演不一致：' + vr.reason);
+});
+
+// ---------- 结果呈现 ----------
+function presentResult() {
+  const r = state.result;
+  $('results').hidden = false;
+  $('btn-replay').disabled = false;
+  $('btn-vcd').disabled = false; $('btn-json').disabled = false;
+  const changes = r.wave.reduce((s, w) => s + w.times.length, 0);
+  $('run-stats').innerHTML =
+    `处理时刻 <b class="mono">${r.times.length}</b> · 变值记录 <b class="mono">${changes}</b> · 内核用时 <b class="mono">${r._elapsedMs.toFixed(0)} ms</b>`;
+  setAlert($('replay-alert'), null);
+  // 时间滑杆：跨越 0..until，事件时刻供跳转
+  $('time-slider').max = r.until;
+  $('time-slider').value = 0;
+  $('event-idx').textContent = `1/${r.times.length}`;
+  buildNetList();
+  buildWriteTable();
+  updateCursorUI();
+}
+
+// ---------- 游标与时刻跳转 ----------
+function eventIndexOf(t) {
+  const ts = state.result.times;
+  let lo = 0, hi = ts.length - 1, ans = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (ts[m] <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
+  return ans;
+}
+function setCursor(t) {
+  const r = state.result;
+  state.cursor = Math.max(0, Math.min(r.until, t));
+  updateCursorUI();
+}
+function updateCursorUI() {
+  const r = state.result; if (!r) return;
+  const t = state.cursor;
+  $('time-label').textContent = `t=${t}`;
+  $('time-slider').value = t;
+  const idx = eventIndexOf(t);
+  $('event-idx').textContent = `${idx + 1}/${r.times.length}`;
+  drawWave();
+  renderNetDetail();
+}
+$('time-slider').addEventListener('input', (e) => setCursor(Number(e.target.value)));
+$('btn-first').addEventListener('click', () => setCursor(state.result.times[0]));
+$('btn-last').addEventListener('click', () => setCursor(state.result.until));
+$('btn-fwd').addEventListener('click', () => setCursor(state.cursor + 1));
+$('btn-back').addEventListener('click', () => setCursor(state.cursor - 1));
+$('btn-next').addEventListener('click', () => {
+  const ts = state.result.times;
+  const nxt = ts.find(x => x > state.cursor);
+  if (nxt !== undefined) setCursor(nxt);
+});
+$('btn-prev').addEventListener('click', () => {
+  const ts = state.result.times;
+  let prev = ts[0];
+  for (const x of ts) { if (x < state.cursor) prev = x; else break; }
+  setCursor(prev);
+});
+
+// ---------- Canvas 波形 ----------
+function drawWave() {
+  const r = state.result; if (!r) return;
+  const canvas = $('wave-canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const rowH = 26, padL = 110, padR = 16, padT = 8;
+  const visibleNets = getVisibleNets();
+  const totalRows = visibleNets.reduce((s, wf) => s + wf.width, 0);
+  const w = Math.max(canvas.parentElement.clientWidth, padL + 200);
+  const h = padT * 2 + totalRows * rowH + 22;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  const col = (name) => css.getPropertyValue(name).trim();
+  const grid = col('--border'), ink2 = col('--fg-2'), ink3 = col('--fg-3'), surface = col('--surface-2');
+  const px = state.pxPerTick;
+  const xOf = (t) => padL + t * px;
+  ctx.fillStyle = surface; ctx.fillRect(0, 0, w, h);
+
+  // 时刻网格（事件时刻）
+  ctx.strokeStyle = grid; ctx.lineWidth = 1; ctx.font = '10px ' + css.getPropertyValue('--mono');
+  ctx.fillStyle = ink3;
+  for (const t of r.times) {
+    const x = xOf(t);
+    if (x > w - padR) break;
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, h - 18); ctx.stroke();
+    ctx.fillText(String(t), x + 2, h - 6);
+  }
+
+  // 游标
+  const cx = xOf(state.cursor);
+  ctx.strokeStyle = col('--accent'); ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(cx, padT); ctx.lineTo(cx, h - 18); ctx.stroke();
+  ctx.setLineDash([]);
+
+  let row = 0;
+  for (const wf of visibleNets) {
+    for (let bit = 0; bit < wf.width; bit++) {
+      const y = padT + row * rowH;
+      const label = wf.width === 1 ? wf.name : `${wf.name}[${wf.width - 1 - bit}]`;
+      ctx.fillStyle = ink2; ctx.font = '11px ' + css.getPropertyValue('--mono');
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, 8, y + rowH / 2);
+      // 该位在各区间的值
+      const segVals = [];
+      for (let k = 0; k < wf.times.length; k++) {
+        const v = FOUR[(((wf.hi[k] >> (wf.width - 1 - bit)) & 1) << 1) | ((wf.lo[k] >> (wf.width - 1 - bit)) & 1)];
+        segVals.push({ t: wf.times[k], v });
+      }
+      for (let k = 0; k < segVals.length; k++) {
+        const t0 = segVals[k].t;
+        const t1 = k + 1 < segVals.length ? segVals[k + 1].t : r.until + 1;
+        const xa = xOf(t0), xb = Math.min(xOf(t1), w - padR);
+        if (xb <= padL) continue;
+        const v = segVals[k].v;
+        ctx.fillStyle = col(VAL_COLOR[v]);
+        ctx.globalAlpha = .22;
+        ctx.fillRect(xa, y + 3, Math.max(2, xb - xa), rowH - 8);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = col(VAL_COLOR[v]);
+        ctx.font = 'bold 11px ' + css.getPropertyValue('--mono');
+        ctx.fillText(v, xa + 4, y + rowH / 2);
+      }
+      ctx.strokeStyle = grid;
+      ctx.beginPath(); ctx.moveTo(padL, y + rowH - 1); ctx.lineTo(w - padR, y + rowH - 1); ctx.stroke();
+      row++;
+    }
+  }
+  // 点击定位
+  canvas.onclick = (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    const t = Math.round((ev.clientX - rect.left - padL) / px);
+    if (t >= 0 && t <= r.until) setCursor(t);
+  };
+}
+$('zoom').addEventListener('input', (e) => { state.pxPerTick = Number(e.target.value); drawWave(); });
+window.addEventListener('resize', () => state.result && drawWave());
+
+// ---------- 线网列表 + 驱动来源 ----------
+function getVisibleNets() {
+  const q = ($('net-filter').value || '').trim().toLowerCase();
+  return state.result.wave.filter(wf => !q || wf.name.toLowerCase().includes(q));
+}
+function buildNetList() {
+  const list = $('net-list');
+  list.innerHTML = '';
+  state.result.wave.forEach((wf, i) => {
+    const div = document.createElement('div');
+    div.className = 'item' + (i === state.selectedNet ? ' sel' : '');
+    div.innerHTML = `<span class="mono">${wf.name}</span><span class="badge">${wf.width} 位</span>`;
+    div.addEventListener('click', () => { state.selectedNet = i; buildNetList(); renderNetDetail(); });
+    list.appendChild(div);
+  });
+}
+$('net-filter').addEventListener('input', () => { drawWave(); });
+
+function driverValueAt(hist, t) {
+  const v = FB.valueAt(hist, t);
+  return v; // null 表示该时刻前驱动从未动作（隐式 Z）
+}
+function renderNetDetail() {
+  const r = state.result; if (!r) return;
+  const wf = r.wave[state.selectedNet];
+  const t = state.cursor;
+  const cur = fmtNetVal(wf, t);
+  const drivers = r.driverInfo.filter(d => d.netName === wf.name);
+  const rows = drivers.map(d => {
+    const hist = r.driverHist[d.id];
+    const v = driverValueAt(hist, t);
+    const valStr = v ? FB.formatValue(v.lo, v.hi, d.width) : 'Z'.repeat(d.width);
+    // 最近一次变化时刻
+    let lastChange = '—';
+    if (hist.times.length) {
+      let lo = 0, hi = hist.times.length - 1, pick = 0;
+      while (lo <= hi) { const m = (lo + hi) >> 1; if (hist.times[m] <= t) { pick = m; lo = m + 1; } else hi = m - 1; }
+      lastChange = 't=' + hist.times[pick];
+    }
+    const kind = d.kind === 'port' ? `外部端口 ${d.ref}` : `门输出 ${d.ref}`;
+    return { kind, valStr, lastChange, width: d.width };
+  });
+  // 解算说明
+  const reason = explainResolution(cur, rows.map(x => x.valStr));
+  $('net-detail').innerHTML = `
+    <h2 style="text-transform:none;letter-spacing:0;font-size:13px;margin-bottom:8px">
+      <span class="mono">${wf.name}</span> @ t=${t}
+    </h2>
+    <div class="row" style="margin-bottom:10px">
+      <span class="muted small">线网解算值</span>
+      <span class="pill" style="font-size:14px">
+        ${[...cur].map(ch => `<i class="dot" style="background:${VAL_COLOR[ch]}"></i>`).join('')}
+        <b class="mono">${cur}</b>
+      </span>
+    </div>
+    <div class="small muted" style="margin-bottom:8px">${reason}</div>
+    <div>${rows.map(x => `
+      <div class="src-line">
+        <span class="t">${x.lastChange}</span>
+        <span style="flex:1;min-width:0">
+          <div>${x.kind}</div>
+          <div class="mono" style="color:var(--fg)">${x.valStr}</div>
+        </span>
+      </div>`).join('')}
+    </div>`;
+}
+function explainResolution(netVal, driverVals) {
+  if (driverVals.length === 0) return '该线网没有任何驱动，逐位为 Z。';
+  const w = netVal.length;
+  const notes = [];
+  for (let bit = 0; bit < w; bit++) {
+    const pos = w - 1 - bit;
+    const dv = driverVals.map(s => s[pos]).filter(v => v !== 'Z');
+    if (dv.length === 0) { notes.push(`位${bit}：全部高阻，结果 Z`); continue; }
+    if (dv.includes('X')) { notes.push(`位${bit}：存在 X 驱动，结果 X`); continue; }
+    const ones = dv.filter(v => v === '1').length, zeros = dv.filter(v => v === '0').length;
+    if (ones && zeros) notes.push(`位${bit}：${ones} 个 1 与 ${zeros} 个 0 冲突，结果 X`);
+  }
+  return notes.length ? notes.join('；') + '。' : '各有效驱动一致，Z 驱动逐位忽略。';
+}
+
+// ---------- 写入编辑 ----------
+function buildWriteTable() {
+  const tb = $('write-table').querySelector('tbody');
+  tb.innerHTML = '';
+  state.draftWrites.forEach((wr, i) => {
+    const tr = document.createElement('tr');
+    tr.className = 'write-row';
+    tr.innerHTML = `
+      <td><input class="mono" data-i="${i}" data-k="0" value="${wr[0]}" style="width:70px"></td>
+      <td><input class="mono" data-i="${i}" data-k="1" value="${wr[1]}" style="width:90px"></td>
+      <td><input class="mono" data-i="${i}" data-k="2" value="${wr[2]}" style="width:110px"></td>
+      <td><button data-del="${i}" class="ghost small">删除</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = Number(inp.dataset.i), k = Number(inp.dataset.k);
+      state.draftWrites[i][k] = k === 0 ? Number(inp.value) : inp.value;
+    });
+  });
+  tb.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.draftWrites.splice(Number(btn.dataset.del), 1);
+      buildWriteTable();
+    });
+  });
+}
+$('btn-add-write').addEventListener('click', () => {
+  const firstPort = Object.keys(state.model.ports)[0] || '';
+  const w = firstPort ? state.model.nets[state.model.ports[firstPort]] : 1;
+  state.draftWrites.push([0, firstPort, 'Z'.repeat(w)]);
+  buildWriteTable();
+});
+$('btn-apply-writes').addEventListener('click', async () => {
+  const model = structuredClone(state.model);
+  model.writes = state.draftWrites.map(w => w.slice());
+  const errors = FB.validateModel(model);
+  if (errors.length) {
+    setAlert($('write-alert'), null);
+    $('write-alert').innerHTML = `<span class="alert err" style="display:inline-block">${
+      errors.map(e => (e.gateId ? `门 ${e.gateId}：` : '') + e.message).join('；')
+    }（旧波形保留）</span>`;
+    return;
+  }
+  $('write-alert').innerHTML = '';
+  $('btn-run').disabled = true;
+  const r = await runAsync(model);
+  $('btn-run').disabled = false;
+  if (!r.ok) { toast('重跑被拒，旧波形保留'); return; }
+  state.result = r; state.model = model; state.cursor = 0;
+  presentResult();
+  toast('写入已应用并重跑');
+});
+
+// ---------- 导出（Blob 本地下载）----------
+function download(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$('btn-vcd').addEventListener('click', () => {
+  download('factory-bus-wave.vcd', EXP.exportVcd(state.result), 'text/plain');
+  toast('VCD 已导出');
+});
+$('btn-json').addEventListener('click', () => {
+  download('factory-bus-wave.json', EXP.exportJson(state.result), 'application/json');
+  toast('JSON 已导出');
+});
+
+// ---------- 启动 ----------
+try { state.theme = localStorage.getItem('fb-theme') || null; } catch (_) {}
+applyTheme();
+const saved = loadSavedModel();
+$('model-text').value = saved || JSON.stringify(SAMPLE, null, 2);
+parseModel(true);
+</script>
+</body>
+</html>
