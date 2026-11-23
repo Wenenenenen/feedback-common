@@ -1,0 +1,205 @@
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>多楼层导览路线调试台</title>
+<style>
+/* ===== 设计令牌：工程仪表盘，冷灰蓝底 + 青色引导线 + 语义色 ===== */
+:root {
+  --bg: #0f1419;
+  --panel: #171d25;
+  --panel-2: #1e2630;
+  --border: #2b3642;
+  --fg: #e6edf3;
+  --muted: #8b98a5;
+  --faint: #5c6875;
+  --accent: #38c8d6;          /* 引导折线 */
+  --accent-dim: #1d6a72;
+  --corridor: #4a9eff;        /* 走廊高亮 */
+  --jump: #f0a838;            /* 跨层入口/出口 */
+  --door-open: #5fd08a;
+  --door-closed: #e5604d;
+  --warn: #e8b341;
+  --danger: #e5604d;
+  --grid: #232c37;
+  --shadow: 0 1px 3px rgba(0,0,0,.4);
+  --radius: 8px;
+  --font-mono: "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f4f6f8; --panel: #ffffff; --panel-2: #f0f3f6; --border: #d6dde4;
+    --fg: #1a232c; --muted: #5a6875; --faint: #8a96a2;
+    --grid: #e3e8ed; --shadow: 0 1px 3px rgba(20,40,60,.08);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8; --panel: #ffffff; --panel-2: #f0f3f6; --border: #d6dde4;
+  --fg: #1a232c; --muted: #5a6875; --faint: #8a96a2;
+  --grid: #e3e8ed; --shadow: 0 1px 3px rgba(20,40,60,.08);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.app { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding-block: 16px; height: 100%; min-height: 0; }
+@media (max-width: 880px) { .app { grid-template-columns: 1fr; height: auto; } }
+
+/* ===== 左侧控制面板 ===== */
+.sidebar { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+.card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.row:last-child { margin-bottom: 0; }
+label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 3px; }
+input, select, button {
+  font-family: var(--font-body); font-size: 13px; color: var(--fg);
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; outline: none; min-width: 0;
+}
+input:focus, select:focus { border-color: var(--accent); }
+input[type="number"] { width: 100%; }
+.field { flex: 1; min-width: 90px; }
+.field input, .field select { width: 100%; }
+button { cursor: pointer; font-weight: 500; transition: border-color .15s, background .15s; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent-dim); border-color: var(--accent); color: #eafcff; }
+button.primary:hover { background: var(--accent); color: #04262b; }
+button.block { width: 100%; }
+.file-label { display: block; text-align: center; border: 1px dashed var(--border); border-radius: 6px; padding: 14px; color: var(--muted); cursor: pointer; font-size: 13px; }
+.file-label:hover { border-color: var(--accent); color: var(--fg); }
+.file-label input { display: none; }
+.hint { font-size: 11px; color: var(--faint); margin-top: 4px; }
+.switch { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.switch input { width: auto; }
+
+/* 门列表 */
+.door-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+.door-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 12px; gap: 8px; }
+.door-item:last-child { border-bottom: none; }
+.door-item .meta { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.open { background: var(--door-open); }
+.dot.closed { background: var(--door-closed); }
+.door-item button { padding: 2px 8px; font-size: 11px; }
+.door-item.jump { background: color-mix(in srgb, var(--jump) 12%, transparent); }
+.badge { font-family: var(--font-mono); font-size: 10px; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--border); color: var(--muted); }
+.badge.jump { color: var(--jump); border-color: var(--jump); }
+
+/* ===== 右侧主区 ===== */
+.main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.toolbar .spacer { flex: 1; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 12px; }
+.stat b { font-family: var(--font-mono); color: var(--accent); font-size: 14px; }
+.canvas-wrap { flex: 1; min-height: 320px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); position: relative; overflow: hidden; box-shadow: var(--shadow); }
+canvas { display: block; width: 100%; height: 100%; }
+.floor-tabs { display: flex; gap: 4px; }
+.floor-tabs button { padding: 4px 12px; font-size: 12px; }
+.floor-tabs button.active { background: var(--accent-dim); border-color: var(--accent); color: #eafcff; }
+
+/* 结果面板 */
+.result { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; max-height: 240px; overflow-y: auto; }
+.result h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--font-mono); word-break: break-all; min-width: 0; }
+.unreach { color: var(--danger); font-weight: 600; }
+.reason-box { background: color-mix(in srgb, var(--danger) 12%, transparent); border: 1px solid var(--danger); border-radius: 6px; padding: 10px; margin-top: 8px; font-size: 12px; }
+.reason-box.warn { background: color-mix(in srgb, var(--warn) 12%, transparent); border-color: var(--warn); }
+pre.export { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 11px; overflow: auto; max-height: 180px; margin: 8px 0 0; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--accent); color: var(--fg); padding: 8px 16px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; }
+.toast.show { opacity: 1; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-family: var(--font-mono); }
+.pill.ok { background: color-mix(in srgb, var(--door-open) 18%, transparent); color: var(--door-open); }
+.pill.bad { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); padding: 6px 2px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+</style>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="card">
+      <h2>地图数据</h2>
+      <label class="file-label">
+        导入 corridor-guide.json
+        <input type="file" id="fileInput" accept=".json,application/json">
+      </label>
+      <div class="hint" id="loadInfo">尚未加载地图</div>
+    </div>
+
+    <div class="card">
+      <h2>起终点</h2>
+      <div class="row">
+        <div class="field"><label>起点楼层</label><select id="startFloor"></select></div>
+        <div class="field"><label>起点格编号</label><input type="number" id="startCell" min="1"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>终点楼层</label><select id="endFloor"></select></div>
+        <div class="field"><label>终点格编号</label><input type="number" id="endCell" min="1"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>门余量 margin</label><input type="number" id="margin" value="0.5" step="0.1" min="0"></div>
+      </div>
+      <button class="primary block" id="solveBtn">求解路线</button>
+    </div>
+
+    <div class="card">
+      <h2>门与跨层连接</h2>
+      <div class="row">
+        <input class="field" id="doorFilter" placeholder="按编号筛选…" style="flex:1">
+        <label class="switch"><input type="checkbox" id="showClosedOnly"> 只看关闭</label>
+      </div>
+      <div class="door-list" id="doorList"></div>
+    </div>
+
+    <div class="card">
+      <h2>显示</h2>
+      <div class="row">
+        <label class="switch"><input type="checkbox" id="showCorridor" checked> 高亮走廊</label>
+        <label class="switch"><input type="checkbox" id="showVertices" checked> 折点</label>
+      </div>
+      <div class="row">
+        <label class="switch"><input type="checkbox" id="showJumps" checked> 跨层入口</label>
+        <label class="switch"><input type="checkbox" id="showDoors" checked> 门段</label>
+      </div>
+      <button class="block" id="exportBtn">复制导出结果 JSON</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <div class="floor-tabs" id="floorTabs"></div>
+      <div class="spacer"></div>
+      <div class="stat">格 <b id="statCells">–</b></div>
+      <div class="stat">连接 <b id="statEdges">–</b></div>
+      <div class="stat">耗时 <b id="statTime">–</b> ms</div>
+      <span class="pill" id="statusPill">待加载</span>
+    </div>
+    <div class="canvas-wrap"><canvas id="canvas"></canvas></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--corridor)"></i>走廊格</span>
+      <span><i class="sw" style="background:var(--accent)"></i>引导折线</span>
+      <span><i class="sw" style="background:var(--jump)"></i>跨层跳跃</span>
+      <span><i class="sw" style="background:var(--door-open)"></i>开门</span>
+      <span><i class="sw" style="background:var(--door-closed)"></i>关门</span>
+    </div>
+    <div class="result" id="resultPanel">
+      <h2>求解结果</h2>
+      <div class="hint">导入地图并设置起终点后点击“求解路线”。</div>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= 算法模块将在发布前由构建脚本内联到此处 ================= */
+</script>

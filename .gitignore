@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 生成的满载测试地图与构建产物
+samples/full-map.json
+dist/

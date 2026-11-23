@@ -1,0 +1,13 @@
+{
+  "name": "multifloor-corridor-guide",
+  "version": "1.0.0",
+  "description": "多楼层游戏导览路线调试台：凸多边形格上的两段求解（最小费用走廊 + 漏斗最短折线）",
+  "private": true,
+  "scripts": {
+    "test": "node tests/test-core.js",
+    "build": "node tools/build-web.js",
+    "bench": "node tools/benchmark.js",
+    "gen:full": "node tools/gen-map.js 20000 40000 2 samples/full-map.json"
+  },
+  "engines": { "node": ">=18" }
+}
