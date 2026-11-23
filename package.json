@@ -1,0 +1,12 @@
+{
+  "name": "line21-state-reel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "双场广播字幕（Line 21 / CEA-608 子集）网页核对工具",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "bench": "node tests/bench.mjs",
+    "serve": "node tools/serve.mjs"
+  }
+}

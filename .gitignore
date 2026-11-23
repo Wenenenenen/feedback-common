@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 基准生成的大文件
+bench-1m.l21p

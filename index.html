@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line 21 双场字幕核对台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">L21 双场字幕核对台</div>
+  <div class="toolbar">
+    <label class="file-btn">
+      打开 L21P
+      <input id="fileInput" type="file" accept=".l21p" hidden>
+    </label>
+    <button id="undoBtn" disabled>撤销</button>
+    <button id="redoBtn" disabled>重做</button>
+    <span class="sep"></span>
+    <label>选区起 <input id="selStart" type="number" min="0" value="0"></label>
+    <label>止 <input id="selEnd" type="number" min="0" value="0"></label>
+    <button id="exportBtn" disabled>导出选区 JSON</button>
+  </div>
+  <div id="meta" class="meta"></div>
+</header>
+
+<main class="layout">
+  <section class="left-pane">
+    <div class="pane-head">
+      <span>记录流</span>
+      <input id="jumpRecord" type="number" min="0" placeholder="记录#">
+      <input id="filterText" type="search" placeholder="筛选：坏校验/抑制/忽略…">
+    </div>
+    <div id="tableHead" class="table-head">
+      <span style="width:72px">#</span>
+      <span style="width:72px">帧</span>
+      <span style="width:44px">场</span>
+      <span style="width:96px">字节 A/B</span>
+      <span style="width:84px">校验</span>
+      <span>解码 / 原因</span>
+    </div>
+    <div id="recordScroller" class="record-scroller">
+      <div id="recordSpacer" style="position:relative"></div>
+      <div id="recordRows"></div>
+    </div>
+  </section>
+
+  <section class="right-pane">
+    <div class="player">
+      <div class="player-controls">
+        <button id="firstBtn">⏮</button>
+        <button id="prevBtn">◀</button>
+        <label class="frame-box">帧
+          <input id="frameInput" type="number" min="0" value="0">
+          <span id="frameTotal">/ 0</span>
+        </label>
+        <button id="nextBtn">▶</button>
+        <button id="lastBtn">⏭</button>
+        <input id="frameSlider" type="range" min="0" max="0" value="0">
+        <span id="jumpMs" class="jump-ms"></span>
+        <span class="clock" id="clock">00:00:00.000</span>
+      </div>
+      <div id="channels" class="channels"></div>
+    </div>
+
+    <div class="detail" id="detail">
+      <div class="detail-empty">在左侧选择一条记录查看原字节、奇校验与执行/跳过原因</div>
+    </div>
+  </section>
+</main>
+
+<div id="structureModal" class="modal" hidden>
+  <div class="modal-card">
+    <h3>结构错误 — 已保留当前稿，未加载新文件</h3>
+    <pre id="structureErrors"></pre>
+    <div class="modal-actions"><button id="closeModal">知道了</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
