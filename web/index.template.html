@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>深度区间合成台 · Deep Interval Compositor</title>
+<style>
+  :root {
+    --bg: #0f1218;
+    --panel: #171c25;
+    --panel-2: #1e2530;
+    --line: #2a3342;
+    --text: #e6eaf1;
+    --muted: #93a0b4;
+    --accent: #6ea8fe;
+    --accent-2: #7ee0c0;
+    --warn: #ffb86b;
+    --err: #ff7a7a;
+    --ok: #8bd47a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.55 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+    background: var(--panel); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  main { flex: 1; display: flex; min-height: 0; }
+  .stage {
+    flex: 1; display: flex; flex-direction: column; padding: 14px; gap: 10px; min-width: 0;
+  }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  input[type=file] { display: none; }
+  .canvas-wrap {
+    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    background:
+      linear-gradient(45deg, #141922 25%, transparent 25%) 0 0/24px 24px,
+      linear-gradient(-45deg, #141922 25%, transparent 25%) 0 12px/24px 24px,
+      linear-gradient(45deg, transparent 75%, #141922 75%) 12px -12px/24px 24px,
+      linear-gradient(-45deg, transparent 75%, #141922 75%) -12px 0/24px 24px,
+      #10141c;
+    border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto;
+  }
+  canvas {
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    background: #000; border-radius: 4px; cursor: crosshair; max-width: 100%; max-height: 100%;
+  }
+  .side {
+    width: 380px; min-width: 320px; border-left: 1px solid var(--line);
+    background: var(--panel); display: flex; flex-direction: column; min-height: 0;
+  }
+  .side .scroll { overflow: auto; padding: 12px 14px; flex: 1; }
+  .statusbar {
+    border-top: 1px solid var(--line); padding: 8px 14px; color: var(--muted);
+    display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px;
+  }
+  .statusbar b { color: var(--text); font-weight: 600; }
+  .errbox {
+    margin: 0 14px 10px; padding: 8px 10px; border-radius: 6px; display: none;
+    border: 1px solid var(--err); background: rgba(255, 122, 122, .08); color: var(--err);
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .errbox.show { display: block; }
+  .progress { height: 4px; background: var(--panel-2); border-radius: 2px; overflow: hidden; margin: 0 14px 10px; display: none; }
+  .progress.show { display: block; }
+  .progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  h2 { font-size: 13px; margin: 14px 0 6px; color: var(--accent-2); font-weight: 650; }
+  h2:first-child { margin-top: 2px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: right; font-size: 12px; }
+  th:first-child, td:first-child { text-align: left; color: var(--muted); }
+  th { color: var(--muted); font-weight: 500; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 2px 8px; font-variant-numeric: tabular-nums; }
+  .kv .k { color: var(--muted); }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 11px; border: 1px solid var(--line); }
+  .tag.vol { color: #9ecbff; }
+  .tag.surf { color: var(--accent-2); }
+  .tag.hold { color: var(--warn); }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; }
+  .drop-hint { color: var(--muted); font-size: 12px; }
+  .canvas-wrap.dragover { outline: 2px dashed var(--accent); outline-offset: -8px; }
+  .timing b { color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>深度区间合成台</h1>
+  <span class="sub">多通道烟雾 / 透明展板按深度事件积分 · Float64 全精度 · 线性预乘导出</span>
+</header>
+<main>
+  <section class="stage">
+    <div class="toolbar">
+      <label class="btn primary" for="file-input">导入 JSON</label>
+      <input id="file-input" type="file" accept=".json,application/json">
+      <button id="load-sample">载入内置样例</button>
+      <button id="cancel" disabled>取消导入</button>
+      <span style="flex:1"></span>
+      <button id="export-rgba64" disabled>导出 RGBA64 二进制</button>
+      <button id="export-json" disabled>导出 JSON</button>
+    </div>
+    <div class="progress" id="progress"><i id="progress-bar"></i></div>
+    <div class="errbox" id="err"></div>
+    <div class="canvas-wrap" id="canvas-wrap">
+      <canvas id="view" width="3" height="2"></canvas>
+    </div>
+    <div class="statusbar">
+      <span>画面：<b id="stat-size">—</b></span>
+      <span>层记录：<b id="stat-layers">—</b></span>
+      <span>非空像素：<b id="stat-pixels">—</b></span>
+      <span class="timing">导入→可点：<b id="stat-time">—</b></span>
+      <span class="drop-hint">可将 JSON 拖入窗口；点击像素查看分段透射率与贡献</span>
+    </div>
+  </section>
+  <aside class="side">
+    <div class="scroll" id="inspect">
+      <h2>像素检查</h2>
+      <p class="muted">点击画面中的像素查看每个积分段的入射 / 出射透射率、吸收份额与预乘贡献。</p>
+    </div>
+  </aside>
+</main>
+
+<!--
+  engine.js 内联块：Worker 需要把同一份引擎源码拼进 Blob（file:// 下禁止 Worker 内 XHR）。
+  由 scripts/build-page.sh 从 web/engine.js 注入到下方脚本占位处；
+  修改引擎后重新执行该脚本，本块与 engine.js 必须保持同源。
+-->
+<script>
+__DIC_ENGINE_PLACEHOLDER__
+</script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
