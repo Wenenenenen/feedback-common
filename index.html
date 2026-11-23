@@ -1,0 +1,669 @@
+<title>分时灯光分离台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: 顶部标题栏 + 主区双栏（画布 / 侧栏），窄屏堆叠为单列。
+     Color: 暖调实验仪器面板，钨丝灯琥珀色为强调色。
+     Type: IBM Plex Sans 界面文本，IBM Plex Mono 数值与数据。 */
+  :root {
+    --bg: #f4f1ec;
+    --panel: #fdfcfa;
+    --ink: #26221b;
+    --ink-dim: #6f675a;
+    --line: #ddd6c9;
+    --accent: #a86e0a;
+    --accent-soft: #f3e3c2;
+    --ok: #2e7d46;
+    --err: #b3341f;
+    --err-soft: #f8e3dd;
+    --canvas-bg: #141210;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140f;
+      --panel: #211d16;
+      --ink: #ece5d8;
+      --ink-dim: #9c927f;
+      --line: #3b352a;
+      --accent: #e0a33e;
+      --accent-soft: #3d3018;
+      --ok: #6fbf8a;
+      --err: #e0705a;
+      --err-soft: #40211a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17140f;
+    --panel: #211d16;
+    --ink: #ece5d8;
+    --ink-dim: #9c927f;
+    --line: #3b352a;
+    --accent: #e0a33e;
+    --accent-soft: #3d3018;
+    --ok: #6fbf8a;
+    --err: #e0705a;
+    --err-soft: #40211a;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px;
+    padding-block: 14px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
+  h1 .sub { font-weight: 400; color: var(--ink-dim); font-size: 13px; margin-left: 8px; }
+  #status-line { margin-left: auto; color: var(--ink-dim); font-size: 12.5px; }
+
+  #err-banner {
+    display: none;
+    margin-block: 10px 0; padding: 10px 14px;
+    background: var(--err-soft); color: var(--err);
+    border-left: 3px solid var(--err); border-radius: 4px;
+    font-size: 13px;
+  }
+  #err-banner.show { display: block; }
+  #err-banner .where { font-weight: 600; }
+
+  #progress-wrap { height: 3px; background: var(--line); margin-block: 0; display: none; }
+  #progress-wrap.show { display: block; }
+  #progress-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+
+  main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 20px; padding-block: 16px 32px; align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 10px; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-dim);
+  }
+
+  /* import */
+  #drop-zone {
+    border: 1.5px dashed var(--line); border-radius: 6px;
+    padding: 18px; text-align: center; color: var(--ink-dim);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  #drop-zone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center; }
+  button {
+    font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    border-radius: 5px; padding: 6px 12px;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); color: #fff; }
+  button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
+  button:focus-visible, [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* view tabs */
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tabs [role="tab"] {
+    font: inherit; font-size: 13px; cursor: pointer;
+    padding: 5px 12px; border-radius: 5px; border: 1px solid transparent;
+    background: none; color: var(--ink-dim);
+  }
+  .tabs [role="tab"][aria-selected="true"] {
+    background: var(--accent-soft); color: var(--accent);
+    border-color: var(--accent); font-weight: 500;
+  }
+
+  #canvas-wrap {
+    background: var(--canvas-bg); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px; min-height: 120px;
+  }
+  #view-canvas {
+    width: 512px; max-width: 100%; height: auto; image-rendering: pixelated;
+    cursor: crosshair; display: block;
+  }
+  #canvas-meta {
+    display: flex; justify-content: space-between; gap: 8px;
+    color: var(--ink-dim); font-size: 12px; margin-top: 8px; flex-wrap: wrap;
+  }
+
+  /* inspector */
+  #inspector dl {
+    display: grid; grid-template-columns: auto 1fr; gap: 3px 14px;
+    margin: 0 0 12px; font-size: 13px;
+  }
+  #inspector dt { color: var(--ink-dim); }
+  #inspector dd { margin: 0; text-align: right; }
+  .tbl-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { padding: 3px 6px; text-align: right; white-space: nowrap; }
+  th { color: var(--ink-dim); font-weight: 500; border-bottom: 1px solid var(--line); }
+  td { border-bottom: 1px solid var(--line); }
+  tr.st-drop td { color: var(--err); }
+  tr.st-sat td { color: var(--ink-dim); text-decoration: line-through; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; }
+  .tag-use { background: var(--accent-soft); color: var(--accent); }
+  .tag-drop { background: var(--err-soft); color: var(--err); }
+  .tag-sat { background: var(--line); color: var(--ink-dim); }
+
+  .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .hint { color: var(--ink-dim); font-size: 12px; margin-top: 8px; }
+  .side-stack { display: grid; gap: 16px; min-width: 0; }
+  #empty-note { color: var(--ink-dim); text-align: center; padding: 24px 8px; }
+</style>
+
+<header>
+  <h1>分时灯光分离台<span class="sub">滚动快门 · 三灯组脉冲解混</span></h1>
+  <span id="status-line" class="mono">未载入数据</span>
+</header>
+<div id="err-banner" role="alert"></div>
+<div id="progress-wrap"><div id="progress-bar"></div></div>
+
+<main>
+  <section>
+    <div class="card">
+      <h2>数据导入</h2>
+      <div id="drop-zone">
+        拖入 <span class="mono">.zip</span>（含 JSON + RAW）或
+        <span class="mono">.json</span> + <span class="mono">.raw</span> 文件对
+        <div class="btn-row">
+          <button id="btn-zip">选择 ZIP</button>
+          <button id="btn-pair">选择 JSON + RAW</button>
+          <button id="btn-sample">载入内置样例</button>
+        </div>
+      </div>
+      <input type="file" id="file-zip" accept=".zip" hidden>
+      <input type="file" id="file-pair" accept=".json,.raw" multiple hidden>
+      <div class="hint">线性 16 位灰度 RAW（u16 小端，帧→行→列），最多 24 帧、512×512；65535 视为饱和。</div>
+    </div>
+
+    <div class="card" style="margin-top:16px" id="view-card" hidden>
+      <div class="tabs" role="tablist" id="view-tabs">
+        <button role="tab" data-view="l0" aria-selected="true">灯层 0</button>
+        <button role="tab" data-view="l1" aria-selected="false">灯层 1</button>
+        <button role="tab" data-view="l2" aria-selected="false">灯层 2</button>
+        <button role="tab" data-view="res" aria-selected="false">残差图</button>
+      </div>
+      <div id="canvas-wrap"><canvas id="view-canvas"></canvas></div>
+      <div id="canvas-meta">
+        <span id="meta-scale" class="mono"></span>
+        <span id="meta-hover" class="mono">点击像素查看详情</span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px" id="empty-card">
+      <div id="empty-note">尚无结果 — 导入数据或载入样例后此处显示分离图层。</div>
+    </div>
+  </section>
+
+  <aside class="side-stack">
+    <div class="card" id="inspector" hidden>
+      <h2>像素检查器</h2>
+      <dl id="insp-summary"></dl>
+      <div class="tbl-wrap">
+        <table class="mono">
+          <thead><tr>
+            <th>帧</th><th>w₀</th><th>w₁</th><th>w₂</th><th>实测</th><th>状态</th>
+          </tr></thead>
+          <tbody id="insp-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="export-card" hidden>
+      <h2>导出</h2>
+      <div class="export-grid">
+        <button data-exp="layer0">灯层 0 · f32</button>
+        <button data-exp="layer1">灯层 1 · f32</button>
+        <button data-exp="layer2">灯层 2 · f32</button>
+        <button data-exp="mask">有效掩膜 · u8</button>
+        <button data-exp="dropped">舍弃帧图 · i8</button>
+        <button data-exp="zip" class="primary">全部打包 zip</button>
+      </div>
+      <div class="hint">层为行优先小端 float32；掩膜 0/1；舍弃帧图 0 起帧号、-1 表示未舍弃或无效。</div>
+    </div>
+
+    <div class="card" id="cfg-card" hidden>
+      <h2>当前配置</h2>
+      <div id="cfg-summary" class="mono" style="font-size:12px"></div>
+    </div>
+  </aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="demixer.js"></script>
+<script>
+"use strict";
+
+/* ---------------- state ---------------- */
+var S = {
+  name: null,        // dataset label
+  cfg: null,         // normalized config
+  u16: null,         // Uint16Array frames
+  duties: null,      // Float64Array [F][H][3]
+  res: null,         // demix result
+  view: "l0",
+  sel: null,         // selected pixel index
+  computeMs: 0
+};
+
+var $ = function (id) { return document.getElementById(id); };
+var errBanner = $("err-banner");
+
+function showError(html) {
+  errBanner.innerHTML = html;
+  errBanner.classList.add("show");
+}
+function clearError() {
+  errBanner.classList.remove("show");
+}
+function configErrorHtml(e) {
+  var where;
+  if (e.scope === "frame") where = "帧 " + e.index + " · 字段 <span class='mono'>" + esc(e.field) + "</span>";
+  else if (e.scope === "lamp") where = "灯组 " + e.index + " · <span class='mono'>" + esc(e.field) + "</span>";
+  else where = "全局字段 <span class='mono'>" + esc(e.field) + "</span>";
+  return "<span class='where'>配置不合法（" + where + "）：</span>" + esc(e.message) +
+    "<br>已保留上一份结果。";
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  });
+}
+
+/* ---------------- import ---------------- */
+
+$("btn-zip").onclick = function () { $("file-zip").click(); };
+$("btn-pair").onclick = function () { $("file-pair").click(); };
+$("file-zip").onchange = function () {
+  if (this.files[0]) importZip(this.files[0]);
+  this.value = "";
+};
+$("file-pair").onchange = function () {
+  importFiles(Array.prototype.slice.call(this.files));
+  this.value = "";
+};
+
+var dz = $("drop-zone");
+["dragenter", "dragover"].forEach(function (ev) {
+  dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add("over"); });
+});
+["dragleave", "drop"].forEach(function (ev) {
+  dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove("over"); });
+});
+dz.addEventListener("drop", function (e) {
+  var files = Array.prototype.slice.call(e.dataTransfer.files);
+  if (files.length === 1 && /\.zip$/i.test(files[0].name)) importZip(files[0]);
+  else importFiles(files);
+});
+
+function importFiles(files) {
+  var j = null, r = null;
+  files.forEach(function (f) {
+    if (/\.json$/i.test(f.name)) j = f;
+    else if (/\.raw$/i.test(f.name)) r = f;
+  });
+  if (!j || !r) {
+    showError("需要恰好一个 .json 与一个 .raw 文件（或一个 zip 包）。已保留上一份结果。");
+    return;
+  }
+  var name = j.name.replace(/\.json$/i, "");
+  Promise.all([j.text(), r.arrayBuffer()]).then(function (parts) {
+    ingest(parts[0], parts[1], name);
+  }, function (err) { showError("读取文件失败：" + esc(err)); });
+}
+
+function importZip(file) {
+  if (typeof JSZip === "undefined") {
+    showError("JSZip 未加载，无法解析 zip 包。");
+    return;
+  }
+  JSZip.loadAsync(file).then(function (zip) {
+    var j = null, r = null;
+    zip.forEach(function (path, entry) {
+      if (entry.dir) return;
+      if (/\.json$/i.test(path) && !j) j = entry;
+      else if (/\.raw$/i.test(path) && !r) r = entry;
+    });
+    if (!j || !r) throw new Error("zip 内未找到 .json 与 .raw 配对文件");
+    return Promise.all([j.async("string"), r.async("arraybuffer")]);
+  }).then(function (parts) {
+    ingest(parts[0], parts[1], file.name.replace(/\.zip$/i, ""));
+  }, function (err) {
+    showError("解析 zip 失败：" + esc(err.message || err) + "。已保留上一份结果。");
+  });
+}
+
+$("btn-sample").onclick = function () { loadSample(); };
+
+function loadSample() {
+  Promise.all([
+    fetch("samples/studio.json").then(function (r) {
+      if (!r.ok) throw new Error("samples/studio.json 不可用");
+      return r.text();
+    }),
+    fetch("samples/studio.raw").then(function (r) {
+      if (!r.ok) throw new Error("samples/studio.raw 不可用");
+      return r.arrayBuffer();
+    })
+  ]).then(function (parts) {
+    ingest(parts[0], parts[1], "内置样例 studio");
+  }, function (err) {
+    showError("载入样例失败：" + esc(err.message || err));
+  });
+}
+
+/* ---------------- ingest + compute ---------------- */
+
+function ingest(jsonText, rawBuf, name) {
+  var parsed;
+  try { parsed = JSON.parse(jsonText); }
+  catch (e) {
+    showError("<span class='where'>JSON 解析失败：</span>" + esc(e.message) + "<br>已保留上一份结果。");
+    return;
+  }
+  var cfg;
+  try { cfg = Demixer.validateConfig(parsed); }
+  catch (e) {
+    if (e.name === "ConfigError") showError(configErrorHtml(e));
+    else showError("配置错误：" + esc(e.message));
+    return;
+  }
+  var F = cfg.frames.length;
+  var expect = cfg.width * cfg.height * F * 2;
+  if (rawBuf.byteLength !== expect) {
+    showError("<span class='where'>RAW 尺寸不符：</span>按配置应为 " + expect +
+      " 字节（" + cfg.width + "×" + cfg.height + "×" + F + " 帧 ×2），实际 " +
+      rawBuf.byteLength + " 字节。<br>已保留上一份结果。");
+    return;
+  }
+  clearError();
+  var u16 = new Uint16Array(rawBuf.slice(0));
+  runDemix(cfg, u16, name);
+}
+
+function runDemix(cfg, u16, name) {
+  var wrap = $("progress-wrap"), bar = $("progress-bar");
+  wrap.classList.add("show");
+  bar.style.width = "0%";
+  $("status-line").textContent = "计算中…";
+
+  var finish = function (res, ms) {
+    wrap.classList.remove("show");
+    S.cfg = cfg; S.u16 = u16; S.res = res; S.name = name;
+    S.computeMs = ms;
+    S.duties = Demixer.computeDuties(cfg);
+    S.sel = null;
+    onNewResult();
+  };
+  var fail = function (msg) {
+    wrap.classList.remove("show");
+    showError("计算失败：" + esc(msg) + "。已保留上一份结果。");
+    $("status-line").textContent = S.res ? statusText() : "未载入数据";
+  };
+
+  var t0 = performance.now();
+  var worker = null;
+  try { worker = new Worker("demixer-worker.js"); } catch (e) { worker = null; }
+  if (worker) {
+    worker.onmessage = function (e) {
+      var d = e.data;
+      if (d.type === "progress") bar.style.width = (d.frac * 100).toFixed(1) + "%";
+      else if (d.type === "done") { worker.terminate(); finish(d.res, performance.now() - t0); }
+      else { worker.terminate(); fail(d.message); }
+    };
+    worker.onerror = function (e) {
+      worker.terminate();
+      // fall back to main thread
+      try {
+        var res = Demixer.demix(cfg, u16, function (f) {
+          bar.style.width = (f * 100).toFixed(1) + "%";
+        });
+        finish(res, performance.now() - t0);
+      } catch (err) { fail(err.message || String(err)); }
+    };
+    worker.postMessage({ cfg: cfg, frames: u16 });
+  } else {
+    setTimeout(function () {
+      try {
+        var res = Demixer.demix(cfg, u16, function (f) {
+          bar.style.width = (f * 100).toFixed(1) + "%";
+        });
+        finish(res, performance.now() - t0);
+      } catch (err) { fail(err.message || String(err)); }
+    }, 30);
+  }
+}
+
+function statusText() {
+  var c = S.cfg;
+  return S.name + " · " + c.width + "×" + c.height + "×" + c.frames.length +
+    " 帧 · 有效 " + S.res.validCount + "/" + S.res.pixelCount +
+    " · 耗时 " + S.computeMs.toFixed(0) + " ms";
+}
+
+function onNewResult() {
+  $("status-line").textContent = statusText();
+  $("view-card").hidden = false;
+  $("empty-card").hidden = true;
+  $("inspector").hidden = true;
+  $("export-card").hidden = false;
+  $("cfg-card").hidden = false;
+  renderCfgSummary();
+  renderView();
+}
+
+function renderCfgSummary() {
+  var c = S.cfg, out = [];
+  out.push("period = " + c.period + " µs");
+  c.lamps.forEach(function (g, i) {
+    out.push("灯组 " + i + ": " + (g.length ?
+      g.map(function (iv) { return "[" + iv[0] + "," + iv[1] + ")"; }).join(" ") : "（空）"));
+  });
+  c.frames.forEach(function (f, i) {
+    out.push("帧 " + i + ": start=" + f.start + " rowDelay=" + f.rowDelay +
+      " span=" + f.span + (f.reverse ? " 反向" : ""));
+  });
+  $("cfg-summary").textContent = out.join("\n");
+  $("cfg-summary").style.whiteSpace = "pre-wrap";
+}
+
+/* ---------------- view rendering ---------------- */
+
+var canvas = $("view-canvas");
+var ctx = canvas.getContext("2d");
+var baseImage = null; // ImageData of current view
+
+$("view-tabs").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-view]");
+  if (!b) return;
+  S.view = b.dataset.view;
+  var tabs = this.querySelectorAll("[role=tab]");
+  for (var i = 0; i < tabs.length; i++)
+    tabs[i].setAttribute("aria-selected", tabs[i] === b ? "true" : "false");
+  renderView();
+});
+
+function renderView() {
+  if (!S.res) return;
+  var W = S.cfg.width, H = S.cfg.height, NP = W * H;
+  canvas.width = W; canvas.height = H;
+  var img = ctx.createImageData(W, H);
+  var d = img.data;
+  var mask = S.res.mask, i, p, v;
+
+  if (S.view === "res") {
+    var sse = S.res.sse, maxLog = 0;
+    for (p = 0; p < NP; p++) {
+      if (!mask[p]) continue;
+      var l = Math.log1p(sse[p]);
+      if (l > maxLog) maxLog = l;
+    }
+    for (p = 0; p < NP; p++) {
+      i = p * 4;
+      if (!mask[p]) { d[i] = d[i + 1] = d[i + 2] = 70; d[i + 3] = 255; continue; }
+      var t = maxLog > 0 ? Math.log1p(sse[p]) / maxLog : 0;
+      // amber -> red ramp on dark ground
+      d[i] = 30 + 225 * t;
+      d[i + 1] = 24 + 120 * (1 - Math.abs(t - 0.5) * 2) * (t < 1 ? 1 : 0) + 30 * t;
+      d[i + 2] = 26 + 40 * (1 - t);
+      d[i + 3] = 255;
+    }
+    $("meta-scale").textContent = "SSE log 拉伸 · max " + fmtNum(maxSse());
+  } else {
+    var g = +S.view[1];
+    var layer = S.res.layers[g], max = 0;
+    for (p = 0; p < NP; p++) if (mask[p] && layer[p] > max) max = layer[p];
+    var inv = max > 0 ? 255 / max : 0;
+    for (p = 0; p < NP; p++) {
+      i = p * 4;
+      if (!mask[p]) { d[i] = d[i + 1] = d[i + 2] = 70; d[i + 3] = 255; continue; }
+      v = Math.round(layer[p] * inv);
+      d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+    }
+    $("meta-scale").textContent = "灯层 " + g + " · 0–" + fmtNum(max) + " 线性拉伸";
+  }
+  baseImage = img;
+  drawWithCrosshair();
+  if (S.sel !== null) renderInspector();
+}
+
+function maxSse() {
+  var sse = S.res.sse, mask = S.res.mask, m = 0;
+  for (var p = 0; p < sse.length; p++) if (mask[p] && sse[p] > m) m = sse[p];
+  return m;
+}
+
+function fmtNum(x) {
+  if (!isFinite(x)) return "—";
+  if (x !== 0 && (Math.abs(x) < 0.01 || Math.abs(x) >= 1e6)) return x.toExponential(3);
+  return (Math.round(x * 10000) / 10000).toString();
+}
+
+function drawWithCrosshair() {
+  if (!baseImage) return;
+  ctx.putImageData(baseImage, 0, 0);
+  if (S.sel === null) return;
+  var W = S.cfg.width, H = S.cfg.height;
+  var x = S.sel % W, y = (S.sel / W) | 0;
+  ctx.strokeStyle = "#e0a33e";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5);
+  ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H);
+  ctx.stroke();
+}
+
+canvas.addEventListener("click", function (e) {
+  if (!S.res) return;
+  var r = canvas.getBoundingClientRect();
+  var x = Math.floor((e.clientX - r.left) * canvas.width / r.width);
+  var y = Math.floor((e.clientY - r.top) * canvas.height / r.height);
+  if (x < 0 || y < 0 || x >= S.cfg.width || y >= S.cfg.height) return;
+  S.sel = y * S.cfg.width + x;
+  drawWithCrosshair();
+  renderInspector();
+});
+
+canvas.addEventListener("mousemove", function (e) {
+  if (!S.res) return;
+  var r = canvas.getBoundingClientRect();
+  var x = Math.floor((e.clientX - r.left) * canvas.width / r.width);
+  var y = Math.floor((e.clientY - r.top) * canvas.height / r.height);
+  if (x < 0 || y < 0 || x >= S.cfg.width || y >= S.cfg.height) return;
+  $("meta-hover").textContent = "x=" + x + " y=" + y;
+});
+
+/* ---------------- inspector ---------------- */
+
+function renderInspector() {
+  var p = S.sel, W = S.cfg.width, H = S.cfg.height, F = S.cfg.frames.length;
+  var x = p % W, y = (p / W) | 0;
+  var valid = S.res.mask[p] === 1;
+  var drop = S.res.dropped[p];
+  var dl = $("insp-summary"), html = "";
+  html += "<dt>坐标</dt><dd class='mono'>x=" + x + ", y=" + y + "</dd>";
+  html += "<dt>状态</dt><dd>" + (valid ? "<span style='color:var(--ok)'>有效</span>" :
+    "<span style='color:var(--err)'>无效</span>") + "</dd>";
+  if (valid) {
+    html += "<dt>解 x₀ x₁ x₂</dt><dd class='mono'>" +
+      fmtNum(S.res.layers[0][p]) + " · " + fmtNum(S.res.layers[1][p]) + " · " +
+      fmtNum(S.res.layers[2][p]) + "</dd>";
+    html += "<dt>实际 SSE</dt><dd class='mono'>" + fmtNum(S.res.sse[p]) + "</dd>";
+    html += "<dt>舍弃帧</dt><dd class='mono'>" + (drop >= 0 ? "帧 " + drop : "无") + "</dd>";
+  }
+  dl.innerHTML = html;
+
+  var rows = "";
+  for (var f = 0; f < F; f++) {
+    var v = S.u16[f * W * H + p];
+    var sat = v === 65535;
+    var o = (f * H + y) * 3;
+    var st, cls;
+    if (sat) { st = "<span class='tag tag-sat'>饱和</span>"; cls = "st-sat"; }
+    else if (valid && f === drop) { st = "<span class='tag tag-drop'>舍弃</span>"; cls = "st-drop"; }
+    else { st = "<span class='tag tag-use'>使用</span>"; cls = ""; }
+    rows += "<tr class='" + cls + "'><td>" + f + "</td><td>" +
+      S.duties[o].toFixed(4) + "</td><td>" + S.duties[o + 1].toFixed(4) + "</td><td>" +
+      S.duties[o + 2].toFixed(4) + "</td><td>" + v + "</td><td>" + st + "</td></tr>";
+  }
+  $("insp-rows").innerHTML = rows;
+  $("inspector").hidden = false;
+}
+
+/* ---------------- export ---------------- */
+
+function download(name, data) {
+  var blob = data instanceof Blob ? data : new Blob([data], { type: "application/octet-stream" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 1000);
+}
+
+$("export-card").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-exp]");
+  if (!b || !S.res) return;
+  var kind = b.dataset.exp, stem = (S.name || "demix").replace(/\s+/g, "_");
+  if (kind === "zip") {
+    var zip = new JSZip();
+    zip.file("layer0.f32", S.res.layers[0].buffer);
+    zip.file("layer1.f32", S.res.layers[1].buffer);
+    zip.file("layer2.f32", S.res.layers[2].buffer);
+    zip.file("mask.u8", S.res.mask.buffer);
+    zip.file("dropped.i8", S.res.dropped.buffer);
+    zip.generateAsync({ type: "blob" }).then(function (blob) {
+      download(stem + "-export.zip", blob);
+    });
+    return;
+  }
+  if (kind === "mask") download(stem + "-mask.u8", S.res.mask.buffer);
+  else if (kind === "dropped") download(stem + "-dropped.i8", S.res.dropped.buffer);
+  else {
+    var g = +kind.slice(-1);
+    download(stem + "-layer" + g + ".f32", S.res.layers[g].buffer);
+  }
+});
+
+/* ---------------- boot ---------------- */
+loadSample();
+</script>
