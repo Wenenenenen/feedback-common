@@ -1,0 +1,2293 @@
+<title>远征拿牌核算</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout concept: an expedition ledger — the live round and its odds on the
+   left, objective, deck and the running record on the right. */
+:root {
+  --bg: #f2f4ef;
+  --surface: #fbfbf7;
+  --surface-2: #ebeee7;
+  --ink: #17211c;
+  --muted: #5c6a62;
+  --line: #d4dbd0;
+  --line-strong: #b7c1b6;
+  --accent: #17665a;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcede7;
+  --good: #1d6a3c;
+  --good-soft: #e0f0e4;
+  --warn: #8a5713;
+  --warn-soft: #f5e9d5;
+  --danger: #9e3429;
+  --danger-soft: #f7e2df;
+  --shadow: 0 1px 2px rgba(23, 33, 28, .06), 0 10px 26px -20px rgba(23, 33, 28, .55);
+  --radius: 10px;
+  --radius-sm: 7px;
+  --font-body: "IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", "Noto Sans SC", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1512;
+    --surface: #151d19;
+    --surface-2: #1b2420;
+    --ink: #e6ece7;
+    --muted: #95a39a;
+    --line: #2a352f;
+    --line-strong: #3b493f;
+    --accent: #74d2bc;
+    --accent-ink: #06231d;
+    --accent-soft: #123029;
+    --good: #82d69e;
+    --good-soft: #122b1c;
+    --warn: #e2aa62;
+    --warn-soft: #2f2414;
+    --danger: #f0968b;
+    --danger-soft: #331b18;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 26px -20px rgba(0, 0, 0, .9);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1512;
+  --surface: #151d19;
+  --surface-2: #1b2420;
+  --ink: #e6ece7;
+  --muted: #95a39a;
+  --line: #2a352f;
+  --line-strong: #3b493f;
+  --accent: #74d2bc;
+  --accent-ink: #06231d;
+  --accent-soft: #123029;
+  --good: #82d69e;
+  --good-soft: #122b1c;
+  --warn: #e2aa62;
+  --warn-soft: #2f2414;
+  --danger: #f0968b;
+  --danger-soft: #331b18;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 26px -20px rgba(0, 0, 0, .9);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+p { margin: 0; }
+button { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+
+.shell { max-width: 1180px; margin: 0 auto; padding-block: 22px 56px; }
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-strong);
+}
+.brand { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.brand .kicker {
+  font-family: var(--font-num);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.brand h1 { font-size: clamp(24px, 3.4vw, 32px); letter-spacing: -.01em; line-height: 1.15; }
+.brand .sub { color: var(--muted); font-size: 13.5px; max-width: 58ch; }
+.masthead-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 7px 13px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, transform .06s ease;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 4px 9px; font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+textarea, input[type="file"] {
+  width: 100%;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-num);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 9px 10px;
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input[type="file"] { font-family: var(--font-body); padding: 6px 8px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.58fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  margin-top: 22px;
+}
+@media (max-width: 880px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
+.stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 16px 17px;
+  min-width: 0;
+}
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.panel-head h2 { font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.panel-head .aside { font-size: 12.5px; color: var(--muted); font-family: var(--font-num); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.chip b { font-family: var(--font-num); font-weight: 600; }
+.chip.badge { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
+.chip.met { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 30%, transparent); color: var(--good); }
+
+.message {
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 13.5px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+.message.error { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); }
+.message.ok { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 35%, transparent); color: var(--good); }
+.message.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--warn); }
+
+.status-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 13px; }
+.pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+.pill.live { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--accent); }
+.pill.win { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 40%, transparent); color: var(--good); }
+.pill.lose { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 40%, transparent); color: var(--danger); }
+.round-count { font-family: var(--font-num); font-size: 12.5px; color: var(--muted); }
+
+.section-label {
+  font-size: 11.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 7px;
+  font-weight: 600;
+}
+
+.reveal-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.reveal-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 126px;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.reveal-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.reveal-btn .nm { font-weight: 600; font-size: 14px; }
+.reveal-btn .meta { font-family: var(--font-num); font-size: 11.5px; color: var(--muted); }
+.reveal-btn .pct { font-family: var(--font-num); font-size: 12px; color: var(--accent); font-weight: 500; }
+
+.empty-note { color: var(--muted); font-size: 13.5px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 10px; }
+.tile {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px 11px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.tile.best { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tile-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.tile-top .nm { font-weight: 600; font-size: 15px; }
+.tile-top .val { font-family: var(--font-num); font-size: 13px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.tile-top .val.muted { color: var(--muted); font-weight: 400; }
+.tile .effects { display: flex; flex-wrap: wrap; gap: 5px; }
+.eff { font-family: var(--font-num); font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); white-space: nowrap; }
+.eff.up { color: var(--good); border-color: color-mix(in srgb, var(--good) 30%, transparent); }
+.eff.down { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+.eff.zero { color: var(--muted); }
+.tile-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tile .why { font-size: 12px; color: var(--danger); }
+.frac { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.frac .pc { color: var(--muted); }
+
+.readout {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr);
+  gap: 12px 16px;
+  align-items: center;
+}
+.big-frac {
+  font-family: var(--font-num);
+  font-size: clamp(21px, 4.4vw, 29px);
+  font-weight: 500;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+.big-frac .pc { display: block; font-size: 12.5px; color: var(--muted); font-weight: 400; letter-spacing: 0; margin-top: 3px; }
+.bar { height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+.readout-note { font-size: 12.5px; color: var(--muted); margin-top: 9px; }
+
+.preview {
+  margin-top: 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  background: var(--surface-2);
+}
+.preview h3 { font-size: 13px; margin-bottom: 8px; color: var(--accent); }
+.preview .row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.preview .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.value-table { display: flex; flex-direction: column; margin-top: 6px; }
+.value-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+  align-items: baseline;
+}
+.value-row:last-child { border-bottom: 0; }
+.value-row .k { color: var(--muted); overflow-wrap: anywhere; }
+.value-row .v { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.value-row.best .k { color: var(--ink); font-weight: 600; }
+
+.deck-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.deck-table th {
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  font-weight: 600;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.deck-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.deck-table tr:last-child td { border-bottom: 0; }
+.deck-table td.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.deck-table .badge-list { color: var(--accent); font-size: 12px; }
+.tail-wrap { margin-top: 12px; }
+.tail-list { display: flex; flex-wrap: wrap; gap: 5px; max-height: 116px; overflow: auto; }
+.tail-card {
+  font-family: var(--font-num);
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.tail-card.head { border-color: var(--accent); color: var(--accent); }
+
+.log { display: flex; flex-direction: column; }
+.log-round {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.log-round:last-child { border-bottom: 0; }
+.log-round .no { font-family: var(--font-num); font-size: 12px; color: var(--muted); padding-top: 1px; }
+.log-round .flow { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.log-round .flow .arrow { color: var(--muted); font-size: 12px; }
+.log-chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); }
+.log-chip.kept { border-color: var(--accent); color: var(--accent); }
+
+details.deck-editor { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.deck-editor summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  list-style: none;
+}
+details.deck-editor summary::-webkit-details-marker { display: none; }
+details.deck-editor summary::before { content: "▸ "; }
+details.deck-editor[open] summary::before { content: "▾ "; }
+.editor-body { display: flex; flex-direction: column; gap: 9px; margin-top: 10px; }
+.editor-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.record-area { display: flex; flex-direction: column; gap: 9px; margin-top: 4px; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.copy-state { font-size: 12.5px; color: var(--good); min-height: 1em; }
+
+.hint { font-size: 12.5px; color: var(--muted); }
+.footer { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.btn-label { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <div class="brand">
+      <span class="kicker">Expedition ledger</span>
+      <h1>远征拿牌核算</h1>
+      <p class="sub">每次看两张、拿一张。按当前局面算出最优拿牌的成功率，补录实际揭牌，保留整局并随时续算。</p>
+    </div>
+    <div class="masthead-actions">
+      <button class="btn ghost" id="undo-btn" type="button" disabled>撤销一步</button>
+      <button class="btn ghost" id="reset-btn" type="button">重开本局</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <div class="stack">
+      <section class="panel" aria-labelledby="round-title">
+        <div class="panel-head">
+          <h2 id="round-title">当前拍</h2>
+          <span class="aside" id="round-count"></span>
+        </div>
+        <div id="round-body"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="value-title">
+        <div class="panel-head">
+          <h2 id="value-title">成功率</h2>
+          <span class="aside" id="value-aside"></span>
+        </div>
+        <div id="value-body"></div>
+      </section>
+    </div>
+
+    <aside class="stack">
+      <section class="panel" aria-labelledby="goal-title">
+        <div class="panel-head"><h2 id="goal-title">目标与局面</h2></div>
+        <div id="goal-body"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="deck-title">
+        <div class="panel-head">
+          <h2 id="deck-title">牌堆</h2>
+          <span class="aside" id="deck-aside"></span>
+        </div>
+        <div id="deck-body"></div>
+        <details class="deck-editor">
+          <summary>导入牌组</summary>
+          <div class="editor-body">
+            <label class="visually-hidden" for="deck-input">牌组 JSON</label>
+            <textarea id="deck-input" rows="8" spellcheck="false" placeholder='{"types": {...}, "unknown": {...}, "tail": [], "rounds": 3, "goal": {...}}'></textarea>
+            <div class="editor-actions">
+              <button class="btn primary small" id="deck-load" type="button">载入牌组</button>
+              <button class="btn small" id="deck-sample" type="button">用示例牌组</button>
+              <label class="btn small btn-label" for="deck-file">选择 JSON 文件</label>
+              <input class="visually-hidden" id="deck-file" type="file" accept="application/json,.json">
+            </div>
+            <p class="hint">最多 8 种牌、28 张、6 拍。未知牌堆按剩余多重集均匀逐张揭，耗尽后才用公开队尾的队首；每拍最多揭两张拿一张，未拿的按揭示顺序放回队尾；通行券不能扣成负数，两张都拿不了即失败。</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="log-title">
+        <div class="panel-head">
+          <h2 id="log-title">选择记录</h2>
+          <span class="aside" id="log-aside"></span>
+        </div>
+        <div id="log-body"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="record-title">
+        <div class="panel-head"><h2 id="record-title">导出与续算</h2></div>
+        <div class="record-area">
+          <label class="visually-hidden" for="record-out">当前记录</label>
+          <textarea id="record-out" rows="7" readonly spellcheck="false"></textarea>
+          <div class="record-actions">
+            <button class="btn small" id="copy-btn" type="button">复制记录</button>
+            <span class="copy-state" id="copy-state" role="status"></span>
+          </div>
+          <label class="visually-hidden" for="record-in">粘贴记录以导入</label>
+          <textarea id="record-in" rows="5" spellcheck="false" placeholder="粘贴此前导出的记录，导入后可以接着算。"></textarea>
+          <div class="record-actions">
+            <button class="btn primary small" id="import-btn" type="button">导入记录续算</button>
+          </div>
+          <p class="hint">导入会按记录中的牌组逐条重放选择；不合法的记录会被整份拒绝，不会写入。</p>
+          <div id="record-message" role="status"></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>概率均为精确分数，按最优策略计算，不使用随机模拟。</span>
+    <span class="frac" id="footnote"></span>
+  </footer>
+</div>
+
+
+<script>
+window.EXPEDITION_SAMPLE = {"types":{"map":{"points":1,"tickets":0,"badges":["route"]},"camp":{"points":0,"tickets":1,"badges":[]},"seal":{"points":2,"tickets":-1,"badges":["seal"]}},"unknown":{"map":2,"camp":2,"seal":1},"tail":[],"start":{"points":0,"tickets":0,"badges":[]},"rounds":3,"goal":{"points":2,"badges":["seal"]},"rules":"无牌或拍数耗尽且尚未达标则失败；揭示数固定为 min(2,当下总剩余张数)。选择按位置，下标从0开始。"};
+window.WORKER_SOURCE = "/* Expedition draw-policy solver.\n *\n * Exact, optimal success probabilities for the \"reveal up to two, keep one\"\n * expedition game.  Every probability is a rational number backed by BigInt;\n * nothing here samples, approximates, or simulates.\n *\n * Model (matches samples/expedition-deck.json):\n *  - A round reveals min(2, cards remaining) cards, drawn one at a time: while\n *    the unknown multiset is non-empty cards come from it uniformly, and only\n *    once it is exhausted does drawing continue from the head of the public\n *    tail.  The player keeps exactly one revealed card; the other goes back to\n *    the tail (with at most two revealed, at most one goes back, so reveal\n *    order is moot).\n *  - A card can only be kept if its ticket cost does not take tickets below 0.\n *    If no revealed card can be kept the attempt fails.\n *  - Meeting the points and badge goal succeeds immediately.\n *  - Running out of cards or rounds without success is failure.\n *\n * The search below runs on a mutable state that it restores after every\n * branch, and memoises on a compact key of numbers only.\n */\n(function (root, factory) {\n  if (typeof module === 'object' && module.exports) {\n    module.exports = factory();\n  } else {\n    root.ExpeditionSolver = factory();\n  }\n}(typeof globalThis !== 'undefined' ? globalThis : this, function () {\n  'use strict';\n\n  /* ------------------------------------------------------------------ */\n  /* Exact fractions                                                     */\n  /* ------------------------------------------------------------------ */\n\n  const ZERO = { n: 0n, d: 1n };\n  const ONE = { n: 1n, d: 1n };\n\n  function absBig(a) { return a < 0n ? -a : a; }\n\n  function gcdBig(a, b) {\n    a = absBig(a);\n    b = absBig(b);\n    while (b) {\n      const t = a % b;\n      a = b;\n      b = t;\n    }\n    return a || 1n;\n  }\n\n  function frac(n, d) {\n    n = BigInt(n);\n    d = d === undefined ? 1n : BigInt(d);\n    if (d === 0n) throw new Error('division by zero');\n    if (d < 0n) { n = -n; d = -d; }\n    if (n === 0n) return ZERO;\n    const g = gcdBig(n, d);\n    return { n: n / g, d: d / g };\n  }\n\n  function fAdd(a, b) {\n    if (a.n === 0n) return b;\n    if (b.n === 0n) return a;\n    if (a.d === b.d) return frac(a.n + b.n, a.d);\n    return frac(a.n * b.d + b.n * a.d, a.d * b.d);\n  }\n\n  function fMul(a, b) {\n    if (a.n === 0n || b.n === 0n) return ZERO;\n    return frac(a.n * b.n, a.d * b.d);\n  }\n\n  function fMulInt(a, k) {\n    if (k === 0 || a.n === 0n) return ZERO;\n    return frac(a.n * BigInt(k), a.d);\n  }\n\n  function fCmp(a, b) {\n    if (a.d === b.d) return a.n < b.n ? -1 : a.n > b.n ? 1 : 0;\n    const x = a.n * b.d;\n    const y = b.n * a.d;\n    return x < y ? -1 : x > y ? 1 : 0;\n  }\n\n  function fEquals(a, b) { return a.n === b.n && a.d === b.d; }\n\n  function fToString(f) {\n    return f.d === 1n ? String(f.n) : (String(f.n) + '/' + String(f.d));\n  }\n\n  /** Exact fraction followed by a rounded percentage, for display. */\n  function fPercent(f) {\n    if (f.n === 0n) return '0%';\n    if (f.n === f.d) return '100%';\n    const scaled = (f.n * 1000000n) / f.d; // 6 decimals of probability\n    const pct = Number(scaled) / 10000;\n    let s = pct.toFixed(4).replace(/0+$/, '').replace(/\\.$/, '');\n    return s + '%';\n  }\n\n  /* ------------------------------------------------------------------ */\n  /* Deck parsing / validation                                           */\n  /* ------------------------------------------------------------------ */\n\n  function isInt(x) {\n    return typeof x === 'number' && Number.isInteger(x);\n  }\n\n  function asInt(value, label, fallback) {\n    if (value === undefined && fallback !== undefined) return fallback;\n    if (!isInt(value)) throw new Error(label + ' 必须是整数');\n    return value;\n  }\n\n  function normalizeDeck(rawInput) {\n    let raw = rawInput;\n    if (typeof raw === 'string') {\n      try {\n        raw = JSON.parse(raw);\n      } catch (e) {\n        throw new Error('JSON 解析失败：' + e.message);\n      }\n    }\n    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {\n      throw new Error('牌组必须是一个 JSON 对象');\n    }\n    if (!raw.types || typeof raw.types !== 'object' || Array.isArray(raw.types)) {\n      throw new Error('缺少 types 对象');\n    }\n\n    const names = Object.keys(raw.types);\n    if (names.length === 0) throw new Error('types 至少要有一种牌');\n    if (names.length > 8) throw new Error('最多支持 8 种牌，当前有 ' + names.length + ' 种');\n\n    const badgeSet = new Set();\n    const types = names.map((name, idx) => {\n      const t = raw.types[name];\n      if (!t || typeof t !== 'object' || Array.isArray(t)) {\n        throw new Error('types.' + name + ' 必须是一个对象');\n      }\n      const points = asInt(t.points, 'types.' + name + '.points', 0);\n      const tickets = asInt(t.tickets, 'types.' + name + '.tickets', 0);\n      let badges = t.badges === undefined ? [] : t.badges;\n      if (!Array.isArray(badges) || badges.some(b => typeof b !== 'string' || !b)) {\n        throw new Error('types.' + name + '.badges 必须是字符串数组');\n      }\n      badges = Array.from(new Set(badges));\n      badges.forEach(b => badgeSet.add(b));\n      return { name, index: idx, points, tickets, badges };\n    });\n\n    const unknownRaw = raw.unknown === undefined ? {} : raw.unknown;\n    if (!unknownRaw || typeof unknownRaw !== 'object' || Array.isArray(unknownRaw)) {\n      throw new Error('unknown 必须是一个对象');\n    }\n    for (const key of Object.keys(unknownRaw)) {\n      if (!names.includes(key)) throw new Error('unknown 中的牌 \"' + key + '\" 未在 types 中定义');\n    }\n    const unknown = names.map(name => {\n      const c = unknownRaw[name] === undefined ? 0 : unknownRaw[name];\n      if (!isInt(c) || c < 0) throw new Error('unknown.' + name + ' 必须是非负整数');\n      if (c > 28) throw new Error('unknown.' + name + ' 最多 28 张');\n      return c;\n    });\n\n    const tailRaw = raw.tail === undefined ? [] : raw.tail;\n    if (!Array.isArray(tailRaw)) throw new Error('tail 必须是牌名数组');\n    const tail = tailRaw.map((name, i) => {\n      if (typeof name !== 'string') throw new Error('tail[' + i + '] 必须是牌名字符串');\n      const idx = names.indexOf(name);\n      if (idx < 0) throw new Error('tail[' + i + '] 的牌 \"' + name + '\" 未在 types 中定义');\n      return idx;\n    });\n\n    const totalCards = unknown.reduce((a, b) => a + b, 0) + tail.length;\n    if (totalCards > 28) throw new Error('最多支持 28 张牌，当前有 ' + totalCards + ' 张');\n    if (totalCards === 0) throw new Error('unknown 与 tail 一共至少要有一张牌');\n\n    const rounds = raw.rounds === undefined ? 1 : raw.rounds;\n    if (!isInt(rounds) || rounds < 0) throw new Error('rounds 必须是非负整数');\n    if (rounds > 6) throw new Error('最多支持 6 拍，当前 rounds=' + rounds);\n\n    const startRaw = raw.start === undefined ? {} : raw.start;\n    if (!startRaw || typeof startRaw !== 'object' || Array.isArray(startRaw)) {\n      throw new Error('start 必须是一个对象');\n    }\n    const start = {\n      points: asInt(startRaw.points, 'start.points', 0),\n      tickets: asInt(startRaw.tickets, 'start.tickets', 0),\n      badges: startRaw.badges === undefined ? [] : startRaw.badges\n    };\n    if (!Array.isArray(start.badges) || start.badges.some(b => typeof b !== 'string' || !b)) {\n      throw new Error('start.badges 必须是字符串数组');\n    }\n    start.badges = Array.from(new Set(start.badges));\n    start.badges.forEach(b => badgeSet.add(b));\n\n    const goalRaw = raw.goal === undefined ? {} : raw.goal;\n    if (!goalRaw || typeof goalRaw !== 'object' || Array.isArray(goalRaw)) {\n      throw new Error('goal 必须是一个对象');\n    }\n    const goal = {\n      points: asInt(goalRaw.points, 'goal.points', 0),\n      badges: goalRaw.badges === undefined ? [] : goalRaw.badges\n    };\n    if (!Array.isArray(goal.badges) || goal.badges.some(b => typeof b !== 'string' || !b)) {\n      throw new Error('goal.badges 必须是字符串数组');\n    }\n    goal.badges = Array.from(new Set(goal.badges));\n    goal.badges.forEach(b => badgeSet.add(b));\n\n    if (badgeSet.size > 30) throw new Error('最多支持 30 种徽章，当前有 ' + badgeSet.size + ' 种');\n\n    const badgeNames = Array.from(badgeSet).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));\n    const badgeIndex = new Map(badgeNames.map((b, i) => [b, i]));\n    const maskOf = list => list.reduce((m, b) => m | (1 << badgeIndex.get(b)), 0);\n\n    types.forEach(t => { t.badgeMask = maskOf(t.badges); });\n    const goalMask = maskOf(goal.badges);\n    const startMask = maskOf(start.badges);\n\n    const maxTicketCost = types.reduce((m, t) => Math.max(m, Math.max(0, -t.tickets)), 0);\n    const anyTicketCost = types.some(t => t.tickets < 0);\n    const maxPoints = types.reduce((m, t) => Math.max(m, t.points), 0);\n    const minPoints = types.reduce((m, t) => Math.min(m, t.points), 0);\n    const maxTickets = types.reduce((m, t) => Math.max(m, t.tickets), 0);\n\n    return {\n      raw,\n      names,\n      types,\n      unknown,\n      tail,\n      rounds,\n      start: { points: start.points, tickets: start.tickets, badges: start.badges, badgeMask: startMask },\n      goal: { points: goal.points, badges: goal.badges, badgeMask: goalMask },\n      badgeNames,\n      badgeIndex,\n      totalCards,\n      maxTicketCost,\n      anyTicketCost,\n      maxPoints,\n      minPoints,\n      maxTickets\n    };\n  }\n\n  /* ------------------------------------------------------------------ */\n  /* State helpers                                                       */\n  /* ------------------------------------------------------------------ */\n\n  function makeInitialState(deck) {\n    return {\n      points: deck.start.points,\n      tickets: deck.start.tickets,\n      badgeMask: deck.start.badgeMask,\n      unknown: deck.unknown.slice(),\n      tail: deck.tail.slice(),\n      roundsLeft: deck.rounds\n    };\n  }\n\n  function cloneState(s) {\n    return {\n      points: s.points,\n      tickets: s.tickets,\n      badgeMask: s.badgeMask,\n      unknown: s.unknown.slice(),\n      tail: s.tail.slice(),\n      roundsLeft: s.roundsLeft\n    };\n  }\n\n  function unknownTotal(unknown) {\n    let n = 0;\n    for (let i = 0; i < unknown.length; i++) n += unknown[i];\n    return n;\n  }\n\n  function availableCount(state) {\n    return unknownTotal(state.unknown) + state.tail.length;\n  }\n\n  /** Number of cards a round starting in this state reveals. */\n  function revealCount(state) {\n    return Math.min(2, availableCount(state));\n  }\n\n  /* ------------------------------------------------------------------ */\n  /* Engine                                                              */\n  /* ------------------------------------------------------------------ */\n\n  const BASE_UNK = 32;      // 32^8 = 2^40, exact in a double\n  const BASE_TAIL = 10;     // leading sentinel keeps lengths distinct\n\n  class Engine {\n    constructor(deck) {\n      this.deck = deck;\n      this.preCache = new Map();\n      this.bestCache = new Map();\n      this.work = 0;\n\n      this.goalPoints = deck.goal.points;\n      this.goalMask = deck.goal.badgeMask;\n      this.typeCount = deck.types.length;\n\n      // Tickets have no goal and are only spent by negative-ticket takes, so\n      // within a state with r rounds left they only matter up to r * the\n      // largest ticket cost; anything above that plays identically.\n      this.maxTicketCost = deck.maxTicketCost;\n      // Points are a threshold: when no card can reduce points, once at or\n      // above the goal extra points can never change the outcome, so the key\n      // may cap points at the goal.  With a negative-point card, points above\n      // the goal still matter, so no cap applies.\n      this.pointCap = deck.minPoints >= 0 ? deck.goal.points : Infinity;\n    }\n\n    isSuccess(state) {\n      const deck = this.deck;\n      return state.points >= deck.goal.points && (state.badgeMask & deck.goal.badgeMask) === deck.goal.badgeMask;\n    }\n\n    successOf(s) {\n      return s.p >= this.goalPoints && (s.b & this.goalMask) === this.goalMask;\n    }\n\n    toInternal(state) {\n      return {\n        p: state.points,\n        t: state.tickets,\n        b: state.badgeMask,\n        r: state.roundsLeft,\n        unk: state.unknown.slice(),\n        tail: state.tail.slice()\n      };\n    }\n\n    encodeUnk(unk) {\n      let code = 0;\n      for (let i = this.typeCount - 1; i >= 0; i--) code = code * BASE_UNK + unk[i];\n      return code;\n    }\n\n    encodeTail(tail, limit) {\n      // Sentinel 1 keeps [a] and [0, a] apart.\n      let code = 1;\n      const n = Math.min(tail.length, limit);\n      for (let i = 0; i < n; i++) code = code * BASE_TAIL + tail[i];\n      return code;\n    }\n\n    /**\n     * Cache key.  Equivalent states share a key:\n     *  - points are capped at the goal (above it is success) and at what the\n     *    remaining rounds could still reach,\n     *  - badges outside the goal do not matter,\n     *  - tickets are capped at what the remaining rounds could spend,\n     *  - when the unknown pile cannot be exhausted before the rounds run out,\n     *    the public tail is unreachable and omitted.\n     */\n    stateKey(s, unkTotal) {\n      const p = s.p > this.pointCap ? this.pointCap : s.p;\n      let t = s.t;\n      if (this.maxTicketCost > 0) {\n        const cap = s.r * this.maxTicketCost;\n        if (t > cap) t = cap;\n      } else {\n        t = 0;\n      }\n      let key = p + '|' + t + '|' + (s.b & this.goalMask) + '|' + s.r + '|' + this.encodeUnk(s.unk);\n      if (unkTotal < 2 * s.r) key += '|' + this.encodeTail(s.tail, 2 * s.r);\n      return key;\n    }\n\n    /** Provably impossible from here? */\n    cannotSucceed(s, unkTotal) {\n      if (s.r <= 0) return true;\n      const missingPoints = this.goalPoints - s.p;\n      if (missingPoints > 0) {\n        if (this.deck.maxPoints <= 0) return true;\n        if (missingPoints > s.r * this.deck.maxPoints) return true;\n      }\n      const missingBadges = this.goalMask & ~s.b;\n      if (missingBadges) {\n        let reachable = s.b;\n        for (let i = 0; i < this.typeCount; i++) {\n          if (s.unk[i] > 0 || s.tail.indexOf(i) >= 0) reachable |= this.deck.types[i].badgeMask;\n        }\n        if ((missingBadges & ~reachable) !== 0) return true;\n      }\n      if (unkTotal + s.tail.length === 0) return true;\n      return false;\n    }\n\n    /* ---------------- search ---------------- */\n\n    /** Optimal success probability at the start of a round. */\n    preValue(state) {\n      return this.preSearch(this.toInternal(state));\n    }\n\n    preSearch(s) {\n      if (this.successOf(s)) return ONE;\n      if (s.r <= 0) return ZERO;\n      let unkTotal = 0;\n      for (let i = 0; i < this.typeCount; i++) unkTotal += s.unk[i];\n      const avail = unkTotal + s.tail.length;\n      if (avail === 0) return ZERO;\n      if (this.cannotSucceed(s, unkTotal)) return ZERO;\n\n      const key = this.stateKey(s, unkTotal);\n      const hit = this.preCache.get(key);\n      if (hit !== undefined) return hit;\n      this.work++;\n\n      let value;\n      if (avail === 1) {\n        value = this.roundWithOneCard(s, unkTotal);\n      } else if (unkTotal >= 2) {\n        value = this.roundFromUnknownPairs(s, unkTotal);\n      } else if (unkTotal === 1) {\n        value = this.roundFromOneUnknown(s);\n      } else {\n        value = this.roundFromTail(s);\n      }\n      this.preCache.set(key, value);\n      return value;\n    }\n\n    roundWithOneCard(s, unkTotal) {\n      let type;\n      if (unkTotal > 0) {\n        type = this.firstUnknown(s.unk);\n        s.unk[type] -= 1;\n      } else {\n        type = s.tail.shift();\n      }\n      const value = this.takeOne(s, type);\n      if (unkTotal > 0) s.unk[type] += 1;\n      else s.tail.unshift(type);\n      return value;\n    }\n\n    roundFromOneUnknown(s) {\n      const i = this.firstUnknown(s.unk);\n      const fromTail = s.tail.shift();\n      s.unk[i] -= 1;\n      const value = this.bestOfPair(s, i, fromTail);\n      s.unk[i] += 1;\n      s.tail.unshift(fromTail);\n      return value;\n    }\n\n    roundFromTail(s) {\n      const a = s.tail.shift();\n      const b = s.tail.shift();\n      const value = this.bestOfPair(s, a, b);\n      s.tail.unshift(b);\n      s.tail.unshift(a);\n      return value;\n    }\n\n    roundFromUnknownPairs(s, unkTotal) {\n      const denom = unkTotal * (unkTotal - 1);\n      let value = ZERO;\n      const n = this.typeCount;\n      for (let i = 0; i < n; i++) {\n        const ci = s.unk[i];\n        if (ci === 0) continue;\n        for (let j = i; j < n; j++) {\n          const cj = s.unk[j];\n          if (cj === 0) continue;\n          let w, v;\n          if (i === j) {\n            if (ci < 2) continue;\n            s.unk[i] -= 2;\n            w = frac(ci * (ci - 1), denom);\n            v = this.bestOfPair(s, i, i);\n            s.unk[i] += 2;\n          } else {\n            s.unk[i] -= 1;\n            s.unk[j] -= 1;\n            w = frac(2 * ci * cj, denom);\n            v = this.bestOfPair(s, i, j);\n            s.unk[i] += 1;\n            s.unk[j] += 1;\n          }\n          if (v.n === 0n) continue;\n          value = fAdd(value, fMul(w, v));\n          if (value.n === value.d) return ONE; // cannot exceed 1\n        }\n      }\n      return value;\n    }\n\n    firstUnknown(unk) {\n      for (let i = 0; i < this.typeCount; i++) if (unk[i] > 0) return i;\n      return -1;\n    }\n\n    /** Best take value from two revealed cards; ties keep the earlier one. */\n    bestOfPair(s, a, c) {\n      const ta = this.deck.types[a];\n      let best = null;\n      // Each revealed physical card is distinct even when the types match, so\n      // the card not kept goes back to the tail.\n      if (s.t + ta.tickets >= 0) best = this.takeCard(s, a, c);\n      const tc = this.deck.types[c];\n      if (s.t + tc.tickets >= 0) {\n        const v = this.takeCard(s, c, a);\n        if (best === null || fCmp(v, best) > 0) best = v;\n      }\n      return best === null ? ZERO : best;\n    }\n\n    /** Value of keeping `card`; `other` (or null) goes back to the tail. */\n    takeCard(s, card, other) {\n      const ty = this.deck.types[card];\n      const prevP = s.p, prevT = s.t, prevB = s.b;\n      s.p += ty.points;\n      s.t += ty.tickets;\n      s.b |= ty.badgeMask;\n\n      let value;\n      if (this.successOf(s)) {\n        value = ONE;\n      } else {\n        s.r -= 1;\n        if (s.r <= 0) {\n          value = ZERO;\n        } else if (other === null) {\n          value = this.preSearch(s);\n        } else {\n          s.tail.push(other);\n          value = this.preSearch(s);\n          s.tail.pop();\n        }\n        s.r += 1;\n      }\n      s.p = prevP;\n      s.t = prevT;\n      s.b = prevB;\n      return value;\n    }\n\n    takeOne(s, card) {\n      const ty = this.deck.types[card];\n      if (s.t + ty.tickets < 0) return ZERO;\n      return this.takeCard(s, card, null);\n    }\n\n    /* ---------------- public per-card values ---------------- */\n\n    /** All takes from the revealed cards, with exact values and legality. */\n    takeOptions(state, held) {\n      const s = this.toInternal(state);\n      const options = [];\n      let bestIndex = -1;\n      let bestValue = null;\n      for (let i = 0; i < held.length; i++) {\n        const t = this.deck.types[held[i]];\n        const legal = s.t + t.tickets >= 0;\n        let value = ZERO;\n        if (legal) {\n          const other = held.length > 1 ? held[i === 0 ? 1 : 0] : null;\n          value = this.takeCard(s, held[i], other);\n          if (bestValue === null || fCmp(value, bestValue) > 0) {\n            bestValue = value;\n            bestIndex = i;\n          }\n        }\n        options.push({\n          index: i,\n          type: held[i],\n          name: t.name,\n          points: t.points,\n          tickets: t.tickets,\n          badges: t.badges.slice(),\n          legal,\n          reason: legal ? null : ('通行券不足：需要 ' + (-t.tickets) + ' 张，当前只有 ' + s.t + ' 张'),\n          value\n        });\n      }\n      return { options, bestIndex, bestValue: bestValue || ZERO };\n    }\n\n    /** Value of keeping held[index] (used by takeOptions and the UI). */\n    takeValue(state, held, index) {\n      const s = this.toInternal(state);\n      const t = this.deck.types[held[index]];\n      if (s.t + t.tickets < 0) return ZERO;\n      const other = held.length > 1 ? held[index === 0 ? 1 : 0] : null;\n      return this.takeCard(s, held[index], other);\n    }\n\n    /** Best take value from an already-revealed set. */\n    bestTake(state, held) {\n      if (held.length === 1) return { value: this.takeValue(state, held, 0) };\n      const key = this.stateKey(this.toInternal(state), unknownTotal(state.unknown)) +\n        '#' + Math.min(held[0], held[1]) + '.' + Math.max(held[0], held[1]);\n      const hit = this.bestCache.get(key);\n      if (hit !== undefined) return hit;\n      const s = this.toInternal(state);\n      const result = { value: this.bestOfPair(s, held[0], held[1]) };\n      this.bestCache.set(key, result);\n      return result;\n    }\n\n    /**\n     * Expected value once `held` has been revealed and one more card is due\n     * (used for the \"after one reveal\" readout).\n     */\n    afterRevealsValue(state, held) {\n      if (this.isSuccess(state)) return ONE;\n      if (state.roundsLeft <= 0) return ZERO;\n      const support = this.nextRevealSupport(state);\n      if (support.length === 0) return this.bestTake(state, held).value;\n\n      const s = this.toInternal(state);\n      const known = held[0];\n      let value = ZERO;\n      for (const r of support) {\n        if (unknownTotal(state.unknown) > 0) {\n          s.unk[r.type] -= 1;\n          const v = this.bestOfPair(s, known, r.type);\n          s.unk[r.type] += 1;\n          value = fAdd(value, fMul(r.prob, v));\n        } else {\n          const card = s.tail.shift();\n          const v = this.bestOfPair(s, known, card);\n          s.tail.unshift(card);\n          value = fAdd(value, fMul(r.prob, v));\n        }\n      }\n      return value;\n    }\n\n    /* ---------------- helpers shared with the UI ---------------- */\n\n    /** Cards that can be revealed next, with exact probabilities. */\n    nextRevealSupport(state) {\n      const total = unknownTotal(state.unknown);\n      if (total > 0) {\n        const out = [];\n        for (let i = 0; i < state.unknown.length; i++) {\n          const c = state.unknown[i];\n          if (c > 0) {\n            out.push({ type: i, name: this.deck.names[i], count: c, prob: frac(c, total) });\n          }\n        }\n        return out;\n      }\n      if (state.tail.length > 0) {\n        const t = state.tail[0];\n        return [{ type: t, name: this.deck.names[t], count: 1, prob: ONE }];\n      }\n      return [];\n    }\n\n    /** Remove one revealed card from the unknown multiset or the tail head. */\n    removeCard(state, type) {\n      const next = cloneState(state);\n      if (unknownTotal(state.unknown) > 0) {\n        if (!(next.unknown[type] > 0)) throw new Error('该牌已不在未知牌堆中');\n        next.unknown[type] -= 1;\n      } else {\n        if (next.tail.length === 0 || next.tail[0] !== type) {\n          throw new Error('该牌不是当前应揭的公开队首');\n        }\n        next.tail.shift();\n      }\n      return next;\n    }\n\n    /** Apply a take, returning the state for the next round. */\n    applyTake(state, held, index) {\n      const t = this.deck.types[held[index]];\n      if (state.tickets + t.tickets < 0) throw new Error('该拿法不合法：通行券会变成负数');\n      const next = cloneState(state);\n      next.points += t.points;\n      next.tickets += t.tickets;\n      next.badgeMask |= t.badgeMask;\n      next.roundsLeft -= 1;\n      const leftover = held.slice(0, index).concat(held.slice(index + 1));\n      if (leftover.length) next.tail = next.tail.concat(leftover);\n      return next;\n    }\n  }\n\n  /* ------------------------------------------------------------------ */\n  /* Small shared utilities for the UI                                   */\n  /* ------------------------------------------------------------------ */\n\n  function describeState(deck, state) {\n    return {\n      points: state.points,\n      tickets: state.tickets,\n      badges: deck.badgeNames.filter(b => state.badgeMask & (1 << deck.badgeIndex.get(b))),\n      roundsLeft: state.roundsLeft,\n      unknown: deck.names.map((n, i) => ({ name: n, count: state.unknown[i] })).filter(x => x.count > 0),\n      unknownCounts: state.unknown.slice(),\n      tail: state.tail.map(t => deck.names[t]),\n      available: availableCount(state)\n    };\n  }\n\n  return {\n    normalizeDeck,\n    makeInitialState,\n    cloneState,\n    describeState,\n    Engine,\n    revealCount,\n    availableCount,\n    unknownTotal,\n    ZERO,\n    ONE,\n    frac,\n    fAdd,\n    fMul,\n    fMulInt,\n    fCmp,\n    fEquals,\n    fToString,\n    fPercent\n  };\n}));\n\n/* Worker runtime.  Prepended with the solver source, it keeps one Engine per\n * deck so the memoisation cache stays warm across requests, and answers value\n * queries without blocking the page. */\n/* global ExpeditionSolver */\n(function () {\n  'use strict';\n  var S = ExpeditionSolver;\n  var engine = null;\n  var deckKey = null;\n\n  function wire(f) {\n    if (!f) return null;\n    return { n: String(f.n), d: String(f.d) };\n  }\n\n  function toFrac(w) {\n    return { n: BigInt(w.n), d: BigInt(w.d) };\n  }\n\n  function compute(m) {\n    if (m.kind === 'pre') {\n      return {\n        value: wire(engine.preValue(m.state)),\n        roundStart: null,\n        options: null\n      };\n    }\n    if (m.kind === 'after') {\n      return {\n        value: wire(engine.afterRevealsValue(m.state, m.held)),\n        roundStart: m.roundStart ? wire(engine.preValue(m.roundStart)) : null,\n        options: null\n      };\n    }\n    // decide\n    var result = engine.takeOptions(m.state, m.held);\n    var value = result.bestValue;\n    return {\n      value: wire(value),\n      roundStart: m.roundStart ? wire(engine.preValue(m.roundStart)) : null,\n      options: result.options.map(function (o, i) {\n        return {\n          index: o.index,\n          legal: o.legal,\n          reason: o.reason,\n          recommended: i === result.bestIndex,\n          value: o.legal ? wire(o.value) : null\n        };\n      })\n    };\n  }\n\n  self.onmessage = function (ev) {\n    var m = ev.data;\n    try {\n      if (m.type === 'init') {\n        var key = JSON.stringify(m.deck);\n        if (key !== deckKey) {\n          engine = new S.Engine(S.normalizeDeck(m.deck));\n          deckKey = key;\n        }\n        self.postMessage({ type: 'ready', id: m.id });\n        return;\n      }\n      if (!engine) throw new Error('worker 尚未初始化');\n      var out = compute(m);\n      out.type = 'values';\n      out.id = m.id;\n      self.postMessage(out);\n    } catch (err) {\n      self.postMessage({ type: 'error', id: m.id, message: err.message || String(err) });\n    }\n  };\n}());\n";
+</script>
+<script>
+/* Expedition draw-policy solver.
+   *
+   * Exact, optimal success probabilities for the "reveal up to two, keep one"
+   * expedition game.  Every probability is a rational number backed by BigInt;
+   * nothing here samples, approximates, or simulates.
+   *
+   * Model (matches samples/expedition-deck.json):
+   *  - A round reveals min(2, cards remaining) cards, drawn one at a time: while
+   *    the unknown multiset is non-empty cards come from it uniformly, and only
+   *    once it is exhausted does drawing continue from the head of the public
+   *    tail.  The player keeps exactly one revealed card; the other goes back to
+   *    the tail (with at most two revealed, at most one goes back, so reveal
+   *    order is moot).
+   *  - A card can only be kept if its ticket cost does not take tickets below 0.
+   *    If no revealed card can be kept the attempt fails.
+   *  - Meeting the points and badge goal succeeds immediately.
+   *  - Running out of cards or rounds without success is failure.
+   *
+   * The search below runs on a mutable state that it restores after every
+   * branch, and memoises on a compact key of numbers only.
+   */
+  (function (root, factory) {
+    if (typeof module === 'object' && module.exports) {
+      module.exports = factory();
+    } else {
+      root.ExpeditionSolver = factory();
+    }
+  }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+    'use strict';
+
+    /* ------------------------------------------------------------------ */
+    /* Exact fractions                                                     */
+    /* ------------------------------------------------------------------ */
+
+    const ZERO = { n: 0n, d: 1n };
+    const ONE = { n: 1n, d: 1n };
+
+    function absBig(a) { return a < 0n ? -a : a; }
+
+    function gcdBig(a, b) {
+      a = absBig(a);
+      b = absBig(b);
+      while (b) {
+        const t = a % b;
+        a = b;
+        b = t;
+      }
+      return a || 1n;
+    }
+
+    function frac(n, d) {
+      n = BigInt(n);
+      d = d === undefined ? 1n : BigInt(d);
+      if (d === 0n) throw new Error('division by zero');
+      if (d < 0n) { n = -n; d = -d; }
+      if (n === 0n) return ZERO;
+      const g = gcdBig(n, d);
+      return { n: n / g, d: d / g };
+    }
+
+    function fAdd(a, b) {
+      if (a.n === 0n) return b;
+      if (b.n === 0n) return a;
+      if (a.d === b.d) return frac(a.n + b.n, a.d);
+      return frac(a.n * b.d + b.n * a.d, a.d * b.d);
+    }
+
+    function fMul(a, b) {
+      if (a.n === 0n || b.n === 0n) return ZERO;
+      return frac(a.n * b.n, a.d * b.d);
+    }
+
+    function fMulInt(a, k) {
+      if (k === 0 || a.n === 0n) return ZERO;
+      return frac(a.n * BigInt(k), a.d);
+    }
+
+    function fCmp(a, b) {
+      if (a.d === b.d) return a.n < b.n ? -1 : a.n > b.n ? 1 : 0;
+      const x = a.n * b.d;
+      const y = b.n * a.d;
+      return x < y ? -1 : x > y ? 1 : 0;
+    }
+
+    function fEquals(a, b) { return a.n === b.n && a.d === b.d; }
+
+    function fToString(f) {
+      return f.d === 1n ? String(f.n) : (String(f.n) + '/' + String(f.d));
+    }
+
+    /** Exact fraction followed by a rounded percentage, for display. */
+    function fPercent(f) {
+      if (f.n === 0n) return '0%';
+      if (f.n === f.d) return '100%';
+      const scaled = (f.n * 1000000n) / f.d; // 6 decimals of probability
+      const pct = Number(scaled) / 10000;
+      let s = pct.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+      return s + '%';
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Deck parsing / validation                                           */
+    /* ------------------------------------------------------------------ */
+
+    function isInt(x) {
+      return typeof x === 'number' && Number.isInteger(x);
+    }
+
+    function asInt(value, label, fallback) {
+      if (value === undefined && fallback !== undefined) return fallback;
+      if (!isInt(value)) throw new Error(label + ' 必须是整数');
+      return value;
+    }
+
+    function normalizeDeck(rawInput) {
+      let raw = rawInput;
+      if (typeof raw === 'string') {
+        try {
+          raw = JSON.parse(raw);
+        } catch (e) {
+          throw new Error('JSON 解析失败：' + e.message);
+        }
+      }
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error('牌组必须是一个 JSON 对象');
+      }
+      if (!raw.types || typeof raw.types !== 'object' || Array.isArray(raw.types)) {
+        throw new Error('缺少 types 对象');
+      }
+
+      const names = Object.keys(raw.types);
+      if (names.length === 0) throw new Error('types 至少要有一种牌');
+      if (names.length > 8) throw new Error('最多支持 8 种牌，当前有 ' + names.length + ' 种');
+
+      const badgeSet = new Set();
+      const types = names.map((name, idx) => {
+        const t = raw.types[name];
+        if (!t || typeof t !== 'object' || Array.isArray(t)) {
+          throw new Error('types.' + name + ' 必须是一个对象');
+        }
+        const points = asInt(t.points, 'types.' + name + '.points', 0);
+        const tickets = asInt(t.tickets, 'types.' + name + '.tickets', 0);
+        let badges = t.badges === undefined ? [] : t.badges;
+        if (!Array.isArray(badges) || badges.some(b => typeof b !== 'string' || !b)) {
+          throw new Error('types.' + name + '.badges 必须是字符串数组');
+        }
+        badges = Array.from(new Set(badges));
+        badges.forEach(b => badgeSet.add(b));
+        return { name, index: idx, points, tickets, badges };
+      });
+
+      const unknownRaw = raw.unknown === undefined ? {} : raw.unknown;
+      if (!unknownRaw || typeof unknownRaw !== 'object' || Array.isArray(unknownRaw)) {
+        throw new Error('unknown 必须是一个对象');
+      }
+      for (const key of Object.keys(unknownRaw)) {
+        if (!names.includes(key)) throw new Error('unknown 中的牌 "' + key + '" 未在 types 中定义');
+      }
+      const unknown = names.map(name => {
+        const c = unknownRaw[name] === undefined ? 0 : unknownRaw[name];
+        if (!isInt(c) || c < 0) throw new Error('unknown.' + name + ' 必须是非负整数');
+        if (c > 28) throw new Error('unknown.' + name + ' 最多 28 张');
+        return c;
+      });
+
+      const tailRaw = raw.tail === undefined ? [] : raw.tail;
+      if (!Array.isArray(tailRaw)) throw new Error('tail 必须是牌名数组');
+      const tail = tailRaw.map((name, i) => {
+        if (typeof name !== 'string') throw new Error('tail[' + i + '] 必须是牌名字符串');
+        const idx = names.indexOf(name);
+        if (idx < 0) throw new Error('tail[' + i + '] 的牌 "' + name + '" 未在 types 中定义');
+        return idx;
+      });
+
+      const totalCards = unknown.reduce((a, b) => a + b, 0) + tail.length;
+      if (totalCards > 28) throw new Error('最多支持 28 张牌，当前有 ' + totalCards + ' 张');
+      if (totalCards === 0) throw new Error('unknown 与 tail 一共至少要有一张牌');
+
+      const rounds = raw.rounds === undefined ? 1 : raw.rounds;
+      if (!isInt(rounds) || rounds < 0) throw new Error('rounds 必须是非负整数');
+      if (rounds > 6) throw new Error('最多支持 6 拍，当前 rounds=' + rounds);
+
+      const startRaw = raw.start === undefined ? {} : raw.start;
+      if (!startRaw || typeof startRaw !== 'object' || Array.isArray(startRaw)) {
+        throw new Error('start 必须是一个对象');
+      }
+      const start = {
+        points: asInt(startRaw.points, 'start.points', 0),
+        tickets: asInt(startRaw.tickets, 'start.tickets', 0),
+        badges: startRaw.badges === undefined ? [] : startRaw.badges
+      };
+      if (!Array.isArray(start.badges) || start.badges.some(b => typeof b !== 'string' || !b)) {
+        throw new Error('start.badges 必须是字符串数组');
+      }
+      start.badges = Array.from(new Set(start.badges));
+      start.badges.forEach(b => badgeSet.add(b));
+
+      const goalRaw = raw.goal === undefined ? {} : raw.goal;
+      if (!goalRaw || typeof goalRaw !== 'object' || Array.isArray(goalRaw)) {
+        throw new Error('goal 必须是一个对象');
+      }
+      const goal = {
+        points: asInt(goalRaw.points, 'goal.points', 0),
+        badges: goalRaw.badges === undefined ? [] : goalRaw.badges
+      };
+      if (!Array.isArray(goal.badges) || goal.badges.some(b => typeof b !== 'string' || !b)) {
+        throw new Error('goal.badges 必须是字符串数组');
+      }
+      goal.badges = Array.from(new Set(goal.badges));
+      goal.badges.forEach(b => badgeSet.add(b));
+
+      if (badgeSet.size > 30) throw new Error('最多支持 30 种徽章，当前有 ' + badgeSet.size + ' 种');
+
+      const badgeNames = Array.from(badgeSet).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+      const badgeIndex = new Map(badgeNames.map((b, i) => [b, i]));
+      const maskOf = list => list.reduce((m, b) => m | (1 << badgeIndex.get(b)), 0);
+
+      types.forEach(t => { t.badgeMask = maskOf(t.badges); });
+      const goalMask = maskOf(goal.badges);
+      const startMask = maskOf(start.badges);
+
+      const maxTicketCost = types.reduce((m, t) => Math.max(m, Math.max(0, -t.tickets)), 0);
+      const anyTicketCost = types.some(t => t.tickets < 0);
+      const maxPoints = types.reduce((m, t) => Math.max(m, t.points), 0);
+      const minPoints = types.reduce((m, t) => Math.min(m, t.points), 0);
+      const maxTickets = types.reduce((m, t) => Math.max(m, t.tickets), 0);
+
+      return {
+        raw,
+        names,
+        types,
+        unknown,
+        tail,
+        rounds,
+        start: { points: start.points, tickets: start.tickets, badges: start.badges, badgeMask: startMask },
+        goal: { points: goal.points, badges: goal.badges, badgeMask: goalMask },
+        badgeNames,
+        badgeIndex,
+        totalCards,
+        maxTicketCost,
+        anyTicketCost,
+        maxPoints,
+        minPoints,
+        maxTickets
+      };
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* State helpers                                                       */
+    /* ------------------------------------------------------------------ */
+
+    function makeInitialState(deck) {
+      return {
+        points: deck.start.points,
+        tickets: deck.start.tickets,
+        badgeMask: deck.start.badgeMask,
+        unknown: deck.unknown.slice(),
+        tail: deck.tail.slice(),
+        roundsLeft: deck.rounds
+      };
+    }
+
+    function cloneState(s) {
+      return {
+        points: s.points,
+        tickets: s.tickets,
+        badgeMask: s.badgeMask,
+        unknown: s.unknown.slice(),
+        tail: s.tail.slice(),
+        roundsLeft: s.roundsLeft
+      };
+    }
+
+    function unknownTotal(unknown) {
+      let n = 0;
+      for (let i = 0; i < unknown.length; i++) n += unknown[i];
+      return n;
+    }
+
+    function availableCount(state) {
+      return unknownTotal(state.unknown) + state.tail.length;
+    }
+
+    /** Number of cards a round starting in this state reveals. */
+    function revealCount(state) {
+      return Math.min(2, availableCount(state));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Engine                                                              */
+    /* ------------------------------------------------------------------ */
+
+    const BASE_UNK = 32;      // 32^8 = 2^40, exact in a double
+    const BASE_TAIL = 10;     // leading sentinel keeps lengths distinct
+
+    class Engine {
+      constructor(deck) {
+        this.deck = deck;
+        this.preCache = new Map();
+        this.bestCache = new Map();
+        this.work = 0;
+
+        this.goalPoints = deck.goal.points;
+        this.goalMask = deck.goal.badgeMask;
+        this.typeCount = deck.types.length;
+
+        // Tickets have no goal and are only spent by negative-ticket takes, so
+        // within a state with r rounds left they only matter up to r * the
+        // largest ticket cost; anything above that plays identically.
+        this.maxTicketCost = deck.maxTicketCost;
+        // Points are a threshold: when no card can reduce points, once at or
+        // above the goal extra points can never change the outcome, so the key
+        // may cap points at the goal.  With a negative-point card, points above
+        // the goal still matter, so no cap applies.
+        this.pointCap = deck.minPoints >= 0 ? deck.goal.points : Infinity;
+      }
+
+      isSuccess(state) {
+        const deck = this.deck;
+        return state.points >= deck.goal.points && (state.badgeMask & deck.goal.badgeMask) === deck.goal.badgeMask;
+      }
+
+      successOf(s) {
+        return s.p >= this.goalPoints && (s.b & this.goalMask) === this.goalMask;
+      }
+
+      toInternal(state) {
+        return {
+          p: state.points,
+          t: state.tickets,
+          b: state.badgeMask,
+          r: state.roundsLeft,
+          unk: state.unknown.slice(),
+          tail: state.tail.slice()
+        };
+      }
+
+      encodeUnk(unk) {
+        let code = 0;
+        for (let i = this.typeCount - 1; i >= 0; i--) code = code * BASE_UNK + unk[i];
+        return code;
+      }
+
+      encodeTail(tail, limit) {
+        // Sentinel 1 keeps [a] and [0, a] apart.
+        let code = 1;
+        const n = Math.min(tail.length, limit);
+        for (let i = 0; i < n; i++) code = code * BASE_TAIL + tail[i];
+        return code;
+      }
+
+      /**
+       * Cache key.  Equivalent states share a key:
+       *  - points are capped at the goal (above it is success) and at what the
+       *    remaining rounds could still reach,
+       *  - badges outside the goal do not matter,
+       *  - tickets are capped at what the remaining rounds could spend,
+       *  - when the unknown pile cannot be exhausted before the rounds run out,
+       *    the public tail is unreachable and omitted.
+       */
+      stateKey(s, unkTotal) {
+        const p = s.p > this.pointCap ? this.pointCap : s.p;
+        let t = s.t;
+        if (this.maxTicketCost > 0) {
+          const cap = s.r * this.maxTicketCost;
+          if (t > cap) t = cap;
+        } else {
+          t = 0;
+        }
+        let key = p + '|' + t + '|' + (s.b & this.goalMask) + '|' + s.r + '|' + this.encodeUnk(s.unk);
+        if (unkTotal < 2 * s.r) key += '|' + this.encodeTail(s.tail, 2 * s.r);
+        return key;
+      }
+
+      /** Provably impossible from here? */
+      cannotSucceed(s, unkTotal) {
+        if (s.r <= 0) return true;
+        const missingPoints = this.goalPoints - s.p;
+        if (missingPoints > 0) {
+          if (this.deck.maxPoints <= 0) return true;
+          if (missingPoints > s.r * this.deck.maxPoints) return true;
+        }
+        const missingBadges = this.goalMask & ~s.b;
+        if (missingBadges) {
+          let reachable = s.b;
+          for (let i = 0; i < this.typeCount; i++) {
+            if (s.unk[i] > 0 || s.tail.indexOf(i) >= 0) reachable |= this.deck.types[i].badgeMask;
+          }
+          if ((missingBadges & ~reachable) !== 0) return true;
+        }
+        if (unkTotal + s.tail.length === 0) return true;
+        return false;
+      }
+
+      /* ---------------- search ---------------- */
+
+      /** Optimal success probability at the start of a round. */
+      preValue(state) {
+        return this.preSearch(this.toInternal(state));
+      }
+
+      preSearch(s) {
+        if (this.successOf(s)) return ONE;
+        if (s.r <= 0) return ZERO;
+        let unkTotal = 0;
+        for (let i = 0; i < this.typeCount; i++) unkTotal += s.unk[i];
+        const avail = unkTotal + s.tail.length;
+        if (avail === 0) return ZERO;
+        if (this.cannotSucceed(s, unkTotal)) return ZERO;
+
+        const key = this.stateKey(s, unkTotal);
+        const hit = this.preCache.get(key);
+        if (hit !== undefined) return hit;
+        this.work++;
+
+        let value;
+        if (avail === 1) {
+          value = this.roundWithOneCard(s, unkTotal);
+        } else if (unkTotal >= 2) {
+          value = this.roundFromUnknownPairs(s, unkTotal);
+        } else if (unkTotal === 1) {
+          value = this.roundFromOneUnknown(s);
+        } else {
+          value = this.roundFromTail(s);
+        }
+        this.preCache.set(key, value);
+        return value;
+      }
+
+      roundWithOneCard(s, unkTotal) {
+        let type;
+        if (unkTotal > 0) {
+          type = this.firstUnknown(s.unk);
+          s.unk[type] -= 1;
+        } else {
+          type = s.tail.shift();
+        }
+        const value = this.takeOne(s, type);
+        if (unkTotal > 0) s.unk[type] += 1;
+        else s.tail.unshift(type);
+        return value;
+      }
+
+      roundFromOneUnknown(s) {
+        const i = this.firstUnknown(s.unk);
+        const fromTail = s.tail.shift();
+        s.unk[i] -= 1;
+        const value = this.bestOfPair(s, i, fromTail);
+        s.unk[i] += 1;
+        s.tail.unshift(fromTail);
+        return value;
+      }
+
+      roundFromTail(s) {
+        const a = s.tail.shift();
+        const b = s.tail.shift();
+        const value = this.bestOfPair(s, a, b);
+        s.tail.unshift(b);
+        s.tail.unshift(a);
+        return value;
+      }
+
+      roundFromUnknownPairs(s, unkTotal) {
+        const denom = unkTotal * (unkTotal - 1);
+        let value = ZERO;
+        const n = this.typeCount;
+        for (let i = 0; i < n; i++) {
+          const ci = s.unk[i];
+          if (ci === 0) continue;
+          for (let j = i; j < n; j++) {
+            const cj = s.unk[j];
+            if (cj === 0) continue;
+            let w, v;
+            if (i === j) {
+              if (ci < 2) continue;
+              s.unk[i] -= 2;
+              w = frac(ci * (ci - 1), denom);
+              v = this.bestOfPair(s, i, i);
+              s.unk[i] += 2;
+            } else {
+              s.unk[i] -= 1;
+              s.unk[j] -= 1;
+              w = frac(2 * ci * cj, denom);
+              v = this.bestOfPair(s, i, j);
+              s.unk[i] += 1;
+              s.unk[j] += 1;
+            }
+            if (v.n === 0n) continue;
+            value = fAdd(value, fMul(w, v));
+            if (value.n === value.d) return ONE; // cannot exceed 1
+          }
+        }
+        return value;
+      }
+
+      firstUnknown(unk) {
+        for (let i = 0; i < this.typeCount; i++) if (unk[i] > 0) return i;
+        return -1;
+      }
+
+      /** Best take value from two revealed cards; ties keep the earlier one. */
+      bestOfPair(s, a, c) {
+        const ta = this.deck.types[a];
+        let best = null;
+        // Each revealed physical card is distinct even when the types match, so
+        // the card not kept goes back to the tail.
+        if (s.t + ta.tickets >= 0) best = this.takeCard(s, a, c);
+        const tc = this.deck.types[c];
+        if (s.t + tc.tickets >= 0) {
+          const v = this.takeCard(s, c, a);
+          if (best === null || fCmp(v, best) > 0) best = v;
+        }
+        return best === null ? ZERO : best;
+      }
+
+      /** Value of keeping `card`; `other` (or null) goes back to the tail. */
+      takeCard(s, card, other) {
+        const ty = this.deck.types[card];
+        const prevP = s.p, prevT = s.t, prevB = s.b;
+        s.p += ty.points;
+        s.t += ty.tickets;
+        s.b |= ty.badgeMask;
+
+        let value;
+        if (this.successOf(s)) {
+          value = ONE;
+        } else {
+          s.r -= 1;
+          if (s.r <= 0) {
+            value = ZERO;
+          } else if (other === null) {
+            value = this.preSearch(s);
+          } else {
+            s.tail.push(other);
+            value = this.preSearch(s);
+            s.tail.pop();
+          }
+          s.r += 1;
+        }
+        s.p = prevP;
+        s.t = prevT;
+        s.b = prevB;
+        return value;
+      }
+
+      takeOne(s, card) {
+        const ty = this.deck.types[card];
+        if (s.t + ty.tickets < 0) return ZERO;
+        return this.takeCard(s, card, null);
+      }
+
+      /* ---------------- public per-card values ---------------- */
+
+      /** All takes from the revealed cards, with exact values and legality. */
+      takeOptions(state, held) {
+        const s = this.toInternal(state);
+        const options = [];
+        let bestIndex = -1;
+        let bestValue = null;
+        for (let i = 0; i < held.length; i++) {
+          const t = this.deck.types[held[i]];
+          const legal = s.t + t.tickets >= 0;
+          let value = ZERO;
+          if (legal) {
+            const other = held.length > 1 ? held[i === 0 ? 1 : 0] : null;
+            value = this.takeCard(s, held[i], other);
+            if (bestValue === null || fCmp(value, bestValue) > 0) {
+              bestValue = value;
+              bestIndex = i;
+            }
+          }
+          options.push({
+            index: i,
+            type: held[i],
+            name: t.name,
+            points: t.points,
+            tickets: t.tickets,
+            badges: t.badges.slice(),
+            legal,
+            reason: legal ? null : ('通行券不足：需要 ' + (-t.tickets) + ' 张，当前只有 ' + s.t + ' 张'),
+            value
+          });
+        }
+        return { options, bestIndex, bestValue: bestValue || ZERO };
+      }
+
+      /** Value of keeping held[index] (used by takeOptions and the UI). */
+      takeValue(state, held, index) {
+        const s = this.toInternal(state);
+        const t = this.deck.types[held[index]];
+        if (s.t + t.tickets < 0) return ZERO;
+        const other = held.length > 1 ? held[index === 0 ? 1 : 0] : null;
+        return this.takeCard(s, held[index], other);
+      }
+
+      /** Best take value from an already-revealed set. */
+      bestTake(state, held) {
+        if (held.length === 1) return { value: this.takeValue(state, held, 0) };
+        const key = this.stateKey(this.toInternal(state), unknownTotal(state.unknown)) +
+          '#' + Math.min(held[0], held[1]) + '.' + Math.max(held[0], held[1]);
+        const hit = this.bestCache.get(key);
+        if (hit !== undefined) return hit;
+        const s = this.toInternal(state);
+        const result = { value: this.bestOfPair(s, held[0], held[1]) };
+        this.bestCache.set(key, result);
+        return result;
+      }
+
+      /**
+       * Expected value once `held` has been revealed and one more card is due
+       * (used for the "after one reveal" readout).
+       */
+      afterRevealsValue(state, held) {
+        if (this.isSuccess(state)) return ONE;
+        if (state.roundsLeft <= 0) return ZERO;
+        const support = this.nextRevealSupport(state);
+        if (support.length === 0) return this.bestTake(state, held).value;
+
+        const s = this.toInternal(state);
+        const known = held[0];
+        let value = ZERO;
+        for (const r of support) {
+          if (unknownTotal(state.unknown) > 0) {
+            s.unk[r.type] -= 1;
+            const v = this.bestOfPair(s, known, r.type);
+            s.unk[r.type] += 1;
+            value = fAdd(value, fMul(r.prob, v));
+          } else {
+            const card = s.tail.shift();
+            const v = this.bestOfPair(s, known, card);
+            s.tail.unshift(card);
+            value = fAdd(value, fMul(r.prob, v));
+          }
+        }
+        return value;
+      }
+
+      /* ---------------- helpers shared with the UI ---------------- */
+
+      /** Cards that can be revealed next, with exact probabilities. */
+      nextRevealSupport(state) {
+        const total = unknownTotal(state.unknown);
+        if (total > 0) {
+          const out = [];
+          for (let i = 0; i < state.unknown.length; i++) {
+            const c = state.unknown[i];
+            if (c > 0) {
+              out.push({ type: i, name: this.deck.names[i], count: c, prob: frac(c, total) });
+            }
+          }
+          return out;
+        }
+        if (state.tail.length > 0) {
+          const t = state.tail[0];
+          return [{ type: t, name: this.deck.names[t], count: 1, prob: ONE }];
+        }
+        return [];
+      }
+
+      /** Remove one revealed card from the unknown multiset or the tail head. */
+      removeCard(state, type) {
+        const next = cloneState(state);
+        if (unknownTotal(state.unknown) > 0) {
+          if (!(next.unknown[type] > 0)) throw new Error('该牌已不在未知牌堆中');
+          next.unknown[type] -= 1;
+        } else {
+          if (next.tail.length === 0 || next.tail[0] !== type) {
+            throw new Error('该牌不是当前应揭的公开队首');
+          }
+          next.tail.shift();
+        }
+        return next;
+      }
+
+      /** Apply a take, returning the state for the next round. */
+      applyTake(state, held, index) {
+        const t = this.deck.types[held[index]];
+        if (state.tickets + t.tickets < 0) throw new Error('该拿法不合法：通行券会变成负数');
+        const next = cloneState(state);
+        next.points += t.points;
+        next.tickets += t.tickets;
+        next.badgeMask |= t.badgeMask;
+        next.roundsLeft -= 1;
+        const leftover = held.slice(0, index).concat(held.slice(index + 1));
+        if (leftover.length) next.tail = next.tail.concat(leftover);
+        return next;
+      }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Small shared utilities for the UI                                   */
+    /* ------------------------------------------------------------------ */
+
+    function describeState(deck, state) {
+      return {
+        points: state.points,
+        tickets: state.tickets,
+        badges: deck.badgeNames.filter(b => state.badgeMask & (1 << deck.badgeIndex.get(b))),
+        roundsLeft: state.roundsLeft,
+        unknown: deck.names.map((n, i) => ({ name: n, count: state.unknown[i] })).filter(x => x.count > 0),
+        unknownCounts: state.unknown.slice(),
+        tail: state.tail.map(t => deck.names[t]),
+        available: availableCount(state)
+      };
+    }
+
+    return {
+      normalizeDeck,
+      makeInitialState,
+      cloneState,
+      describeState,
+      Engine,
+      revealCount,
+      availableCount,
+      unknownTotal,
+      ZERO,
+      ONE,
+      frac,
+      fAdd,
+      fMul,
+      fMulInt,
+      fCmp,
+      fEquals,
+      fToString,
+      fPercent
+    };
+  }));
+</script>
+<script>
+/* Expedition session: the playable record on top of the solver.
+   *
+   * A session owns the deck, the current state, the cards revealed so far in the
+   * current round, and an append-only action log.  Every action can be undone.
+   * An exported record is {deck, actions}; re-importing replays the actions
+   * through the same validation the buttons use, so an impossible reveal or an
+   * illegal take can never be written.
+   */
+  (function (root, factory) {
+    if (typeof module === 'object' && module.exports) {
+      module.exports = factory(require('./solver.js'));
+    } else {
+      root.ExpeditionSession = factory(root.ExpeditionSolver);
+    }
+  }(typeof globalThis !== 'undefined' ? globalThis : this, function (S) {
+    'use strict';
+
+    const ACTIVE = 'active';
+
+    class Session {
+      constructor(deck) {
+        this.deck = deck;
+        this.engine = new S.Engine(deck);
+        this.reset();
+      }
+
+      static fromDeckRaw(rawDeck) {
+        return new Session(S.normalizeDeck(rawDeck));
+      }
+
+      static fromRecord(record) {
+        if (!record || typeof record !== 'object') throw new Error('记录必须是一个 JSON 对象');
+        if (!record.deck) throw new Error('记录缺少 deck 字段');
+        if (!Array.isArray(record.actions)) throw new Error('记录缺少 actions 数组');
+
+        const session = Session.fromDeckRaw(record.deck);
+        record.actions.forEach((action, i) => {
+          const where = '第 ' + (i + 1) + ' 条记录';
+          if (!action || typeof action !== 'object') throw new Error(where + '格式错误');
+          if (action.kind === 'reveal') {
+            if (typeof action.card !== 'string') throw new Error(where + '缺少 card');
+            try {
+              session.reveal(action.card);
+            } catch (e) {
+              throw new Error(where + '：' + e.message);
+            }
+          } else if (action.kind === 'take') {
+            if (!Number.isInteger(action.index)) throw new Error(where + '缺少整数 index');
+            try {
+              session.take(action.index);
+            } catch (e) {
+              throw new Error(where + '：' + e.message);
+            }
+          } else {
+            throw new Error(where + '的 kind 必须是 reveal 或 take');
+          }
+        });
+        return session;
+      }
+
+      reset() {
+        this.state = S.makeInitialState(this.deck);
+        this.held = [];
+        this.actions = [];
+        this.history = [];
+        this.revealTarget = Math.min(2, S.availableCount(this.state));
+        this.roundStart = S.cloneState(this.state);
+      }
+
+      isSuccess() {
+        return this.engine.isSuccess(this.state);
+      }
+
+      /** pre → revealing → deciding → next round; or a terminal success / failure. */
+      get phase() {
+        if (this.isSuccess()) return 'success';
+        if (this.state.roundsLeft <= 0) return 'failed';
+        if (S.availableCount(this.state) === 0 && this.held.length === 0) return 'failed';
+        if (this.held.length === 0) return 'pre';
+        if (this.held.length < this.revealTarget) return 'revealing';
+        return 'deciding';
+      }
+
+      /**
+       * True when a completed round's revealed cards are all unplayable: the
+       * attempt is lost.  While a card is still to be revealed this is false,
+       * since that card could still be kept.
+       */
+      get stuck() {
+        if (this.phase !== 'deciding') return false;
+        return !this.held.some(t => this.state.tickets + this.deck.types[t].tickets >= 0);
+      }
+
+      /** Terminal state reached without meeting the goal. */
+      get failed() {
+        return this.phase === 'failed' || this.stuck;
+      }
+
+      /** Why the game ended, for display. */
+      get endReason() {
+        if (this.phase === 'success') return '达到分数与徽章目标，本局成功。';
+        if (!this.failed) return null;
+        if (this.stuck) return '本轮揭出的牌都拿不了（通行券不足），本局失败。';
+        if (S.availableCount(this.state) === 0) return '牌堆已空且尚未达标，本局失败。';
+        return '拍数耗尽且尚未达标，本局失败。';
+      }
+
+      /** Legal next cards to record, with their probabilities. */
+      validReveals() {
+        const phase = this.phase;
+        if (phase !== 'pre' && phase !== 'revealing') return [];
+        return this.engine.nextRevealSupport(this.state).map(r => ({
+          type: r.type,
+          name: r.name,
+          count: r.count,
+          prob: r.prob
+        }));
+      }
+
+      /** Cards already revealed this round, in reveal order. */
+      heldCards() {
+        return this.held.map(t => ({
+          type: t,
+          name: this.deck.names[t],
+          points: this.deck.types[t].points,
+          tickets: this.deck.types[t].tickets,
+          badges: this.deck.types[t].badges.slice()
+        }));
+      }
+
+      pushHistory() {
+        this.history.push({
+          state: S.cloneState(this.state),
+          held: this.held.slice(),
+          revealTarget: this.revealTarget,
+          roundStart: S.cloneState(this.roundStart),
+          actionsLength: this.actions.length
+        });
+      }
+
+      /**
+       * Record a revealed card.  Only a card that really can come next is
+       * accepted: any type still in the unknown pile, or the tail head once the
+       * unknown pile is empty.
+       */
+      reveal(cardName) {
+        if (typeof cardName !== 'string') throw new Error('揭牌必须是牌名');
+        if (this.phase === 'success') throw new Error('本局已经成功，不能再揭牌');
+        if (this.failed) throw new Error('本局已经失败，不能再揭牌');
+        if (this.phase === 'deciding') throw new Error('本轮牌都已揭出，请先拿牌');
+        const options = this.validReveals();
+        const pick = options.find(o => o.name === cardName);
+        if (!pick) {
+          const pool = options.length
+            ? options.map(o => o.name).join('、')
+            : '（无）';
+          throw new Error('不可能揭牌「' + cardName + '」，当前只能揭出：' + pool);
+        }
+        this.pushHistory();
+        this.state = this.engine.removeCard(this.state, pick.type);
+        this.held.push(pick.type);
+        this.actions.push({ kind: 'reveal', card: cardName });
+        return this;
+      }
+
+      /** Each revealed card with its exact success value, plus the recommended one. */
+      takeOptions() {
+        // Takes are only allowed once the round's reveals are complete, so no
+        // values or buttons are exposed while another card is still due.
+        if (this.phase !== 'deciding') return null;
+        const result = this.engine.takeOptions(this.state, this.held);
+        return result.options.map(o => ({
+          index: o.index,
+          name: o.name,
+          points: o.points,
+          tickets: o.tickets,
+          badges: o.badges,
+          legal: o.legal,
+          reason: o.reason,
+          value: o.value,
+          recommended: o.index === result.bestIndex
+        }));
+      }
+
+      /** Take held[index]; the other revealed card goes back to the tail. */
+      take(index) {
+        if (this.phase === 'success' || this.phase === 'failed') throw new Error('本局已经结束');
+        if (this.phase !== 'deciding') throw new Error('还没揭完牌，不能拿牌');
+        if (!Number.isInteger(index) || index < 0 || index >= this.held.length) {
+          throw new Error('拿牌位置无效');
+        }
+        const t = this.deck.types[this.held[index]];
+        if (this.state.tickets + t.tickets < 0) {
+          throw new Error('不合法：拿「' + t.name + '」会让通行券变成负数');
+        }
+        this.pushHistory();
+        const roundIndex = this.held[index];
+        const takeName = this.deck.names[roundIndex];
+        this.state.points += t.points;
+        this.state.tickets += t.tickets;
+        this.state.badgeMask |= t.badgeMask;
+        this.state.roundsLeft -= 1;
+        const leftover = this.held.slice(0, index).concat(this.held.slice(index + 1));
+        if (leftover.length) this.state.tail = this.state.tail.concat(leftover);
+        this.held = [];
+        this.revealTarget = Math.min(2, S.availableCount(this.state));
+        this.roundStart = S.cloneState(this.state);
+        this.actions.push({ kind: 'take', index, card: takeName });
+        return this;
+      }
+
+      undo() {
+        const last = this.history.pop();
+        if (!last) return false;
+        this.state = last.state;
+        this.held = last.held;
+        this.revealTarget = last.revealTarget;
+        this.roundStart = last.roundStart;
+        this.actions.length = last.actionsLength;
+        return true;
+      }
+
+      exportRecord() {
+        return {
+          format: 'expedition-draw-record',
+          version: 1,
+          deck: this.deck.raw,
+          actions: this.actions.map(a => (a.kind === 'reveal'
+            ? { kind: 'reveal', card: a.card }
+            : { kind: 'take', index: a.index, card: a.card }))
+        };
+      }
+
+      /** Human-readable rounds, derived by replaying the action log. */
+      logEntries() {
+        const rounds = [];
+        let replay = new Session(this.deck);
+        let current = null;
+
+        for (const a of this.actions) {
+          if (a.kind === 'reveal') {
+            if (!current) current = { reveals: [], take: null };
+            replay.reveal(a.card);
+            current.reveals.push(a.card);
+          } else {
+            if (!current) current = { reveals: [], take: null };
+            const card = replay.heldCards()[a.index];
+            current.take = card ? card.name : null;
+            replay.take(a.index);
+            rounds.push(current);
+            current = null;
+          }
+        }
+        if (current) rounds.push(current);
+        return rounds.map((r, i) => ({
+          round: i + 1,
+          reveals: r.reveals,
+          take: r.take,
+          pending: r.take === null
+        }));
+      }
+
+      /** Exact success probability of the optimal policy from the current position. */
+      currentValue() {
+        const phase = this.phase;
+        if (phase === 'success') return S.ONE;
+        if (this.failed) return S.ZERO;
+        if (phase === 'pre') return this.engine.preValue(this.state);
+        if (phase === 'revealing') return this.engine.afterRevealsValue(this.state, this.held);
+        return this.engine.bestTake(this.state, this.held).value;
+      }
+
+      /**
+       * A cheap description of the position that needs no probability work.
+       * `takes` carries legality and reasons but no values; values arrive from
+       * the solver separately (they can take seconds on a large deck).
+       */
+      position() {
+        const phase = this.phase;
+        let takes = null;
+        if (phase === 'deciding') {
+          takes = this.held.map((t, i) => {
+            const ty = this.deck.types[t];
+            const legal = this.state.tickets + ty.tickets >= 0;
+            return {
+              index: i,
+              name: ty.name,
+              points: ty.points,
+              tickets: ty.tickets,
+              badges: ty.badges.slice(),
+              legal,
+              reason: legal ? null : ('通行券不足：需要 ' + (-ty.tickets) + ' 张，当前只有 ' + this.state.tickets + ' 张')
+            };
+          });
+        }
+        return {
+          phase,
+          failed: this.failed,
+          stuck: this.stuck,
+          endReason: this.endReason,
+          state: S.describeState(this.deck, this.state),
+          roundStart: S.describeState(this.deck, this.roundStart),
+          held: this.heldCards(),
+          revealTarget: this.revealTarget,
+          reveals: this.validReveals(),
+          takes,
+          actions: this.actions.length,
+          canUndo: this.history.length > 0,
+          log: this.logEntries()
+        };
+      }
+
+      /**
+       * What the solver must evaluate for this position, or null when there is
+       * nothing left to compute (success, or a game that ended without cards).
+       * A stuck round still returns a query so its revealed cards can be listed
+       * with their values; every take in it is illegal and worth 0.
+       */
+      valueQuery() {
+        const phase = this.phase;
+        if (phase === 'success') return null;
+        if (phase === 'failed') return null;
+        const roundStart = phase === 'pre' ? null : this.roundStart;
+        if (phase === 'pre') {
+          return { kind: 'pre', state: this.state, held: [], roundStart: null };
+        }
+        if (phase === 'revealing') {
+          return { kind: 'after', state: this.state, held: this.held.slice(), roundStart };
+        }
+        return { kind: 'decide', state: this.state, held: this.held.slice(), roundStart };
+      }
+
+      snapshot() {
+        const position = this.position();
+        const query = this.valueQuery();
+        let value;
+        let options = null;
+        let roundStartValue = null;
+        if (query) {
+          value = this.currentValue();
+          if (query.roundStart) roundStartValue = this.engine.preValue(query.roundStart);
+          if (query.kind === 'decide') {
+            const result = this.engine.takeOptions(this.state, this.held);
+            options = result.options.map(o => ({
+              index: o.index,
+              legal: o.legal,
+              reason: o.reason,
+              recommended: o.index === result.bestIndex,
+              value: o.legal ? o.value : null
+            }));
+          }
+        } else {
+          value = this.phase === 'success' ? S.ONE : S.ZERO;
+        }
+        return Object.assign({}, position, {
+          value,
+          roundStartValue,
+          options
+        });
+      }
+    }
+
+    return { Session, ACTIVE };
+  }));
+</script>
+<script>
+/* Page application.  Rendered by the build into index.html after the solver
+   * and session sources.  Heavy probability work runs in a Worker built from an
+   * inline blob so the page stays responsive; without Worker support (or for very
+   * small decks) the same values are computed on the main thread. */
+  /* global ExpeditionSolver, ExpeditionSession, WORKER_SOURCE */
+  (function () {
+    'use strict';
+    var S = window.ExpeditionSolver;
+    var Session = window.ExpeditionSession.Session;
+
+    var STORAGE_KEY = 'expedition-draw-policy:v1';
+    var SAMPLE = window.EXPEDITION_SAMPLE;
+
+    var el = {
+      roundBody: document.getElementById('round-body'),
+      roundCount: document.getElementById('round-count'),
+      valueBody: document.getElementById('value-body'),
+      valueAside: document.getElementById('value-aside'),
+      goalBody: document.getElementById('goal-body'),
+      deckBody: document.getElementById('deck-body'),
+      deckAside: document.getElementById('deck-aside'),
+      logBody: document.getElementById('log-body'),
+      logAside: document.getElementById('log-aside'),
+      undoBtn: document.getElementById('undo-btn'),
+      resetBtn: document.getElementById('reset-btn'),
+      deckInput: document.getElementById('deck-input'),
+      deckLoad: document.getElementById('deck-load'),
+      deckSample: document.getElementById('deck-sample'),
+      deckFile: document.getElementById('deck-file'),
+      recordOut: document.getElementById('record-out'),
+      recordIn: document.getElementById('record-in'),
+      importBtn: document.getElementById('import-btn'),
+      copyBtn: document.getElementById('copy-btn'),
+      copyState: document.getElementById('copy-state'),
+      recordMessage: document.getElementById('record-message'),
+      footnote: document.getElementById('footnote')
+    };
+
+    var session = null;
+    var preview = null;          // { index } — a trial take, not committed
+    var notice = null;           // { kind, text }
+    var position = null;         // session.position() for the current frame
+    var values = null;           // { value, roundStartValue, options } or null
+    var computing = false;
+    var seq = 0;                 // position version; stale results are dropped
+    var reqId = 0;               // worker request ids
+
+    /* ---------------- worker plumbing ---------------- */
+
+    var worker = null;
+    var workerBroken = false;
+    var pending = {};            // id -> { resolve, reject }
+
+    function workerUsable() {
+      return !workerBroken &&
+        typeof Worker !== 'undefined' &&
+        typeof Blob !== 'undefined' &&
+        typeof URL !== 'undefined' &&
+        typeof URL.createObjectURL === 'function';
+    }
+
+    function postInit(target) {
+      if (!target) return;
+      target.postMessage({ type: 'init', id: 'init-' + (++reqId), deck: session.deck.raw });
+    }
+
+    function startWorker() {
+      if (!workerUsable()) return null;
+      if (worker) return worker;
+      try {
+        var blob = new Blob([String(WORKER_SOURCE)], { type: 'application/javascript' });
+        worker = new Worker(URL.createObjectURL(blob));
+        worker.onmessage = function (ev) {
+          var m = ev.data || {};
+          var entry = pending[m.id];
+          if (!entry) return;
+          delete pending[m.id];
+          if (m.type === 'error') entry.reject(new Error(m.message));
+          else entry.resolve(m);
+        };
+        worker.onerror = function () {
+          workerBroken = true;
+          var waiting = Object.keys(pending);
+          waiting.forEach(function (id) {
+            var entry = pending[id];
+            delete pending[id];
+            entry.reject(new Error('worker 出错'));
+          });
+        };
+        postInit(worker);
+        return worker;
+      } catch (e) {
+        workerBroken = true;
+        worker = null;
+        return null;
+      }
+    }
+
+    function workerRequest(message) {
+      var w = startWorker();
+      if (!w) return Promise.reject(new Error('no worker'));
+      var id = 'q' + (++reqId);
+      return new Promise(function (resolve, reject) {
+        pending[id] = { resolve: resolve, reject: reject };
+        w.postMessage(Object.assign({ id: id }, message));
+      });
+    }
+
+    /* ---------------- value computation ---------------- */
+
+    function fractionFromWire(w) {
+      return S.frac(BigInt(w.n), BigInt(w.d));
+    }
+
+    function localValues(query) {
+      if (!query) return null;
+      var engine = session.engine;
+      var out = { value: null, roundStartValue: null, options: null };
+
+      if (query.kind === 'decide') {
+        var result = engine.takeOptions(query.state, query.held);
+        out.value = result.bestValue;
+        out.options = result.options.map(function (o, i) {
+          return {
+            index: o.index,
+            legal: o.legal,
+            reason: o.reason,
+            recommended: i === result.bestIndex,
+            value: o.legal ? o.value : null
+          };
+        });
+      } else if (query.kind === 'after') {
+        out.value = engine.afterRevealsValue(query.state, query.held);
+      } else {
+        out.value = engine.preValue(query.state);
+      }
+
+      if (query.roundStart) out.roundStartValue = engine.preValue(query.roundStart);
+      return out;
+    }
+
+    function requestValues(query) {
+      if (!query) return Promise.resolve(null);
+      // Tiny positions are computed inline: a worker round-trip would only add
+      // a flicker of "calculating".
+      var small = session.deck.totalCards <= 9 && session.deck.rounds <= 3;
+      if (small || !workerUsable()) {
+        return Promise.resolve(localValues(query));
+      }
+      return workerRequest({
+        kind: query.kind,
+        state: query.state,
+        held: query.held,
+        roundStart: query.roundStart
+      }).then(function (m) {
+        return {
+          value: fractionFromWire(m.value),
+          roundStartValue: m.roundStart ? fractionFromWire(m.roundStart) : null,
+          options: m.options ? m.options.map(function (o) {
+            return {
+              index: o.index,
+              legal: o.legal,
+              reason: o.reason,
+              recommended: o.recommended,
+              value: o.value ? fractionFromWire(o.value) : null
+            };
+          }) : null
+        };
+      });
+    }
+
+    /* ---------------- refresh pipeline ---------------- */
+
+    function refresh() {
+      position = session.position();
+      values = null;
+      var mySeq = ++seq;
+      var query = session.valueQuery();
+
+      if (!query) {
+        // Success, or a game that ran out of cards/rounds: the value follows
+        // from the phase with no work.
+        values = {
+          value: position.phase === 'success' ? S.ONE : S.ZERO,
+          roundStartValue: null,
+          options: null
+        };
+        if (position.takes) {
+          values.options = position.takes.map(function (t) {
+            return { index: t.index, legal: t.legal, reason: t.reason, recommended: false, value: null };
+          });
+        }
+        computing = false;
+        render();
+        return;
+      }
+
+      computing = true;
+      render();
+
+      requestValues(query).then(function (result) {
+        if (mySeq !== seq) return; // a newer position superseded this one
+        values = result;
+        computing = false;
+        render();
+        persist();
+      }, function (err) {
+        if (mySeq !== seq) return;
+        // Worker died or failed: fall back to the main thread once.
+        workerBroken = true;
+        try {
+          values = localValues(session.valueQuery());
+          computing = false;
+        } catch (e2) {
+          notice = { kind: 'error', text: '概率计算失败：' + (e2.message || e2) };
+          computing = false;
+        }
+        render();
+      });
+    }
+
+    /* ---------------- formatting ---------------- */
+
+    function esc(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function fracHTML(f) {
+      return '<span class="frac">' + esc(S.fToString(f)) +
+        ' <span class="pc">' + esc(S.fPercent(f)) + '</span></span>';
+    }
+
+    function barWidth(f) {
+      var hundredths = Number((f.n * 10000n) / f.d); // percent * 100
+      return Math.max(0, Math.min(100, hundredths / 100));
+    }
+
+    function cardChips(t) {
+      var parts = ['<span class="eff ' + (t.points > 0 ? 'up' : t.points < 0 ? 'down' : 'zero') + '">' +
+        (t.points === 0 ? '分数 ±0' : (t.points > 0 ? '+' : '') + t.points + ' 分') + '</span>'];
+      if (t.tickets !== 0) {
+        parts.push('<span class="eff ' + (t.tickets > 0 ? 'up' : 'down') + '">' +
+          (t.tickets > 0 ? '+' : '') + t.tickets + ' 券</span>');
+      }
+      (t.badges || []).forEach(function (b) {
+        parts.push('<span class="eff up">徽章 ' + esc(b) + '</span>');
+      });
+      return parts.join('');
+    }
+
+    /* ---------------- rendering ---------------- */
+
+    function phasePill() {
+      if (position.phase === 'success') return '<span class="pill win">已成功</span>';
+      if (position.failed) return '<span class="pill lose">已失败</span>';
+      if (position.phase === 'pre') return '<span class="pill live">待揭第一张</span>';
+      if (position.phase === 'revealing') return '<span class="pill live">已揭一张</span>';
+      return '<span class="pill live">请选择拿法</span>';
+    }
+
+    function optionOf(i) {
+      if (!values || !values.options) return null;
+      return values.options[i] || null;
+    }
+
+    function renderRound() {
+      var st = position.state;
+      var html = '<div class="status-row">' + phasePill() +
+        '<span class="round-count">未知牌堆 ' + st.unknown.reduce(function (a, x) { return a + x.count; }, 0) +
+        ' 张 · 公开队尾 ' + st.tail.length + ' 张</span></div>';
+
+      if (position.endReason) {
+        html += '<div class="message ' + (position.phase === 'success' ? 'ok' : 'warn') +
+          '" style="margin-bottom:13px">' + esc(position.endReason) + '</div>';
+      }
+
+      if (position.phase === 'pre' || position.phase === 'revealing') {
+        var need = position.revealTarget - position.held.length;
+        html += '<div class="section-label">补录实际揭出的牌' +
+          (position.phase === 'revealing' ? '（还需 ' + need + ' 张）' : '') + '</div>';
+        if (position.reveals.length) {
+          html += '<div class="reveal-grid">';
+          position.reveals.forEach(function (r) {
+            html += '<button class="reveal-btn" type="button" data-reveal="' + esc(r.name) + '">' +
+              '<span class="nm">' + esc(r.name) + '</span>' +
+              '<span class="meta">此牌还剩 ' + r.count + ' 张</span>' +
+              '<span class="pct">P = ' + esc(S.fToString(r.prob)) + ' · ' + esc(S.fPercent(r.prob)) + '</span>' +
+              '</button>';
+          });
+          html += '</div>';
+        } else {
+          html += '<p class="empty-note">当前没有可揭出的牌。</p>';
+        }
+      }
+
+      if (position.held.length) {
+        html += '<div class="section-label" style="margin-top:16px">本拍已揭</div><div class="tiles">';
+        position.held.forEach(function (h, i) {
+          var opt = position.takes ? position.takes[i] : null;
+          var vals = optionOf(i);
+          var best = vals && vals.recommended;
+          html += '<div class="tile' + (best ? ' best' : '') + '">' +
+            '<div class="tile-top"><span class="nm">' + esc(h.name) + '</span>' +
+            (vals && vals.legal && vals.value ? '<span class="val">' + esc(S.fToString(vals.value)) + '</span>'
+              : (computing ? '<span class="val muted">…</span>' : '')) +
+            '</div><div class="effects">' + cardChips(h) + '</div>';
+          if (!opt) {
+            html += '<div class="tile-foot"><span class="hint">收牌中…</span></div>';
+          } else if (!opt.legal) {
+            html += '<div class="tile-foot"><span class="why">' + esc(opt.reason) + '</span></div>';
+          } else {
+            html += '<div class="tile-foot">' +
+              '<button class="btn primary small" type="button" data-take="' + i + '">拿这张</button>' +
+              '<button class="btn small" type="button" data-preview="' + i + '">试选</button>' +
+              (best ? '<span class="hint">建议</span>' : '') +
+              '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+        if (position.takes) {
+          html += '<p class="hint" style="margin-top:9px">数字是拿它之后的最优成功率；同率时取揭示顺序靠前的一张。</p>';
+        }
+      }
+
+      if (preview !== null && position.takes && position.takes[preview] && position.takes[preview].legal) {
+        var pv = position.takes[preview];
+        var applied = session.engine.applyTake(session.state, session.held, preview);
+        var nd = S.describeState(session.deck, applied);
+        var pvValue = optionOf(preview);
+        html += '<div class="preview"><h3>试选：拿「' + esc(pv.name) + '」（尚未提交）</h3><div class="row">' +
+          '<span class="chip">分数 <b>' + nd.points + '</b></span>' +
+          '<span class="chip">通行券 <b>' + nd.tickets + '</b></span>' +
+          '<span class="chip">徽章 <b>' + (nd.badges.length ? nd.badges.map(esc).join('、') : '无') + '</b></span>' +
+          '<span class="chip">剩余拍数 <b>' + nd.roundsLeft + '</b></span>' +
+          '<span class="chip">此拿法成功率 <b>' +
+          (pvValue && pvValue.value ? esc(S.fToString(pvValue.value)) : (computing ? '计算中' : '—')) +
+          '</b></span></div><div class="actions">' +
+          '<button class="btn primary small" type="button" data-take="' + preview + '">确认此拿法</button>' +
+          '<button class="btn small" type="button" data-preview-cancel="1">取消试选</button>' +
+          '</div></div>';
+      }
+
+      el.roundBody.innerHTML = html;
+      el.roundCount.textContent = '第 ' + (session.deck.rounds - position.state.roundsLeft + 1) +
+        ' 拍 / 共 ' + session.deck.rounds + ' 拍';
+    }
+
+    function renderValue() {
+      var html = '';
+      var shown = values ? (values.roundStartValue || values.value) : null;
+      var exact = values ? values.value : null;
+      var label = values && values.roundStartValue ? '本拍揭牌前' : '当前局面';
+
+      if (!shown) {
+        html += '<div class="readout"><div class="big-frac">计算中…' +
+          '<span class="pc">正在按最优策略汇总概率</span></div>' +
+          '<div class="bar"><span style="width:0"></span></div></div>';
+      } else {
+        html += '<div class="readout"><div class="big-frac">' + esc(S.fToString(shown)) +
+          '<span class="pc">' + esc(S.fPercent(shown)) + ' · ' + label + '</span></div>' +
+          '<div class="bar" role="img" aria-label="成功率 ' + esc(S.fPercent(shown)) + '">' +
+          '<span style="width:' + barWidth(shown) + '%"></span></div></div>';
+      }
+
+      if (values && values.roundStartValue && exact) {
+        html += '<p class="readout-note">已揭一张后，按公开信息继续的最优值为 ' +
+          fracHTML(exact) + '。</p>';
+      }
+
+      if (values && values.options && values.options.length) {
+        html += '<div class="value-table">';
+        values.options.forEach(function (o, i) {
+          var t = position.takes[i];
+          html += '<div class="value-row' + (o.recommended ? ' best' : '') + '">' +
+            '<span class="k">拿「' + esc(t.name) + '」' +
+            (o.legal ? (o.recommended ? ' · 建议' : '') : ' · 不合法') + '</span>' +
+            '<span class="v">' + (o.legal && o.value ? fracHTML(o.value) : '—') + '</span></div>';
+        });
+        html += '</div>';
+      }
+
+      el.valueBody.innerHTML = html;
+      el.valueAside.textContent = position.phase === 'pre' ? '揭牌前'
+        : (position.phase === 'revealing' ? '已揭一张' : '');
+    }
+
+    function renderGoal() {
+      var deck = session.deck;
+      var st = position.state;
+      var html = '<div class="chips" style="margin-bottom:11px">' +
+        '<span class="chip' + (st.points >= deck.goal.points ? ' met' : '') + '">分数 <b>' + st.points +
+        '</b> / ' + deck.goal.points + '</span>' +
+        '<span class="chip">通行券 <b>' + st.tickets + '</b></span>' +
+        '<span class="chip">剩余拍数 <b>' + st.roundsLeft + '</b></span>';
+      deck.goal.badges.forEach(function (b) {
+        var has = st.badges.indexOf(b) >= 0;
+        html += '<span class="chip ' + (has ? 'met' : 'badge') + '">' +
+          (has ? '✓ ' : '') + '徽章 ' + esc(b) + '</span>';
+      });
+      if (!deck.goal.badges.length) html += '<span class="chip">无徽章目标</span>';
+      html += '</div><p class="hint">' +
+        (st.badges.length ? '已得徽章：' + st.badges.map(esc).join('、') : '尚未获得徽章') + '</p>';
+      el.goalBody.innerHTML = html;
+    }
+
+    function renderDeck() {
+      var deck = session.deck;
+      var st = position.state;
+      var unknownLeft = st.unknown.reduce(function (a, x) { return a + x.count; }, 0);
+      el.deckAside.textContent = unknownLeft + ' 张未知 · ' + st.tail.length + ' 张在队尾';
+
+      var html = '<div style="overflow-x:auto"><table class="deck-table">' +
+        '<thead><tr><th>牌</th><th>分数</th><th>券</th><th>徽章</th><th>未知余量</th></tr></thead><tbody>';
+      deck.types.forEach(function (t, i) {
+        html += '<tr><td><strong>' + esc(t.name) + '</strong></td>' +
+          '<td class="num">' + (t.points > 0 ? '+' : '') + t.points + '</td>' +
+          '<td class="num">' + (t.tickets > 0 ? '+' : '') + t.tickets + '</td>' +
+          '<td class="badge-list">' + (t.badges.length ? t.badges.map(esc).join('、') : '—') + '</td>' +
+          '<td class="num">' + (st.unknownCounts[i] || 0) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+
+      html += '<div class="tail-wrap"><div class="section-label">公开队尾（先揭队首）</div>';
+      if (st.tail.length) {
+        html += '<div class="tail-list">';
+        st.tail.forEach(function (name, i) {
+          html += '<span class="tail-card' + (i === 0 ? ' head' : '') + '">' + esc(name) + '</span>';
+        });
+        html += '</div>';
+      } else {
+        html += '<p class="empty-note">队尾为空。未拿的牌会按揭示顺序排到这里。</p>';
+      }
+      html += '</div>';
+      el.deckBody.innerHTML = html;
+    }
+
+    function renderLog() {
+      var log = position.log;
+      el.logAside.textContent = position.actions + ' 个动作';
+      if (!log.length) {
+        el.logBody.innerHTML = '<p class="empty-note">还没有记录。揭出第一张牌后会出现在这里。</p>';
+        return;
+      }
+      var html = '<div class="log">';
+      log.forEach(function (r) {
+        html += '<div class="log-round"><span class="no">' + String(r.round).padStart(2, '0') +
+          '</span><div class="flow">';
+        r.reveals.forEach(function (c, i) {
+          if (i > 0) html += '<span class="arrow">·</span>';
+          html += '<span class="log-chip">' + esc(c) + '</span>';
+        });
+        html += r.take
+          ? '<span class="arrow">→ 拿</span><span class="log-chip kept">' + esc(r.take) + '</span>'
+          : '<span class="arrow">→ 待拿</span>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+      el.logBody.innerHTML = html;
+    }
+
+    function renderRecord() {
+      el.recordOut.value = JSON.stringify(session.exportRecord(), null, 2);
+      el.undoBtn.disabled = session.history.length === 0;
+      el.resetBtn.disabled = false;
+      if (notice) {
+        el.recordMessage.innerHTML = '<div class="message ' + notice.kind + '">' + esc(notice.text) + '</div>';
+      } else {
+        el.recordMessage.innerHTML = '';
+      }
+    }
+
+    function render() {
+      if (!position) return;
+      renderRound();
+      renderValue();
+      renderGoal();
+      renderDeck();
+      renderLog();
+      renderRecord();
+      el.footnote.textContent = '本轮牌组 ' + session.deck.totalCards + ' 张 · ' +
+        session.deck.types.length + ' 种 · 上限 8 种 / 28 张 / 6 拍';
+    }
+
+    /* ---------------- actions ---------------- */
+
+    function fail(message) {
+      notice = { kind: 'error', text: message };
+      render();
+    }
+
+    function afterChange() {
+      persist();
+      refresh();
+    }
+
+    function doReveal(name) {
+      notice = null;
+      try {
+        session.reveal(name);
+        preview = null;
+        afterChange();
+      } catch (e) { fail(e.message); }
+    }
+
+    function doTake(index) {
+      notice = null;
+      try {
+        session.take(index);
+        preview = null;
+        afterChange();
+      } catch (e) { fail(e.message); }
+    }
+
+    function doUndo() {
+      notice = null;
+      preview = null;
+      if (session.undo()) afterChange();
+    }
+
+    function persist() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(session.exportRecord()));
+      } catch (e) { /* storage unavailable: the page still works */ }
+    }
+
+    function restore() {
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return Session.fromRecord(JSON.parse(raw));
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function useSession(next) {
+      session = next;
+      preview = null;
+      notice = null;
+      if (worker) {
+        postInit(worker);
+      }
+      afterChange();
+    }
+
+    /* ---------------- wiring ---------------- */
+
+    el.roundBody.addEventListener('click', function (ev) {
+      var target = ev.target.closest('[data-reveal],[data-take],[data-preview],[data-preview-cancel]');
+      if (!target) return;
+      if (target.hasAttribute('data-reveal')) doReveal(target.getAttribute('data-reveal'));
+      else if (target.hasAttribute('data-take')) doTake(Number(target.getAttribute('data-take')));
+      else if (target.hasAttribute('data-preview')) {
+        preview = Number(target.getAttribute('data-preview'));
+        notice = null;
+        render();
+      } else {
+        preview = null;
+        render();
+      }
+    });
+
+    el.undoBtn.addEventListener('click', doUndo);
+
+    el.resetBtn.addEventListener('click', function () {
+      var actions = session.actions.length;
+      if (actions === 0) { preview = null; notice = null; render(); return; }
+      if (el.resetBtn.getAttribute('data-armed') !== '1') {
+        el.resetBtn.setAttribute('data-armed', '1');
+        el.resetBtn.textContent = '确认清空 ' + actions + ' 步';
+        window.setTimeout(function () {
+          if (el.resetBtn.getAttribute('data-armed') === '1') {
+            el.resetBtn.removeAttribute('data-armed');
+            el.resetBtn.textContent = '重开本局';
+          }
+        }, 4000);
+        return;
+      }
+      el.resetBtn.removeAttribute('data-armed');
+      el.resetBtn.textContent = '重开本局';
+      session.reset();
+      preview = null;
+      notice = null;
+      afterChange();
+    });
+
+    el.deckLoad.addEventListener('click', function () {
+      notice = null;
+      try {
+        useSession(Session.fromDeckRaw(JSON.parse(el.deckInput.value)));
+      } catch (e) {
+        fail('牌组无法载入：' + e.message);
+      }
+    });
+
+    el.deckSample.addEventListener('click', function () {
+      el.deckInput.value = JSON.stringify(SAMPLE, null, 2);
+      notice = null;
+      try { useSession(Session.fromDeckRaw(SAMPLE)); } catch (e) { fail(e.message); }
+    });
+
+    el.deckFile.addEventListener('change', function () {
+      var file = el.deckFile.files && el.deckFile.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        var text = String(reader.result);
+        notice = null;
+        try {
+          useSession(Session.fromDeckRaw(JSON.parse(text)));
+          el.deckInput.value = text;
+        } catch (e) {
+          fail('文件无法载入：' + e.message);
+        }
+      };
+      reader.onerror = function () { fail('读取文件失败。'); };
+      reader.readAsText(file);
+    });
+
+    el.importBtn.addEventListener('click', function () {
+      notice = null;
+      var text = el.recordIn.value;
+      if (!String(text).trim()) { fail('导入失败：请先粘贴要导入的记录'); return; }
+      var parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        fail('导入失败：记录不是合法 JSON（' + e.message + '）');
+        return;
+      }
+      var next;
+      try {
+        next = Session.fromRecord(parsed);
+      } catch (e) {
+        fail('导入失败：' + e.message);
+        return;
+      }
+      el.recordIn.value = '';
+      session = next;
+      preview = null;
+      notice = { kind: 'ok', text: '已导入记录，共 ' + next.actions.length + ' 个动作，可以接着算。' };
+      if (worker) {
+        postInit(worker);
+      }
+      afterChange();
+    });
+
+    el.copyBtn.addEventListener('click', function () {
+      var text = el.recordOut.value;
+      function done() {
+        el.copyState.textContent = '已复制';
+        window.setTimeout(function () { el.copyState.textContent = ''; }, 2200);
+      }
+      function selectIt() {
+        el.recordOut.focus();
+        el.recordOut.select();
+        el.copyState.textContent = '已选中，请手动复制';
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, selectIt);
+      } else {
+        selectIt();
+      }
+    });
+
+    /* ---------------- boot ---------------- */
+
+    function start(restored) {
+      session = restored || Session.fromDeckRaw(SAMPLE);
+      el.deckInput.value = JSON.stringify(session.deck.raw, null, 2);
+      startWorker();
+      afterChange();
+    }
+
+    var restored = restore();
+    var hot = window.claude && window.claude.hot;
+    if (hot) {
+      var begin = function (data) {
+        var fromHot = null;
+        try {
+          if (data && data.record) fromHot = Session.fromRecord(data.record);
+        } catch (e) { fromHot = null; }
+        start(fromHot || restored);
+      };
+      if (hot.ready) hot.ready(begin); else begin(null);
+      if (hot.snapshot) {
+        hot.snapshot(function () {
+          try {
+            return { record: session.exportRecord() };
+          } catch (e) {
+            return {};
+          }
+        });
+      }
+    } else {
+      start(restored);
+    }
+  }());
+</script>
