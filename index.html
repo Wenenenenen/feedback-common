@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>周期浮雕贴面 · 射线校验台</title>
+<style>
+  :root {
+    --bg: #14161c;
+    --panel: #1c1f28;
+    --panel2: #232734;
+    --line: #313646;
+    --text: #e6e9f0;
+    --muted: #9aa3b5;
+    --accent: #6ea8fe;
+    --accent2: #7ee0c0;
+    --warn: #ffb454;
+    --bad: #ff7a7a;
+    --ok: #7ee0a0;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13px/1.55 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #1b1e27, #171a22);
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .layout {
+    display: grid; grid-template-columns: 320px minmax(0, 1fr) 380px;
+    gap: 12px; padding: 12px; align-items: start;
+  }
+  @media (max-width: 1180px) { .layout { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px;
+  }
+  .panel h2 {
+    font-size: 12px; margin: 0 0 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel + .panel { margin-top: 12px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 3px; }
+  input, textarea, select, button {
+    font: inherit; color: var(--text);
+    background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 8px; width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  textarea { font-family: var(--mono); font-size: 11.5px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  button {
+    cursor: pointer; width: auto; padding: 7px 12px;
+    background: #2a3142; border-color: #3a4256; font-weight: 550;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.primary { background: #2c4a7c; border-color: #3d63a0; }
+  button.primary:hover { background: #355891; }
+  .seg { display: flex; gap: 4px; background: var(--panel2); padding: 3px; border-radius: 8px; border: 1px solid var(--line); }
+  .seg button { flex: 1; border: none; background: transparent; padding: 6px 4px; border-radius: 6px; color: var(--muted); }
+  .seg button.on { background: #34405a; color: #fff; }
+  .stage { position: relative; text-align: center; }
+  canvas#view {
+    image-rendering: pixelated; max-width: 100%;
+    border: 1px solid var(--line); border-radius: 8px; background: #181b22;
+    cursor: crosshair;
+  }
+  .meta { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .meta b { color: var(--text); font-weight: 600; }
+  .status {
+    margin-top: 8px; padding: 8px 10px; border-radius: 7px; font-size: 12px;
+    background: var(--panel2); border: 1px solid var(--line); min-height: 20px;
+    font-family: var(--mono); white-space: pre-wrap; word-break: break-all;
+  }
+  .status.err { border-color: #5a2d2d; color: var(--bad); background: #2a1d1d; }
+  .status.ok { border-color: #2d4a35; color: var(--ok); }
+  .inspect { max-height: 78vh; overflow: auto; }
+  .inspect details {
+    border: 1px solid var(--line); border-radius: 7px; margin-bottom: 7px;
+    background: var(--panel2);
+  }
+  .inspect summary {
+    cursor: pointer; padding: 7px 10px; font-size: 12px; color: var(--accent2);
+    user-select: none; list-style: none;
+  }
+  .inspect summary::before { content: "▸ "; color: var(--muted); }
+  .inspect details[open] summary::before { content: "▾ "; }
+  .inspect .body { padding: 0 10px 9px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  td, th { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  code, .mono { font-family: var(--mono); font-size: 11.5px; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 20px; font-size: 11px; }
+  .tag.hit { background: #1e3a2a; color: var(--ok); }
+  .tag.miss { background: #3a2323; color: var(--bad); }
+  .tag.tan { background: #3a3320; color: var(--warn); }
+  .tag.edge { background: #26304a; color: var(--accent); }
+  .root-accept { color: var(--ok); }
+  .root-reject { color: var(--muted); }
+  .muted { color: var(--muted); }
+  .swatch { display: inline-block; width: 11px; height: 11px; border: 1px solid #0006; border-radius: 2px; vertical-align: -1px; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 6px 0 0; }
+  .filemeta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>周期浮雕贴面 · 射线校验台</h1>
+  <span class="sub">双线性曲面解析求根 · DDA 格遍历 · 半开归属去重 · 自阴影</span>
+  <span class="spacer" style="flex:1"></span>
+  <span class="sub mono" id="engineState">未加载</span>
+</header>
+
+<div class="layout">
+  <!-- 左栏：数据与场景参数 -->
+  <div>
+    <div class="panel">
+      <h2>① 高度场数据</h2>
+      <div class="btnrow" style="margin-top:0">
+        <button class="primary" id="btnLoadSample">载入样例 JSON</button>
+        <button id="btnImportFile">导入文件…</button>
+        <input type="file" id="fileInput" accept=".json,application/json" hidden>
+      </div>
+      <div class="filemeta" id="fileMeta"></div>
+      <label>横纵物理间距 spacing [sx, sy]</label>
+      <div class="row2">
+        <input id="inSx" type="number" step="any">
+        <input id="inSy" type="number" step="any">
+      </div>
+      <label>高度节点 height[j][i]（行主序，最多 128×128）</label>
+      <textarea id="inHeight" rows="7" spellcheck="false"></textarea>
+      <div class="hint">每行一行数组，或直接粘贴二维 JSON。修改后点「应用并重渲染」。</div>
+      <div class="btnrow">
+        <button class="primary" id="btnApplyField">应用并重渲染</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>② 正交相机</h2>
+      <label>原点 o（左上角像素射线原点）</label>
+      <div class="row"><input id="camOx" type="number" step="any"><input id="camOy" type="number" step="any"><input id="camOz" type="number" step="any"></div>
+      <label>像素步进 stepX</label>
+      <div class="row"><input id="camSxx" type="number" step="any"><input id="camSxy" type="number" step="any"><input id="camSxz" type="number" step="any"></div>
+      <label>像素步进 stepY</label>
+      <div class="row"><input id="camSyx" type="number" step="any"><input id="camSyy" type="number" step="any"><input id="camSyz" type="number" step="any"></div>
+      <label>方向 d（保留原长度，不归一化）</label>
+      <div class="row"><input id="camDx" type="number" step="any"><input id="camDy" type="number" step="any"><input id="camDz" type="number" step="any"></div>
+      <label>闭合 t 区间 [tmin, tmax] 与预览尺寸 [宽, 高]（≤192×128）</label>
+      <div class="row2">
+        <input id="camT0" type="number" step="any">
+        <input id="camT1" type="number" step="any">
+      </div>
+      <div class="row2" style="margin-top:6px">
+        <input id="camW" type="number" min="1" max="192" step="1">
+        <input id="camH" type="number" min="1" max="128" step="1">
+      </div>
+      <div class="btnrow"><button class="primary" id="btnApplyCam">应用相机并重渲染</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>③ 定向光</h2>
+      <label>灯方向 d（保留原长度，阴影射线方向）</label>
+      <div class="row"><input id="lightDx" type="number" step="any"><input id="lightDy" type="number" step="any"><input id="lightDz" type="number" step="any"></div>
+      <label>阴影射线闭合 t 区间 [tmin, tmax]</label>
+      <div class="row2">
+        <input id="lightT0" type="number" step="any">
+        <input id="lightT1" type="number" step="any">
+      </div>
+      <div class="btnrow"><button class="primary" id="btnApplyLight">应用灯并重渲染</button></div>
+    </div>
+  </div>
+
+  <!-- 中栏：预览 -->
+  <div class="panel stage">
+    <h2 style="justify-content:center">
+      <span class="seg" style="width:340px">
+        <button data-mode="depth" id="modeDepth">深度图</button>
+        <button data-mode="normal" id="modeNormal">法线图</button>
+        <button data-mode="lit" id="modeLit" class="on">受光图</button>
+      </span>
+    </h2>
+    <canvas id="view" width="320" height="240"></canvas>
+    <div class="meta" id="stageMeta">
+      <span>尺寸 <b id="metaSize">—</b></span>
+      <span>命中 <b id="metaHits">—</b></span>
+      <span>阴影 <b id="metaShadow">—</b></span>
+      <span>切触 <b id="metaTan">—</b></span>
+      <span>深度范围 <b id="metaDepth">—</b></span>
+    </div>
+    <div class="hint" style="text-align:center">点击任一像素，在右栏展开它经过的格、每个根与选中原因。</div>
+    <div class="btnrow" style="justify-content:center">
+      <button id="btnDownloadJson">下载命中 JSON</button>
+      <button id="btnDownloadPng">下载预览图 PNG</button>
+    </div>
+    <div class="status" id="status">就绪。载入样例开始。</div>
+  </div>
+
+  <!-- 右栏：手动射线与像素检查器 -->
+  <div>
+    <div class="panel">
+      <h2>④ 手动世界射线 O + tD</h2>
+      <label>原点 O</label>
+      <div class="row"><input id="rayOx" type="number" step="any"><input id="rayOy" type="number" step="any"><input id="rayOz" type="number" step="any"></div>
+      <label>方向 D（保留原长度）</label>
+      <div class="row"><input id="rayDx" type="number" step="any"><input id="rayDy" type="number" step="any"><input id="rayDz" type="number" step="any"></div>
+      <label>闭合 t 区间</label>
+      <div class="row2">
+        <input id="rayT0" type="number" step="any" value="0">
+        <input id="rayT1" type="number" step="any" value="5">
+      </div>
+      <div class="btnrow"><button class="primary" id="btnTrace">求首个交点</button></div>
+    </div>
+
+    <div class="panel inspect">
+      <h2>⑤ 检查器 <span id="inspectWhat" class="mono" style="text-transform:none;letter-spacing:0"></span></h2>
+      <div id="inspectBody"><p class="muted" style="margin:4px 0">尚未选择。点击预览像素或运行手动射线。</p></div>
+    </div>
+  </div>
+</div>
+
+<script src="src/math.js"></script>
+<script src="src/field.js"></script>
+<script src="src/ray.js"></script>
+<script src="src/render.js"></script>
+<script src="samples/sample-data.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

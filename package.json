@@ -1,0 +1,15 @@
+{
+  "name": "periodic-relief-ray-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "周期浮雕贴面的双线性曲面射线校验台：解析求根、DDA 格遍历、半开归属去重、自阴影",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node test/trace.test.js && node test/sample.e2e.test.js",
+    "gen-sample": "node scripts/gen-sample-data.js",
+    "smoke": "node scripts/browser-smoke.mjs",
+    "serve": "node scripts/serve.js"
+  },
+  "keywords": ["ray-casting", "bilinear", "heightfield", "periodic", "relief"],
+  "license": "MIT"
+}
