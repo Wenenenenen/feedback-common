@@ -1,0 +1,12 @@
+{
+  "name": "locale-dialogue-pack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "游戏对白语言包 LCP1 编译与预览网页（自研消息解析/编译/读包，禁用现成格式化与语言包库）",
+  "scripts": {
+    "start": "node serve.mjs",
+    "test": "node tests/run-tests.mjs",
+    "perf": "node tests/perf.mjs"
+  }
+}

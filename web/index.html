@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="claude:viewport-fit-sides" content="cover">
+  <title>LCP1 语言包工作台</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">LCP1</span>
+      <div>
+        <h1>语言包工作台</h1>
+        <p class="sub">对白多语言编译 · 回退链预览 · 发布检查</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="btn ghost">
+        导入工程 JSON
+        <input id="import-project" type="file" accept=".json,application/json" hidden>
+      </label>
+      <label class="btn ghost">
+        读包 .lcp1
+        <input id="import-pack" type="file" accept=".lcp1,application/octet-stream" hidden>
+      </label>
+      <button id="publish" class="btn primary" type="button">发布并导出 LCP1</button>
+    </div>
+  </header>
+
+  <section id="banner" class="banner" hidden></section>
+
+  <main class="layout">
+    <!-- 左栏：语言与回退链 -->
+    <aside class="panel col-langs">
+      <div class="panel-head">
+        <h2>语言与回退链</h2>
+        <button id="add-lang" class="btn mini" type="button">+ 语言</button>
+      </div>
+      <p class="hint">每条回退指向链上的下一语言，留空表示链尾。链不可成环。</p>
+      <div id="add-lang-row" class="add-lang-row" hidden>
+        <input id="new-lang-code" type="text" placeholder="语言代码，如 fr" maxlength="16">
+        <select id="new-lang-mode" aria-label="新模式">
+          <option value="other" selected>other 模式</option>
+          <option value="one">one 模式</option>
+        </select>
+        <button id="confirm-add-lang" class="btn mini primary" type="button">添加</button>
+        <button id="cancel-add-lang" class="btn mini" type="button">取消</button>
+      </div>
+      <ul id="lang-list" class="lang-list"></ul>
+      <div class="meta-grid">
+        <div><span id="meta-langs">0</span><label>语言数 / 上限 8</label></div>
+        <div><span id="meta-messages">0</span><label>消息条数</label></div>
+        <div><span id="meta-errors">0</span><label>待修问题</label></div>
+      </div>
+    </aside>
+
+    <!-- 中栏：消息编辑 -->
+    <section class="panel col-editor">
+      <div class="panel-head">
+        <h2>译文编辑</h2>
+        <div class="editor-controls">
+          <select id="key-select" aria-label="选择消息键"></select>
+          <button id="delete-key" class="btn mini danger" type="button">删除该语言译文</button>
+        </div>
+      </div>
+      <div class="sig-line" id="sig-line"></div>
+      <div class="editor-wrap">
+        <label class="code-label" for="message-json">消息节点 JSON（t / a / r / p）</label>
+        <textarea id="message-json" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+      <div class="editor-actions">
+        <button id="save-message" class="btn" type="button">保存译文</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+      <div class="raw-block">
+        <div class="panel-head compact">
+          <h3>回退链编辑（当前语言）</h3>
+        </div>
+        <div class="fallback-row">
+          <select id="fb-lang" aria-label="选择语言"></select>
+          <span class="arrow">→</span>
+          <select id="fb-target" aria-label="回退目标语言"></select>
+          <button id="save-fallback" class="btn mini" type="button">保存链</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右栏：预览与检查 -->
+    <aside class="panel col-preview">
+      <div class="panel-head"><h2>预览</h2></div>
+      <div class="preview-controls">
+        <label>请求语言
+          <select id="preview-lang"></select>
+        </label>
+        <label>消息键
+          <select id="preview-key"></select>
+        </label>
+      </div>
+      <div class="params-head">
+        <h3>参数</h3>
+        <button id="refresh-preview" class="btn mini" type="button">刷新预览</button>
+      </div>
+      <div id="params-form" class="params-form"></div>
+      <div class="result-card" id="result-card">
+        <div class="result-meta" id="result-meta"></div>
+        <div class="result-text" id="result-text">尚未展开</div>
+        <details class="trace-box" id="trace-box" hidden>
+          <summary>解析路径（引用重查 / 复数命中）</summary>
+          <ol id="trace-list"></ol>
+        </details>
+      </div>
+      <div class="check-block">
+        <div class="panel-head compact"><h3>发布检查</h3>
+          <button id="run-check" class="btn mini" type="button">重新检查</button>
+        </div>
+        <ul id="check-list" class="check-list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>自研消息解析 · LCP1 编译/读包 · 未使用任何现成消息格式化或语言包编译库</span>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
