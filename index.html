@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>剪辑点波形核对台</title>
+<style>
+/* ---- 设计 token：中性灰带轻微冷偏，accent 用蓝；颜色全部走变量，明暗双主题 ---- */
+:root {
+  --bg: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f1f0ea;
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --fg-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.12);
+  --critical: #d03b3b;
+  --tag-bg: #e8edf6;
+  --tag-fg: #1c5cab;
+  --mute-bg: #efece2;
+  --mute-fg: #6b6344;
+  --shadow: 0 1px 3px rgba(11, 11, 11, 0.08), 0 4px 16px rgba(11, 11, 11, 0.06);
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --fg: #f0efec;
+    --fg-2: #c3c2b7;
+    --fg-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --accent-soft: rgba(57, 135, 229, 0.18);
+    --critical: #e66767;
+    --tag-bg: #1d2c42;
+    --tag-fg: #9ec5f4;
+    --mute-bg: #2c2a22;
+    --mute-fg: #c9bd8f;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --fg-muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.18);
+  --critical: #e66767;
+  --tag-bg: #1d2c42;
+  --tag-fg: #9ec5f4;
+  --mute-bg: #2c2a22;
+  --mute-fg: #c9bd8f;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+.num, .sumsq { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg-muted); }
+
+header.app-head {
+  padding-block: 18px 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+header.app-head h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: 0.2px; }
+header.app-head .sub { color: var(--fg-2); font-size: 13px; }
+header.app-head .spacer { flex: 1; }
+
+button, select, input {
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 11px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.42; cursor: default; }
+button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+button.primary:hover:not(:disabled) { filter: brightness(1.07); }
+input[type="number"] { width: 110px; font-family: var(--mono); }
+input[type="range"] { padding: 0; border: none; background: transparent; }
+
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; padding-bottom: 40px; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: var(--fg-muted);
+  margin: 0 0 10px;
+  font-weight: 650;
+}
+.side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.main-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.source-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 4px; border-bottom: 1px solid var(--grid);
+  min-width: 0;
+}
+.source-row:last-child { border-bottom: none; }
+.source-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.source-meta { margin-left: auto; color: var(--fg-muted); font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; display: inline-block; }
+.swatch.sm { width: 10px; height: 10px; }
+
+.form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.form-row label { font-size: 12px; color: var(--fg-2); }
+.btn-grid { display: flex; flex-wrap: wrap; gap: 7px; }
+.btn-grid button { flex: 1 1 auto; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toolbar .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.toolbar .sep { width: 1px; height: 22px; background: var(--border); }
+
+#canvasWrap { position: relative; width: 100%; overflow-x: auto; }
+#stripCanvas, #waveCanvas { display: block; width: 100%; touch-action: none; }
+#stripCanvas { border-radius: 6px 6px 0 0; cursor: pointer; }
+#waveCanvas { border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; cursor: crosshair; }
+#overlay { position: absolute; inset: 0; pointer-events: none; }
+#cursorLine {
+  position: absolute; top: 0; bottom: 0; width: 1.5px;
+  background: var(--critical);
+}
+#cursorLine::after {
+  content: ""; position: absolute; top: -3px; left: -3px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--critical);
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--fg-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+td.num, th.num { text-align: right; }
+#segBody tr { cursor: pointer; }
+#segBody tr:hover { background: var(--surface-2); }
+#segBody tr.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.table-scroll { overflow-x: auto; max-height: 320px; overflow-y: auto; }
+
+.tag {
+  display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 99px;
+  background: var(--tag-bg); color: var(--tag-fg); margin-left: 4px;
+}
+.tag-mute { background: var(--mute-bg); color: var(--mute-fg); }
+
+.inspect-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; margin: 0; }
+.inspect-grid dt { color: var(--fg-muted); font-size: 12px; }
+.inspect-grid dd { margin: 0; min-width: 0; }
+
+.pager { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.pager span { color: var(--fg-muted); font-size: 12px; }
+
+.tooltip {
+  position: fixed; z-index: 60; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font-family: var(--mono); font-size: 11.5px;
+  box-shadow: var(--shadow); max-width: 280px; line-height: 1.55;
+}
+#toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px);
+  background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 99px;
+  opacity: 0; transition: opacity 0.18s, transform 0.18s; z-index: 70; font-size: 13px;
+  max-width: calc(100vw - 40px);
+}
+#toast.show { opacity: 0.96; transform: translateX(-50%) translateY(0); }
+#toast[data-kind="error"] { background: var(--critical); color: #fff; }
+
+.modal-back {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 80; padding: 16px;
+}
+.modal {
+  background: var(--surface); border-radius: 12px; width: min(860px, 100%);
+  max-height: 86vh; display: flex; flex-direction: column; padding: 18px; gap: 12px;
+}
+.modal-head { display: flex; align-items: center; gap: 10px; }
+.modal-head h3 { margin: 0; font-size: 15px; }
+.modal-tabs { display: flex; gap: 6px; }
+textarea.export-box {
+  width: 100%; flex: 1; min-height: 300px; resize: vertical;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.5;
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  word-break: break-all;
+}
+.view-meta { font-family: var(--mono); font-size: 12px; color: var(--fg-2); }
+.kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; background: var(--surface-2); }
+@media (prefers-reduced-motion: reduce) {
+  #toast, * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="app-head">
+  <h1>剪辑点波形核对台</h1>
+  <span class="sub">48kHz 双声道 16-bit PCM · 最多 8 轨 · 分段引用半开区间 · 平方和精确十进制</span>
+  <span class="spacer"></span>
+  <button id="themeToggle" type="button">切换明暗</button>
+</header>
+
+<div class="layout">
+  <!-- 侧栏 -->
+  <aside class="side">
+    <section class="panel">
+      <h2>源轨（身份色固定）</h2>
+      <div id="sourceList"></div>
+      <div class="form-row">
+        <input id="fileInput" type="file" accept=".wav,audio/wav,audio/x-wav" multiple hidden>
+        <button id="btnImport" class="primary" type="button">导入 WAV（≤8 份）</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>添加段（半开区间）</h2>
+      <div class="form-row">
+        <select id="addSource" style="flex:1; min-width:0"></select>
+      </div>
+      <div class="form-row">
+        <label>源起帧 <input id="addStart" type="number" min="0" placeholder="0"></label>
+        <label>源止帧 <input id="addEnd" type="number" min="1" placeholder="末尾"></label>
+      </div>
+      <div class="form-row btn-grid">
+        <button id="btnAdd" type="button">添加段</button>
+        <button id="btnAddWhole" type="button">整轨添加</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>段编辑（先选段）</h2>
+      <div class="btn-grid">
+        <button id="btnSplit" type="button">在光标处拆分</button>
+        <button id="btnReverse" type="button">切换倒序</button>
+        <button id="btnMute" type="button">切换静音</button>
+        <button id="btnMoveLeft" type="button">前移</button>
+        <button id="btnMoveRight" type="button">后移</button>
+        <button id="btnDelete" type="button">删除段</button>
+      </div>
+      <div class="form-row btn-grid" style="margin-top:10px">
+        <button id="btnUndo" type="button">撤销 <span class="kbd">CtrlZ</span></button>
+        <button id="btnRedo" type="button">重做 <span class="kbd">Ctrl⇧Z</span></button>
+      </div>
+    </section>
+  </aside>
+
+  <!-- 主列 -->
+  <main class="main-col">
+    <section class="panel">
+      <h2>拼接波形总览（上分段身份条 / 下双声道列统计，上半 L 下半 R）</h2>
+      <div class="toolbar" style="margin-bottom:10px">
+        <div class="group">
+          <label>列数 B = <strong id="bValue" class="num">1024</strong></label>
+          <input id="bRange" type="range" min="1" max="2048" value="1024" style="width:180px">
+        </div>
+        <span class="sep"></span>
+        <button id="btnFullView" type="button">缩到整段</button>
+        <span class="sep"></span>
+        <label>区间起 <input id="viewStart" type="number" min="0" style="width:120px"></label>
+        <label>区间止 <input id="viewEnd" type="number" min="0" style="width:120px"></label>
+        <button id="btnApplyView" type="button">应用区间</button>
+        <span class="sep"></span>
+        <button id="btnExport" class="primary" type="button">导出当前区间与列统计</button>
+      </div>
+      <p class="view-meta" id="viewMeta"></p>
+      <div id="canvasWrap">
+        <canvas id="stripCanvas"></canvas>
+        <canvas id="waveCanvas"></canvas>
+        <div id="overlay"><div id="cursorLine" hidden></div></div>
+      </div>
+      <p class="muted" style="font-size:12px; margin:8px 0 0">
+        拖拽波形选择区间（即统计与导出范围），单击定位单帧；点上方分段条选择段。倒序段有左向三角，静音段叠 45° 纹理。
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>当前区间聚合（双声道精确统计）</h2>
+      <div class="table-scroll" id="aggregate"></div>
+    </section>
+
+    <section class="panel">
+      <h2>单帧定位</h2>
+      <div id="inspector"></div>
+    </section>
+
+    <section class="panel">
+      <h2>拼接段清单（上限 2 万段）</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>#</th><th>源轨</th><th class="num">srcStart</th><th class="num">srcEnd</th>
+            <th class="num">长度</th><th>拼接时间码</th><th>标记</th>
+          </tr></thead>
+          <tbody id="segBody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="segPrev" type="button">上一页</button>
+        <button id="segNext" type="button">下一页</button>
+        <span id="segPage"></span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 导出弹窗 -->
+<div class="modal-back" id="exportModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="导出统计">
+    <div class="modal-head">
+      <h3>导出当前区间与列统计</h3>
+      <span class="spacer" style="flex:1"></span>
+      <div class="modal-tabs">
+        <button id="copyJson" type="button">复制 JSON</button>
+        <button id="dlJson" type="button">下载 JSON</button>
+        <button id="copyCsv" type="button">复制 CSV</button>
+        <button id="dlCsv" type="button">下载 CSV</button>
+      </div>
+      <button id="closeExport" type="button">关闭</button>
+    </div>
+    <div class="form-row" style="margin:0">
+      <button type="button" data-show="json" class="tabbtn">JSON（含段清单/区间聚合，平方和十进制字符串）</button>
+      <button type="button" data-show="csv" class="tabbtn">CSV（逐列双声道统计）</button>
+    </div>
+    <textarea id="exportJson" class="export-box" readonly></textarea>
+    <textarea id="exportCsv" class="export-box" readonly hidden></textarea>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+<script>
+// 导出弹窗的 JSON/CSV 切换（与模块解耦的纯视图逻辑）
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tabbtn');
+  if (!btn) return;
+  const show = btn.dataset.show;
+  document.getElementById('exportJson').hidden = show !== 'json';
+  document.getElementById('exportCsv').hidden = show !== 'csv';
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.getElementById('exportModal').hidden = true;
+});
+</script>
+</body>
+</html>

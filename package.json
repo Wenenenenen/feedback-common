@@ -1,0 +1,14 @@
+{
+  "name": "waveform-edit-pyramid",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "剪辑点波形核对台：多轨 WAV 拼接、精确列统计与逐帧定位",
+  "scripts": {
+    "test": "node tests/pyramid.test.js && node tests/timeline.test.js && node tests/wav.test.js",
+    "perf": "node tests/perf.test.js",
+    "perf:full": "node tests/perf.test.js --full",
+    "e2e": "node tests/e2e.mjs",
+    "crosscheck": "node tests/crosscheck.mjs"
+  }
+}
