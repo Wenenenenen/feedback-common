@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>壳层绕序审计台</title>
+<style>
+/* ---- 设计令牌：工程深色工具风，冷灰蓝底 + 青色强调 + 语义色 ---- */
+:root {
+  --bg: #0e141b;
+  --bg-elev: #161f29;
+  --bg-panel: #1a2530;
+  --bg-hover: #22303d;
+  --border: #2b3a48;
+  --fg: #e3ebf2;
+  --fg-dim: #93a5b5;
+  --fg-faint: #5f7285;
+  --accent: #38c8d6;
+  --accent-soft: rgba(56, 200, 214, 0.14);
+  --ok: #4cc38a;
+  --warn: #e5b550;
+  --error: #ef6a5f;
+  --error-soft: rgba(239, 106, 95, 0.16);
+  --cross: #e08ee0;
+  --touch: #e5b550;
+  --overlap: #ef6a5f;
+  --mono: "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f7fa; --bg-elev: #ffffff; --bg-panel: #ffffff; --bg-hover: #eef3f7;
+    --border: #d4dee7; --fg: #16222d; --fg-dim: #4a5d6e; --fg-faint: #7e90a0;
+    --accent: #0e8fa0; --accent-soft: rgba(14, 143, 160, 0.1);
+    --error-soft: rgba(214, 69, 60, 0.1); color-scheme: light;
+  }
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--sans);
+  font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, select { font-family: inherit; font-size: 13px; }
+button {
+  background: var(--bg-elev); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 7px; padding: 7px 13px; cursor: pointer; transition: background .15s, border-color .15s;
+}
+button:hover { background: var(--bg-hover); border-color: var(--accent); }
+button.primary { background: var(--accent); color: #062228; border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; gap: 0; }
+header.topbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding-block: 12px; border-bottom: 1px solid var(--border);
+}
+.title { font-size: 17px; font-weight: 700; letter-spacing: .3px; }
+.title .dot { color: var(--accent); }
+.spacer { flex: 1; }
+.filestatus { font-size: 12px; color: var(--fg-dim); font-family: var(--mono); }
+
+.main {
+  display: grid; grid-template-columns: 290px 1fr 320px; gap: 0;
+  min-height: 0; overflow: hidden;
+}
+.panel {
+  background: var(--bg-panel); border-right: 1px solid var(--border);
+  overflow-y: auto; min-height: 0; padding: 14px;
+}
+.panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+.panel h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+  color: var(--fg-faint); margin: 18px 0 8px; font-weight: 600;
+}
+.panel h2:first-child { margin-top: 0; }
+
+.viewer-wrap { position: relative; min-width: 0; min-height: 0; background: var(--bg); }
+#viewer { position: absolute; inset: 0; }
+.viewer-toolbar {
+  position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; flex-wrap: wrap;
+  z-index: 5;
+}
+.viewer-toolbar button { padding: 5px 10px; font-size: 12px; background: rgba(22,31,41,.85); backdrop-filter: blur(6px); }
+.viewer-legend {
+  position: absolute; bottom: 12px; left: 12px; display: flex; gap: 14px; flex-wrap: wrap;
+  background: rgba(22,31,41,.85); backdrop-filter: blur(6px); padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--border); font-size: 12px; z-index: 5;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; color: var(--fg-dim); }
+.legend-swatch { width: 11px; height: 11px; border-radius: 3px; }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat {
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+}
+.stat .label { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .8px; }
+.stat .value { font-family: var(--mono); font-size: 18px; font-weight: 600; margin-top: 3px; word-break: break-all; }
+.stat .value.ok { color: var(--ok); } .stat .value.err { color: var(--error); }
+
+.verdict {
+  border-radius: 8px; padding: 12px; font-weight: 600; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.verdict.legal { background: rgba(76,195,138,.13); color: var(--ok); border: 1px solid rgba(76,195,138,.4); }
+.verdict.illegal { background: var(--error-soft); color: var(--error); border: 1px solid rgba(239,106,95,.4); }
+
+.shell-item, .issue-item {
+  border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; margin-bottom: 7px;
+  cursor: pointer; background: var(--bg-elev); transition: background .12s, border-color .12s;
+}
+.shell-item:hover, .issue-item:hover { background: var(--bg-hover); }
+.shell-item.active, .issue-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.shell-row { display: flex; align-items: center; gap: 8px; }
+.shell-name { font-weight: 600; }
+.badge {
+  font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.badge.depth0 { background: rgba(56,200,214,.18); color: var(--accent); }
+.badge.depth1 { background: rgba(229,181,80,.18); color: var(--warn); }
+.badge.bad { background: var(--error-soft); color: var(--error); }
+.issue-item .itype { font-weight: 600; font-size: 12px; }
+.issue-item .itype.crossing { color: var(--cross); }
+.issue-item .itype.coplanar-overlap { color: var(--overlap); }
+.issue-item .itype.bad-contact { color: var(--touch); }
+.issue-item .itype.boundary-edge, .issue-item .itype.non-manifold-edge,
+.issue-item .itype.bad-fan, .issue-item .itype.degenerate,
+.issue-item .itype.non-orientable, .issue-item .itype.duplicate-face,
+.issue-item .itype.zero-volume-shell { color: var(--error); }
+.issue-item .msg { font-size: 12px; color: var(--fg-dim); margin-top: 3px; }
+.issue-item .faces { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); margin-top: 4px; }
+
+.normal-row { display: grid; grid-template-columns: 64px 1fr; gap: 8px; align-items: center; margin-bottom: 8px; }
+.normal-tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.normal-tag.before { color: var(--error); } .normal-tag.after { color: var(--ok); }
+.normal-val { font-family: var(--mono); font-size: 12px; word-break: break-all; background: var(--bg-elev); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); }
+
+footer.statusbar {
+  border-top: 1px solid var(--border); padding-block: 8px;
+  display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--fg-dim);
+  font-family: var(--mono);
+}
+footer.statusbar .k { color: var(--fg-faint); }
+.drop-hint {
+  border: 1.5px dashed var(--border); border-radius: 10px; padding: 18px; text-align: center;
+  color: var(--fg-dim); font-size: 13px;
+}
+.drop-hint.drag { border-color: var(--accent); background: var(--accent-soft); }
+.toast {
+  position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-elev); border: 1px solid var(--accent); color: var(--fg);
+  padding: 10px 18px; border-radius: 8px; z-index: 100; font-size: 13px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.4); max-width: 80vw;
+}
+.toast.warn { border-color: var(--warn); } .toast.err { border-color: var(--error); }
+.empty { color: var(--fg-faint); font-size: 13px; padding: 8px 0; }
+input[type=file] { display: none; }
+.theme-toggle { padding: 5px 9px; }
+.vol-tree { font-family: var(--mono); font-size: 12px; }
+.vol-tree .node { padding: 3px 0; }
+.vol-tree .sign-pos { color: var(--ok); } .vol-tree .sign-neg { color: var(--warn); }
+@media (max-width: 980px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: auto auto auto; overflow-y: auto; }
+  .panel { max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
+  .panel:last-child { border-left: none; }
+  #viewer { position: relative; height: 360px; }
+  .viewer-wrap { height: 360px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="title">壳层绕序审计台<span class="dot">.</span></div>
+    <div class="filestatus" id="fileStatus">未载入文件</div>
+    <div class="spacer"></div>
+    <button class="theme-toggle" id="themeToggle" title="切换明暗主题">◐</button>
+    <button id="loadSample">载入样例</button>
+    <button class="primary" id="pickFile">选择 JSON</button>
+    <input type="file" id="fileInput" accept=".json,application/json">
+    <button id="exportBtn" disabled>导出修正索引</button>
+  </header>
+
+  <div class="main">
+    <aside class="panel" id="leftPanel">
+      <h2>审计结论</h2>
+      <div id="verdictBox"><div class="empty">载入网格后显示</div></div>
+      <h2>统计</h2>
+      <div class="stat-grid" id="statGrid"></div>
+      <h2>包含树（实体内部）</h2>
+      <div class="vol-tree" id="treeBox"><div class="empty">—</div></div>
+      <h2>壳层（点击隔离）</h2>
+      <div id="shellList"><div class="empty">—</div></div>
+    </aside>
+
+    <main class="viewer-wrap" id="viewerWrap">
+      <div id="viewer"></div>
+      <div class="viewer-toolbar">
+        <button id="showAll">全部壳</button>
+        <button id="toggleNormals">法线: 关</button>
+        <button id="toggleCompare">修正前/后</button>
+        <button id="resetCam">复位视角</button>
+      </div>
+      <div class="viewer-legend">
+        <span class="legend-item"><span class="legend-swatch" style="background:#38c8d6"></span>正常面</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#ef6a5f"></span>问题面</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#e5b550"></span>选中面</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#4cc38a"></span>修正法线</span>
+      </div>
+    </main>
+
+    <aside class="panel" id="rightPanel">
+      <h2>问题清单（点击定位）</h2>
+      <div id="issueList"><div class="empty">—</div></div>
+      <h2>选中面详情</h2>
+      <div id="faceDetail"><div class="empty">在 3D 视图或问题清单中点选面</div></div>
+      <h2>载入文件</h2>
+      <div class="drop-hint" id="dropHint">拖放 .json 到此处，或用顶部“选择 JSON”<br>≤ 20000 三角形 · 整数坐标 ≤ 1e6</div>
+    </aside>
+  </div>
+
+  <footer class="statusbar" id="statusBar">
+    <span><span class="k">引擎</span> BigInt 精确谓词 · 零容差</span>
+    <span><span class="k">宽相</span> BVH</span>
+    <span id="perfInfo"></span>
+    <span id="persistInfo"></span>
+  </footer>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { auditMesh } from './src/mesh-auditor.js';
+
+const $ = (id) => document.getElementById(id);
+let currentResult = null;
+let currentFileName = '';
+let lastValid = null; // 上一份可用结果（坏文件时保留）
+
+// ---------------- 持久化（IndexedDB，全部 try/catch） ----------------
+const DB_NAME = 'shell-parity-auditor', STORE = 'last-valid';
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbPut(key, val) {
+  try { const db = await idbOpen(); await new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key);
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  }); } catch { /* 隐私模式等场景静默降级 */ }
+}
+async function idbGet(key) {
+  try { const db = await idbOpen(); return await new Promise((res, rej) => {
+    const rq = db.transaction(STORE).objectStore(STORE).get(key);
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  }); } catch { return null; }
+}
+
+// ---------------- Three.js 场景 ----------------
+const viewerEl = $('viewer');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+viewerEl.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e141b);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1e7);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 2, 3); scene.add(dl);
+
+let meshGroup = new THREE.Group(); scene.add(meshGroup);
+let normalGroup = new THREE.Group(); scene.add(normalGroup);
+let baseMesh = null, overlayMesh = null, highlightMesh = null, edgeLines = null;
+let faceGeometry = null;
+let showNormals = false, showCorrected = false, selectedFace = -1;
+let shellVisibility = null; // null=全部，否则 Set(componentId)
+
+function resize() {
+  const w = viewerEl.clientWidth, h = viewerEl.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(viewerEl);
+
+function buildGeometry(result) {
+  const pos = [];
+  for (const v of result.vertices) pos.push(v[0], v[1], v[2]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const idx = [];
+  for (const f of result.faces) idx.push(f[0], f[1], f[2]);
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function faceColorArray(result) {
+  const n = result.faces.length;
+  const colors = new Float32Array(n * 3);
+  const problemFaces = new Set();
+  for (const iss of result.issues) for (const f of iss.faces) problemFaces.add(f);
+  const cOk = new THREE.Color(0x38c8d6), cErr = new THREE.Color(0xef6a5f);
+  for (let i = 0; i < n; i++) {
+    const c = problemFaces.has(i) ? cErr : cOk;
+    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+  }
+  return colors;
+}
+
+function renderMesh(result) {
+  // 清空旧对象
+  while (meshGroup.children.length) {
+    const o = meshGroup.children.pop();
+    o.geometry?.dispose(); o.material?.dispose();
+  }
+  normalGroup.clear();
+  faceGeometry = buildGeometry(result);
+  const colors = faceColorArray(result);
+  faceGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  baseMesh = new THREE.Mesh(faceGeometry, new THREE.MeshStandardMaterial({
+    vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.92,
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+  }));
+  meshGroup.add(baseMesh);
+
+  // 问题面叠加层（独立 mesh，便于高亮/点选）
+  const selPos = [], selIdx = [], selFaceMap = [];
+  for (let fi = 0; fi < result.faces.length; fi++) {
+    const f = result.faces;
+    const b = selPos.length / 3;
+    for (const vi of f[fi]) selPos.push(...result.vertices[vi]);
+    selIdx.push(b, b + 1, b + 2);
+    selFaceMap.push(fi);
+  }
+  const og = new THREE.BufferGeometry();
+  og.setAttribute('position', new THREE.Float32BufferAttribute(selPos, 3));
+  og.setIndex(selIdx);
+  og.computeVertexNormals();
+  overlayMesh = new THREE.Mesh(og, new THREE.MeshBasicMaterial({
+    color: 0xe5b550, side: THREE.DoubleSide, transparent: true, opacity: 0,
+    depthWrite: false,
+  }));
+  overlayMesh.userData.faceMap = selFaceMap;
+  overlayMesh.material.opacity = 0; // 点选层本身不可见，仅用于射线拾取
+  meshGroup.add(overlayMesh);
+
+  // 选中面高亮层（独立，初始空）
+  highlightMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+    color: 0xe5b550, side: THREE.DoubleSide, transparent: true, opacity: 0.6, depthWrite: false,
+  }));
+  meshGroup.add(highlightMesh);
+
+  // 线框
+  edgeLines = new THREE.LineSegments(
+    new THREE.EdgesGeometry(faceGeometry, 1),
+    new THREE.LineBasicMaterial({ color: 0x0e141b, transparent: true, opacity: 0.55 }));
+  meshGroup.add(edgeLines);
+
+  fitCamera();
+  buildNormals(result);
+  applyShellVisibility();
+}
+
+function fitCamera() {
+  const box = new THREE.Box3().setFromObject(baseMesh);
+  const c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  controls.target.copy(c);
+  const d = Math.max(size.x, size.y, size.z) * 1.6;
+  camera.position.set(c.x + d, c.y + d * 0.7, c.z + d);
+  camera.near = Math.max(0.01, d / 1000); camera.far = d * 100;
+  camera.updateProjectionMatrix(); controls.update();
+}
+
+// ---------------- 法线对照（修正前红 / 修正后绿） ----------------
+function buildNormals(result) {
+  normalGroup.clear();
+  const useCorrected = showCorrected && result.correctedFaces;
+  const faces = useCorrected ? result.correctedFaces : result.faces;
+  const red = new THREE.Color(0xef6a5f), green = new THREE.Color(0x4cc38a);
+  for (let fi = 0; fi < faces.length; fi++) {
+    const f = faces[fi];
+    const a = new THREE.Vector3(...result.vertices[f[0]]);
+    const b = new THREE.Vector3(...result.vertices[f[1]]);
+    const c = new THREE.Vector3(...result.vertices[f[2]]);
+    const cent = a.clone().add(b).add(c).multiplyScalar(1 / 3);
+    const n = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
+    const edgeLen = Math.hypot(
+      result.vertices[f[1]][0] - result.vertices[f[0]][0],
+      result.vertices[f[1]][1] - result.vertices[f[0]][1],
+      result.vertices[f[1]][2] - result.vertices[f[0]][2]);
+    const len = Math.max(1, edgeLen * 0.4);
+    const arrow = new THREE.ArrowHelper(n, cent, len, useCorrected ? green.getHex() : red.getHex(), len * 0.3, len * 0.18);
+    arrow.visible = !!shellVisibility ? shellVisibility.has(componentOfFace(result, fi)) : true;
+    normalGroup.add(arrow);
+  }
+  normalGroup.visible = showNormals;
+}
+function componentOfFace(result, fi) {
+  for (const sh of result.shells) if (sh.faces.includes(fi)) return sh.componentId;
+  return -1;
+}
+
+function applyShellVisibility() {
+  if (!baseMesh || !currentResult) return;
+  const r = currentResult;
+  const visibleFaces = new Set();
+  if (!shellVisibility) {
+    for (let i = 0; i < r.faces.length; i++) visibleFaces.add(i);
+  } else {
+    for (const sh of r.shells) if (shellVisibility.has(sh.componentId))
+      for (const f of sh.faces) visibleFaces.add(f);
+  }
+  // 重建 base 几何，只保留可见面（非索引，逐面顶点，颜色按问题着色）
+  const problemFaces = new Set();
+  for (const iss of r.issues) for (const f of iss.faces) problemFaces.add(f);
+  const pos = [], col = [], keptFaces = [];
+  const cOk = new THREE.Color(0x38c8d6), cErr = new THREE.Color(0xef6a5f);
+  for (let fi = 0; fi < r.faces.length; fi++) {
+    if (!visibleFaces.has(fi)) continue;
+    const c = problemFaces.has(fi) ? cErr : cOk;
+    for (const vi of r.faces[fi]) {
+      pos.push(...r.vertices[vi]);
+      col.push(c.r, c.g, c.b);
+    }
+    keptFaces.push(fi);
+  }
+  faceGeometry.dispose();
+  faceGeometry = new THREE.BufferGeometry();
+  faceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  faceGeometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  baseMesh.geometry = faceGeometry;
+  baseMesh.userData.keptFaces = keptFaces;
+  // 重建线框
+  edgeLines.geometry.dispose();
+  edgeLines.geometry = new THREE.EdgesGeometry(faceGeometry, 1);
+  // 重建点选层，只含可见面（隔离模式下不会选中隐藏壳）
+  overlayMesh.geometry.dispose();
+  const op = [], oi = [], omap = [];
+  for (const fi of keptFaces) {
+    const b = op.length / 3;
+    for (const vi of r.faces[fi]) op.push(...r.vertices[vi]);
+    oi.push(b, b + 1, b + 2);
+    omap.push(fi);
+  }
+  const og = new THREE.BufferGeometry();
+  og.setAttribute('position', new THREE.Float32BufferAttribute(op, 3));
+  og.setIndex(oi); og.computeVertexNormals();
+  overlayMesh.geometry = og;
+  overlayMesh.userData.faceMap = omap;
+  // 选中面若仍可见则刷新高亮，否则清除
+  if (selectedFace >= 0 && visibleFaces.has(selectedFace)) updateHighlight(selectedFace);
+  else updateHighlight(-1);
+  // 法线显隐
+  normalGroup.children.forEach((arrow, fi) => {
+    arrow.visible = showNormals && visibleFaces.has(fi);
+  });
+}
+
+function updateHighlight(fi) {
+  if (!highlightMesh) return;
+  highlightMesh.geometry.dispose();
+  const g = new THREE.BufferGeometry();
+  if (fi >= 0 && currentResult) {
+    const pos = [];
+    for (const vi of currentResult.faces[fi]) pos.push(...currentResult.vertices[vi]);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex([0, 1, 2]); g.computeVertexNormals();
+  }
+  highlightMesh.geometry = g;
+}
+
+// ---------------- 点选 ----------------
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+renderer.domElement.addEventListener('click', (ev) => {
+  if (!overlayMesh) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObject(overlayMesh);
+  if (!hits.length) { selectFace(-1); return; }
+  const fi = overlayMesh.userData.faceMap[hits[0].faceIndex];
+  selectFace(fi);
+});
+
+function selectFace(fi) {
+  selectedFace = fi;
+  updateHighlight(fi);
+  renderFaceDetail(fi);
+  // 同步高亮问题清单
+  document.querySelectorAll('.issue-item').forEach((el) =>
+    el.classList.toggle('active', fi >= 0 && el.dataset.faces.split(',').map(Number).includes(fi)));
+}
+
+function renderFaceDetail(fi) {
+  const box = $('faceDetail');
+  if (fi < 0 || !currentResult) { box.innerHTML = '<div class="empty">在 3D 视图或问题清单中点选面</div>'; return; }
+  const r = currentResult;
+  const f0 = r.faces[fi];
+  const f1 = r.correctedFaces ? r.correctedFaces[fi] : null;
+  const n0 = r.normals[fi];
+  // 修正后法线：若翻面则取反
+  const n1 = f1 && (f1[1] !== f0[1] || f1[2] !== f0[2])
+    ? n0.map((x) => (-BigInt(x)).toString()) : n0;
+  box.innerHTML = `
+    <div class="normal-row"><span class="normal-tag">面号</span>
+      <span class="normal-val mono">${fi} &nbsp; 顶点 [${f0.join(', ')}]</span></div>
+    <div class="normal-row"><span class="normal-tag">所属壳</span>
+      <span class="normal-val mono">分量 ${componentOfFace(r, fi)}</span></div>
+    <div class="normal-row"><span class="normal-tag before">修正前</span>
+      <span class="normal-val">(${n0.join(', ')})</span></div>
+    <div class="normal-row"><span class="normal-tag after">修正后</span>
+      <span class="normal-val">(${f1 ? n1.join(', ') : '非法网格不交付'})</span></div>
+    <div class="normal-row"><span class="normal-tag">索引</span>
+      <span class="normal-val">前 [${f0.join(', ')}]${f1 ? ` → 后 [${f1.join(', ')}]` : ''}</span></div>`;
+}
+
+// ---------------- UI 填充 ----------------
+function renderAll(result, fileName, isFallback) {
+  currentResult = result; currentFileName = fileName;
+  $('fileStatus').textContent = `${fileName} · ${result.stats.vertexCount} 顶点 / ${result.stats.faceCount} 面` +
+    (isFallback ? '（当前文件非法，显示上一份可用结果）' : '');
+  // 结论
+  $('verdictBox').innerHTML = result.legal
+    ? '<div class="verdict legal">✓ 合法封闭网格，绕序已统一并交替定向</div>'
+    : `<div class="verdict illegal">✗ 发现 ${result.issues.filter(i => i.severity === 'error').length} 个问题，不交付修复索引</div>`;
+  // 统计
+  const s = result.stats;
+  $('statGrid').innerHTML = `
+    <div class="stat"><div class="label">三角形</div><div class="value">${s.faceCount}</div></div>
+    <div class="stat"><div class="label">壳层</div><div class="value">${s.shellCount}</div></div>
+    <div class="stat"><div class="label">问题</div><div class="value ${result.legal ? 'ok' : 'err'}">${result.issues.length}</div></div>
+    <div class="stat"><div class="label">总 6V</div><div class="value">${result.totalVolume6 ?? '—'}</div></div>
+    <div class="stat" style="grid-column:1/3"><div class="label">六倍带符号体积（十进制）</div>
+      <div class="value mono" style="font-size:14px">${result.totalVolume6 ?? '非法，不计算'}</div></div>`;
+  // 包含树
+  const roots = result.shells.filter((sh) => sh.parent === null);
+  const renderNode = (sh, depth) => {
+    const sign = sh.volume6 ? (BigInt(sh.volume6) > 0n ? 'sign-pos' : 'sign-neg') : '';
+    return `<div class="node" style="padding-left:${depth * 16}px">
+      壳${sh.componentId} <span class="badge depth${sh.depth % 2}">深${sh.depth}</span>
+      ${sh.valid ? `<span class="${sign}">6V=${sh.volume6}</span>` : '<span class="badge bad">无效</span>'}
+      </div>` +
+      result.shells.filter((x) => x.parent === sh.componentId).map((x) => renderNode(x, depth + 1)).join('');
+  };
+  $('treeBox').innerHTML = roots.length ? roots.map((r) => renderNode(r, 0)).join('') : '<div class="empty">—</div>';
+  // 壳列表
+  $('shellList').innerHTML = result.shells.map((sh) => `
+    <div class="shell-item" data-cid="${sh.componentId}">
+      <div class="shell-row">
+        <span class="shell-name">壳 ${sh.componentId}</span>
+        <span class="badge depth${sh.depth % 2}">深 ${sh.depth}</span>
+        ${sh.valid ? '' : '<span class="badge bad">无效</span>'}
+      </div>
+      <div class="msg mono" style="font-size:11px;color:var(--fg-faint);margin-top:4px">
+        ${sh.faces.length} 面 · 6V ${sh.volume6 ?? '—'}</div>
+    </div>`).join('');
+  document.querySelectorAll('.shell-item').forEach((el) => el.addEventListener('click', () => {
+    const cid = Number(el.dataset.cid);
+    document.querySelectorAll('.shell-item').forEach((x) => x.classList.remove('active'));
+    el.classList.add('active');
+    shellVisibility = new Set([cid]);
+    applyShellVisibility(); buildNormals(currentResult);
+  }));
+  // 问题清单
+  $('issueList').innerHTML = result.issues.length ? result.issues.map((iss, i) => `
+    <div class="issue-item" data-idx="${i}" data-faces="${iss.faces.join(',')}">
+      <div class="itype ${iss.type}">${issueLabel(iss.type)}</div>
+      <div class="msg">${iss.message}</div>
+      <div class="faces">面 [${iss.faces.join(', ')}]${iss.vertices.length ? ` · 点 [${iss.vertices.join(', ')}]` : ''}</div>
+    </div>`).join('') : '<div class="empty">无问题</div>';
+  document.querySelectorAll('.issue-item').forEach((el) => el.addEventListener('click', () => {
+    const fi = Number(el.dataset.faces.split(',')[0]);
+    selectFace(fi);
+    controls.target.copy(faceCentroid(currentResult, fi));
+    controls.update();
+  }));
+  // 导出按钮
+  $('exportBtn').disabled = !result.legal;
+  $('perfInfo').textContent = `精相对 ${s.pairTests} 对 · 总耗时 ${s.timingsMs.total}ms（BVH ${s.timingsMs.bvh}ms）`;
+  renderMesh(result);
+  selectFace(-1);
+}
+
+function issueLabel(t) {
+  return ({
+    'boundary-edge': '开口边', 'non-manifold-edge': '非流形边', 'bad-fan': '面扇异常',
+    'degenerate': '退化面', 'duplicate-face': '重复面', 'non-orientable': '不可定向',
+    'bad-contact': '非拓扑接触', 'coplanar-overlap': '共面重叠', 'crossing': '穿越相交',
+    'zero-volume-shell': '零体积壳', 'containment-ambiguous': '包含歧义',
+  })[t] || t;
+}
+function faceCentroid(r, fi) {
+  const f = r.faces[fi];
+  const v = f.map((i) => r.vertices[i]);
+  return new THREE.Vector3(
+    (v[0][0] + v[1][0] + v[2][0]) / 3,
+    (v[0][1] + v[1][1] + v[2][1]) / 3,
+    (v[0][2] + v[1][2] + v[2][2]) / 3);
+}
+
+// ---------------- 文件载入（坏文件保留上一份可用结果） ----------------
+async function handleFile(file) {
+  const text = await file.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch (e) { toast('JSON 解析失败：' + e.message, 'err'); return; }
+  let result;
+  try {
+    result = auditMesh(data.vertices, data.faces);
+  } catch (e) {
+    toast('输入非法：' + e.message + '。保留上一份可用结果。', 'err');
+    if (lastValid) renderAll(lastValid, lastValid.__fileName, true);
+    return;
+  }
+  if (result.legal) {
+    result.__fileName = file.name;
+    lastValid = result;
+    await idbPut('result', JSON.stringify({ result, fileName: file.name }));
+    $('persistInfo').textContent = '已保存上一份可用结果';
+    renderAll(result, file.name, false);
+    toast('审计完成：合法网格');
+  } else {
+    toast(`审计完成：${result.issues.filter(i => i.severity === 'error').length} 个问题。非法几何只交付定位报告，不交付修复索引。`, 'warn');
+    renderAll(result, file.name, false); // 非法也展示定位，但不覆盖 lastValid
+  }
+}
+
+function toast(msg, kind = '') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4200);
+}
+
+// ---------------- 事件绑定 ----------------
+$('pickFile').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+$('exportBtn').addEventListener('click', () => {
+  if (!currentResult?.legal) return;
+  const out = { vertices: currentResult.vertices, faces: currentResult.correctedFaces };
+  const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = currentFileName.replace(/\.json$/i, '') + '.fixed.json';
+  a.click(); URL.revokeObjectURL(a.href);
+});
+$('showAll').addEventListener('click', () => {
+  shellVisibility = null;
+  document.querySelectorAll('.shell-item').forEach((x) => x.classList.remove('active'));
+  applyShellVisibility(); buildNormals(currentResult);
+});
+$('toggleNormals').addEventListener('click', (e) => {
+  showNormals = !showNormals;
+  e.target.textContent = '法线: ' + (showNormals ? '开' : '关');
+  normalGroup.visible = showNormals;
+  applyShellVisibility();
+});
+$('toggleCompare').addEventListener('click', () => {
+  if (!currentResult?.correctedFaces) { toast('非法网格无修正绕序可比', 'warn'); return; }
+  showCorrected = !showCorrected;
+  buildNormals(currentResult);
+  normalGroup.visible = showNormals;
+});
+$('resetCam').addEventListener('click', () => fitCamera());
+$('loadSample').addEventListener('click', async () => {
+  try {
+    const resp = await fetch('./samples/shell-parity.json');
+    const data = await resp.json();
+    const result = auditMesh(data.vertices, data.faces);
+    if (result.legal) { result.__fileName = 'shell-parity.json'; lastValid = result; }
+    renderAll(result, 'shell-parity.json', false);
+  } catch (e) { toast('样例载入失败：' + e.message, 'err'); }
+});
+// 拖放
+const dh = $('dropHint');
+document.body.addEventListener('dragover', (e) => { e.preventDefault(); dh.classList.add('drag'); });
+document.body.addEventListener('dragleave', () => dh.classList.remove('drag'));
+document.body.addEventListener('drop', (e) => {
+  e.preventDefault(); dh.classList.remove('drag');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+// 主题
+$('themeToggle').addEventListener('click', () => {
+  const root = document.documentElement;
+  const cur = root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  root.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+});
+
+// 启动：恢复上一份可用结果
+(async function boot() {
+  resize();
+  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  const saved = await idbGet('result');
+  if (saved) {
+    try {
+      const { result, fileName } = JSON.parse(saved);
+      lastValid = result;
+      renderAll(result, fileName, false);
+      $('persistInfo').textContent = '已恢复上一份可用结果';
+    } catch { /* 损坏数据忽略 */ }
+  }
+})();
+</script>
+</body>
+</html>
