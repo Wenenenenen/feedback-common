@@ -1,0 +1,15 @@
+{
+  "name": "stabilized-aperture-desk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "展品短片平移防抖与裁幅工作台",
+  "scripts": {
+    "test": "node tools/test-core.js",
+    "serve": "node tools/serve.mjs",
+    "reference": "python3 tools/reference.py",
+    "check-kkt": "python3 tools/verify-kkt.py",
+    "browser-test": "node tools/browser-test.mjs",
+    "bench": "node tools/bench.js"
+  }
+}

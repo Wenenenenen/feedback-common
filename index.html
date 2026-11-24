@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>稳像裁幅台</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <rect x="2.5" y="4" width="11" height="12" rx="1.6" stroke="#fff" stroke-width="1.5"/>
+        <rect x="7.5" y="7" width="10" height="9" rx="1.6" stroke="#fff" stroke-width="1.5" opacity=".7"/>
+        <path d="M5 8h3M5 12h3" stroke="#fff" stroke-width="1.3" stroke-linecap="round" opacity=".55"/>
+      </svg>
+    </span>
+    <div>
+      <h1>稳像裁幅台</h1>
+      <p>展品短片 · 平移防抖与指定画幅交付</p>
+    </div>
+  </div>
+  <div class="topmeta">
+    <div class="chips" id="topChips">
+      <span class="chip"><span class="k">帧</span><b id="chipFrames">—</b></span>
+      <span class="chip"><span class="k">镜头</span><b id="chipShots">—</b></span>
+      <span class="chip"><span class="k">画幅</span><b id="chipCrop">—</b></span>
+    </div>
+    <span class="status" id="statusPill" data-state="idle"><span class="dot"></span><span id="statusText">未载入</span></span>
+    <button class="btn ghost small" id="recomputeBtn" disabled title="按当前参数重算">重新计算</button>
+    <button class="btn ghost small" id="exportBtn" disabled>导出 ZIP</button>
+    <div class="theme" role="group" aria-label="主题">
+      <button type="button" data-t="light" aria-pressed="false">浅</button>
+      <button type="button" data-t="dark" aria-pressed="false">深</button>
+      <button type="button" data-t="auto" aria-pressed="true">自动</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="banner" class="banner" role="alert"></div>
+
+  <div class="layout">
+    <!-- ------------------------------------------------------- controls -->
+    <aside>
+      <div class="card">
+        <h3 class="sect">数据 <span class="aside" id="dsAside">未载入</span></h3>
+        <div class="row wrap" style="margin-bottom:10px">
+          <button class="btn primary small" id="loadSampleBtn">载入示例</button>
+          <button class="btn small" id="importBtn">导入 ZIP…</button>
+          <input type="file" id="zipInput" accept=".zip,application/zip" class="sr-only">
+        </div>
+        <div class="dsgrid" id="dsGrid">
+          <span class="k">尺寸</span><span class="v" id="dsSize">—</span>
+          <span class="k">帧数</span><span class="v" id="dsFrames">—</span>
+          <span class="k">累计像素</span><span class="v" id="dsPixels">—</span>
+          <span class="k">镜头</span><span class="v" id="dsShots">—</span>
+          <span class="k">离群门限</span><span class="v" id="dsThreshold">—</span>
+          <span class="k">切点 / 弱帧</span><span class="v" id="dsCuts">—</span>
+        </div>
+        <p class="note" id="dsNote">拖入 <code>ZIP</code> 或点「导入」。</p>
+      </div>
+
+      <div class="card">
+        <h3 class="sect">画幅与代价 <span class="aside" id="fitAside">—</span></h3>
+        <div class="stack">
+          <div class="field">
+            <label for="cropW">输出宽 × 高（像素）</label>
+            <div class="pair">
+              <input class="input num" id="cropW" type="number" min="1" step="1" value="56" aria-label="输出宽">
+              <input class="input num" id="cropH" type="number" min="1" step="1" value="36" aria-label="输出高">
+            </div>
+            <span class="hint" id="cropHint">源整幅为上限</span>
+          </div>
+
+          <div class="field">
+            <label for="marginRange">安全边距 <span class="hint" id="marginVal" style="margin-left:auto"></span></label>
+            <div class="row">
+              <input type="range" id="marginRange" min="0" max="12" step="1" value="1" aria-label="安全边距">
+              <input class="input num" id="marginNum" type="number" min="0" step="1" value="1" aria-label="安全边距数值">
+            </div>
+            <span class="hint" id="boundHint">每轴允许范围 —</span>
+          </div>
+
+          <div class="field">
+            <label for="lambdaRange">平滑强度 λ <span class="hint" id="lambdaVal" style="margin-left:auto"></span></label>
+            <div class="row">
+              <input type="range" id="lambdaRange" min="0" max="10000" step="1" value="25" aria-label="平滑强度">
+              <input class="input num" id="lambdaNum" type="number" min="0" max="10000" step="1" value="25" aria-label="平滑强度数值">
+            </div>
+            <div class="chip-row" id="lambdaPresets">
+              <button class="chip-btn" data-lambda="0" aria-pressed="false">0</button>
+              <button class="chip-btn" data-lambda="1" aria-pressed="false">1</button>
+              <button class="chip-btn" data-lambda="25" aria-pressed="true">25</button>
+              <button class="chip-btn" data-lambda="100" aria-pressed="false">100</button>
+              <button class="chip-btn" data-lambda="1000" aria-pressed="false">1000</button>
+              <button class="chip-btn" data-lambda="10000" aria-pressed="false">10000</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>固定帧 <span class="hint" style="margin-left:auto" id="pinCount"></span></label>
+            <div class="pin-list" id="pinList"><div class="empty">未固定任何帧</div></div>
+            <div class="row" style="margin-top:2px">
+              <button class="btn small" id="addPinBtn">固定当前帧</button>
+              <button class="btn small ghost" id="clearPinsBtn">清除全部</button>
+            </div>
+          </div>
+
+          <div class="spread" style="margin-top:2px">
+            <button class="btn primary" id="fitBtn">按当前参数重算</button>
+            <button class="btn ghost small" id="resetBtn" title="恢复上次成功的参数">恢复上次可行</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="sect">镜头 <span class="aside" id="shotAside"></span></h3>
+        <div class="tablewrap">
+          <table class="data" id="shotTable">
+            <thead><tr><th>镜头</th><th>帧范围</th><th>帧数</th><th>|u| max x/y</th><th>贴界</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="sect">导出预览 <span class="aside" id="jsonAside">—</span></h3>
+        <pre class="mono" id="jsonPreview" style="margin:0;font-size:11px;max-height:150px;overflow:auto;color:var(--fg-muted)">—</pre>
+        <p class="note">ZIP 内含 <code>frames/NNNN.ppm</code>（零起四位帧号）与 <code>offsets.json</code>。</p>
+      </div>
+    </aside>
+
+    <!-- ------------------------------------------------------- viewer -->
+    <section>
+      <div class="viewer">
+        <div class="panel" id="rawPanel">
+          <div class="head"><b>原图</b><span id="rawMeta">—</span><span class="spacer"></span>
+            <span class="legend" style="margin:0;gap:10px">
+              <span class="item" style="color:var(--accent-2)"><span class="dot"></span>取样框</span>
+              <span class="item" style="color:var(--fg-faint)"><span class="line" style="background:var(--fg-faint)"></span>居中基准</span>
+            </span>
+          </div>
+          <div class="canvas-wrap" id="rawWrap"><canvas id="rawCanvas" width="64" height="40"></canvas>
+            <span class="overlay-hint" id="rawHint">点击选帧</span>
+          </div>
+        </div>
+
+        <div class="panel" id="cropPanel">
+          <div class="head"><b>裁后</b><span id="cropMeta">—</span><span class="spacer"></span>
+            <span class="legend" style="margin:0"><span class="item" id="cropSizeTag">—</span></span>
+          </div>
+          <div class="canvas-wrap contain" id="cropWrap"><canvas id="cropCanvas" width="56" height="36"></canvas>
+            <span class="overlay-hint" id="cropHint">指针悬停查看取样</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card chart-card" id="chartCard">
+        <div class="chart-head">
+          <h3>轨迹与偏移</h3>
+          <span class="meta" id="chartMeta">—</span>
+          <div class="legend">
+            <span class="item" style="color:var(--series-1)"><span class="line"></span>轨迹 p</span>
+            <span class="item" style="color:var(--series-2)"><span class="line"></span>偏移 u</span>
+            <span class="item" style="color:var(--series-3)"><span class="line"></span>残差 q = p−u</span>
+            <span class="item" style="color:var(--bound)"><span class="dash"></span>允许界</span>
+            <span class="item" style="color:var(--pin)"><span class="dot"></span>固定帧</span>
+          </div>
+          <div class="chip-row" style="margin-left:auto">
+            <button class="chip-btn" data-axis="x" aria-pressed="true">横轴 X</button>
+            <button class="chip-btn" data-axis="y" aria-pressed="false">纵轴 Y</button>
+          </div>
+        </div>
+        <div class="chart-shell" id="chartShell">
+          <canvas id="trajChart" height="240"></canvas>
+          <div class="tooltip" id="chartTip"></div>
+        </div>
+        <div class="frame-strip">
+          <button class="btn small icon" id="prevBtn" title="上一帧（←）">←</button>
+          <input type="range" id="frameRange" class="track" min="0" max="5" step="1" value="0" aria-label="当前帧">
+          <button class="btn small icon" id="nextBtn" title="下一帧（→）">→</button>
+          <span class="label">帧 <b id="frameLabel">0</b> / <span id="frameTotal">6</span></span>
+          <button class="btn small" id="playBtn" title="播放 / 暂停（空格）">▶</button>
+          <label class="row" style="gap:5px;font-size:12px;color:var(--fg-muted)">
+            <input type="checkbox" id="inspectToggle" checked> 检视
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="sect">像素检视 <span class="aside" id="inspState">在裁后图上移动指针</span></h3>
+        <div class="inspector">
+          <div class="insp-kv" id="inspKv">
+            <span class="k">输出坐标</span><span class="v" id="inspOut">—</span>
+            <span class="k">源坐标</span><span class="v" id="inspSrc">—</span>
+            <span class="k">双线性权重</span><span class="v" id="inspWeights">—</span>
+            <span class="k">取样点</span><span class="v" id="inspPoint">—</span>
+            <span class="k">输出 RGB</span><span class="v" id="inspRgb">—</span>
+          </div>
+          <div class="field" style="align-items:flex-end;gap:6px">
+            <canvas id="inspCanvas" class="zoom-canvas" width="180" height="180" aria-label="源图邻域放大"></canvas>
+            <span class="hint">源图 9×9 邻域（红框为取样点）</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="sr-only" id="liveRegion" aria-live="polite"></div>
+
+<script src="js/sample-data.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/pnm.js"></script>
+<script src="js/tracking.js"></script>
+<script src="js/qp.js"></script>
+<script src="js/fit.js"></script>
+<script src="js/crop.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

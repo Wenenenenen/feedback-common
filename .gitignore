@@ -15,3 +15,5 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 演示用大样本与导入/导出产物
+test-output/
