@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>互易辐射度校验台 · Reciprocal Radiosity Desk</title>
+  <style>
+    :root {
+      --bg: #eef2f6;
+      --surface: #ffffff;
+      --surface-2: #f7f9fc;
+      --ink: #182230;
+      --muted: #667085;
+      --faint: #98a2b3;
+      --line: #d9e1ec;
+      --line-strong: #c4cfdd;
+      --accent: #b45309;
+      --accent-strong: #92400e;
+      --accent-soft: #fef3c7;
+      --ok: #087443;
+      --ok-soft: #dcfae6;
+      --bad: #b42318;
+      --bad-soft: #fee4e2;
+      --busy: #175cd3;
+      --busy-soft: #dbeafe;
+      --canvas-bg: #dfe6ef;
+      --sel: #1d4ed8;
+      --shadow: 0 10px 30px rgba(16, 24, 40, .08);
+      --font-body: "Aptos", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --font-display: "Aptos Display", "Bahnschrift", "Segoe UI", "PingFang SC", system-ui, sans-serif;
+      --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f141b;
+        --surface: #171e29;
+        --surface-2: #1d2634;
+        --ink: #e7edf5;
+        --muted: #9aa8bc;
+        --faint: #66758a;
+        --line: #2b3647;
+        --line-strong: #3b485d;
+        --accent: #f59e0b;
+        --accent-strong: #fbbf24;
+        --accent-soft: #3a2a12;
+        --ok: #4ade80;
+        --ok-soft: #14331f;
+        --bad: #fb7185;
+        --bad-soft: #3b171c;
+        --busy: #7cb0ff;
+        --busy-soft: #172554;
+        --canvas-bg: #0a0f16;
+        --sel: #8ab4ff;
+        --shadow: 0 18px 45px rgba(0, 0, 0, .28);
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      background:
+        radial-gradient(circle at 12% -10%, rgba(180, 83, 9, .10), transparent 34rem),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.5;
+      padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(22px) max(16px, env(safe-area-inset-left));
+    }
+
+    button, input { font: inherit; }
+
+    .wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px 14px;
+      flex-wrap: wrap;
+      padding: 4px 2px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .brand-mark {
+      width: 38px; height: 38px; border-radius: 11px;
+      display: grid; place-items: center;
+      background: linear-gradient(145deg, var(--accent), #ea580c);
+      color: white; font-family: var(--font-display); font-weight: 800;
+      box-shadow: 0 8px 20px rgba(180, 83, 9, .25);
+      flex: none;
+    }
+    h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(18px, 2vw, 23px);
+      line-height: 1.15;
+      letter-spacing: -.015em;
+    }
+    .subtitle { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      min-height: 26px;
+      padding: 3px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 88%, transparent);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .pill::before {
+      content: ""; width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor; opacity: .75;
+    }
+    .pill[data-state="ok"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: var(--ok-soft); }
+    .pill[data-state="busy"] { color: var(--busy); border-color: color-mix(in srgb, var(--busy) 40%, var(--line)); background: var(--busy-soft); }
+    .pill[data-state="bad"] { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); background: var(--bad-soft); }
+    #versionPill { font-family: var(--font-mono); }
+
+    .toolbar { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .btn {
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: var(--ink);
+      border-radius: 9px;
+      padding: 7px 12px;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: border-color .15s ease, color .15s ease, background .15s ease, transform .05s ease;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); }
+    .btn:active:not(:disabled) { transform: translateY(1px); }
+    .btn:focus-visible, input:focus-visible, summary:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--busy) 28%, transparent);
+      outline-offset: 1px;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 7px 18px rgba(180, 83, 9, .18);
+    }
+    .btn.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+    .btn.tiny { padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; }
+    .btn.danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+
+    #errPanel {
+      border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--line));
+      border-left-width: 5px;
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+    }
+    #errTitle { margin: 0 0 7px; color: var(--bad); font-size: 13.5px; font-family: var(--font-display); }
+    #errList {
+      margin: 0; padding-left: 20px; max-height: 190px; overflow: auto;
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.65;
+    }
+
+    main.layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 410px);
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 1020px) {
+      main.layout { grid-template-columns: 1fr; }
+      .toolbar { margin-left: 0; }
+    }
+
+    .stage-shell {
+      position: relative;
+      height: min(74vh, 780px);
+      min-height: 430px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--canvas-bg);
+      box-shadow: var(--shadow);
+    }
+    @media (max-width: 1020px) { .stage-shell { height: 56vh; min-height: 360px; } }
+
+    #stage { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: manipulation; }
+
+    .stage-hint {
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      padding: 5px 9px;
+      border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 84%, transparent);
+      color: var(--muted);
+      font-size: 12px;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+    .stage-legend {
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      display: flex;
+      gap: 7px;
+      pointer-events: none;
+    }
+    .legend-chip {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 82%, transparent);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11.5px;
+      backdrop-filter: blur(8px);
+    }
+
+    aside.inspector { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+    .card {
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 13px 14px;
+      min-width: 0;
+      box-shadow: 0 4px 16px rgba(16, 24, 40, .045);
+    }
+    .card h2 {
+      margin: 0 0 9px;
+      font-family: var(--font-display);
+      font-size: 12.5px;
+      font-weight: 750;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 13px; margin: 0; }
+    .kv dt { color: var(--muted); white-space: nowrap; font-size: 12.5px; }
+    .kv dd {
+      margin: 0;
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .good { color: var(--ok) !important; }
+    .bad { color: var(--bad) !important; }
+    .muted { color: var(--muted); }
+
+    .channel-row { display: flex; align-items: center; gap: 7px; margin: 6px 0; }
+    .chan-row > label, .channel-row > label {
+      width: auto;
+      min-width: 42px;
+      flex: none;
+      white-space: nowrap;
+      color: var(--muted); font-size: 12px; font-weight: 700;
+      font-family: var(--font-display);
+    }
+    .channel-row input[type="number"] {
+      width: 72px;
+      padding: 4px 7px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: var(--surface-2);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+    }
+    .steady-values {
+      min-width: 0;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .swatch {
+      width: 38px; height: 23px; flex: none;
+      margin-left: auto;
+      border-radius: 6px;
+      border: 1px solid var(--line-strong);
+      background: #111;
+    }
+
+    .table-wrap { max-height: 230px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; }
+    table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th {
+      position: sticky; top: 0; z-index: 1;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-family: var(--font-display);
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    td:nth-child(1), th:nth-child(1), td:nth-child(2), th:nth-child(2) { text-align: left; }
+    td input[type="number"] {
+      width: 78px; padding: 3px 6px;
+      border: 1px solid var(--line-strong); border-radius: 6px;
+      background: var(--surface-2); color: var(--ink);
+      font-family: var(--font-mono); font-size: 12px; text-align: right;
+    }
+    .empty-row { text-align: center !important; color: var(--faint); padding: 13px 8px !important; }
+
+    .add-edge { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 9px; }
+    .add-edge input {
+      width: 88px; padding: 5px 8px;
+      border: 1px solid var(--line-strong); border-radius: 7px;
+      background: var(--surface-2); color: var(--ink);
+      font-family: var(--font-mono); font-size: 12px;
+    }
+    .add-edge .hint-label { color: var(--muted); font-size: 12.5px; }
+
+    .empty-note { margin: 0; color: var(--muted); font-size: 13px; }
+
+    details.rules {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      padding: 11px 15px;
+    }
+    details.rules summary { cursor: pointer; font-family: var(--font-display); font-weight: 750; color: var(--muted); }
+    .rules-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+    @media (max-width: 900px) { .rules-grid { grid-template-columns: 1fr; } }
+    .rule { border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px; background: var(--surface-2); }
+    .rule code { display: block; color: var(--accent-strong); font-family: var(--font-mono); font-size: 12.5px; overflow-x: auto; }
+    .rule p { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">R</div>
+        <div>
+          <h1>互易辐射度校验台</h1>
+          <p class="subtitle">Reciprocal radiosity correction · 3-channel steady state · version-safe export</p>
+        </div>
+      </div>
+
+      <div class="toolbar" role="toolbar" aria-label="数据与导出操作">
+        <span class="pill" id="versionPill">v0</span>
+        <span class="pill" id="statusPill" data-state="busy">初始化…</span>
+        <button class="btn" id="btnImport" type="button">导入 JSON</button>
+        <button class="btn" id="btnSample" type="button">载入样例</button>
+        <button class="btn" id="btnRing" type="button">环形样例 4096</button>
+        <button class="btn" id="btnUndo" type="button" disabled>撤销</button>
+        <button class="btn primary" id="btnExport" type="button" disabled>导出结果</button>
+        <input id="fileInput" type="file" accept=".json,application/json" hidden>
+      </div>
+    </header>
+
+    <section id="errPanel" role="alert" hidden>
+      <h2 id="errTitle">导入被拒绝，已保留原结果</h2>
+      <ul id="errList"></ul>
+    </section>
+
+    <main class="layout">
+      <section class="stage-shell">
+        <canvas id="stage" aria-label="补丁辐射度预览画布"></canvas>
+        <div class="stage-legend" aria-hidden="true">
+          <span class="legend-chip">线性 RGB → 显示色调映射</span>
+          <span class="legend-chip">橙线：选中补丁的校正连接</span>
+        </div>
+        <div class="stage-hint" id="stageHint">点击补丁查看原始边、校正边和稳态值；也可拖入 JSON</div>
+      </section>
+
+      <aside class="inspector">
+        <section class="card">
+          <h2>求解与版本</h2>
+          <dl class="kv" id="solveInfo"></dl>
+        </section>
+
+        <section class="card" id="patchCard">
+          <h2>选中补丁</h2>
+          <div id="patchInfo"><p class="empty-note">尚未选中补丁。</p></div>
+        </section>
+
+        <section class="card" id="rawCard" hidden>
+          <h2>原始有向边</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>方向</th><th>对端</th><th>F</th><th>操作</th></tr></thead>
+              <tbody id="rawEdges"></tbody>
+            </table>
+          </div>
+          <div class="add-edge">
+            <span class="hint-label" for="addTarget">从当前补丁新增 →</span>
+            <input id="addTarget" type="number" min="0" step="1" inputmode="numeric" placeholder="目标编号">
+            <input id="addF" type="number" min="0" max="1" step="0.01" inputmode="decimal" placeholder="F 0–1">
+            <button class="btn tiny" id="btnAddEdge" type="button">添加边</button>
+          </div>
+        </section>
+
+        <section class="card" id="corrCard" hidden>
+          <h2>校正后边</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>对端</th><th>G</th><th>G/A<sub>i</sub></th></tr></thead>
+              <tbody id="corrEdges"></tbody>
+            </table>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <details class="rules" open>
+      <summary>校正与求解规则</summary>
+      <div class="rules-grid">
+        <div class="rule">
+          <code>H(i,j) = (AᵢFᵢⱼ + AⱼFⱼᵢ) / 2</code>
+          <p>两个方向先按面积化为同一交换量；缺失方向按 0 参与平均，避免直接平均可见比例在墙角制造假亮。</p>
+        </div>
+        <div class="rule">
+          <code>s(i)=max(1,ΣH/Aᵢ), G=H/max(sᵢ,sⱼ)</code>
+          <p>过量行由包内两端共同缩放。分母对两端相同，因此 G 保持互易，且每块总出射比例不超过 1。</p>
+        </div>
+        <div class="rule">
+          <code>Lᵢ = Eᵢ + ρᵢ Σⱼ (Gᵢⱼ/Aᵢ)Lⱼ</code>
+          <p>RGB 三通道独立进行多次反弹稳态求解；以无穷范数残差界保证导出每通道绝对误差不超过 1e-6。</p>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <script src="radiosity-core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

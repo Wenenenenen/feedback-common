@@ -1,0 +1,15 @@
+{
+  "name": "reciprocal-radiosity-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "展厅补丁互易辐射度校正、三通道稳态求解与版本安全导出工作台",
+  "scripts": {
+    "test": "node test/run-tests.js && node test/smoke-page.js",
+    "test:core": "node test/run-tests.js",
+    "test:smoke": "node test/smoke-page.js",
+    "serve": "python3 -m http.server 28238"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
