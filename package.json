@@ -1,0 +1,19 @@
+{
+  "name": "dual-period-echo-depth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "双周期回波折深核对台：两路折叠回波逐像素反解全部最少回波深度组，按深度排层并导出 16 位 P5",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test test/core.test.js test/fuzz.test.js",
+    "test:page": "node tools/page-test.js",
+    "test:acceptance": "node tools/acceptance-test.js",
+    "sample": "node tools/gen-sample-data.js",
+    "serve": "node tools/serve.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["echo", "periodic", "crt", "depth", "pgm", "canvas"],
+  "license": "MIT"
+}

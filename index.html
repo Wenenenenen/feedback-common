@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>双周期回波折深核对台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+        <path d="M3 7h26M3 16h26M3 25h26" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".28"/>
+        <path d="M7 7v18M16 7v18M25 7v18" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".28"/>
+        <path d="M7 25 7 25" />
+        <circle cx="7" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <circle cx="16" cy="7" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M9.4 14.2 13.6 8.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="25" cy="16" r="3" fill="currentColor" opacity=".16"/>
+        <circle cx="25" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+      </svg>
+      <div>
+        <h1>双周期回波折深核对台</h1>
+        <p>两路折叠回波 · 逐像素全解 · 按深度排层</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="record-pill" id="recordPill" title="当前记录尺寸">12 × 10 · 周期 5 / 7</span>
+      <button class="btn btn-icon" id="themeBtn" type="button" aria-label="切换深浅主题" title="切换深浅主题">
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+          <path d="M10 3.2a6.8 6.8 0 1 0 0 13.6A6.8 6.8 0 0 0 10 3.2Zm0 0v13.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M10 3.2a6.8 6.8 0 0 1 0 13.6Z" fill="currentColor" opacity=".85"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- 控制栏 -->
+    <div class="col controls">
+      <section class="card" aria-labelledby="ioTitle">
+        <div class="card-hd"><h2 id="ioTitle">记录</h2></div>
+        <div class="card-bd">
+          <label class="drop" id="drop">
+            <input type="file" id="fileInput" accept=".json,application/json">
+            <strong>导入 echo-depth.json</strong>
+            或拖拽到此处 · 替换当前记录
+          </label>
+          <div class="preset-row">
+            <button class="btn btn-sm" id="loadSample" type="button">载入样例</button>
+            <button class="btn btn-sm" id="loadBig" type="button">满额图压测</button>
+          </div>
+          <dl class="facts" id="facts">
+            <dt>尺寸</dt><dd id="fSize">12 × 10</dd>
+            <dt>周期</dt><dd id="fPeriod">5 / 7</dd>
+            <dt>上限</dt><dd id="fMax">34</dd>
+            <dt>像素</dt><dd id="fCount">120</dd>
+          </dl>
+          <div class="hint" id="ioHint">样例为 12×10、周期 5/7、上限 34。</div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="paramTitle">
+        <div class="card-hd"><h2 id="paramTitle">折叠参数</h2><span class="hint">改动即重算</span></div>
+        <div class="card-bd">
+          <div class="field">
+            <label for="maxDepth">深度上限 maxDepth</label>
+            <div class="row">
+              <input type="number" id="maxDepth" min="0" step="1" inputmode="numeric">
+              <span class="mod" id="maxDepthHint">0..34</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="off0">第 1 路偏移（周期 <span id="p0Label">5</span>）</label>
+            <div class="row">
+              <input type="number" id="off0" step="1" inputmode="numeric">
+              <span class="mod" id="off0Mod">mod 5 = 0</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="off1">第 2 路偏移（周期 <span id="p1Label">7</span>）</label>
+            <div class="row">
+              <input type="number" id="off1" step="1" inputmode="numeric">
+              <span class="mod" id="off1Mod">mod 7 = 0</span>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-sm" id="resetParams" type="button">恢复记录参数</button>
+          </div>
+          <div class="progress" id="progress" hidden><div id="progressBar"></div></div>
+          <div class="hint" id="paramHint">上限与偏移只影响求解，不改写导入记录。</div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="statTitle">
+        <div class="card-hd"><h2 id="statTitle">解状态分布</h2><span class="hint" id="timing">—</span></div>
+        <div class="card-bd">
+          <div class="stack" id="stack" role="img" aria-label="各解状态像素占比"></div>
+          <ul class="counts" id="counts"></ul>
+        </div>
+      </section>
+    </div>
+
+    <!-- 主体 -->
+    <div class="col stage">
+      <section class="card map-card" aria-labelledby="mapTitle">
+        <div class="map-hd">
+          <h2 id="mapTitle" class="hint" style="color:var(--ink);font-weight:600;font-size:12.5px">状态图</h2>
+          <div class="seg" role="tablist" aria-label="视图">
+            <button role="tab" id="viewState" aria-selected="true" aria-controls="mapWrap" tabindex="0" type="button">解状态</button>
+            <button role="tab" id="viewLayer0" aria-selected="false" aria-controls="mapWrap" tabindex="-1" type="button">层 1 深度</button>
+            <button role="tab" id="viewLayer1" aria-selected="false" aria-controls="mapWrap" tabindex="-1" type="button">层 2 深度</button>
+          </div>
+          <div class="map-meta">
+            <span id="mapZoom">1 px = 1 px</span>
+            <span id="mapCursor">—</span>
+          </div>
+        </div>
+        <div class="map-wrap" id="mapWrap">
+          <div class="map-empty" id="mapEmpty" hidden>没有可显示的记录。</div>
+          <canvas id="map" tabindex="0" role="img" aria-label="逐像素解状态图，点击查看详情"></canvas>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <div class="map-foot">
+          <ul class="legend" id="legend"></ul>
+          <div class="depth-scale" id="depthScale" hidden>
+            <span>浅</span><span class="ramp" aria-hidden="true"></span><span>深</span>
+            <span id="depthRange">0 – 34</span>
+          </div>
+        </div>
+        <p class="map-help" id="mapHelp">点击像素查看两路槽读数与全部回波深度组。方向键移动，回车锁定。</p>
+      </section>
+
+      <section class="card card-errors" id="errorCard" hidden aria-labelledby="errTitle">
+        <div class="card-hd">
+          <h2 id="errTitle">记录未通过校验</h2>
+          <span class="hint" id="errCount"></span>
+        </div>
+        <div class="card-bd">
+          <p class="kept" id="keptNote"></p>
+          <ol class="errors" id="errorList"></ol>
+        </div>
+      </section>
+
+      <div class="stage-pair">
+        <section class="card" aria-labelledby="ruleTitle">
+          <div class="card-hd"><h2 id="ruleTitle">约定速查</h2></div>
+          <div class="card-bd">
+            <dl class="rules">
+              <dt>折叠</dt>
+              <dd>第 j 路槽 = (深度 + 偏移<sub>j</sub>) mod 周期<sub>j</sub>，取非负余数。</dd>
+              <dt>读数</dt>
+              <dd>槽内读数 = 落进该槽的回波幅度和。未列槽恰为 0，null 不约束，255 表示至少 255，其余须精确相等。</dd>
+              <dt>回波</dt>
+              <dd>每像素 0–2 个，深度互异且 ≤ 上限，幅度 1–1023。先取回波数最少的全部解。</dd>
+              <dt>排层</dt>
+              <dd>每组解按深度升序，第 1 层总是较近的回波。</dd>
+              <dt>导出</dt>
+              <dd>深度组唯一时写深度 + 1；无回波、多组深度、无解与缺层写 0。</dd>
+            </dl>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 检查器 -->
+    <div class="col inspector">
+      <section class="card inspector-card" aria-label="像素检查">
+        <div class="pix-hd">
+          <div style="min-width:0">
+            <div class="pix-coord" id="pixCoord">像素 (0, 0)</div>
+            <div class="pix-sub" id="pixSub">第 1 个 · index 0</div>
+          </div>
+          <span class="pill" id="pixStatus"><span class="dot"></span><span id="pixStatusText">—</span></span>
+        </div>
+        <div class="insp-body" id="inspBody">
+          <div class="empty-note" id="inspEmpty">点击左侧状态图中的像素查看细节。</div>
+          <div id="inspContent" hidden></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="expTitle">
+        <div class="card-hd"><h2 id="expTitle">导出</h2></div>
+        <div class="card-bd">
+          <div class="export-line" id="exportNote">两层深度导出 16 位 P5，仅唯一深度组写入深度 + 1。</div>
+          <div class="btn-row">
+            <button class="btn btn-sm" id="exportL0" type="button">层 1 · PGM</button>
+            <button class="btn btn-sm" id="exportL1" type="button">层 2 · PGM</button>
+            <button class="btn btn-sm" id="exportJson" type="button">状态 JSON</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="src/core.js"></script>
+<script src="src/sample-data.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
