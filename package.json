@@ -1,0 +1,16 @@
+{
+  "name": "swept-harmonic-meter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "扫频谐波分离台 · 展厅音箱直达响应与 2–4 次谐波逐通道测量",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:fast": "node --test tests/core.test.mjs",
+    "serve": "python3 -I -m http.server 8123",
+    "build:worker": "node tools/build-worker.mjs",
+    "make:case": "node tools/make-case.mjs --out tests/fixtures/cases",
+    "perf": "node tests/perf.mjs",
+    "crosscheck": "python3 -I tests/crosscheck.py"
+  }
+}

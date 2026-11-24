@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>扫频谐波分离台</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">
+      <svg width="21" height="21" viewBox="0 0 21 21" fill="none">
+        <path d="M2.5 6.2c1.8 0 1.8 8.6 3.6 8.6s1.8-8.6 3.6-8.6 1.8 8.6 3.6 8.6 1.8-8.6 3.6-8.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="2.5" cy="6.2" r="1.1" fill="#fff" opacity=".55"/>
+        <circle cx="16.9" cy="14.8" r="1.1" fill="#fff" opacity=".55"/>
+      </svg>
+    </span>
+    <div>
+      <h1>扫频谐波分离台</h1>
+      <p>展厅音箱 · 直达响应与 2–4 次谐波逐通道分开</p>
+    </div>
+  </div>
+
+  <div class="topmeta">
+    <div class="chips" id="topChips">
+      <span class="chip"><span class="k">采集</span><b id="chipCh">—</b></span>
+      <span class="chip"><span class="k">N</span><b id="chipN">—</b></span>
+      <span class="chip"><span class="k">M</span><b id="chipM">—</b></span>
+      <span class="chip"><span class="k">定标 D</span><b id="chipD">—</b></span>
+      <span class="chip"><span class="k">用时</span><b id="chipT">—</b></span>
+    </div>
+    <span class="status" id="statusPill" data-tone="idle"><span class="dot"></span><span id="statusText">未载入</span></span>
+    <div class="theme" role="group" aria-label="主题">
+      <button type="button" data-t="light" aria-pressed="false">浅</button>
+      <button type="button" data-t="dark" aria-pressed="false">深</button>
+      <button type="button" data-t="auto" aria-pressed="true">自动</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="rail">
+
+    <section class="card" id="cardImport">
+      <h2><span class="step">01</span>导入测量包</h2>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="导入 sweep-harmonic-cases.zip 或两个 WAV">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="big">导入 sweep-harmonic-cases.zip</div>
+        <div class="small">或拖放至此处 · 包内含扫频 WAV、采集 WAV 与 setup.json</div>
+        <input type="file" id="fileInput" accept=".zip,application/zip" hidden>
+      </div>
+      <div class="btnrow">
+        <button class="btn small" id="btnSample" title="从 samples/ 读取示例包（需通过 HTTP 打开）">载入示例包</button>
+        <button class="btn small" id="btnPickSweep">单独选扫频 WAV</button>
+        <button class="btn small" id="btnPickCapture">单独选采集 WAV</button>
+        <input type="file" id="sweepInput" accept=".wav,audio/wav" hidden>
+        <input type="file" id="captureInput" accept=".wav,audio/wav" hidden>
+      </div>
+      <div class="casebox" id="caseInfo">
+        <div class="row"><span>扫频</span><span id="ciSweep">—</span></div>
+        <div class="row"><span>采集</span><span id="ciCapture">—</span></div>
+        <div class="row"><span>f0 → f1</span><span id="ciFreq">—</span></div>
+      </div>
+      <div class="err" id="importErr" hidden>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M7 4v3.6M7 9.6v.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span id="importErrText"></span>
+      </div>
+    </section>
+
+    <section class="card" id="cardParams">
+      <h2><span class="step">02</span>参数</h2>
+
+      <div class="fieldset">
+        <div class="field-row">
+          <label for="inF0">扫频 f0 <span class="unit">Hz</span></label>
+          <input class="num" id="inF0" type="number" step="1" inputmode="numeric">
+        </div>
+        <div class="field-row">
+          <label for="inF1">扫频 f1 <span class="unit">Hz</span></label>
+          <input class="num" id="inF1" type="number" step="1" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="fieldset">
+        <div class="field-block">
+          <label>搜索区间 lo – hi <span class="unit">相对 N-1 的帧偏移，闭区间</span></label>
+          <div class="pair">
+            <input class="num" id="inLo" type="number" step="1" inputmode="numeric" aria-label="搜索起点 lo">
+            <span class="sep">–</span>
+            <input class="num" id="inHi" type="number" step="1" inputmode="numeric" aria-label="搜索终点 hi">
+          </div>
+        </div>
+        <div class="field-block">
+          <label>窗宽 pre / post <span class="unit">帧，窗为 [中心-pre, 中心+post)</span></label>
+          <div class="pair">
+            <input class="num" id="inPre" type="number" step="1" inputmode="numeric" aria-label="窗左宽 pre">
+            <span class="sep">/</span>
+            <input class="num" id="inPost" type="number" step="1" inputmode="numeric" aria-label="窗右宽 post">
+          </div>
+        </div>
+      </div>
+
+      <div class="btnrow">
+        <button class="btn small" id="btnReset">恢复包内参数</button>
+      </div>
+
+      <div class="err" id="paramErr" hidden>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M7 4v3.6M7 9.6v.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span id="paramErrText"></span>
+      </div>
+
+      <p class="hint">搜索区间是相对反卷积帧 <code>N-1</code> 的偏移，闭区间，零点取区间内 |c| 最大的帧（同高取较早帧）。窗为 <code>[中心-pre, 中心+post)</code>，窗外取零。</p>
+    </section>
+
+    <section class="card" id="cardChannels">
+      <h2><span class="step">03</span>通道零点</h2>
+      <div id="chList" class="casebox"><p class="hint">载入采集后逐通道显示。</p></div>
+      <p class="hint">每个采集通道独立定位与定标，左右测点不合并峰值、不共用增益。</p>
+    </section>
+
+  </aside>
+
+  <div class="main">
+
+    <section class="section" id="secOverview">
+      <header>
+        <h2>反卷积总览</h2>
+        <span class="sub" id="ovSub">原反卷积时间轴 · 搜索区间与四个响应窗</span>
+        <div class="spacer"></div>
+        <div class="toolbar">
+          <button type="button" class="toggle" id="tgScale" aria-pressed="true" title="切换幅度刻度">dB</button>
+          <button type="button" class="toggle" id="tgSearch" aria-pressed="true">搜索区间</button>
+        </div>
+      </header>
+      <div class="legend" id="ovLegend">
+        <span class="item"><span class="key" style="background:var(--accent)"></span>|c| 包络</span>
+        <span class="item"><span class="key box" style="background:var(--accent)"></span>搜索区间</span>
+        <span class="item"><span class="key" style="background:var(--series-2)"></span>零点</span>
+        <span class="item"><span class="key box" style="background:var(--series-1)"></span>q1</span>
+        <span class="item"><span class="key box" style="background:var(--series-2)"></span>q2</span>
+        <span class="item"><span class="key box" style="background:var(--series-3)"></span>q3</span>
+        <span class="item"><span class="key box" style="background:var(--series-4)"></span>q4</span>
+      </div>
+      <div class="chartwrap">
+        <canvas id="cvOverview" height="220" aria-label="反卷积总览图"></canvas>
+        <div class="tip" id="tipOverview"></div>
+      </div>
+      <div class="footnote" id="ovFoot">载入后显示每条采集通道的定标反卷积幅度。</div>
+    </section>
+
+    <section class="section" id="secWindows">
+      <header>
+        <h2>响应窗</h2>
+        <div class="tabs" id="chTabs" role="tablist" aria-label="采集通道"></div>
+        <div class="spacer"></div>
+        <span class="sub" id="winSub"></span>
+      </header>
+      <div class="conflictbar" id="conflictBar" hidden>
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 2 13.5 12.5h-12L7.5 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M7.5 6v3M7.5 10.7v.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <span id="conflictText"></span>
+      </div>
+      <div class="summary" id="winSummary"></div>
+      <div class="wgrid" id="wgrid"></div>
+      <p class="footnote" id="winFoot"></p>
+    </section>
+
+    <section class="section" id="secCompare">
+      <header>
+        <h2>通道对照</h2>
+        <span class="sub">逐通道独立结果，不跨通道合并</span>
+        <div class="spacer"></div>
+        <button type="button" class="toggle" id="tgCompareUnit" aria-pressed="false" title="能量显示为 dB">能量 dB</button>
+      </header>
+      <div class="body flush">
+        <table class="ctable" id="compareTable">
+          <thead>
+            <tr>
+              <th scope="col">通道</th>
+              <th scope="col">零点帧 (rel)</th>
+              <th scope="col">零点值</th>
+              <th scope="col">1 阶能量</th>
+              <th scope="col">2 阶能量</th>
+              <th scope="col">3 阶能量</th>
+              <th scope="col">4 阶能量</th>
+              <th scope="col">冲突</th>
+            </tr>
+          </thead>
+          <tbody id="compareBody">
+            <tr><td colspan="8" class="ctempty">载入后显示</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="footnote">零点帧为原反卷积帧号（括号内为相对 N-1 的偏移）；能量为窗内样本平方和。</p>
+    </section>
+
+    <section class="section" id="secExport">
+      <header>
+        <h2>导出</h2>
+        <span class="sub">48 kHz · 单声道 · float32 WAV · 不归一化、不限幅</span>
+        <div class="spacer"></div>
+        <button type="button" class="btn small" id="btnExportJson">导出结果 JSON</button>
+        <button type="button" class="btn primary" id="btnExportAll" disabled>全部导出 ZIP</button>
+      </header>
+      <div class="exlist" id="exList">
+        <div class="empty">载入并完成定位后可导出各通道各阶的窗内波形。</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <header><h2>计算口径</h2></header>
+      <div class="footnote">
+        <p><b>逆扫频</b> <code>g[j] = x[N-1-j]·exp(-j·ln(f1/f0)/N)</code>，0 ≤ j &lt; N。<b>定标</b> <code>D = (x∗g)[N-1] = Σ x[k]²·exp(-(N-1-k)·ln(f1/f0)/N)</code>；D 为 0 报错。每条采集 <code>c = (y∗g)/D</code>，∗ 为线性卷积（实数 FFT 实现，长度取 ≥ M+N-1 的 2 的幂）。</p>
+        <p><b>零点</b>取搜索区间 <code>[N-1+lo, N-1+hi]</code> 内 |c| 最大帧，同高取较早帧。<b>第 q 阶中心</b> <code>zero - floor(N·ln(q)/ln(f1/f0) + 0.5)</code>，q = 1…4。<b>窗</b> <code>[中心-pre, 中心+post)</code>，超出反卷积索引的样本取零；两窗半开区间有公共样本即为冲突。<b>能量</b>为窗内样本平方和。</p>
+        <p>导出的浮点 WAV 按窗口样本原样写出（含补零），采样率 48 kHz，单声道，float32，不峰值归一、不限幅。</p>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script src="src/js/fft.js"></script>
+<script src="src/js/wav.js"></script>
+<script src="src/js/zip.js"></script>
+<script src="src/js/core.js"></script>
+<script src="src/js/chart.js"></script>
+<script src="src/js/worker-source.js"></script>
+<script src="src/js/app.js"></script>
+</body>
+</html>
