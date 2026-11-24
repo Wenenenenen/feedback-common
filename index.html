@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>共边分色图矢量化台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">◩</div>
+      <div>
+        <h1>共边分色图矢量化台</h1>
+        <p>标签栅格 → 唯一分界边 → 拓扑安全简化 → 共边 JSON / 无描边 SVG</p>
+      </div>
+    </div>
+    <div class="topbar-meta" id="perf-pill" aria-live="polite">等待导入</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="card">
+        <h2>1. 导入标签栅格</h2>
+        <div class="button-row">
+          <button id="load-sample" class="btn primary" type="button">载入示例</button>
+          <button id="load-stripe" class="btn" type="button">满额条纹图</button>
+          <label class="btn file-btn">
+            选择 JSON
+            <input id="file-input" type="file" accept=".json,application/json" hidden />
+          </label>
+        </div>
+        <div class="hint">“满额条纹图”为 512×112、整行轮换 1/2，含 58,080 条单位边；面积上限 0 时应简化为 337 条边。</div>
+        <div id="data-status" class="status-text">支持 samples/label-outline.json；0 为透明，图外按 0 处理。</div>
+        <div id="error-box" class="error-box" hidden></div>
+      </section>
+
+      <section class="card">
+        <h2>2. 简化阈值</h2>
+        <label class="field-line" for="area-limit">
+          <span>三角形双面积上限</span>
+          <input id="area-limit" type="number" min="0" step="1" value="0" inputmode="numeric" />
+        </label>
+        <input id="area-range" type="range" min="0" max="262144" step="1" value="0" aria-label="三角形双面积上限滑块" />
+        <div class="hint">只删除当前恰有两条边、两侧编号一致且方向接续的点；阈值为 0 时边界集合不变。</div>
+        <dl class="stats" id="stats-panel">
+          <div><dt>栅格</dt><dd id="stat-grid">—</dd></div>
+          <div><dt>单位边</dt><dd id="stat-unit">—</dd></div>
+          <div><dt>简化后直线边</dt><dd id="stat-edges">—</dd></div>
+          <div><dt>共边链 / 面环</dt><dd id="stat-chains">—</dd></div>
+          <div><dt>删除顶点</dt><dd id="stat-removed">—</dd></div>
+          <div><dt>计算耗时</dt><dd id="stat-time">—</dd></div>
+          <div><dt>阈值 0 保真</dt><dd id="stat-zero">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>3. 改格与历史</h2>
+        <div class="tool-group" role="group" aria-label="画布工具">
+          <button id="tool-edit" class="btn tool" type="button" data-tool="edit">改格</button>
+          <button id="tool-inspect" class="btn tool is-active" type="button" data-tool="inspect">点边查看</button>
+          <button id="tool-pan" class="btn tool" type="button" data-tool="pan">平移</button>
+        </div>
+
+        <label class="field-line" for="paint-label">
+          <span>画笔标签（0=透明）</span>
+          <span class="label-input-wrap">
+            <input id="paint-label" type="number" min="0" step="1" value="3" />
+            <i id="paint-swatch" class="swatch" aria-hidden="true"></i>
+          </span>
+        </label>
+
+        <form id="cell-form" class="cell-form">
+          <div class="cell-inputs">
+            <label>行 r<input id="cell-row" type="number" min="0" value="4" /></label>
+            <label>列 c<input id="cell-col" type="number" min="0" value="3" /></label>
+            <label>新编号<input id="cell-value" type="number" min="0" value="0" /></label>
+          </div>
+          <button id="apply-cell" class="btn" type="submit">修改这一格</button>
+        </form>
+
+        <div class="button-row">
+          <button id="undo-btn" class="btn" type="button" disabled>↶ 撤销</button>
+          <button id="redo-btn" class="btn" type="button" disabled>↷ 重做</button>
+        </div>
+        <div class="hint">快捷键：Ctrl/⌘+Z 撤销，Ctrl/⌘+Shift+Z 或 Ctrl+Y 重做。拖动画布可连续改格，一次手势合并为一条历史。</div>
+      </section>
+
+      <section class="card">
+        <h2>4. 点边信息</h2>
+        <div id="edge-info" class="edge-info empty">切换到“点边查看”后，点击任意共边。</div>
+        <div id="edge-detail" class="edge-detail" hidden>
+          <div class="detail-row"><span>边 ID</span><b id="edge-id"></b></div>
+          <div class="detail-row"><span>左侧编号（小）</span><b><i class="swatch tiny" id="edge-left-swatch"></i><span id="edge-left"></span></b></div>
+          <div class="detail-row"><span>右侧编号（大）</span><b><i class="swatch tiny" id="edge-right-swatch"></i><span id="edge-right"></span></b></div>
+          <div class="detail-row"><span>起点</span><b id="edge-start"></b></div>
+          <div class="detail-row"><span>终点</span><b id="edge-end"></b></div>
+          <div class="detail-row"><span>长度 / 双面积</span><b id="edge-extra"></b></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>5. 导出</h2>
+        <div class="button-row">
+          <button id="export-json" class="btn primary" type="button" disabled>导出共边 JSON</button>
+          <button id="export-svg" class="btn primary" type="button" disabled>导出无描边 SVG</button>
+        </div>
+        <div class="hint">JSON 含单位边、简化直线边与共边链；SVG 按标签填充，使用 evenodd 保留透明孔，不含 stroke。</div>
+      </section>
+
+      <section class="card legend-card">
+        <h2>图例</h2>
+        <div id="legend" class="legend"><span class="hint">尚未导入标签</span></div>
+      </section>
+    </aside>
+
+    <section class="canvas-panel">
+      <div class="canvas-toolbar">
+        <div id="coord-readout" class="coord-readout">坐标：—</div>
+        <div class="view-buttons">
+          <button id="zoom-out" class="btn icon" type="button" title="缩小">−</button>
+          <button id="zoom-in" class="btn icon" type="button" title="放大">＋</button>
+          <button id="zoom-fit" class="btn" type="button">适应</button>
+        </div>
+      </div>
+      <div id="canvas-wrap" class="canvas-wrap">
+        <canvas id="canvas" aria-label="标签栅格和共边矢量预览"></canvas>
+        <div id="canvas-empty" class="canvas-empty">
+          <div class="empty-inner">
+            <div class="empty-mark">▱</div>
+            <h2>导入 label-outline.json</h2>
+            <p>或点击左上角“载入示例”</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="src/sample-data.js"></script>
+  <script src="src/core.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>
