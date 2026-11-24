@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Quad Derivative Reel</title>
+<style>
+/* ---- design tokens: 工程示波器风格，深色优先的 GPU 调试台 ---- */
+:root {
+  --bg: #0e1116;
+  --bg-2: #151a22;
+  --panel: #1a212c;
+  --panel-2: #212a37;
+  --line: #2c3746;
+  --fg: #e6ebf2;
+  --fg-dim: #93a1b3;
+  --fg-faint: #61707f;
+  --accent: #4fd1c5;        /* 示波器青：正常/胜者 */
+  --accent-ink: #06231f;
+  --warn: #f0b455;          /* 舍弃/粗层 */
+  --bad: #ef6b6b;           /* 未覆盖/错误 */
+  --violet: #9d8cff;        /* 纹理/LOD */
+  --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --radius: 10px;
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f9; --bg-2: #eceff4; --panel: #ffffff; --panel-2: #f1f4f8;
+  --line: #d6dde6; --fg: #18222e; --fg-dim: #4d5c6d; --fg-faint: #81909f;
+  --accent: #0d9488; --accent-ink: #e6fffb; --warn: #b96e12; --bad: #c53b3b; --violet: #6451d6;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-weight: 650; text-wrap: balance; margin: 0; }
+code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; }
+button {
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+  border-radius: 8px; padding: 7px 14px; cursor: pointer; white-space: nowrap;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+[hidden] { display: none !important; }
+
+header.app {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding-block: 18px 14px; border-bottom: 1px solid var(--line);
+}
+header.app h1 { font-size: 19px; letter-spacing: .2px; }
+header.app .sub { color: var(--fg-dim); font-size: 12.5px; }
+header.app .spacer { flex: 1; }
+.theme-btn { padding: 5px 10px; font-size: 12px; }
+
+.controls {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  padding-block: 14px;
+}
+.controls .hint { color: var(--fg-faint); font-size: 12px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
+  font-size: 12px; color: var(--fg-dim); background: var(--panel);
+}
+.pill b { color: var(--fg); font-family: var(--mono); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot.ok { background: var(--accent); } .dot.err { background: var(--bad); } .dot.idle { background: var(--fg-faint); }
+
+main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; padding-bottom: 40px; }
+@media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px; min-width: 0;
+}
+.card h2 { font-size: 13px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .9px; margin-bottom: 10px; }
+
+.canvas-wrap { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+canvas#screen {
+  background: #05070a; border: 1px solid var(--line); border-radius: 6px;
+  image-rendering: pixelated; max-width: 100%; cursor: crosshair; touch-action: manipulation;
+}
+:root[data-theme="light"] canvas#screen { background: #dde3ea; }
+.canvas-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--fg-dim); width: 100%; }
+.canvas-meta .mono { color: var(--fg); }
+.checkline { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--fg-dim); }
+.checkline label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+#errors { border-color: var(--bad); margin-bottom: 14px; }
+#errors h2 { color: var(--bad); }
+#errors .stale-note {
+  background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid var(--warn);
+  color: var(--warn); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin-bottom: 10px;
+}
+.err-item { font-family: var(--mono); font-size: 12.5px; padding: 6px 9px; border-radius: 7px; background: var(--panel-2); margin-bottom: 6px; }
+.err-item .ln { color: var(--bad); font-weight: 700; }
+.err-item .sc { color: var(--violet); }
+
+#inspector .empty { color: var(--fg-faint); font-size: 12.5px; }
+.pixel-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.pixel-head .coord { font-family: var(--mono); font-size: 15px; font-weight: 650; }
+.quad-block { border: 1px solid var(--line); border-radius: 9px; padding: 10px; margin-top: 10px; background: var(--panel-2); }
+.quad-block.winner { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.quad-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; margin-bottom: 8px; }
+.quad-title .qid { font-family: var(--mono); font-weight: 650; }
+.chip { font-size: 11px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--fg-dim); }
+.chip.win { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
+.chip.disc { color: var(--warn); border-color: var(--warn); }
+.chip.off { color: var(--bad); border-color: var(--bad); }
+.lane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.lane {
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.5; background: var(--panel);
+  min-width: 0;
+}
+.lane .lt { display: flex; justify-content: space-between; color: var(--fg-faint); margin-bottom: 3px; font-family: var(--sans); font-size: 10.5px; }
+.lane.discarded { border-color: var(--warn); }
+.lane.uncovered { opacity: .62; }
+.lane.iswin { border-color: var(--accent); }
+.lane b { color: var(--fg); font-weight: 600; }
+.lane .lod { color: var(--violet); }
+.tex-detail { margin-top: 8px; font-family: var(--mono); font-size: 11px; border-top: 1px dashed var(--line); padding-top: 7px; color: var(--fg-dim); }
+.tex-detail .row { display: flex; justify-content: space-between; gap: 8px; }
+.tex-detail .row span:last-child { color: var(--fg); }
+
+details.help { margin-top: 16px; }
+details.help summary { cursor: pointer; color: var(--fg-dim); font-size: 12.5px; padding: 6px 0; }
+table.isa { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.isa th, table.isa td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+table.isa th { color: var(--fg-dim); font-weight: 600; background: var(--panel-2); }
+table.isa code { color: var(--accent); font-size: 11.5px; }
+.scrollx { overflow-x: auto; }
+
+#toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--accent); color: var(--fg);
+  border-radius: 9px; padding: 9px 16px; font-size: 12.5px; opacity: 0; pointer-events: none;
+  transition: opacity .18s ease; z-index: 50; max-width: calc(100vw - 40px);
+}
+#toast.show { opacity: 1; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>Quad Derivative Reel</h1>
+  <span class="sub">片元四格组导数 / LOD 校验台 · 细导数选层 · 周期双线性 · 深度选择</span>
+  <span class="spacer"></span>
+  <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+</header>
+
+<section class="controls">
+  <button class="primary" id="loadBtn" type="button">载入 JSON 包</button>
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+  <button id="sampleBtn" type="button">载入样例</button>
+  <button id="stressBtn" type="button">生成 25 万组压力包</button>
+  <button id="exportBtn" type="button" disabled>导出 RGBAf32</button>
+  <button id="pfmBtn" type="button" disabled>导出 PFM</button>
+  <span class="hint">f32 小端线性浮点，行优先左上原点；空像素全零，入屏片元 A=1</span>
+</section>
+
+<div id="statusline" style="padding-bottom:12px;display:flex;gap:10px;flex-wrap:wrap">
+  <span class="pill"><span class="dot idle" id="statusDot"></span><span id="statusText">尚未载入</span></span>
+  <span class="pill" hidden id="pillSize">画面 <b id="vSize">–</b></span>
+  <span class="pill" hidden id="pillQuad">四格组 <b id="vQuad">–</b></span>
+  <span class="pill" hidden id="pillInsn">指令 <b id="vInsn">–</b></span>
+  <span class="pill" hidden id="pillTime">引擎耗时 <b id="vTime">–</b></span>
+  <span class="pill" hidden id="pillMem">诊断日志 <b id="vMem">–</b></span>
+</div>
+
+<div class="card" id="errors" hidden>
+  <h2>校验未通过 — 保留上一次可导出的画面</h2>
+  <div class="stale-note" id="staleNote" hidden>当前画布仍是上一次成功运行的画面，未被本次坏包覆盖。</div>
+  <div id="errList"></div>
+</div>
+
+<main>
+  <section class="card">
+    <h2>画面（点像素检视四格）</h2>
+    <div class="canvas-wrap">
+      <canvas id="screen" width="64" height="64"></canvas>
+      <div class="canvas-meta">
+        <span>指针 <span class="mono" id="hoverCoord">–</span></span>
+        <span>该像素胜者 <span class="mono" id="hoverWin">–</span></span>
+        <span class="checkline">
+          <label><input type="checkbox" id="chkGrid" checked> 像素网格（小画面）</label>
+          <label><input type="checkbox" id="chkMark"> 标注舍弃/空像素</label>
+        </span>
+      </div>
+    </div>
+    <details class="help" open>
+      <summary>指令集与语义（包内规则的实现说明）</summary>
+      <div class="scrollx">
+      <table class="isa">
+        <thead><tr><th>指令</th><th>语义</th></tr></thead>
+        <tbody>
+          <tr><td><code>[常量,目标,数值]</code></td><td>四格全部写入数值常量；操作数也允许直接写数值。</td></tr>
+          <tr><td><code>[加/乘,目标,甲,乙]</code></td><td>逐格算术。</td></tr>
+          <tr><td><code>[细横,目标,源]</code></td><td>所在行右减左：LT/RT 用 RT−LT，LB/RB 用 RB−LB。</td></tr>
+          <tr><td><code>[细纵,目标,源]</code></td><td>所在列下减上：LT/LB 用 LB−LT，RT/RB 用 RB−RT。</td></tr>
+          <tr><td><code>[粗横,目标,源]</code></td><td>全四格用顶行 RT−LT。</td></tr>
+          <tr><td><code>[粗纵,目标,源]</code></td><td>全四格用左列 LB−LT。</td></tr>
+          <tr><td><code>[舍弃,甲,乙]</code></td><td>甲 &lt; 乙 时置该格舍弃标记；不写寄存器。</td></tr>
+          <tr><td><code>[纹理,目标,u,v,通道]</code></td><td>用当时坐标的<b>细导数</b>换算基底纹素，ρ=max(|∂x|,|∂y|)，LOD=clamp(log₂ρ,0,L)，零导数取第 0 层；双线性按 u·w−0.5、v·h−0.5 取周期邻点，层间线性混合。</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:12px;color:var(--fg-faint);margin:8px 0 0">未覆盖与已舍弃的辅助格继续执行全部指令、照常参与导数与舍弃判断；只有「已覆盖且未舍弃」的片元参与深度选择，深度小者胜，同深度取小 id（再同则按输入顺序/车道编号）。</p>
+    </details>
+  </section>
+
+  <aside class="card" id="inspector">
+    <h2>像素检视</h2>
+    <div class="empty" id="inspEmpty">点击画布上任意像素，查看覆盖它的全部四格组：各格 uv、舍弃标记、每条纹理指令的采样层（LOD）与最终胜者。</div>
+    <div id="inspBody" hidden></div>
+  </aside>
+</main>
+
+<div id="toast" role="status"></div>
+
+<script>
+// QuadEngine — 片元四格组 (quad) 导数/LOD 校验引擎
+// 纯计算，无 DOM 依赖；浏览器与 Node 通用 (UMD)。
+// 语义严格按 samples/quad-program.json 内 rules 实现。
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  root.QuadEngine = api;
+})(typeof self !== 'undefined' ? self : globalThis, function () {
+  'use strict';
+
+  const OP = {
+    CONST: 0, ADD: 1, MUL: 2,
+    FINE_X: 3, FINE_Y: 4, COARSE_X: 5, COARSE_Y: 6,
+    DISCARD: 7, TEXTURE: 8,
+  };
+  const OP_NAME = {
+    常量: OP.CONST, 加: OP.ADD, 乘: OP.MUL,
+    细横: OP.FINE_X, 细纵: OP.FINE_Y, 粗横: OP.COARSE_X, 粗纵: OP.COARSE_Y,
+    舍弃: OP.DISCARD, 纹理: OP.TEXTURE,
+  };
+
+  function isInt(v) { return typeof v === 'number' && Number.isInteger(v); }
+  function isFiniteNum(v) { return typeof v === 'number' && Number.isFinite(v); }
+  function mod(n, m) { return ((n % m) + m) % m; }
+
+  // ---------- 校验 + 构建扁平模型 ----------
+  // 返回 { errors:[{scope,line,message}], model }
+  function build(pkg) {
+    const errors = [];
+    const err = (scope, line, message) => errors.push({ scope, line: line || null, message });
+
+    if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
+      err('package', null, '包必须是 JSON 对象');
+      return { errors, model: null };
+    }
+    const W = pkg.width, H = pkg.height;
+    if (!isInt(W) || W < 1 || W > 512) err('package', null, 'width 须为 1..512 的整数');
+    if (!isInt(H) || H < 1 || H > 512) err('package', null, 'height 须为 1..512 的整数');
+    if (errors.length) return { errors, model: null };
+
+    // ---- quads ----
+    const quadsRaw = pkg.quads;
+    if (!Array.isArray(quadsRaw) || quadsRaw.length === 0) {
+      err('quads', null, 'quads 须为非空数组');
+      return { errors, model: null };
+    }
+    const N = quadsRaw.length;
+    const qx = new Int32Array(N), qy = new Int32Array(N), qid = new Float64Array(N);
+    const qmask = new Uint8Array(N), qz = new Float64Array(4 * N);
+    const qu = new Float64Array(4 * N), qv = new Float64Array(4 * N);
+    const seenKey = new Set();
+    for (let q = 0; q < N; q++) {
+      const qd = quadsRaw[q];
+      const tag = `quads[${q}]`;
+      if (!qd || typeof qd !== 'object' || Array.isArray(qd)) { err('quads', null, `${tag} 必须是对象`); continue; }
+      if (!isInt(qd.x) || qd.x < 0 || qd.x >= W || qd.x % 2 !== 0)
+        err('quads', null, `${tag}.x 须为 [0,${W - 1}] 内的偶数整数（越界格不得在 mask 置位）`);
+      if (!isInt(qd.y) || qd.y < 0 || qd.y >= H || qd.y % 2 !== 0)
+        err('quads', null, `${tag}.y 须为 [0,${H - 1}] 内的偶数整数（越界格不得在 mask 置位）`);
+      if (!isInt(qd.id)) err('quads', null, `${tag}.id 须为整数`);
+      if (!isInt(qd.mask) || qd.mask < 0 || qd.mask > 15) err('quads', null, `${tag}.mask 须为 0..15 的 4 位掩码`);
+      if (!Array.isArray(qd.z) || qd.z.length !== 4 || qd.z.some((z) => !isInt(z)))
+        err('quads', null, `${tag}.z 须为 4 个整数`);
+      if (!Array.isArray(qd.uv) || qd.uv.length !== 4 ||
+        qd.uv.some((p) => !Array.isArray(p) || p.length !== 2 || !isFiniteNum(p[0]) || !isFiniteNum(p[1])))
+        err('quads', null, `${tag}.uv 须为 4 对有限浮点`);
+      if (errors.length && errors[errors.length - 1].scope === 'quads') continue;
+
+      qx[q] = qd.x; qy[q] = qd.y; qid[q] = qd.id; qmask[q] = qd.mask;
+      for (let l = 0; l < 4; l++) {
+        qz[4 * q + l] = qd.z[l];
+        qu[4 * q + l] = qd.uv[l][0];
+        qv[4 * q + l] = qd.uv[l][1];
+      }
+      // 越界位不得置 1
+      const lanePos = [[qd.x, qd.y], [qd.x + 1, qd.y], [qd.x, qd.y + 1], [qd.x + 1, qd.y + 1]];
+      for (let l = 0; l < 4; l++) {
+        const [lx, ly] = lanePos[l];
+        const inb = lx >= 0 && lx < W && ly >= 0 && ly < H;
+        if (!inb && (qd.mask & (1 << l)))
+          err('quads', null, `${tag} 第 ${l} 格 (${lx},${ly}) 越界，mask 第 ${l} 位不得置 1`);
+      }
+      const key = qd.x + ',' + qd.y + ',' + qd.id;
+      if (seenKey.has(key)) err('quads', null, `${tag} 与更早的 quad 位置、id 完全相同 (${key})`);
+      seenKey.add(key);
+    }
+    if (errors.length) return { errors, model: null };
+
+    // ---- mips ----
+    const mipsRaw = pkg.mips;
+    if (!Array.isArray(mipsRaw) || mipsRaw.length === 0) {
+      err('mips', null, 'mips 须为非空数组');
+      return { errors, model: null };
+    }
+    const mips = [];
+    for (let i = 0; i < mipsRaw.length; i++) {
+      const m = mipsRaw[i];
+      const tag = `mips[${i}]`;
+      if (!m || typeof m !== 'object' || Array.isArray(m)) { err('mips', null, `${tag} 必须是对象`); break; }
+      if (!isInt(m.width) || m.width < 1 || !isInt(m.height) || m.height < 1) {
+        err('mips', null, `${tag}.width/height 须为正整数`); break;
+      }
+      if (i > 0) {
+        const pw = mips[i - 1].W, ph = mips[i - 1].H;
+        const ew = Math.max(1, Math.floor(pw / 2)), eh = Math.max(1, Math.floor(ph / 2));
+        if (m.width !== ew || m.height !== eh)
+          err('mips', null, `${tag} 尺寸应为 ${ew}×${eh}（前层各轴减半向下取整、至少 1）`);
+      }
+      const hasConst = m.rgb !== undefined, hasPix = m.pixels !== undefined;
+      if (hasConst === hasPix) { err('mips', null, `${tag} 须且仅须提供 rgb 常量或 pixels 之一`); break; }
+      const layer = { W: m.width, H: m.height, constRGB: null, pix: null };
+      if (hasConst) {
+        if (!Array.isArray(m.rgb) || m.rgb.length !== 3 || m.rgb.some((c) => !isFiniteNum(c))) {
+          err('mips', null, `${tag}.rgb 须为 3 个有限数`); break;
+        }
+        layer.constRGB = m.rgb.slice();
+      } else {
+        const need = m.width * m.height;
+        if (!Array.isArray(m.pixels) || m.pixels.length !== need ||
+          m.pixels.some((p) => !Array.isArray(p) || p.length !== 3 || p.some((c) => !isFiniteNum(c)))) {
+          err('mips', null, `${tag}.pixels 须为 ${need} 个 rgb 三元组（按行）`); break;
+        }
+        const flat = new Float64Array(need * 3);
+        for (let k = 0; k < need; k++) { flat[3 * k] = m.pixels[k][0]; flat[3 * k + 1] = m.pixels[k][1]; flat[3 * k + 2] = m.pixels[k][2]; }
+        layer.pix = flat;
+      }
+      mips.push(layer);
+    }
+    if (errors.length) return { errors, model: null };
+    if (mips[mips.length - 1].W !== 1 || mips[mips.length - 1].H !== 1)
+      err('mips', null, `mips 链必须完整到 1×1，末层实际为 ${mips[mips.length - 1].W}×${mips[mips.length - 1].H}`);
+    if (errors.length) return { errors, model: null };
+
+    // ---- program ----
+    const progRaw = pkg.program;
+    if (!Array.isArray(progRaw) || progRaw.length === 0) {
+      err('program', null, 'program 须为非空数组');
+      return { errors, model: null };
+    }
+    if (!Array.isArray(pkg.out) || pkg.out.length !== 3 || pkg.out.some((n) => typeof n !== 'string' || n.length === 0)) {
+      err('program', null, 'out 须为 3 个寄存器名');
+      return { errors, model: null };
+    }
+    const regIndex = new Map();
+    const regNames = [];
+    const regReg = (name) => {
+      let idx = regIndex.get(name);
+      if (idx === undefined) { idx = regNames.length; regIndex.set(name, idx); regNames.push(name); }
+      return idx;
+    };
+    const uIdx = regReg('u'), vIdx = regReg('v');
+    const written = new Set(['u', 'v']);
+    const operand = (raw, line, label) => {
+      if (isFiniteNum(raw)) return { reg: -1, lit: raw };
+      if (typeof raw === 'string' && raw.length > 0) {
+        if (!written.has(raw)) err('program', line, `第 ${line} 行：${label} 读取了尚未写入的寄存器 "${raw}"`);
+        return { reg: regReg(raw), lit: 0 };
+      }
+      err('program', line, `第 ${line} 行：${label} 须是寄存器名或数值常量`);
+      return { reg: -1, lit: 0 };
+    };
+    const ops = [];
+    for (let i = 0; i < progRaw.length; i++) {
+      const line = i + 1;
+      const ins = progRaw[i];
+      if (!Array.isArray(ins) || ins.length === 0 || typeof ins[0] !== 'string') {
+        err('program', line, `第 ${line} 行：无法识别的指令格式`);
+        continue;
+      }
+      const op = OP_NAME[ins[0]];
+      if (op === undefined) { err('program', line, `第 ${line} 行：未知操作码 "${ins[0]}"`); continue; }
+      const tgtName = ins[1];
+      if (typeof tgtName !== 'string' || tgtName.length === 0) {
+        err('program', line, `第 ${line} 行：目标寄存器名非法`);
+        continue;
+      }
+      const tgt = regReg(tgtName);
+      if (op === OP.CONST) {
+        if (ins.length !== 3) { err('program', line, `第 ${line} 行：常量指令需要 [常量,目标,数值]`); continue; }
+        if (!isFiniteNum(ins[2])) { err('program', line, `第 ${line} 行：常量必须是有限数`); continue; }
+        ops.push({ op, line, tgt, lit: ins[2] });
+      } else if (op === OP.ADD || op === OP.MUL) {
+        if (ins.length !== 4) { err('program', line, `第 ${line} 行：${ins[0]}指令需要 4 个元素`); continue; }
+        const a = operand(ins[2], line, '甲'), b = operand(ins[3], line, '乙');
+        ops.push({ op, line, tgt, a, b });
+      } else if (op >= OP.FINE_X && op <= OP.COARSE_Y) {
+        if (ins.length !== 3) { err('program', line, `第 ${line} 行：${ins[0]}指令需要 [${ins[0]},目标,源]`); continue; }
+        const s = operand(ins[2], line, '源');
+        ops.push({ op, line, tgt, s });
+      } else if (op === OP.DISCARD) {
+        if (ins.length !== 3) { err('program', line, `第 ${line} 行：舍弃指令需要 [舍弃,甲,乙]`); continue; }
+        const a = operand(ins[1], line, '甲'), b = operand(ins[2], line, '乙');
+        ops.push({ op, line, tgt: -1, a, b });
+      } else if (op === OP.TEXTURE) {
+        if (ins.length !== 5) { err('program', line, `第 ${line} 行：纹理指令需要 [纹理,目标,u寄存器,v寄存器,通道]`); continue; }
+        const cu = operand(ins[2], line, 'u 寄存器'), cv = operand(ins[3], line, 'v 寄存器');
+        if (!isInt(ins[4]) || ins[4] < 0 || ins[4] > 2) { err('program', line, `第 ${line} 行：颜色通道编号须为 0、1 或 2`); continue; }
+        ops.push({ op, line, tgt, cu, cv, ch: ins[4] });
+      }
+      written.add(tgtName);
+    }
+    if (errors.length) return { errors, model: null };
+    for (const name of pkg.out) {
+      if (!written.has(name)) err('program', null, `输出寄存器 "${name}" 从未被写入`);
+    }
+    if (errors.length) return { errors, model: null };
+
+    const model = {
+      W, H, N, qx, qy, qid, qmask, qz, qu, qv,
+      mips, ops, regNames, regIndex, uIdx, vIdx,
+      outIdx: pkg.out.map((n) => regIndex.get(n)),
+      outNames: pkg.out.slice(),
+      texCount: ops.reduce((c, o) => c + (o.op === OP.TEXTURE ? 1 : 0), 0),
+    };
+    return { errors, model };
+  }
+
+  // ---------- 执行 ----------
+  function run(model, opts) {
+    opts = opts || {};
+    const { W, H, N } = model;
+    const L = model.mips.length - 1;
+    const baseW = model.mips[0].W, baseH = model.mips[0].H;
+    const lanes = 4 * N;
+
+    // 寄存器文件
+    const regs = model.regNames.map(() => new Float64Array(lanes));
+    regs[model.uIdx].set(model.qu);
+    regs[model.vIdx].set(model.qv);
+    const discard = new Uint8Array(lanes);
+
+    // 覆盖关系：lane -> 像素；像素 -> 覆盖 lane 链表
+    const lanePixel = new Int32Array(lanes).fill(-1);
+    const covered = new Uint8Array(lanes);
+    const head = new Int32Array(W * H).fill(-1);
+    const next = new Int32Array(lanes).fill(-1);
+    for (let q = 0; q < N; q++) {
+      const x = model.qx[q], y = model.qy[q], mask = model.qmask[q];
+      const pos = [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]];
+      for (let l = 0; l < 4; l++) {
+        const g = 4 * q + l;
+        if (mask & (1 << l)) {
+          const p = pos[l][1] * W + pos[l][0];
+          covered[g] = 1; lanePixel[g] = p;
+          next[g] = head[p]; head[p] = g;
+        }
+      }
+    }
+
+    // 纹理诊断日志（每条纹理指令一组）
+    const logBudgetOk = lanes * model.texCount * 8 <= (opts.logByteBudget || 256 * 1024 * 1024);
+    const texLogs = [];
+
+    const texel = (layer, x, y, ch) => {
+      if (layer.constRGB !== null) return layer.constRGB[ch];
+      return layer.pix[3 * (y * layer.W + x) + ch];
+    };
+    const bilinear = (layer, u, v, ch) => {
+      const lw = layer.W, lh = layer.H;
+      const s = u * lw - 0.5, t = v * lh - 0.5;
+      const i0 = Math.floor(s), j0 = Math.floor(t);
+      const fx = s - i0, fy = t - j0;
+      const x0 = mod(i0, lw), x1 = mod(i0 + 1, lw);
+      const y0 = mod(j0, lh), y1 = mod(j0 + 1, lh);
+      const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy, w11 = fx * fy;
+      return texel(layer, x0, y0, ch) * w00 + texel(layer, x1, y0, ch) * w10
+        + texel(layer, x0, y1, ch) * w01 + texel(layer, x1, y1, ch) * w11;
+    };
+    const valOf = (opd, g) => (opd.reg === -1 ? opd.lit : regs[opd.reg][g]);
+
+    for (let oi = 0; oi < model.ops.length; oi++) {
+      const o = model.ops[oi];
+      const T = regs[o.tgt];
+      switch (o.op) {
+        case OP.CONST: {
+          for (let g = 0; g < lanes; g++) T[g] = o.lit;
+          break;
+        }
+        case OP.ADD: {
+          for (let g = 0; g < lanes; g++) T[g] = valOf(o.a, g) + valOf(o.b, g);
+          break;
+        }
+        case OP.MUL: {
+          for (let g = 0; g < lanes; g++) T[g] = valOf(o.a, g) * valOf(o.b, g);
+          break;
+        }
+        case OP.FINE_X: {
+          const S = regs[o.s.reg];
+          for (let q = 0; q < N; q++) {
+            const b = 4 * q;
+            const d0 = S[b + 1] - S[b], d2 = S[b + 3] - S[b + 2];
+            T[b] = d0; T[b + 1] = d0; T[b + 2] = d2; T[b + 3] = d2;
+          }
+          break;
+        }
+        case OP.FINE_Y: {
+          const S = regs[o.s.reg];
+          for (let q = 0; q < N; q++) {
+            const b = 4 * q;
+            const d0 = S[b + 2] - S[b], d1 = S[b + 3] - S[b + 1];
+            T[b] = d0; T[b + 1] = d1; T[b + 2] = d0; T[b + 3] = d1;
+          }
+          break;
+        }
+        case OP.COARSE_X: {
+          const S = regs[o.s.reg];
+          for (let q = 0; q < N; q++) {
+            const b = 4 * q;
+            const d = S[b + 1] - S[b];
+            T[b] = d; T[b + 1] = d; T[b + 2] = d; T[b + 3] = d;
+          }
+          break;
+        }
+        case OP.COARSE_Y: {
+          const S = regs[o.s.reg];
+          for (let q = 0; q < N; q++) {
+            const b = 4 * q;
+            const d = S[b + 2] - S[b];
+            T[b] = d; T[b + 1] = d; T[b + 2] = d; T[b + 3] = d;
+          }
+          break;
+        }
+        case OP.DISCARD: {
+          for (let g = 0; g < lanes; g++) {
+            if (valOf(o.a, g) < valOf(o.b, g)) discard[g] = 1;
+          }
+          break;
+        }
+        case OP.TEXTURE: {
+          const RU = regs[o.cu.reg], RV = regs[o.cv.reg];
+          const lodArr = new Float32Array(lanes);
+          const resArr = logBudgetOk ? new Float32Array(lanes) : null;
+          for (let q = 0; q < N; q++) {
+            const b = 4 * q;
+            // 坐标细导数（当时值）
+            const dux0 = RU[b + 1] - RU[b], dux2 = RU[b + 3] - RU[b + 2];
+            const duy0 = RU[b + 2] - RU[b], duy1 = RU[b + 3] - RU[b + 1];
+            const dvx0 = RV[b + 1] - RV[b], dvx2 = RV[b + 3] - RV[b + 2];
+            const dvy0 = RV[b + 2] - RV[b], dvy1 = RV[b + 3] - RV[b + 1];
+            const fdx = [dux0, dux0, dux2, dux2];
+            const fdy = [duy0, duy1, duy0, duy1];
+            const gdx = [dvx0, dvx0, dvx2, dvx2];
+            const gdy = [dvy0, dvy1, dvy0, dvy1];
+            for (let l = 0; l < 4; l++) {
+              const g = b + l;
+              // 换算为基底纹素
+              const ax = fdx[l] * baseW, ay = gdx[l] * baseH;
+              const bx = fdy[l] * baseW, by = gdy[l] * baseH;
+              const rho = Math.max(Math.hypot(ax, ay), Math.hypot(bx, by));
+              const lod = rho === 0 ? 0 : Math.min(Math.max(Math.log2(rho), 0), L);
+              lodArr[g] = lod;
+              const u = RU[g], v = RV[g];
+              let val;
+              const k = Math.floor(lod);
+              if (k >= L) {
+                val = bilinear(model.mips[L], u, v, o.ch);
+              } else {
+                const f = lod - k;
+                const c0 = bilinear(model.mips[k], u, v, o.ch);
+                const c1 = bilinear(model.mips[k + 1], u, v, o.ch);
+                val = (1 - f) * c0 + f * c1;
+              }
+              T[g] = val;
+              if (resArr) resArr[g] = val;
+            }
+          }
+          texLogs.push({ line: o.line, target: model.regNames[o.tgt], cu: model.regNames[o.cu.reg], cv: model.regNames[o.cv.reg], ch: o.ch, lod: lodArr, result: resArr, layers: model.mips.length });
+          break;
+        }
+      }
+    }
+
+    // ---------- 深度选择：仅已覆盖且未舍弃者，深度小优先，同深度取小 id ----------
+    const winLane = new Int32Array(W * H).fill(-1);
+    const winZ = new Float64Array(W * H).fill(Infinity);
+    const winId = new Float64Array(W * H).fill(Infinity);
+    for (let g = 0; g < lanes; g++) {
+      if (!covered[g] || discard[g]) continue;
+      const p = lanePixel[g];
+      const z = model.qz[g], id = model.qid[g >> 2];
+      const cur = winLane[p];
+      const better = cur === -1
+        || z < winZ[p]
+        || (z === winZ[p] && id < winId[p])
+        || (z === winZ[p] && id === winId[p] && g < cur); // 兜底：输入顺序 + 车道编号
+      if (better) {
+        winZ[p] = z; winId[p] = id; winLane[p] = g;
+      }
+    }
+
+    // ---------- 组装帧 ----------
+    const rgb = new Float64Array(W * H * 3);
+    const alpha = new Uint8Array(W * H);
+    const o0 = model.outIdx[0], o1 = model.outIdx[1], o2 = model.outIdx[2];
+    for (let p = 0; p < W * H; p++) {
+      const g = winLane[p];
+      if (g !== -1) {
+        rgb[3 * p] = regs[o0][g]; rgb[3 * p + 1] = regs[o1][g]; rgb[3 * p + 2] = regs[o2][g];
+        alpha[p] = 1;
+      }
+    }
+
+    return {
+      W, H, N, regs, regNames: model.regNames.slice(), discard, covered, lanePixel,
+      head, next, qx: model.qx, qy: model.qy, qid: model.qid, qmask: model.qmask, qz: model.qz,
+      texLogs, logBudgetOk,
+      frame: { rgb, alpha, winLane, winZ, winId },
+      outNames: model.outNames.slice(),
+    };
+  }
+
+  // 一站式入口：解析由调用方完成（便于把 JSON.parse 耗时单独计时）
+  function validateAndRun(pkg, opts) {
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const { errors, model } = build(pkg);
+    const tBuild = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+    if (errors.length) return { ok: false, errors, timings: { build: tBuild } };
+    const t1 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const state = run(model, opts);
+    const tRun = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t1;
+    return { ok: true, errors: [], model, state, timings: { build: tBuild, run: tRun, total: tBuild + tRun } };
+  }
+
+  // 导出线性浮点 RGBA（IEEE binary32，小端，行优先，左上原点）
+  function exportRGBAf32(state) {
+    const { W, H, frame } = state;
+    const buf = new ArrayBuffer(W * H * 16);
+    const f32 = new Float32Array(buf);
+    for (let p = 0; p < W * H; p++) {
+      f32[4 * p] = frame.rgb[3 * p];
+      f32[4 * p + 1] = frame.rgb[3 * p + 1];
+      f32[4 * p + 2] = frame.rgb[3 * p + 2];
+      f32[4 * p + 3] = frame.alpha[p];
+    }
+    return new Uint8Array(buf);
+  }
+
+  // PFM（RGB, f32 小端；alpha 不进 PFM）
+  function exportPFM(state) {
+    const { W, H, frame } = state;
+    const head = `PF\n${W} ${H}\n-1.0\n`;
+    const enc = new TextEncoder().encode(head);
+    const out = new Uint8Array(enc.length + W * H * 12);
+    out.set(enc, 0);
+    const dv = new DataView(out.buffer, out.byteOffset, out.byteLength);
+    let off = enc.length;
+    for (let y = 0; y < H; y++) { // PFM 行序自下而上
+      for (let x = 0; x < W; x++) {
+        const p = (H - 1 - y) * W + x;
+        dv.setFloat32(off, frame.rgb[3 * p], true);
+        dv.setFloat32(off + 4, frame.rgb[3 * p + 1], true);
+        dv.setFloat32(off + 8, frame.rgb[3 * p + 2], true);
+        off += 12;
+      }
+    }
+    return out;
+  }
+
+  return { build, run, validateAndRun, exportRGBAf32, exportPFM, OP, OP_NAME };
+});
+
+</script>
+<script>
+'use strict';
+const E = window.QuadEngine;
+const $ = (id) => document.getElementById(id);
+let lastGood = null;      // {pkg, state, model}
+let lastPkgName = '';
+let canvasScale = 8;
+let selected = null;      // {x,y}
+let stressSeed = 20261125;
+
+// ---------- 工具 ----------
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._h); toast._h = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function fmt(x, digits) {
+  if (x === undefined || x === null || Number.isNaN(x)) return 'NaN';
+  if (!Number.isFinite(x)) return x > 0 ? '+Inf' : '-Inf';
+  const a = Math.abs(x);
+  if (a !== 0 && (a < 1e-3 || a >= 1e5)) return x.toExponential(4);
+  return x.toFixed(digits ?? 5);
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- 压力包生成（与 tools/gen_cases.py 同分布） ----------
+function buildStressPackage(seed) {
+  const rng = mulberry32(seed);
+  const W = 512, H = 512, N = 250000;
+  const quads = new Array(N);
+  for (let i = 0; i < N; i++) {
+    quads[i] = {
+      x: 2 * Math.floor(rng() * (W / 2)), y: 2 * Math.floor(rng() * (H / 2)),
+      id: 1 + Math.floor(rng() * 999999999), mask: 15,
+      z: [0, 1, 2, 3].map(() => Math.floor(rng() * 1001)),
+      uv: [[rng(), rng()], [rng(), rng()], [rng(), rng()], [rng(), rng()]],
+    };
+  }
+  const program = [['常量', 'k', 0.5]];
+  const regs = ['u', 'v', 'k'];
+  for (let i = 0; i < 46; i++) {
+    const tgt = 't' + i, kind = Math.floor(rng() * 6);
+    if (kind === 0) program.push(['常量', tgt, rng() * 2 - 1]);
+    else if (kind === 1 || kind === 2) program.push([kind === 1 ? '加' : '乘', tgt, regs[Math.floor(rng() * regs.length)], regs[Math.floor(rng() * regs.length)]]);
+    else program.push([['细横', '细纵', '粗横', '粗纵'][kind - 3], tgt, regs[Math.floor(rng() * Math.min(4, regs.length))]]);
+    regs.push(tgt);
+  }
+  program.push(['纹理', 'r', 'u', 'v', 0]);
+  const mips = [];
+  let cw = 64, ch = 64;
+  while (true) {
+    const pix = [];
+    for (let i = 0; i < cw * ch; i++) pix.push([rng() * 2 - 1, rng() * 2 - 1, rng() * 2]);
+    mips.push({ width: cw, height: ch, pixels: pix });
+    if (cw === 1 && ch === 1) break;
+    cw = Math.max(1, Math.floor(cw / 2)); ch = Math.max(1, Math.floor(ch / 2));
+  }
+  return { rules: 'stress-generated', width: W, height: H, quads, program, out: ['r', 'u', 'v'], mips };
+}
+
+// ---------- 渲染 ----------
+function tonemap(x) {
+  // 线性 clamp 到 [0,1]；负数值偏红在检视面板读真值
+  return x < 0 ? 0 : x > 1 ? 255 : Math.round(x * 255);
+}
+function drawCanvas(state) {
+  const cv = $('screen'), { W, H, frame } = state;
+  canvasScale = W <= 64 ? 12 : W <= 128 ? 6 : W <= 256 ? 3 : 1;
+  cv.width = W; cv.height = H;
+  cv.style.width = (W * canvasScale) + 'px';
+  cv.style.height = (H * canvasScale) + 'px';
+  const img = new ImageData(W, H);
+  const d = img.data;
+  for (let p = 0; p < W * H; p++) {
+    d[4 * p] = tonemap(frame.rgb[3 * p]);
+    d[4 * p + 1] = tonemap(frame.rgb[3 * p + 1]);
+    d[4 * p + 2] = tonemap(frame.rgb[3 * p + 2]);
+    d[4 * p + 3] = frame.alpha[p] ? 255 : 255; // 空像素仍可见（底色），用标记层区分
+  }
+  const ctx = cv.getContext('2d');
+  ctx.putImageData(img, 0, 0);
+  if ($('chkMark').checked) {
+    ctx.fillStyle = 'rgba(239,107,107,.55)';
+    for (let p = 0; p < W * H; p++) if (!frame.alpha[p]) {
+      ctx.fillRect(p % W, Math.floor(p / W), 1, 1);
+    }
+    ctx.fillStyle = 'rgba(240,180,85,.85)';
+    for (let g = 0; g < state.discard.length; g++) {
+      if (state.discard[g] && state.covered[g]) {
+        const px = state.lanePixel[g];
+        ctx.fillRect(px % W, Math.floor(px / W), 1, 1);
+      }
+    }
+  }
+  if ($('chkGrid').checked && W <= 128) {
+    ctx.strokeStyle = 'rgba(255,255,255,.13)';
+    ctx.lineWidth = 1 / canvasScale;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 2) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = 0; y <= H; y += 2) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+  if (selected) {
+    ctx.strokeStyle = '#4fd1c5'; ctx.lineWidth = 1 / canvasScale;
+    ctx.strokeRect(selected.x, selected.y, 1, 1);
+  }
+}
+
+// ---------- 检视面板 ----------
+const LANE_NAME = ['LT 左上', 'RT 右上', 'LB 左下', 'RB 右下'];
+function renderInspector(x, y, state) {
+  const { W, frame } = state;
+  const p = y * W + x;
+  const body = $('inspBody');
+  $('inspEmpty').hidden = true; body.hidden = false;
+  const quadsHere = [];
+  for (let g = state.head[p]; g !== -1; g = state.next[g]) quadsHere.push(g);
+  quadsHere.sort((a, b) => (a >> 2) - (b >> 2) || (a & 3) - (b & 3));
+  const winG = frame.winLane[p];
+  const rows = [];
+  rows.push(`<div class="pixel-head"><span class="coord">像素 (${x}, ${y})</span>
+    <span class="chip ${frame.alpha[p] ? 'win' : 'off'}">${frame.alpha[p] ? '有入屏胜者' : '空像素'}</span></div>`);
+  rows.push(`<div style="margin-top:8px;font-family:var(--mono);font-size:11.5px;color:var(--fg-dim)">最终 RGB = (${
+    frame.alpha[p] ? fmt(frame.rgb[3 * p]) + ', ' + fmt(frame.rgb[3 * p + 1]) + ', ' + fmt(frame.rgb[3 * p + 2]) : '0, 0, 0'
+  })，A = ${frame.alpha[p]}</div>`);
+
+  if (!quadsHere.length) {
+    rows.push('<p class="empty" style="margin-top:10px">没有任何四格组覆盖此像素（mask 未置位）。</p>');
+    body.innerHTML = rows.join('');
+    return;
+  }
+  // 按 quad 聚合
+  const byQuad = new Map();
+  for (const g of quadsHere) {
+    const q = g >> 2;
+    if (!byQuad.has(q)) byQuad.set(q, []);
+    byQuad.get(q).push(g);
+  }
+  const q0 = state;
+  for (const [q, lanes] of byQuad) {
+    const isWinQuad = lanes.some((g) => g === winG);
+    rows.push(`<div class="quad-block ${isWinQuad ? 'winner' : ''}">
+      <div class="quad-title">
+        <span class="qid">quad #${q} · id=${state.qid[q]}</span>
+        <span class="chip">原点 (${state.qx[q]}, ${state.qy[q]})</span>
+        <span class="chip mono">mask=${state.qmask[q].toString(2).padStart(4, '0')}</span>
+        ${isWinQuad ? '<span class="chip win">含最终胜者</span>' : ''}
+      </div><div class="lane-grid">`);
+    for (let l = 0; l < 4; l++) {
+      const g = 4 * q + l;
+      const cov = state.covered[g], disc = state.discard[g];
+      const cls = ['lane', disc ? 'discarded' : '', !cov ? 'uncovered' : '', g === winG ? 'iswin' : ''].join(' ');
+      const uvx = state.regs[state.regNames.indexOf('u')][g];
+      const uvy = state.regs[state.regNames.indexOf('v')][g];
+      rows.push(`<div class="${cls}"><div class="lt"><span>${LANE_NAME[l]}</span><span>${
+        !cov ? '未覆盖' : disc ? '已舍弃' : g === winG ? '胜者' : '参与'
+      }</span></div>
+        <div>z=<b>${state.qz[g]}</b></div>
+        <div>u=<b>${fmt(uvx)}</b></div><div>v=<b>${fmt(uvy)}</b></div></div>`);
+    }
+    rows.push('</div>');
+    // 每条纹理指令的 LOD/层
+    if (state.texLogs.length) {
+      rows.push('<div class="tex-detail">');
+      for (const log of state.texLogs) {
+        for (let l = 0; l < 4; l++) {
+          const g = 4 * q + l;
+          const lod = log.lod[g], k = Math.floor(lod), frac = lod - k;
+          const layerText = k >= log.layers - 1
+            ? `层 ${log.layers - 1}（钳制）`
+            : frac === 0 ? `层 ${k}` : `层 ${k}→${k + 1} 混 ${frac.toFixed(3)}`;
+          rows.push(`<div class="row"><span>行${log.line} 纹理→${log.target} ch${log.ch} · ${LANE_NAME[l].split(' ')[0]} LOD</span>
+            <span class="lod">${fmt(lod, 4)} · ${layerText}${log.result ? ' · 值 ' + fmt(log.result[g]) : ''}</span></div>`);
+        }
+      }
+      rows.push('</div>');
+    }
+    rows.push('</div>');
+  }
+  body.innerHTML = rows.join('');
+}
+
+// ---------- 运行入口 ----------
+function setStatus(kind, text) {
+  const dot = $('statusDot');
+  dot.className = 'dot ' + kind;
+  $('statusText').textContent = text;
+}
+function showErrors(errors, hadPrev) {
+  const box = $('errors'); box.hidden = false;
+  $('staleNote').hidden = !hadPrev;
+  $('errList').innerHTML = errors.map((e) =>
+    `<div class="err-item">${e.line ? `<span class="ln">第 ${e.line} 行</span> · ` : ''}<span class="sc">${e.scope}</span> — ${e.message}</div>`
+  ).join('');
+}
+function runPackage(pkg, name) {
+  $('errors').hidden = true;
+  const hadPrev = !!lastGood;
+  let parsed;
+  const tParse0 = performance.now();
+  try {
+    parsed = pkg;
+  } catch (e) {
+    showErrors([{ scope: 'JSON', line: null, message: 'JSON 解析失败：' + e.message }], hadPrev);
+    setStatus('err', 'JSON 解析失败');
+    return;
+  }
+  const parseMs = performance.now() - tParse0;
+  const res = E.validateAndRun(parsed);
+  if (!res.ok) {
+    showErrors(res.errors, hadPrev);
+    setStatus('err', `校验失败（${res.errors.length} 项），上次画面保留`);
+    if (hadPrev) toast('坏指令已标行号；画布保留上一次可导出的画面');
+    return;
+  }
+  lastGood = { pkg: parsed, state: res.state, model: res.model, name };
+  $('exportBtn').disabled = false; $('pfmBtn').disabled = false;
+  setStatus('ok', `运行成功 · 解析 ${parseMs.toFixed(0)}ms + 引擎 ${res.timings.total.toFixed(0)}ms`);
+  $('pillSize').hidden = false; $('vSize').textContent = `${res.state.W}×${res.state.H}`;
+  $('pillQuad').hidden = false; $('vQuad').textContent = res.state.N.toLocaleString();
+  $('pillInsn').hidden = false; $('vInsn').textContent = res.model.ops.length + (res.model.texCount ? `（纹理 ${res.model.texCount}）` : '');
+  $('pillTime').hidden = false; $('vTime').textContent = `${res.timings.total.toFixed(1)} ms`;
+  const logBytes = res.state.texLogs.reduce((s, l) => s + l.lod.byteLength + (l.result ? l.result.byteLength : 0), 0);
+  $('pillMem').hidden = false;
+  $('vMem').textContent = res.state.logBudgetOk ? `${(logBytes / 1048576).toFixed(1)} MB` : '超预算，仅留 LOD';
+  selected = null;
+  drawCanvas(res.state);
+  $('inspEmpty').hidden = false; $('inspBody').hidden = true;
+  toast(`已渲染 ${name}`);
+}
+
+// ---------- 事件 ----------
+$('loadBtn').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  lastPkgName = f.name;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try { runPackage(JSON.parse(rd.result), f.name); }
+    catch (e) {
+      showErrors([{ scope: 'JSON', line: null, message: 'JSON 解析失败：' + e.message }], !!lastGood);
+      setStatus('err', 'JSON 解析失败');
+    }
+  };
+  rd.readAsText(f);
+  ev.target.value = '';
+});
+$('sampleBtn').addEventListener('click', async () => {
+  try {
+    const r = await fetch('samples/quad-program.json');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    runPackage(await r.json(), 'quad-program.json（样例）');
+  } catch (e) {
+    // 本地 file:// 打开时 fetch 不可用，内置同一份样例
+    runPackage(EMBEDDED_SAMPLE, 'quad-program.json（内置样例）');
+  }
+});
+$('stressBtn').addEventListener('click', () => {
+  $('stressBtn').disabled = true;
+  setStatus('idle', '正在生成 25 万组压力包…');
+  setTimeout(() => {
+    const t0 = performance.now();
+    const pkg = buildStressPackage(stressSeed++);
+    const genMs = performance.now() - t0;
+    setStatus('idle', `压力包生成 ${genMs.toFixed(0)}ms，开始执行…`);
+    setTimeout(() => {
+      try { runPackage(pkg, `压力包 seed=${stressSeed - 1}`); }
+      finally { $('stressBtn').disabled = false; }
+    }, 30);
+  }, 30);
+});
+function download(bytes, filename, mime) {
+  const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$('exportBtn').addEventListener('click', () => {
+  if (!lastGood) return;
+  const bytes = E.exportRGBAf32(lastGood.state);
+  const base = (lastGood.name || 'frame').replace(/\.json$/i, '');
+  download(bytes, `${base}.rgba.f32.bin`);
+  const meta = {
+    width: lastGood.state.W, height: lastGood.state.H,
+    format: 'linear-float RGBA, IEEE binary32 little-endian, row-major, origin top-left, A∈{0,1}',
+    source: lastGood.name,
+  };
+  download(new TextEncoder().encode(JSON.stringify(meta, null, 2)), `${base}.rgba.meta.json`, 'application/json');
+  toast(`已导出 ${bytes.length.toLocaleString()} 字节线性浮点 RGBA（附 meta.json）。若浏览器拦截下载，可用本地 file:// 方式打开本页。`);
+});
+$('pfmBtn').addEventListener('click', () => {
+  if (!lastGood) return;
+  const bytes = E.exportPFM(lastGood.state);
+  const base = (lastGood.name || 'frame').replace(/\.json$/i, '');
+  download(bytes, `${base}.pfm`);
+  toast('已导出 RGB PFM（f32 小端，行序自下而上）');
+});
+$('chkGrid').addEventListener('change', () => lastGood && drawCanvas(lastGood.state));
+$('chkMark').addEventListener('change', () => lastGood && drawCanvas(lastGood.state));
+
+const cv = $('screen');
+function eventToPixel(ev) {
+  const rect = cv.getBoundingClientRect();
+  const x = Math.floor((ev.clientX - rect.left) / rect.width * cv.width);
+  const y = Math.floor((ev.clientY - rect.top) / rect.height * cv.height);
+  if (x < 0 || y < 0 || x >= cv.width || y >= cv.height) return null;
+  return { x, y };
+}
+cv.addEventListener('click', (ev) => {
+  if (!lastGood) return;
+  const px = eventToPixel(ev);
+  if (!px) return;
+  selected = px;
+  drawCanvas(lastGood.state);
+  renderInspector(px.x, px.y, lastGood.state);
+});
+cv.addEventListener('mousemove', (ev) => {
+  if (!lastGood) return;
+  const px = eventToPixel(ev);
+  if (!px) { $('hoverCoord').textContent = '–'; $('hoverWin').textContent = '–'; return; }
+  const p = px.y * lastGood.state.W + px.x;
+  $('hoverCoord').textContent = `(${px.x}, ${px.y})`;
+  const g = lastGood.state.frame.winLane[p];
+  $('hoverWin').textContent = g === -1 ? '空像素' : `quad#${g >> 2} ${LANE_NAME[g & 3].split(' ')[0]}`;
+});
+
+// 主题
+const themeBtn = $('themeBtn');
+try {
+  const saved = localStorage.getItem('qdr-theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+} catch (_) {}
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', cur);
+  try { localStorage.setItem('qdr-theme', cur); } catch (_) {}
+  if (lastGood) drawCanvas(lastGood.state);
+});
+
+// 内置样例（与 samples/quad-program.json 同内容，file:// 下 fetch 失败时兜底）
+const EMBEDDED_SAMPLE = {"rules":"样例","width":2,"height":2,"quads":[{"x":0,"y":0,"id":1,"mask":15,"z":[1,1,1,1],"uv":[[0,0],[0.25,0],[0,0.25],[0.25,0.25]]}],"program":[["纹理","r","u","v",0]],"out":["r","u","v"],"mips":[{"width":2,"height":2,"rgb":[0.7,0.4,0.2]},{"width":1,"height":1,"rgb":[0.5,0.4,0.3]}]};
+
+// 首帧：直接渲染内置样例，让工具打开即处于可检查状态
+runPackage(EMBEDDED_SAMPLE, 'quad-program.json（内置样例）');
+</script>
+</body>
+</html>
