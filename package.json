@@ -1,0 +1,14 @@
+{
+  "name": "nested-glass-ray-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "解析球面玻璃套件光路校验网页：严格嵌套/分离球体、Fresnel 分支、介质衰减、像素审计与 JSON/PNG 导出。",
+  "scripts": {
+    "start": "python3 -m http.server 8123",
+    "test": "node --test tools/test-core.cjs",
+    "smoke": "node tools/smoke.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

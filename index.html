@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>玻璃套件光路校验 · Nested Glass Ray Reel</title>
+  <meta name="description" content="严格嵌套球面玻璃/气泡的解析求交、菲涅耳分支追迹、像素光路核验与导出工具。" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23102040' stroke='%2367e8f9' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23241a4d' stroke='%23a78bfa' stroke-width='2'/%3E%3Cpath d='M3 16h10m6 0h13M13 16l3-3m-3 3l3 3' stroke='white' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="30" height="30">
+            <circle cx="16" cy="16" r="13" class="bm-outer"></circle>
+            <circle cx="16" cy="16" r="6.2" class="bm-inner"></circle>
+            <path d="M3 16h10.5M18.5 16H29M13.5 16l3-3.2M13.5 16l3 3.2" class="bm-ray"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>玻璃套件光路校验</h1>
+          <p>Nested Glass Ray Reel · 解析球面求交 / Fresnel R-T 分支 / 介质余量审计</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <span id="statusPill" class="status-pill">等待场景</span>
+        <button id="loadSampleBtn" class="btn ghost" type="button">读取 samples 示例</button>
+        <label class="btn secondary file-button" for="fileInput">导入 JSON
+          <input id="fileInput" type="file" accept=".json,application/json" hidden />
+        </label>
+        <button id="exportPng" class="btn primary" type="button" disabled>导出 PNG</button>
+        <button id="exportJson" class="btn" type="button" disabled>导出全部光路 JSON</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel view-panel" aria-labelledby="viewTitle">
+        <div class="panel-head">
+          <div>
+            <h2 id="viewTitle">追迹画面</h2>
+            <p id="sceneMeta" class="panel-sub">最多 32 个球面、96×64 条射线、10 次界面事件</p>
+          </div>
+          <div class="depth-control">
+            <label for="depthRange">追迹深度 <strong id="depthValue">4</strong><span>/10 事件</span></label>
+            <input id="depthRange" type="range" min="0" max="10" step="1" value="4" />
+            <div class="depth-ticks"><span>0</span><span>相切无事件</span><span>10</span></div>
+          </div>
+        </div>
+
+        <div id="errorPanel" class="error-panel" role="alert" hidden>
+          <div class="error-title">
+            <strong>导入的球面几何不合法，已保留上一帧旧图。</strong>
+            <button id="closeError" class="icon-btn" type="button" aria-label="关闭错误">×</button>
+          </div>
+          <div id="errorMessage" class="error-message"></div>
+          <ul id="errorList" class="error-list"></ul>
+        </div>
+
+        <div id="dropHint" class="drop-hint">松开以导入 nested-glass JSON；相交/接触球会报告编号且不会替换当前画面</div>
+
+        <div class="canvas-frame" id="canvasFrame">
+          <canvas id="view" width="1" height="1" aria-label="光线追迹结果，点击像素查看分支"></canvas>
+          <canvas id="overlay" width="1" height="1" aria-hidden="true"></canvas>
+          <div id="renderBadge" class="render-badge" hidden>
+            <span class="spinner"></span><span id="renderBadgeText">追迹中…</span>
+          </div>
+          <div id="emptyHint" class="empty-hint">
+            <strong>还没有有效画面</strong>
+            <span>点击右上角“读取 samples 示例”或导入 JSON</span>
+          </div>
+        </div>
+
+        <div class="view-footer">
+          <div id="pixelReadout" class="pixel-readout">点击画面像素，展开该像素的 R/T 分支、事件球号与介质。</div>
+          <label class="check"><input id="residualOverlay" type="checkbox" /> 余量琥珀标记</label>
+        </div>
+        <div class="progress-track" aria-hidden="true"><div id="progressBar" class="progress-bar"></div></div>
+
+        <div class="stats-grid">
+          <div class="stat"><span>射线</span><strong id="statRays">–</strong></div>
+          <div class="stat"><span>球面</span><strong id="statSpheres">–</strong></div>
+          <div class="stat"><span>逃逸分支</span><strong id="statEscapes">–</strong></div>
+          <div class="stat"><span>余量分支</span><strong id="statResidualBranches">–</strong></div>
+          <div class="stat"><span>总余量 RGB</span><strong id="statResidualRgb" class="rgb-text">–</strong></div>
+          <div class="stat"><span>TIR / 事件</span><strong id="statTir">–</strong></div>
+        </div>
+      </section>
+
+      <aside class="panel inspector-panel" aria-labelledby="inspectorTitle">
+        <div class="panel-head compact">
+          <div>
+            <h2 id="inspectorTitle">像素分支</h2>
+            <p class="panel-sub">R 排在 T 前；反射保留介质，折射才切换</p>
+          </div>
+        </div>
+
+        <div id="inspectorEmpty" class="inspector-empty">
+          <div class="empty-orbit" aria-hidden="true"></div>
+          <p>选择画面中的一个像素后，这里会显示完整光路树。</p>
+          <ul>
+            <li>每段起点 / 终点 / t 距离</li>
+            <li>事件球号与定位按钮</li>
+            <li>入射 / 出射介质 n 与 sigma</li>
+            <li>Fresnel F、TIR、RGB 权重与深度余量</li>
+          </ul>
+        </div>
+
+        <div id="inspectorContent" hidden>
+          <div class="selected-summary">
+            <div class="color-swatch" id="selectedSwatch"></div>
+            <div class="selected-numbers">
+              <div id="selectedTitle" class="selected-title">像素 –</div>
+              <div id="selectedRgb" class="mono tiny"></div>
+              <div id="selectedResidual" class="mono tiny residual-text"></div>
+            </div>
+          </div>
+          <div id="branchTree" class="branch-tree"></div>
+          <div class="inspector-actions">
+            <button id="exportPixelJson" class="btn secondary" type="button">导出此像素 JSON</button>
+            <button id="copyPixelJson" class="btn ghost" type="button">复制 JSON</button>
+          </div>
+          <details class="raw-json">
+            <summary>查看当前像素 JSON</summary>
+            <pre id="pixelJson" tabindex="0"></pre>
+          </details>
+        </div>
+      </aside>
+
+      <aside class="panel scene-panel" aria-labelledby="sceneTitle">
+        <div class="panel-head compact">
+          <div>
+            <h2 id="sceneTitle">球面与定位</h2>
+            <p class="panel-sub">正交投影；点击分支中的“定位球面”高亮</p>
+          </div>
+        </div>
+
+        <div class="map-tools" role="group" aria-label="投影方向">
+          <button class="chip is-active" type="button" data-axis="xy">XY</button>
+          <button class="chip" type="button" data-axis="xz">XZ</button>
+          <button class="chip" type="button" data-axis="yz">YZ</button>
+          <button id="clearSphere" class="chip" type="button">取消定位</button>
+        </div>
+        <div class="map-wrap">
+          <canvas id="mapCanvas" width="680" height="420" aria-label="球面正交定位图"></canvas>
+        </div>
+        <div id="sceneSummary" class="scene-summary"></div>
+        <div id="sphereList" class="sphere-list"></div>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      <span>所有求交、斯涅尔折射、Fresnel 与衰减均在本地完成；未使用现成光追库。</span>
+      <span class="mono">t = 世界距离 · RGB linear · PNG clamp + round(255x)</span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="tracer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
