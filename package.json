@@ -1,0 +1,16 @@
+{
+  "name": "companion-statechart-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "伙伴角色状态图调试网页：自研确定性运行器 + 单步 / 时间轴 / 快照",
+  "scripts": {
+    "test": "node tests/runner.test.js",
+    "test:extra": "node tests/extra.test.js",
+    "test:all": "node tests/runner.test.js && node tests/extra.test.js",
+    "start": "python3 -m http.server 8123 --directory web"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

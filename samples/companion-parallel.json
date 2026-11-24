@@ -1,0 +1,44 @@
+{
+  "name": "伙伴豆豆：跟随动作 × 表情并行 × 剧情打断",
+  "rules": "root 为 parallel：动作分区(10)与表情分区(20)同时活跃。follow 让待机→跟随并内部 emit blink；跟随状态的 rest 定时器、眨眼/开心的定时器都只属于当次进入，提前离开即作废。story 用局部 exitRoot=10 打断动作分区，storyEnd 以 history=true 恢复被打断前的完整动作叶（可能是 follow），而不是简单回到 initial。",
+  "root": 1,
+  "vars": { "bond": 0, "mood": 0 },
+  "states": [
+    { "id": 1, "parallel": true, "name": "伙伴根（动作 ‖ 表情）" },
+
+    { "id": 10, "parent": 1, "initial": 11, "name": "动作轨道" },
+    { "id": 11, "parent": 10, "name": "待机 Idle" },
+    { "id": 12, "parent": 10, "name": "跟随 Follow",
+      "timers": [{ "after": 8, "event": "rest" }] },
+    { "id": 13, "parent": 10, "name": "剧情特写 Cutscene" },
+
+    { "id": 20, "parent": 1, "initial": 21, "name": "表情轨道" },
+    { "id": 21, "parent": 20, "name": "平常 Normal" },
+    { "id": 22, "parent": 20, "name": "眨眼 Blink",
+      "timers": [{ "after": 2, "event": "blinkDone" }] },
+    { "id": 23, "parent": 20, "name": "开心 Happy",
+      "timers": [{ "after": 6, "event": "coolDown" }] }
+  ],
+  "edges": [
+    { "id": 1, "source": 11, "exitRoot": 10, "target": 12, "event": "follow",
+      "set": { "bond": 1 }, "emit": ["blink"] },
+    { "id": 2, "source": 12, "exitRoot": 10, "target": 11, "event": "wait" },
+    { "id": 3, "source": 12, "exitRoot": 10, "target": 13, "event": "story" },
+    { "id": 4, "source": 11, "exitRoot": 10, "target": 13, "event": "story" },
+    { "id": 5, "source": 13, "exitRoot": 10, "target": 11, "event": "storyEnd", "history": true },
+    { "id": 6, "source": 12, "exitRoot": 10, "target": 11, "event": "rest" },
+
+    { "id": 7, "source": 21, "exitRoot": 20, "target": 22, "event": "blink" },
+    { "id": 8, "source": 22, "exitRoot": 20, "target": 21, "event": "blinkDone" },
+    { "id": 9, "source": 21, "exitRoot": 20, "target": 23, "event": "praise", "set": { "mood": 2 } },
+    { "id": 10, "source": 23, "exitRoot": 20, "target": 21, "event": "coolDown", "set": { "mood": 0 } }
+  ],
+  "inputs": [
+    { "ms": 0, "event": "follow" },
+    { "ms": 3, "event": "story" },
+    { "ms": 5, "event": "storyEnd" },
+    { "ms": 10, "event": "praise" },
+    { "ms": 12, "event": "wait" },
+    { "ms": 30, "event": "follow" }
+  ]
+}

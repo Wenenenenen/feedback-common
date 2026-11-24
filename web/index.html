@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>伙伴状态图调试台 · Companion Statechart Reel</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="30" height="30">
+        <rect x="2" y="6" width="12" height="10" rx="3" class="lg-a"/>
+        <rect x="17" y="6" width="13" height="10" rx="3" class="lg-b"/>
+        <rect x="2" y="19" width="28" height="9" rx="3" class="lg-c"/>
+        <circle cx="8" cy="11" r="1.6" class="lg-dot"/>
+        <circle cx="23.5" cy="11" r="1.6" class="lg-dot"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>伙伴状态图调试台</h1>
+      <span class="subtitle">Companion Statechart Reel · 确定性运行器 / 单步 · 时间轴 · 快照</span>
+    </div>
+  </div>
+
+  <div class="pills" id="pills">
+    <span class="pill" title="当前逻辑时间">⏱ <b id="pillTime">0</b> ms</span>
+    <span class="pill" title="微步 / 生效微步">微步 <b id="pillMicro">0</b> · 生效 <b id="pillEff">0</b></span>
+    <span class="pill" title="外部输入游标">输入 <b id="pillInput">0/0</b></span>
+    <span class="pill" title="活跃状态数">活跃 <b id="pillActive">0</b></span>
+    <span class="pill status-pill" id="pillStatus">—</span>
+  </div>
+
+  <div class="halt-banner" id="haltBanner" hidden>
+    <span class="halt-icon">⛔</span><span id="haltText"></span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ============ 左栏：图定义 + 转移 ============ -->
+  <section class="col col-left">
+    <div class="panel editor-panel">
+      <div class="panel-title">
+        <span>图定义 JSON</span>
+        <span class="limits-hint">≤512 状态 · 2048 转移 · 50000 输入</span>
+      </div>
+      <div class="btn-row wrap">
+        <button id="btnCompile" class="btn primary" title="解析编辑器中的图并重新开始">编译并重置</button>
+        <button id="btnSample" class="btn" title="载入 samples/companion-chart.json">基础示例</button>
+        <button id="btnDemo" class="btn accent" title="并行动作/表情 + 剧情打断 + 定时器">伙伴并行剧场</button>
+        <button id="btnOpenChart" class="btn">打开 JSON…</button>
+        <button id="btnStress" class="btn ghost" title="内存生成 5 万输入压测图">5 万事件压测</button>
+        <input type="file" id="fileChart" accept=".json,application/json" hidden>
+      </div>
+      <textarea id="chartSrc" spellcheck="false" autocomplete="off"
+        aria-label="状态图 JSON 定义编辑器"></textarea>
+      <div id="compileMsg" class="msg" role="status"></div>
+    </div>
+
+    <div class="panel edges-panel">
+      <div class="panel-title">
+        <span>转移 <span class="count" id="edgeCount">0</span></span>
+        <input type="search" id="edgeFilter" class="mini-input" placeholder="筛选事件 / 状态 / id" aria-label="筛选转移">
+      </div>
+      <div class="table-head edge-grid">
+        <span>#</span><span>事件</span><span>source → target · 守卫 / 动作</span>
+      </div>
+      <div id="edges" class="scroll edges-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ 中栏：状态图 + 解说 + 历史 ============ -->
+  <section class="col col-center">
+    <div class="panel diagram-panel">
+      <div class="panel-title">
+        <span>状态图（嵌套 = 复合，<i class="parallel-swatch"></i> 双栏 = parallel 并行分区，高亮 = 当前活跃）</span>
+        <span class="diagram-tools">
+          <button id="btnExpandAll" class="btn tiny">全部展开</button>
+          <button id="btnCollapseInactive" class="btn tiny">折叠非活跃</button>
+        </span>
+      </div>
+      <div id="diagramScroll" class="diagram-scroll">
+        <div id="diagramCanvas" class="diagram-canvas">
+          <svg id="edgeLayer" class="edge-layer" aria-hidden="true">
+            <defs>
+              <marker id="arrowFired" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="arrow-head"/>
+              </marker>
+              <marker id="arrowDanger" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="arrow-head danger"/>
+              </marker>
+            </defs>
+          </svg>
+          <div id="diagram" class="diagram"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel narration-panel">
+      <div class="panel-title"><span>本微步解说</span></div>
+      <div id="narration" class="narration"></div>
+    </div>
+
+    <div class="panel history-panel">
+      <div class="panel-title"><span>历史记录（exitRoot → 退出时的完整活跃配置）</span></div>
+      <div id="history" class="history-strip"></div>
+    </div>
+  </section>
+
+  <!-- ============ 右栏：变量/定时器/队列 + 轨迹 ============ -->
+  <aside class="col col-right">
+    <div class="mini-cards">
+      <section class="panel mini">
+        <div class="panel-title"><span>变量 vars</span></div>
+        <table id="vars" class="kv"></table>
+      </section>
+      <section class="panel mini">
+        <div class="panel-title"><span>挂起定时器</span></div>
+        <div id="timers" class="small-list"></div>
+      </section>
+      <section class="panel mini">
+        <div class="panel-title"><span>内部事件队列 FIFO</span></div>
+        <div id="queue" class="small-list"></div>
+      </section>
+    </div>
+
+    <section class="panel trace-panel">
+      <div class="panel-title">
+        <span>事件轨迹 <span class="count" id="traceCount">0</span>（点击行跳转）</span>
+        <button id="btnTraceFollow" class="btn tiny" hidden>⤓ 回到当前步</button>
+      </div>
+      <div id="trace" class="trace-scroll" tabindex="0" aria-label="事件轨迹，点击跳转">
+        <div id="tracePad" class="trace-pad">
+          <div id="traceWindow" class="trace-window"></div>
+        </div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<!-- ============ 底部控制台 / 时间轴 ============ -->
+<footer class="deck">
+  <div class="controls">
+    <button id="btnReset" class="btn" title="回到第 0 步（初始配置）">⏮ 重置</button>
+    <button id="btnPrev" class="btn" title="上一个微步（←）">◀ 上一步</button>
+    <button id="btnStep" class="btn primary" title="下一个微步（→ / 空格）">单步 ▶</button>
+    <button id="btnNextInput" class="btn" title="运行到下一个外部输入被处理">下一输入 ⏭</button>
+    <button id="btnPlay" class="btn accent" title="自动播放 / 暂停">▶ 播放</button>
+
+    <span class="sep"></span>
+
+    <div class="timeline-wrap">
+      <input type="range" id="timeline" min="0" max="0" value="0" step="1"
+        aria-label="微步时间轴，可拖动">
+      <div class="timeline-meta">
+        <span id="timelineLabel">步 0 / 0</span>
+        <span id="primeLabel" class="prime-label"></span>
+      </div>
+    </div>
+
+    <span class="sep"></span>
+
+    <button id="btnExport" class="btn good" title="下载含图/状态/轨迹的快照 JSON">⬇ 导出快照</button>
+    <button id="btnImport" class="btn" title="从快照 JSON 导回并继续">⬆ 导入快照</button>
+    <input type="file" id="fileSnap" accept=".json,application/json" hidden>
+  </div>
+  <div id="status" class="status-line">未加载图</div>
+</footer>
+
+<script src="runner.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
