@@ -1,0 +1,13 @@
+{
+  "name": "optical-soundtrack-stitcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "从扫描胶片条恢复双声道声音的纯静态网页与同构算法核心",
+  "scripts": {
+    "test": "node test/core-test.mjs",
+    "test:oracle": "node test/oracle-test.mjs",
+    "test:e2e": "NODE_PATH=$(npm root -g) node test/e2e-test.cjs",
+    "perf": "node test/perf.mjs",
+    "start": "python3 -m http.server 8080"
+  }
+}

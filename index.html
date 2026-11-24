@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>光学声轨拼接台 · Optical Soundtrack Stitcher</title>
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 5h2v14H3zM7 5h1.6l.8 14H7.6zM11 5h2l-1 14h-2zM15.4 5H17l-.6 14h-1.8zM19 5h2v14h-2z"/></svg>
+    </span>
+    <div>
+      <h1>光学声轨拼接台</h1>
+      <p class="subtitle">扫描胶片条 → 48&nbsp;kHz 双声道 16 位 PCM · 960 刻/帧 · 半开区间裁决</p>
+    </div>
+  </div>
+  <div class="topbar-meta" id="globalLimits">最多 64 条 · 30 万行 · 60 秒</div>
+</header>
+
+<main class="layout">
+
+  <!-- 1. 数据导入 -->
+  <section class="card" id="dataCard">
+    <div class="card-head">
+      <h2><span class="step-no">1</span>载入扫描数据</h2>
+      <div class="card-actions">
+        <label class="btn btn-primary" for="fileInput">选择 optical-strips.json</label>
+        <input type="file" id="fileInput" accept=".json,application/json" hidden />
+        <button class="btn" id="loadSampleBtn" type="button">载入内置样例</button>
+      </div>
+    </div>
+
+    <div id="dropZone" class="dropzone" tabindex="0" role="button"
+         aria-label="拖入 JSON 文件，或按回车选择文件">
+      <div class="dz-inner">
+        <strong>把 optical-strips.json 拖到这里</strong>
+        <span>或点击上方按钮选择文件；页面会优先读取 <code>samples/optical-strips.json</code></span>
+      </div>
+    </div>
+
+    <div class="meta-grid" id="dataMeta" aria-live="polite">
+      <div class="meta-item"><span class="meta-k">数据文件</span><span class="meta-v" id="metaName">—</span></div>
+      <div class="meta-item"><span class="meta-k">条带</span><span class="meta-v" id="metaStrips">—</span></div>
+      <div class="meta-item"><span class="meta-k">总行数</span><span class="meta-v" id="metaRows">—</span></div>
+      <div class="meta-item"><span class="meta-k">输出帧</span><span class="meta-v" id="metaFrames">—</span></div>
+      <div class="meta-item"><span class="meta-k">时长</span><span class="meta-v" id="metaDuration">—</span></div>
+      <div class="meta-item"><span class="meta-k">渲染耗时</span><span class="meta-v" id="metaRenderMs">—</span></div>
+    </div>
+    <div class="status-line" id="renderStatus" role="status">尚未载入数据。</div>
+    <div class="error-box" id="errorBox" hidden></div>
+    <ul class="warn-list" id="warnList"></ul>
+  </section>
+
+  <!-- 2. 试听与选区 -->
+  <section class="card" id="playbackCard">
+    <div class="card-head">
+      <h2><span class="step-no">2</span>试听与裁区</h2>
+      <div class="transport">
+        <button class="btn btn-primary" id="playBtn" type="button" disabled>▶ 播放整轨</button>
+        <button class="btn" id="stopBtn" type="button" disabled>■ 停止</button>
+        <span class="time-display" id="timeDisplay">0 / 0 帧 · 0.000 s</span>
+      </div>
+    </div>
+
+    <div class="wave-wrap">
+      <canvas id="waveform" height="150" aria-label="双声道波形，可拖选裁区"></canvas>
+      <div class="wave-hint">在波形上按下并拖动可选择半开帧区间；单击可定位检查帧。</div>
+    </div>
+
+    <div class="region-row">
+      <label>裁区帧起 <input type="number" id="regionStart" min="0" step="1" placeholder="0" disabled /></label>
+      <label>帧止（不含） <input type="number" id="regionEnd" min="1" step="1" placeholder="—" disabled /></label>
+      <button class="btn" id="applyRegionBtn" type="button" disabled>设定裁区</button>
+      <button class="btn btn-accent" id="playRegionBtn" type="button" disabled>🎯 裁区试听</button>
+      <button class="btn" id="clearRegionBtn" type="button" disabled>清除裁区</button>
+      <span class="region-info" id="regionInfo">未选择裁区</span>
+    </div>
+    <div class="audit-note" id="auditNote">
+      裁区试听与 WAV 导出共用同一份 Int16 PCM：送入 AudioBuffer 的样本恒为整轨对应半开切片
+      <code>pcm.subarray(2a, 2b)</code> 经 /32768 得到。
+    </div>
+  </section>
+
+  <!-- 3. 逐帧核查 -->
+  <section class="card" id="inspectCard">
+    <div class="card-head">
+      <h2><span class="step-no">3</span>按帧查覆盖刻数与条带来源</h2>
+      <div class="inspect-controls">
+        <button class="btn btn-icon" id="prevFrameBtn" type="button" disabled aria-label="上一帧">‹</button>
+        <label>帧号 <input type="number" id="inspectFrame" min="0" step="1" value="0" disabled /></label>
+        <button class="btn btn-icon" id="nextFrameBtn" type="button" disabled aria-label="下一帧">›</button>
+        <button class="btn" id="inspectBtn" type="button" disabled>核查此帧</button>
+      </div>
+    </div>
+    <div id="inspectResult" class="inspect-result">
+      <p class="empty-hint">载入数据后，输入帧号查看每声道的覆盖刻数、PCM 值与条带来源区间。</p>
+    </div>
+  </section>
+
+  <!-- 4. 导出 -->
+  <section class="card" id="exportCard">
+    <div class="card-head"><h2><span class="step-no">4</span>导出</h2></div>
+    <div class="export-grid">
+      <button class="btn btn-primary" id="exportWavBtn" type="button" disabled>⬇ 导出整轨 WAV（48k / 立体声 / 16-bit）</button>
+      <button class="btn" id="exportRegionWavBtn" type="button" disabled>⬇ 导出裁区 WAV（与整轨切片逐字节一致）</button>
+      <button class="btn" id="exportGapsCsvBtn" type="button" disabled>⬇ 双声道缺口表 CSV（半开刻区间）</button>
+      <button class="btn" id="exportGapsLeftBtn" type="button" disabled>⬇ 仅左声道缺口 CSV</button>
+      <button class="btn" id="exportGapsRightBtn" type="button" disabled>⬇ 仅右声道缺口 CSV</button>
+      <button class="btn" id="exportGapsJsonBtn" type="button" disabled>⬇ 缺口表 JSON</button>
+    </div>
+  </section>
+
+  <!-- 5. 缺口浏览 -->
+  <section class="card" id="gapsCard">
+    <div class="card-head"><h2><span class="step-no">5</span>逐声道半开缺口 <span class="half-open">[start, end)</span></h2></div>
+    <div class="gaps-grid">
+      <div class="gap-col">
+        <h3>左声道 <span class="gap-count" id="gapCountL">—</span></h3>
+        <div class="gap-list" id="gapListL"><p class="empty-hint">暂无数据。</p></div>
+      </div>
+      <div class="gap-col">
+        <h3>右声道 <span class="gap-count" id="gapCountR">—</span></h3>
+        <div class="gap-list" id="gapListR"><p class="empty-hint">暂无数据。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p>
+      归一化 <code>clamp((p−dark)/(bright−dark), 0, 1)</code> → 均值 →
+      <code>round-half-even(mean·65536−32768)</code> → 夹到 [−32768, 32767]；
+      帧值 <code>round-half-even(Σ sample·ticks / 960)</code>，缺刻按 0 计入但分母仍为 960。
+    </p>
+    <p>纯静态、无联网依赖；算法核心 <code>optical-core.js</code> 同时可在 Node 中 require。</p>
+  </footer>
+</main>
+
+<script src="optical-core.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
