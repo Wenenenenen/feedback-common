@@ -1,0 +1,805 @@
+<title>连续蒙皮包围盒检查台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ---- 设计计划：深色工程检视台；冷灰底 + 青蓝主色，语义色用于六个面 ---- */
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --panel-2: #1c232d;
+  --line: #2a3340;
+  --fg: #e6edf3;
+  --fg-dim: #9aa7b4;
+  --fg-faint: #6b7785;
+  --accent: #4cc2ff;
+  --accent-dim: #2a7ba8;
+  --ok: #3fb96b;
+  --warn: #e0a23b;
+  --err: #ef6a5e;
+  --x: #ff7a6b;
+  --y: #7ed957;
+  --z: #6aa9ff;
+  --grid: #222b36;
+  --mono: "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="light"]) {
+    --bg: #f4f6f9; --panel: #ffffff; --panel-2: #f0f3f7; --line: #d8dee6;
+    --fg: #16202b; --fg-dim: #4d5b69; --fg-faint: #82909e;
+    --accent: #0b76b6; --accent-dim: #9ccfec; --grid: #e3e8ee;
+    color-scheme: light;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1116; --panel: #161b22; --panel-2: #1c232d; --line: #2a3340;
+  --fg: #e6edf3; --fg-dim: #9aa7b4; --fg-faint: #6b7785;
+  --accent: #4cc2ff; --accent-dim: #2a7ba8; --grid: #222b36;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; gap: 10px; padding-block: 10px; max-width: 1500px; margin: 0 auto; }
+button, input, select { font: inherit; color: var(--fg); }
+button {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; white-space: nowrap;
+}
+button:hover { border-color: var(--accent-dim); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #06121b; font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+input[type="number"], input[type="text"], select {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 0;
+}
+label { color: var(--fg-dim); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* 顶栏 */
+.topbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.brand { font-weight: 700; letter-spacing: .3px; margin-right: 6px; }
+.brand small { display: block; font-weight: 400; color: var(--fg-faint); font-size: 11px; letter-spacing: 0; }
+.spacer { flex: 1; }
+.pill { font-family: var(--mono); font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-dim); }
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.err { color: var(--err); border-color: var(--err); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+
+/* 主体三栏 */
+.main { display: grid; grid-template-columns: 260px 1fr 320px; gap: 10px; min-height: 0; }
+.col { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+.card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--fg-faint); }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > * { min-width: 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 13px; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; font-family: var(--mono); text-align: right; }
+
+.viewport { position: relative; flex: 1; min-height: 320px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.viewport canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.viewport canvas:active { cursor: grabbing; }
+.vp-overlay { position: absolute; top: 10px; left: 12px; font-family: var(--mono); font-size: 11px; color: var(--fg-faint); pointer-events: none; }
+.vp-legend { position: absolute; bottom: 10px; left: 12px; display: flex; gap: 12px; font-size: 11px; color: var(--fg-dim); pointer-events: none; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.vp-hint { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--fg-faint); }
+
+/* 面表格 */
+.face-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.face-table th, .face-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: right; font-family: var(--mono); }
+.face-table th { color: var(--fg-faint); font-weight: 500; font-family: var(--sans); font-size: 11px; }
+.face-table td.name, .face-table th.name { text-align: left; }
+.face-table tr.witness-row { cursor: pointer; }
+.face-table tr.witness-row:hover { background: var(--panel-2); }
+.gap-ok { color: var(--ok); }
+.axis-x { color: var(--x); } .axis-y { color: var(--y); } .axis-z { color: var(--z); }
+
+/* 时间轴 */
+.timeline { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; }
+.tl-track { position: relative; height: 46px; margin-top: 6px; }
+.tl-axis { position: absolute; top: 18px; left: 0; right: 0; height: 2px; background: var(--line); }
+.tl-window { position: absolute; top: 10px; height: 18px; background: color-mix(in srgb, var(--accent) 22%, transparent); border: 1px solid var(--accent); border-radius: 4px; }
+.tl-cursor { position: absolute; top: 4px; width: 2px; height: 30px; background: var(--warn); }
+.tl-cursor::after { content: ""; position: absolute; top: -4px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
+.tl-key { position: absolute; top: 32px; width: 2px; height: 10px; background: var(--fg-faint); }
+.tl-handle { position: absolute; top: 6px; width: 9px; height: 26px; background: var(--accent); border-radius: 3px; cursor: ew-resize; }
+.tl-handle.l { left: -5px; } .tl-handle.r { right: -5px; }
+.tl-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--fg-faint); margin-top: 4px; }
+.tl-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* 编辑区 */
+.edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.edit-grid label { font-size: 11px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 9px 16px; border-radius: 8px; z-index: 50; max-width: 80vw; }
+.toast.err { border-color: var(--err); color: var(--err); }
+.toast.ok { border-color: var(--ok); color: var(--ok); }
+.empty { color: var(--fg-faint); font-size: 13px; padding: 8px 0; }
+.scroll { overflow: auto; min-height: 0; }
+@media (max-width: 980px) {
+  .main { grid-template-columns: 1fr; }
+  .viewport { min-height: 300px; }
+  .col { max-height: none; }
+}
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">连续蒙皮包围盒检查台<small>区间分支定界 · 非固定采样 · 六面带证书</small></div>
+    <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    <button id="btnLoad">导入 JSON</button>
+    <button id="btnFull">载入满额长片</button>
+    <button id="btnSample">载入内置示例</button>
+    <div class="spacer"></div>
+    <span id="statusPill" class="pill">未载入模型</span>
+    <button id="btnTheme" title="切换深浅色">主题</button>
+  </header>
+
+  <div class="main">
+    <!-- 左栏：模型信息与查询 -->
+    <div class="col">
+      <section class="card">
+        <h3>模型</h3>
+        <div id="modelInfo" class="empty">导入 samples/continuous-envelope.json，或载入满额长片。</div>
+      </section>
+      <section class="card">
+        <h3>时间段查询（闭区间）</h3>
+        <div class="stack">
+          <div class="row">
+            <label style="flex:1">起点 t
+              <input type="number" id="qTa" step="any" style="width:100%" disabled>
+            </label>
+            <label style="flex:1">终点 t
+              <input type="number" id="qTb" step="any" style="width:100%" disabled>
+            </label>
+          </div>
+          <div class="row">
+            <button id="btnCompute" class="primary" style="flex:1" disabled>计算连续包围盒</button>
+          </div>
+          <div class="row">
+            <label style="flex:1">单一时刻 t
+              <input type="number" id="qInstant" step="any" style="width:100%" disabled>
+            </label>
+            <button id="btnInstant" disabled>查此时刻</button>
+          </div>
+          <div class="row">
+            <button id="btnWhole" disabled>整段</button>
+            <button id="btnResetRange" disabled>复位框选</button>
+          </div>
+          <div id="computeMeta" class="kv" hidden>
+            <dt>耗时</dt><dd id="metaMs">-</dd>
+            <dt>区间求值</dt><dd id="metaEvals">-</dd>
+            <dt>关键帧段</dt><dd id="metaSegs">-</dd>
+            <dt>未收敛叶</dt><dd id="metaDeep">-</dd>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h3>关键帧角度编辑（圈）</h3>
+        <div class="stack">
+          <div class="edit-grid">
+            <label>关键帧号<input type="number" id="edKey" min="0" style="width:100%"></label>
+            <label>骨骼号<input type="number" id="edBone" min="0" style="width:100%"></label>
+          </div>
+          <label>新 turns 值（按原写圈数，不折角）
+            <input type="number" id="edTurns" step="any" style="width:100%">
+          </label>
+          <button id="btnEdit" disabled>修改并重算</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 中栏：3D 视口 -->
+    <div class="col">
+      <div class="viewport">
+        <canvas id="view"></canvas>
+        <div class="vp-overlay" id="vpOverlay">拖动旋转 · 滚轮缩放 · 点击见证行可跳转姿态</div>
+        <div class="vp-hint" id="vpHint"></div>
+        <div class="vp-legend">
+          <span><i class="dot" style="background:var(--x)"></i>X</span>
+          <span><i class="dot" style="background:var(--y)"></i>Y</span>
+          <span><i class="dot" style="background:var(--z)"></i>Z</span>
+          <span><i class="dot" style="background:var(--accent)"></i>包围盒</span>
+          <span><i class="dot" style="background:var(--warn)"></i>见证点</span>
+        </div>
+      </div>
+      <div class="timeline">
+        <div class="tl-controls">
+          <button id="btnPlay" disabled>播放</button>
+          <label style="flex:1">当前时刻 <span id="curTime" class="mono">0.000</span> s
+            <input type="range" id="timeSlider" min="0" max="1" step="any" style="width:100%" disabled>
+          </label>
+        </div>
+        <div class="tl-track" id="tlTrack">
+          <div class="tl-axis"></div>
+          <div class="tl-window" id="tlWindow" hidden>
+            <div class="tl-handle l" data-handle="l"></div>
+            <div class="tl-handle r" data-handle="r"></div>
+          </div>
+          <div class="tl-cursor" id="tlCursor" hidden></div>
+          <div id="tlKeys"></div>
+        </div>
+        <div class="tl-labels"><span id="tlT0">-</span><span>在轨道上拖动：框选闭时间段；点轴定位单一时刻</span><span id="tlT1">-</span></div>
+      </div>
+    </div>
+
+    <!-- 右栏：结果与见证 -->
+    <div class="col">
+      <section class="card scroll" style="flex:1">
+        <h3>包围盒与六面证书</h3>
+        <div id="boxInfo" class="empty">尚无结果。框选时间段后点击“计算连续包围盒”。</div>
+        <table class="face-table" id="faceTable" hidden>
+          <thead><tr><th class="name">面</th><th>盒面坐标</th><th>证书界</th><th>间隙</th><th class="name">见证</th></tr></thead>
+          <tbody id="faceBody"></tbody>
+        </table>
+      </section>
+      <section class="card">
+        <h3>导出</h3>
+        <div class="row">
+          <button id="btnExport" disabled style="flex:1">导出盒子与见证 JSON</button>
+          <button id="btnCopy" disabled>复制</button>
+        </div>
+        <div class="empty" style="margin-top:6px">含六个面坐标，每面见证含顶点编号、时间、该时刻坐标。</div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script>
+'use strict';
+/* ============================ 全局状态 ============================ */
+const state = {
+  model: null,          // 已生效模型摘要（Worker 内持完整对象）
+  summary: null,
+  result: null,         // 最近一次包围结果
+  positions: null,      // 当前时刻蒙皮顶点
+  currentT: 0,
+  range: null,          // 框选 [ta,tb]
+  cam: { yaw: -0.7, pitch: 0.45, dist: 0 },
+  playing: false,
+  playTimer: null,
+  witnessMark: null,    // 高亮见证 {vertex,t}
+};
+
+const $ = (id) => document.getElementById(id);
+const toast = (msg, kind = '') => {
+  const el = $('toast'); el.textContent = msg; el.className = 'toast ' + kind; el.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => { el.hidden = true; }, 3600);
+};
+
+/* ============================ Worker（失败回退主线程） ============================ */
+let worker = null;
+let engineFallback = null;     // Worker 不可用时的主线程引擎
+const pending = new Map();
+let reqSeq = 0;
+let workerReady = false;
+const queued = [];
+
+function send(msg) {
+  if (worker && workerReady) { worker.postMessage(msg); return; }
+  if (worker) { queued.push(msg); return; } // Worker 启动中，排队（超时会切主线程）
+  runOnMain(msg);
+}
+function onResponse(cb) { const id = ++reqSeq; pending.set(id, cb); return id; }
+
+function switchToMain() {
+  if (!worker) return;
+  worker.terminate(); worker = null;
+  loadEngineFallback().then(() => { while (queued.length) runOnMain(queued.shift()); });
+}
+
+function initWorker() {
+  // file:// 等协议下 Worker 脚本无法加载，直接走主线程回退
+  if (location.protocol === 'file:') { worker = null; loadEngineFallback(); return; }
+  let answered = false;
+  try {
+    worker = new Worker(new URL('src/worker.js', location.href));
+    worker.onmessage = (ev) => { answered = true; workerReady = true; while (queued.length) worker.postMessage(queued.shift()); dispatch(ev.data); };
+    worker.onerror = () => switchToMain();
+    // 探活：发一个无副作用请求；静默失败则在超时后切主线程
+    worker.postMessage({ type: 'ping' });
+    setTimeout(() => { if (!answered) switchToMain(); }, 800);
+  } catch (e) { worker = null; loadEngineFallback(); }
+}
+function loadEngineFallback() {
+  if (engineFallback) return Promise.resolve(engineFallback);
+  // 优先 fetch+函数作用域求值（HTTP，沙箱干净）；file:// 下 fetch 被禁，改用 <script> 标签（同源文件允许）
+  return fetch(new URL('src/engine.js', location.href))
+    .then((r) => r.text())
+    .then((code) => {
+      const mod = { exports: {} };
+      new Function('module', 'self', code)(mod, {});
+      engineFallback = mod.exports;
+      toast('Worker 不可用，已在主线程计算', 'warn');
+      return engineFallback;
+    })
+    .catch(() => new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = new URL('src/engine.js', location.href);
+      s.onload = () => {
+        // engine.js 在浏览器全局挂 self.engine（此处 self===window）
+        engineFallback = window.engine || (typeof engine !== 'undefined' ? engine : null);
+        if (!engineFallback) return reject(new Error('引擎加载失败'));
+        toast('Worker 不可用，已在主线程计算', 'warn');
+        resolve(engineFallback);
+      };
+      s.onerror = () => reject(new Error('引擎脚本加载失败'));
+      document.head.appendChild(s);
+    }));
+}
+function runOnMain(msg) {
+  loadEngineFallback().then(() => {
+    const E = engineFallback;
+    try {
+      if (msg.type === 'load' || msg.type === 'fullFilm') {
+        const raw = msg.type === 'fullFilm' ? E.buildFullLengthFilm() : JSON.parse(msg.text);
+        const r = E.validateModel(raw);
+        if (r.error) return dispatch({ type: 'loadError', error: r.error });
+        state.model = r.model; state.raw = raw;
+        dispatch({ type: 'loaded', summary: summaryOf(r.model) });
+      } else if (msg.type === 'compute') {
+        const res = E.computeEnvelope(state.model, msg.ta, msg.tb);
+        dispatch({ type: 'result', box: res.box, faces: res.faces.map((f) => ({
+          isMin: f.isMin, axis: f.axis, value: f.value, bound: f.bound, witness: f.witness,
+          gap: f.isMin ? f.value - f.bound : f.bound - f.value })),
+          range: res.range, stats: res.stats, elapsed: res.stats.elapsedMs });
+      } else if (msg.type === 'poseAt') {
+        const sc = E.makeScratch(state.model);
+        const world = E.evalWorldMatrices(state.model, msg.t, sc);
+        const positions = [];
+        for (let vi = 0; vi < state.model.vertices.length; vi++)
+          positions.push(E.skinVertex(state.model, world, vi, sc.tmp, sc.pos).slice());
+        dispatch({ type: 'pose', t: msg.t, positions, requestId: msg.requestId });
+      } else if (msg.type === 'editKey') {
+        const copy = JSON.parse(JSON.stringify(state.raw));
+        copy.keys[msg.keyIndex].pose[msg.boneIndex][msg.component] = msg.value;
+        const r = E.validateModel(copy);
+        if (r.error) return dispatch({ type: 'editError', error: r.error });
+        state.model = r.model; state.raw = copy;
+        dispatch({ type: 'edited' });
+      }
+    } catch (err) { dispatch({ type: 'error', error: String(err.message || err) }); }
+  });
+}
+function summaryOf(m) {
+  return { bones: m.bones.length, vertices: m.vertices.length, keys: m.keys.length,
+    intervals: m.keys.length - 1, triangles: m.triangles ? m.triangles.length : 0, t0: m.t0, t1: m.t1 };
+}
+function dispatch(d) {
+  if (d.type === 'loaded') {
+    state.summary = d.summary;
+    $('statusPill').textContent = `已载入 ${d.summary.bones}骨 / ${d.summary.vertices}顶点 / ${d.summary.intervals}区间`;
+    $('statusPill').className = 'pill ok';
+    renderModelInfo(d.summary);
+    enableQueries(true);
+    setupTimeline(d.summary);
+    state.result = null; state.range = null;
+    renderResult(null);
+    requestPose(d.summary.t0);
+  } else if (d.type === 'loadError' || d.type === 'editError') {
+    toast('导入被拒绝，旧结果保留：' + d.error, 'err');
+    $('statusPill').textContent = '错误导入已拦截'; $('statusPill').className = 'pill err';
+  } else if (d.type === 'result') {
+    state.result = d;
+    renderResult(d);
+    toast(`计算完成：${d.elapsed.toFixed(1)} ms，六面证书间隙均 ≤ 0.01`, 'ok');
+  } else if (d.type === 'pose') {
+    state.positions = d.positions; state.currentT = d.t;
+    $('curTime').textContent = d.t.toFixed(3);
+    $('timeSlider').value = d.t;
+    draw();
+  } else if (d.type === 'edited') {
+    toast('关键帧已修改并通过校验，请重新计算包围盒', 'ok');
+    if (state.summary) requestPose(state.currentT);
+  } else if (d.type === 'error') {
+    toast(d.error, 'err');
+  }
+}
+
+/* ============================ 载入 ============================ */
+$('btnLoad').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => send({ type: 'load', text: reader.result });
+  reader.readAsText(f);
+  e.target.value = '';
+};
+$('btnFull').onclick = () => send({ type: 'fullFilm' });
+$('btnSample').onclick = async () => {
+  const r = await fetch(new URL('samples/continuous-envelope.json', location.href)).catch(() => null);
+  if (r) send({ type: 'load', text: await r.text() });
+  else send({ type: 'load', text: JSON.stringify(builtInSample()) });
+};
+function builtInSample() {
+  return { bones: [{ parent: null, axis: 'z' }],
+    keys: [{ t: 0, pose: [[0, 0, 0, 0]] }, { t: 1, pose: [[0, 0, 0, 0.25]] }],
+    vertices: [[[0, 65536, 3, 0, 0]], [[0, 65536, 2, 0, 1]], [[0, 65536, 1, 0, 0]]],
+    triangles: [[0, 1, 2]] };
+}
+
+function renderModelInfo(s) {
+  $('modelInfo').innerHTML =
+    `<dl class="kv">
+      <dt>骨骼</dt><dd>${s.bones}</dd><dt>顶点</dt><dd>${s.vertices}</dd>
+      <dt>关键帧</dt><dd>${s.keys}</dd><dt>区间</dt><dd>${s.intervals}</dd>
+      <dt>三角形</dt><dd>${s.triangles}</dd>
+      <dt>时间范围</dt><dd>[${s.t0}, ${s.t1}] s</dd>
+    </dl>`;
+}
+function enableQueries(on) {
+  ['qTa', 'qTb', 'qInstant', 'btnCompute', 'btnInstant', 'btnWhole', 'btnResetRange',
+   'btnPlay', 'timeSlider', 'btnEdit', 'btnExport', 'btnCopy'].forEach((id) => { $(id).disabled = !on; });
+}
+
+/* ============================ 查询 ============================ */
+$('btnCompute').onclick = () => {
+  const ta = parseFloat($('qTa').value), tb = parseFloat($('qTb').value);
+  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return toast('请输入有效的起止时间', 'err');
+  send({ type: 'compute', ta, tb });
+};
+$('btnInstant').onclick = () => {
+  const t = parseFloat($('qInstant').value);
+  if (!Number.isFinite(t)) return toast('请输入有效时刻', 'err');
+  send({ type: 'compute', ta: t, tb: t });
+  requestPose(t);
+};
+$('btnWhole').onclick = () => {
+  const s = state.summary; setRange(s.t0, s.t1);
+};
+$('btnResetRange').onclick = () => { state.range = null; $('tlWindow').hidden = true; syncRangeInputs(); };
+
+function setRange(ta, tb) {
+  const s = state.summary;
+  ta = Math.max(s.t0, Math.min(s.t1, ta)); tb = Math.max(s.t0, Math.min(s.t1, tb));
+  if (ta > tb) [ta, tb] = [tb, ta];
+  state.range = [ta, tb];
+  $('qTa').value = ta.toFixed(4); $('qTb').value = tb.toFixed(4);
+  const w = $('tlWindow');
+  w.hidden = false;
+  w.style.left = pct(ta) + '%'; w.style.width = (pct(tb) - pct(ta)) + '%';
+}
+function pct(t) { const s = state.summary; return ((t - s.t0) / (s.t1 - s.t0)) * 100; }
+function fromPct(p) { const s = state.summary; return s.t0 + (s.t1 - s.t0) * p; }
+function syncRangeInputs() { if (state.range) { $('qTa').value = state.range[0].toFixed(4); $('qTb').value = state.range[1].toFixed(4); } }
+
+/* ============================ 时间轴交互 ============================ */
+function setupTimeline(s) {
+  $('tlT0').textContent = s.t0 + 's'; $('tlT1').textContent = s.t1 + 's';
+  $('timeSlider').min = s.t0; $('timeSlider').max = s.t1;
+  $('tlCursor').hidden = false;
+  const keys = $('tlKeys'); keys.innerHTML = '';
+  // 关键帧刻度（太多时抽样显示）
+  const maxTicks = 64;
+  const step = Math.max(1, Math.ceil(s.keys / maxTicks));
+  for (let k = 0; k < s.keys; k += step) {
+    const tick = document.createElement('div');
+    tick.className = 'tl-key';
+    tick.style.left = pct(k <= s.keys - 1 ? keyTime(k) : s.t1) + '%';
+    keys.appendChild(tick);
+  }
+}
+// 关键帧时刻需向 Worker 询问成本高；用 slider 同源即可，这里刻度仅按等距示意（满额片等距，通用片由实际 t）
+function keyTime(k) {
+  const s = state.summary; return s.t0 + (s.t1 - s.t0) * (k / (s.keys - 1));
+}
+
+const track = $('tlTrack');
+let drag = null;
+track.addEventListener('pointerdown', (e) => {
+  if (!state.summary) return;
+  const rect = track.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const t = fromPct(p);
+  const handle = e.target.dataset && e.target.dataset.handle;
+  if (handle) {
+    drag = { mode: handle === 'l' ? 'left' : 'right' };
+  } else if (e.target.id === 'tlWindow' || e.target.classList.contains('tl-window')) {
+    drag = { mode: 'move', startP: p, orig: state.range ? [...state.range] : [t, t] };
+  } else {
+    // 轴上按下开始新框选
+    drag = { mode: 'select', anchor: t };
+    setRange(t, t);
+  }
+  track.setPointerCapture(e.pointerId);
+});
+track.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const rect = track.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const t = fromPct(p);
+  if (drag.mode === 'select') setRange(Math.min(drag.anchor, t), Math.max(drag.anchor, t));
+  else if (drag.mode === 'left') setRange(t, state.range[1]);
+  else if (drag.mode === 'right') setRange(state.range[0], t);
+  else if (drag.mode === 'move') {
+    const dp = p - drag.startP; const dt = fromPct(drag.startP + dp) - fromPct(drag.startP);
+    let a = drag.orig[0] + dt, b = drag.orig[1] + dt;
+    const s = state.summary, len = drag.orig[1] - drag.orig[0];
+    if (a < s.t0) { a = s.t0; b = a + len; }
+    if (b > s.t1) { b = s.t1; a = b - len; }
+    setRange(a, b);
+  }
+  syncRangeInputs();
+});
+track.addEventListener('pointerup', () => { drag = null; if (state.range) syncRangeInputs(); });
+
+$('timeSlider').oninput = (e) => requestPose(parseFloat(e.target.value));
+$('qInstant').onchange = (e) => requestPose(parseFloat(e.target.value));
+$('btnPlay').onclick = () => {
+  state.playing = !state.playing;
+  $('btnPlay').textContent = state.playing ? '暂停' : '播放';
+  if (state.playing) tickPlay(); else clearInterval(state.playTimer);
+};
+function tickPlay() {
+  clearInterval(state.playTimer);
+  state.playTimer = setInterval(() => {
+    const s = state.summary; let t = state.currentT + (s.t1 - s.t0) / 120;
+    if (t > s.t1) t = s.t0;
+    requestPose(t);
+  }, 1000 / 30);
+}
+function requestPose(t) {
+  if (!state.summary) return;
+  t = Math.max(state.summary.t0, Math.min(state.summary.t1, t));
+  send({ type: 'poseAt', t, requestId: ++reqSeq });
+}
+
+/* ============================ 编辑 ============================ */
+$('btnEdit').onclick = () => {
+  const keyIndex = parseInt($('edKey').value), boneIndex = parseInt($('edBone').value);
+  const value = parseFloat($('edTurns').value);
+  const s = state.summary;
+  if (!Number.isInteger(keyIndex) || keyIndex < 0 || keyIndex >= s.keys) return toast('关键帧号越界', 'err');
+  if (!Number.isInteger(boneIndex) || boneIndex < 0 || boneIndex >= s.bones) return toast('骨骼号越界', 'err');
+  if (!Number.isFinite(value)) return toast('turns 必须是数值', 'err');
+  // component=3 即 turns；错误时 Worker 拒绝并保留旧模型/旧结果
+  send({ type: 'editKey', keyIndex, boneIndex, component: 3, value });
+};
+
+/* ============================ 结果渲染 ============================ */
+const FACE_NAME = [['xMin', 'axis-x'], ['xMax', 'axis-x'], ['yMin', 'axis-y'],
+  ['yMax', 'axis-y'], ['zMin', 'axis-z'], ['zMax', 'axis-z']];
+function renderResult(d) {
+  $('btnExport').disabled = !d; $('btnCopy').disabled = !d;
+  if (!d) {
+    $('boxInfo').className = 'empty';
+    $('boxInfo').textContent = '尚无结果。框选时间段后点击“计算连续包围盒”。';
+    $('faceTable').hidden = true; return;
+  }
+  $('boxInfo').className = 'kv';
+  const b = d.box;
+  $('boxInfo').innerHTML =
+    `<dt>min</dt><dd>(${b.min.map((v) => v.toFixed(4)).join(', ')})</dd>
+     <dt>max</dt><dd>(${b.max.map((v) => v.toFixed(4)).join(', ')})</dd>
+     <dt>尺寸</dt><dd>(${b.max.map((v, i) => (v - b.min[i]).toFixed(4)).join(', ')})</dd>`;
+  $('metaMs').hidden = false;
+  $('computeMeta').hidden = false;
+  $('metaMs').textContent = d.elapsed.toFixed(2) + ' ms';
+  $('metaEvals').textContent = d.stats.evalCount;
+  $('metaSegs').textContent = d.stats.segments;
+  $('metaDeep').textContent = d.stats.deepLeaves.length;
+  const body = $('faceBody'); body.innerHTML = '';
+  d.faces.forEach((f, q) => {
+    const [nm, cls] = FACE_NAME[q];
+    const tr = document.createElement('tr');
+    tr.className = 'witness-row';
+    const gapOk = Math.abs(f.gap) <= 0.01 + 1e-9;
+    tr.innerHTML =
+      `<td class="name ${cls}">${nm}</td>
+       <td>${f.value.toFixed(4)}</td>
+       <td>${f.bound.toFixed(4)}</td>
+       <td class="${gapOk ? 'gap-ok' : ''}">${f.gap.toExponential(2)}</td>
+       <td class="name">v${f.witness.vertex}@${f.witness.t.toFixed(3)}s</td>`;
+    tr.onclick = () => jumpToWitness(f);
+    body.appendChild(tr);
+  });
+  $('faceTable').hidden = false;
+  draw();
+}
+function jumpToWitness(f) {
+  state.witnessMark = { vertex: f.witness.vertex, t: f.witness.t };
+  requestPose(f.witness.t);
+  $('vpHint').textContent = `见证：顶点 ${f.witness.vertex} 在 t=${f.witness.t.toFixed(4)}s，坐标 ${f.witness.coord.toFixed(4)}（${FACE_NAME[f.axis * 2 + (f.isMin ? 0 : 1)][0]} 面）`;
+  toast(`已跳转到见证姿态 t=${f.witness.t.toFixed(4)}s`, 'ok');
+}
+
+/* ============================ 导出 ============================ */
+function buildExport() {
+  const d = state.result;
+  return {
+    range: { tStart: d.range[0], tEnd: d.range[1], closed: true },
+    box: { min: d.box.min, max: d.box.max },
+    tolerance: { faceToExtremum: 0.01, witnessToFace: 0.01, numericCompare: 1e-8 },
+    faces: d.faces.map((f, q) => ({
+      face: FACE_NAME[q][0],
+      coordinate: f.value,
+      certifiedBound: f.bound,
+      gap: f.gap,
+      witness: { vertex: f.witness.vertex, time: f.witness.t, coordinate: f.witness.coord, axis: ['x', 'y', 'z'][f.axis] },
+    })),
+    stats: { elapsedMs: d.elapsed, intervalEvaluations: d.stats.evalCount, unconvergedLeaves: d.stats.deepLeaves.length },
+  };
+}
+$('btnExport').onclick = () => {
+  const blob = new Blob([JSON.stringify(buildExport(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'continuous-envelope-box.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+$('btnCopy').onclick = async () => {
+  const text = JSON.stringify(buildExport(), null, 2);
+  try { await navigator.clipboard.writeText(text); toast('已复制到剪贴板', 'ok'); }
+  catch { toast('剪贴板不可用，请用导出按钮', 'err'); }
+};
+
+/* ============================ Canvas 3D 渲染（自写投影，无动画库） ============================ */
+const canvas = $('view'), ctx = canvas.getContext('2d');
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(r.width * dpr));
+  canvas.height = Math.max(1, Math.floor(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw();
+}
+window.addEventListener('resize', resize);
+
+let camDrag = null;
+canvas.addEventListener('pointerdown', (e) => { camDrag = { x: e.clientX, y: e.clientY, yaw: state.cam.yaw, pitch: state.cam.pitch }; });
+canvas.addEventListener('pointermove', (e) => {
+  if (!camDrag) return;
+  state.cam.yaw = camDrag.yaw + (e.clientX - camDrag.x) * 0.01;
+  state.cam.pitch = Math.max(-1.4, Math.min(1.4, camDrag.pitch + (e.clientY - camDrag.y) * 0.01));
+  draw();
+});
+window.addEventListener('pointerup', () => { camDrag = null; });
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  state.cam.dist = Math.max(0.5, (state.cam.dist || 0) + e.deltaY * 0.002);
+  draw();
+}, { passive: false });
+
+function project(p, center, scale) {
+  const [yaw, pitch] = [state.cam.yaw, state.cam.pitch];
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  // 绕 Y 再绕 X
+  const x1 = p[0] * cy - p[2] * sy;
+  const z1 = p[0] * sy + p[2] * cy;
+  const y2 = p[1] * cp - z1 * sp;
+  const z2 = p[1] * sp + z1 * cp;
+  const persp = 1 / (1 + state.cam.dist * 0.15 + z2 * 0.0);
+  return { x: center.x + x1 * scale * persp, y: center.y - y2 * scale * persp, depth: z2 };
+}
+
+function draw() {
+  const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
+  ctx.clearRect(0, 0, cssW, cssH);
+  if (!state.positions) { drawGrid(); return; }
+  const verts = state.positions;
+  let cx = 0, cy = 0, cz = 0, maxR = 1;
+  verts.forEach((p) => { cx += p[0]; cy += p[1]; cz += p[2];
+    maxR = Math.max(maxR, Math.hypot(p[0], p[1], p[2])); });
+  cx /= verts.length; cy /= verts.length; cz /= verts.length;
+  let boxR = maxR;
+  if (state.result) {
+    const b = state.result.box;
+    boxR = Math.max(boxR, ...b.min.map(Math.abs), ...b.max.map(Math.abs));
+  }
+  const scale = Math.min(cssW, cssH) * 0.36 / boxR;
+  const center = { x: cssW / 2, y: cssH / 2 };
+  const ctr = [cx, cy, cz];
+  const rel = (p) => [p[0] - ctr[0], p[1] - ctr[1], p[2] - ctr[2]];
+
+  drawGrid(center, scale, ctr);
+
+  // 包围盒线框
+  if (state.result) drawBox(state.result.box, center, scale, ctr);
+
+  // 网格（三角形）或顶点
+  const model = state.model;
+  const tri = model && model.triangles;
+  const proj = verts.map((p) => project(rel(p), center, scale));
+  if (tri && tri.length) {
+    const faces = [];
+    tri.forEach((t) => {
+      const ps = t.map((vi) => proj[vi]);
+      faces.push({ ps, depth: (ps[0].depth + ps[1].depth + ps[2].depth) / 3 });
+    });
+    faces.sort((a, b) => b.depth - a.depth);
+    ctx.lineWidth = 1;
+    faces.forEach(({ ps }) => {
+      ctx.beginPath();
+      ctx.moveTo(ps[0].x, ps[0].y); ps.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+      ctx.strokeStyle = 'var(--accent-dim)';
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent-dim');
+      ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1;
+    });
+  } else {
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg-dim');
+    proj.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 1.4, 0, 7); ctx.fill(); });
+  }
+
+  // 见证点高亮
+  if (state.witnessMark) {
+    const vi = state.witnessMark.vertex;
+    if (proj[vi]) {
+      const p = proj[vi];
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--warn');
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.stroke();
+    }
+  }
+  // 坐标轴小标
+  drawAxes(center, scale, ctr);
+}
+
+function drawGrid(center, scale = 40, ctr = [0, 0, 0]) {
+  const c = getComputedStyle(document.documentElement);
+  ctx.strokeStyle = c.getPropertyValue('--grid'); ctx.lineWidth = 1;
+  const c0 = center || { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+  for (let i = -6; i <= 6; i++) {
+    const a = project([i - ctr[0], -ctr[1], -ctr[2]], c0, scale);
+    const b = project([i - ctr[0], -ctr[1], 6 - ctr[2]], c0, scale);
+    const d = project([-6 - ctr[0], -ctr[1], i - ctr[2]], c0, scale);
+    const e = project([6 - ctr[0], -ctr[1], i - ctr[2]], c0, scale);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+  }
+}
+function drawBox(box, center, scale, ctr) {
+  const c = getComputedStyle(document.documentElement);
+  const [mn, mx] = [box.min, box.max];
+  const corners = [];
+  for (let i = 0; i < 8; i++) {
+    corners.push([
+      (i & 1 ? mx[0] : mn[0]) - ctr[0],
+      (i & 2 ? mx[1] : mn[1]) - ctr[1],
+      (i & 4 ? mx[2] : mn[2]) - ctr[2],
+    ]);
+  }
+  const pc = corners.map((p) => project(p, center, scale));
+  const edges = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+  ctx.strokeStyle = c.getPropertyValue('--accent'); ctx.lineWidth = 1.6;
+  ctx.setLineDash([5, 4]);
+  edges.forEach(([a, b]) => {
+    ctx.beginPath(); ctx.moveTo(pc[a].x, pc[a].y); ctx.lineTo(pc[b].x, pc[b].y); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+}
+function drawAxes(center, scale, ctr) {
+  const c = getComputedStyle(document.documentElement);
+  const L = 1.2;
+  const axes = [['--x', [L, 0, 0]], ['--y', [0, L, 0]], ['--z', [0, 0, L]]];
+  const o = project([-ctr[0], -ctr[1], -ctr[2]], center, scale);
+  axes.forEach(([tok, v]) => {
+    const p = project([v[0] - ctr[0], v[1] - ctr[1], v[2] - ctr[2]], center, scale);
+    ctx.strokeStyle = c.getPropertyValue(tok); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+  });
+}
+
+/* ============================ 主题 ============================ */
+$('btnTheme').onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme !== 'dark';
+  root.dataset.theme = dark ? 'dark' : 'light';
+  draw();
+};
+
+/* ============================ 启动 ============================ */
+initWorker();
+resize();
+new ResizeObserver(resize).observe(canvas.parentElement);
+</script>
