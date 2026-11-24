@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>自适应梳状分离台</title>
+<style>
+/* ---- design tokens: 工程仪器风，中性灰蓝底，状态仅用蓝/橙/灰 ---- */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7;
+  --surface: #fcfcfb;
+  --surface-2: #f0f1f3;
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --muted: #898781;
+  --border: rgba(11,11,11,0.10);
+  --gridline: #e1e0d9;
+  --accent: #2a78d6;          /* 双行 */
+  --accent-soft: rgba(42,120,214,0.12);
+  --warn: #eb6834;            /* 单行回退 */
+  --warn-soft: rgba(235,104,52,0.12);
+  --invalid: #898781;         /* 无效组：中性灰，配合斜纹+文字 */
+  --invalid-soft: rgba(137,135,129,0.18);
+  --critical: #d03b3b;
+  --ok: #1baf7a;
+  --shadow: 0 1px 2px rgba(11,11,11,0.05), 0 4px 14px rgba(11,11,11,0.06);
+  --radius: 10px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --fg: #f0efec;
+    --fg-2: #c3c2b7;
+    --muted: #898781;
+    --border: rgba(255,255,255,0.10);
+    --gridline: #2c2c2a;
+    --accent: #3987e5;
+    --accent-soft: rgba(57,135,229,0.18);
+    --warn: #d95926;
+    --warn-soft: rgba(217,89,38,0.18);
+    --invalid: #898781;
+    --invalid-soft: rgba(137,135,129,0.22);
+    --critical: #e66767;
+    --ok: #199e70;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232322;
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --muted: #898781;
+  --border: rgba(255,255,255,0.10);
+  --gridline: #2c2c2a;
+  --accent: #3987e5;
+  --accent-soft: rgba(57,135,229,0.18);
+  --warn: #d95926;
+  --warn-soft: rgba(217,89,38,0.18);
+  --invalid: #898781;
+  --invalid-soft: rgba(137,135,129,0.22);
+  --critical: #e66767;
+  --ok: #199e70;
+  --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.35);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--fg);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 18px 40px; display: flex; flex-direction: column; gap: 14px; }
+
+header.app-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header.app-head h1 { font-size: 20px; margin: 0; letter-spacing: 0.01em; }
+header.app-head .sub { color: var(--fg-2); font-size: 13px; }
+header.app-head .spacer { flex: 1; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; }
+.ctl-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ctl-group > label { font-size: 12px; color: var(--fg-2); letter-spacing: 0.04em; }
+.ctl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+button, .btn {
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 13px;
+  cursor: pointer;
+}
+button:hover, .btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: 0.45; cursor: default; }
+input[type="number"], input[type="range"] { font: inherit; }
+input[type="number"] {
+  width: 86px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+input[type="range"] { width: 190px; accent-color: var(--accent); }
+.thr-line { display: flex; align-items: center; gap: 10px; }
+.thr-line .thr-val { font-family: var(--mono); min-width: 42px; text-align: right; }
+
+.dropzone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  color: var(--fg-2);
+  font-size: 13px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.dropzone.drag { border-color: var(--accent); background: var(--accent-soft); }
+.file-name { font-family: var(--mono); font-size: 12.5px; color: var(--fg); }
+
+.banner {
+  border-radius: 8px; padding: 10px 12px; font-size: 13px;
+  border: 1px solid var(--border); display: none;
+}
+.banner.show { display: block; }
+.banner.error { background: var(--warn-soft); border-color: var(--warn); color: var(--fg); }
+.banner.info { background: var(--accent-soft); border-color: var(--accent); }
+.banner code { font-family: var(--mono); font-size: 12px; }
+
+/* stats strip */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; min-width: 0; }
+.stat .k { font-size: 11.5px; color: var(--muted); letter-spacing: 0.05em; }
+.stat .v { font-family: var(--mono); font-size: 17px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); }
+.pill .dot { width: 9px; height: 9px; border-radius: 50%; }
+.pill.double { background: var(--accent-soft); }
+.pill.double .dot { background: var(--accent); }
+.pill.single { background: var(--warn-soft); }
+.pill.single .dot { background: var(--warn); }
+.pill.invalid .dot { background: var(--invalid); }
+
+/* playback */
+.playback { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.playback .frame-pos { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.speed-sel { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); }
+
+/* maps */
+.maps { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+.map-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.map-card h3 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.map-card h3 .domain { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+.canvas-hold { position: relative; overflow-x: auto; }
+canvas.map { display: block; image-rendering: pixelated; border-radius: 6px; cursor: crosshair; }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-2); }
+.legend .bar { height: 10px; flex: 1; min-width: 90px; border-radius: 3px; border: 1px solid var(--border); }
+.legend span.t { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.status-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); }
+.status-legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); }
+.swatch.double { background: var(--accent); }
+.swatch.single { background: var(--warn); }
+.swatch.invalid {
+  background:
+    repeating-linear-gradient(45deg, var(--invalid) 0 3px, transparent 3px 6px),
+    var(--invalid-soft);
+}
+
+/* tooltip */
+.tooltip {
+  position: fixed; z-index: 40; pointer-events: none; display: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: var(--shadow); padding: 8px 10px; font-size: 12px; max-width: 280px;
+}
+.tooltip.show { display: block; }
+.tooltip .tt-title { font-weight: 600; margin-bottom: 4px; }
+.tooltip table { border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; }
+.tooltip td { padding: 1px 8px 1px 0; color: var(--fg-2); }
+.tooltip td:last-child { color: var(--fg); text-align: right; }
+
+/* detail panel */
+.detail { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 860px) { .detail { grid-template-columns: 1fr; } }
+.detail h3 { margin: 0 0 8px; font-size: 13.5px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 0; word-break: break-word; }
+.point-table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12px; }
+.point-table th, .point-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.point-table th { color: var(--fg-2); font-weight: 600; background: var(--surface-2); }
+.point-table td.lbl { text-align: left; color: var(--fg-2); }
+.reason-line { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.fallback-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.fb-row {
+  display: flex; justify-content: space-between; gap: 8px; align-items: center;
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  background: var(--surface-2); cursor: pointer; font-size: 12.5px;
+}
+.fb-row:hover { border-color: var(--warn); }
+.fb-row .meta { font-family: var(--mono); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.empty-note { color: var(--muted); font-size: 13px; }
+
+/* modal */
+.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 18px; }
+.modal-back.show { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); width: min(760px, 100%); max-height: 86vh; display: flex; flex-direction: column; }
+.modal header { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+.modal header h3 { margin: 0; font-size: 15px; }
+.modal .body { padding: 12px 16px; overflow: auto; }
+.modal pre {
+  margin: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  max-height: 52vh; overflow: auto; white-space: pre;
+}
+.modal .foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+.theme-btn { padding: 6px 10px; }
+.hint { color: var(--muted); font-size: 12px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app-head">
+    <h1>自适应梳状分离台</h1>
+    <span class="sub">10 位基带行 · 四点组亮/色分离 · 逐帧路径审计</span>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" type="button">切换主题</button>
+  </header>
+
+  <!-- 导入与阈值 -->
+  <section class="panel">
+    <div class="controls">
+      <div class="ctl-group">
+        <label>数据导入（line-comb.json，≤120 帧 / ≤200 万点）</label>
+        <div class="ctl-row">
+          <label class="btn" for="fileInput">选择 JSON</label>
+          <input id="fileInput" type="file" accept=".json,application/json" class="hidden">
+          <button id="sampleBtn" type="button">载入内置样本</button>
+          <span id="fileName" class="file-name"></span>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <label>分离阈值（均值差严格大于阈值才回退单行）</label>
+        <div class="thr-line">
+          <input id="thrRange" type="range" min="0" max="1023" step="1">
+          <input id="thrNumber" type="number" min="0" max="1023" step="1">
+          <span class="hint" id="thrSrc"></span>
+          <button id="thrReset" type="button">恢复文件值</button>
+        </div>
+      </div>
+    </div>
+    <div class="dropzone" id="dropzone" style="margin-top:12px">
+      <span>或将 JSON 拖到此处。非法文件会被整份拒绝，已导入的数据保持不变。</span>
+    </div>
+    <div class="banner error" id="errBanner" role="alert"></div>
+    <div class="banner info" id="infoBanner"></div>
+  </section>
+
+  <!-- 统计 -->
+  <section class="panel">
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <!-- 播放 -->
+  <section class="panel playback">
+    <button id="firstBtn" type="button" title="首帧">⏮</button>
+    <button id="prevBtn" type="button" title="上一帧 ←">◀</button>
+    <button id="playBtn" class="primary" type="button" title="空格 播放/连播">▶ 连播</button>
+    <button id="nextBtn" type="button" title="下一帧 →">▶</button>
+    <button id="lastBtn" type="button" title="末帧">⏭</button>
+    <span class="frame-pos" id="framePos">—</span>
+    <label class="hint">速度
+      <select class="speed-sel" id="speedSel">
+        <option value="1000">1 fps</option>
+        <option value="500">2 fps</option>
+        <option value="250" selected>4 fps</option>
+        <option value="125">8 fps</option>
+      </select>
+    </label>
+    <span class="hint">跳帧与连播对同一帧给出完全相同的结果（纯函数，无播放态依赖）</span>
+    <span class="spacer" style="flex:1"></span>
+    <button id="exportBtn" type="button">导出当前帧 L/U/V</button>
+  </section>
+
+  <!-- 状态图例 -->
+  <section class="panel status-legend">
+    <span class="item"><span class="swatch double"></span>双行（与反极性邻行联合分离）</span>
+    <span class="item"><span class="swatch single"></span>单行回退（均值差超阈值或无可用邻组）</span>
+    <span class="item"><span class="swatch invalid"></span>无效组（四点含缺点，斜纹标记）</span>
+    <span class="hint">点击任意热图的一个四点组查看邻行选择与回退原因；三张图与路径图选区联动</span>
+  </section>
+
+  <!-- 热图 -->
+  <section class="maps" id="maps">
+    <div class="map-card">
+      <h3>亮度 L <span class="domain">域 0–1023</span></h3>
+      <div class="canvas-hold"><canvas class="map" id="mapL"></canvas></div>
+      <div class="legend"><span class="t">0</span><span class="bar" id="rampL"></span><span class="t">1023</span></div>
+    </div>
+    <div class="map-card">
+      <h3>色差 U <span class="domain">域 −512…512</span></h3>
+      <div class="canvas-hold"><canvas class="map" id="mapU"></canvas></div>
+      <div class="legend"><span class="t">−512</span><span class="bar" id="rampU"></span><span class="t">+512</span></div>
+    </div>
+    <div class="map-card">
+      <h3>色差 V <span class="domain">域 −512…512</span></h3>
+      <div class="canvas-hold"><canvas class="map" id="mapV"></canvas></div>
+      <div class="legend"><span class="t">−512</span><span class="bar" id="rampV"></span><span class="t">0</span><span class="t">+512</span></div>
+    </div>
+    <div class="map-card">
+      <h3>分离路径 <span class="domain" id="pathDomain"></span></h3>
+      <div class="canvas-hold"><canvas class="map" id="mapPath"></canvas></div>
+      <div class="legend"><span class="hint">每行高度内标出四点组；蓝=双行，橙=单行，灰斜纹=无效</span></div>
+    </div>
+  </section>
+
+  <!-- 详情 + 回退清单 -->
+  <section class="panel detail">
+    <div>
+      <h3>选中组审计</h3>
+      <div id="detailBody"><span class="empty-note">点击热图选择一个四点组。</span></div>
+    </div>
+    <div>
+      <h3>本帧单行回退组（底部掉行排查）</h3>
+      <div class="fallback-list" id="fallbackList"></div>
+    </div>
+  </section>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<!-- 导出弹窗 -->
+<div class="modal-back" id="modalBack">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <header><h3 id="modalTitle">导出当前帧</h3><button id="modalClose" type="button">关闭</button></header>
+    <div class="body">
+      <p class="hint" style="margin-top:0">L/U/V 均为乘 4 的整数；无效位置全部置 0，并在 invalidMask 中标 1。L 为逐点数组，U/V 在每个四点组内相同。</p>
+      <pre id="exportText"></pre>
+    </div>
+    <div class="foot">
+      <button id="copyExport" type="button">复制 JSON</button>
+      <button id="downloadExport" type="button">下载 .json</button>
+    </div>
+  </div>
+</div>
+
+<script src="sample-data.js"></script>
+<script>
+'use strict';
+/* ================= 常量与状态 ================= */
+const MAX_FRAMES = 120;
+const MAX_POINTS = 2_000_000;
+const LUMA_DOMAIN = [0, 1023];
+const CHROMA_DOMAIN = [-512, 512];
+
+const state = {
+  dataset: null,          // 校验通过的规范化数据
+  fileName: '',
+  threshold: 0,
+  fileThreshold: 0,
+  frameIdx: 0,
+  selected: null,         // {line, g}
+  hover: null,            // {line, g}
+  playing: false,
+  playTimer: null,
+  cache: new Map(),       // key frameIdx -> 该帧结果（阈值变化时整体清空）
+  dark: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches,
+};
+
+/* ================= 校验与导入 =================
+   任何非法项都抛出带帧号（1 起）的错误；调用方保留上一次导入。 */
+function validate(raw) {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('顶层必须是对象，包含 width / height / frames。');
+  }
+  const { width, height, frames } = raw;
+  if (!Number.isInteger(width) || width <= 0 || width % 4 !== 0) {
+    throw new Error(`width 非法：${JSON.stringify(width)}。必须是正整数且为 4 的倍数。`);
+  }
+  if (!Number.isInteger(height) || height <= 0) {
+    throw new Error(`height 非法：${JSON.stringify(height)}。必须是正整数。`);
+  }
+  if (!Array.isArray(frames)) throw new Error('frames 必须是数组。');
+  if (frames.length === 0) throw new Error('frames 为空，至少需要 1 帧。');
+  if (frames.length > MAX_FRAMES) {
+    throw new Error(`帧数 ${frames.length} 超过上限 ${MAX_FRAMES} 帧。`);
+  }
+  let totalPoints = 0;
+  const outFrames = [];
+  frames.forEach((frame, fi) => {
+    const tag = `第 ${fi + 1} 帧`;
+    if (!Array.isArray(frame)) throw new Error(`${tag}：必须是行对象数组。`);
+    if (frame.length !== height) {
+      throw new Error(`${tag}：行数 ${frame.length} 与 height=${height} 不一致。`);
+    }
+    const outLines = [];
+    frame.forEach((line, li) => {
+      const ltag = `${tag} 第 ${li + 1} 行`;
+      if (typeof line !== 'object' || line === null) throw new Error(`${ltag}：行必须是对象。`);
+      const { offset, sign, samples } = line;
+      if (!Number.isInteger(offset)) throw new Error(`${ltag}：offset 非法（${JSON.stringify(offset)}），必须是整数。`);
+      if (sign !== 1 && sign !== -1) throw new Error(`${ltag}：sign 非法（${JSON.stringify(sign)}），必须是 1 或 -1。`);
+      if (!Array.isArray(samples)) throw new Error(`${ltag}：samples 必须是数组。`);
+      const outSamples = new Array(samples.length);
+      samples.forEach((v, si) => {
+        if (v === null) { outSamples[si] = null; return; }
+        if (!Number.isInteger(v) || v < 0 || v > 1023) {
+          throw new Error(`${ltag} samples[${si}] 非法：${JSON.stringify(v)}。10 位样本只允许 0–1023 的整数或 null。`);
+        }
+        outSamples[si] = v;
+      });
+      totalPoints += width;
+      outLines.push({ offset, sign, samples: outSamples });
+    });
+    outFrames.push(outLines);
+  });
+  if (totalPoints > MAX_POINTS) {
+    throw new Error(`累计样本点 ${totalPoints} 超过上限 ${MAX_POINTS}（按 width × 行数 计）。`);
+  }
+  let threshold = 16;
+  if ('threshold' in raw) {
+    const t = raw.threshold;
+    if (!Number.isInteger(t) || t < 0 || t > 1023) {
+      throw new Error(`threshold 非法：${JSON.stringify(t)}。必须是 0–1023 的整数。`);
+    }
+    threshold = t;
+  }
+  return { width, height, threshold, frames: outFrames };
+}
+
+function importRaw(raw, name) {
+  const ds = validate(raw);           // 抛错则 state.dataset 原样保留
+  state.dataset = ds;
+  state.fileName = name;
+  state.fileThreshold = ds.threshold;
+  state.threshold = ds.threshold;
+  state.frameIdx = 0;
+  state.selected = null;
+  state.cache.clear();
+  document.getElementById('fileName').textContent = name;
+  document.getElementById('thrSrc').textContent = `（文件初始值 ${ds.threshold}）`;
+  syncThrControls();
+  renderAll();
+  showInfo(`导入成功：${ds.frames.length} 帧，${ds.width}×${ds.height}，累计 ${ds.width * ds.height * ds.frames.length} 点。`);
+}
+
+/* ================= 分离引擎（纯函数） ================= */
+function sampleAt(line, x) {
+  const idx = x + line.offset;
+  const s = line.samples;
+  if (idx < 0 || idx >= s.length) return null;
+  const v = s[idx];
+  return v === null ? null : v;
+}
+
+function computeFrame(frameIdx) {
+  const ds = state.dataset;
+  const { width, height, frames } = ds;
+  const frame = frames[frameIdx];
+  const G = width / 4;
+  const groups = [];
+  for (let li = 0; li < height; li++) {
+    const line = frame[li];
+    for (let g = 0; g < G; g++) {
+      const vals = [];
+      let valid = true;
+      for (let k = 0; k < 4; k++) {
+        const v = sampleAt(line, 4 * g + k);
+        if (v === null) valid = false;
+        vals.push(v);
+      }
+      groups.push({
+        line: li, g, vals, valid,
+        mean: valid ? vals.reduce((a, b) => a + b, 0) / 4 : null,
+      });
+    }
+  }
+  const at = (li, g) => groups[li * G + g];
+  const results = groups.map((grp) => {
+    const r = {
+      line: grp.line, g: grp.g, valid: grp.valid,
+      mode: null, neighbor: null, metric: null, reason: '',
+      candidates: [], L: null, U: null, V: null, C: null,
+    };
+    if (!grp.valid) {
+      r.mode = 'invalid';
+      r.reason = '本组四点含缺点（越界或 null），整组无效';
+      return r;
+    }
+    const li = grp.line;
+    for (const nj of [li - 1, li + 1]) {
+      if (nj < 0 || nj >= height) continue;
+      if (frame[nj].sign !== -frame[li].sign) continue;   // 仅反极性
+      const ng = at(nj, grp.g);
+      if (!ng.valid) continue;                              // 邻组须完整
+      let sum = 0;
+      for (let k = 0; k < 4; k++) sum += Math.abs(grp.vals[k] - ng.vals[k]);
+      r.candidates.push({ line: nj, metric: sum / 4 });
+    }
+    let picked = null;
+    if (r.candidates.length === 0) {
+      r.mode = 'single';
+      r.reason = '同帧相邻行中没有反极性完整组，回退单行';
+    } else {
+      // 均值差最小；同差优先上一行（line 索引小者）
+      picked = r.candidates.slice().sort((a, b) =>
+        (a.metric - b.metric) || (a.line - b.line))[0];
+      r.metric = picked.metric;
+      if (picked.metric > state.threshold) {
+        r.mode = 'single';
+        r.reason = `最小均值差 ${picked.metric.toFixed(2)} 严格大于阈值 ${state.threshold}，回退单行`;
+        picked = null;
+      } else {
+        r.mode = 'double';
+        r.neighbor = picked.line;
+        r.reason = `与第 ${picked.line + 1} 行联合分离（均值差 ${picked.metric.toFixed(2)} ≤ 阈值 ${state.threshold}）`;
+      }
+    }
+    const a = grp.vals;
+    const pol = frame[li].sign;
+    let L, C, U, V;
+    if (r.mode === 'double') {
+      const b = at(r.neighbor, grp.g).vals;
+      L = [0, 1, 2, 3].map((k) => (a[k] + b[k]) / 2);
+      C = [0, 1, 2, 3].map((k) => (a[k] - b[k]) / 2);
+    } else {
+      const m = grp.mean;
+      L = [m, m, m, m];
+      C = a.map((v) => v - m);
+    }
+    U = pol * (C[0] - C[2]) / 2;
+    V = pol * (C[1] - C[3]) / 2;
+    r.L = L; r.C = C; r.U = U; r.V = V;
+    return r;
+  });
+  return { groups, results, G };
+}
+
+function frameResult(frameIdx) {
+  if (state.cache.has(frameIdx)) return state.cache.get(frameIdx);
+  const res = computeFrame(frameIdx);
+  state.cache.set(frameIdx, res);
+  return res;
+}
+
+/* ================= 颜色 ================= */
+function lerp(a, b, t) { return a + (b - a) * t; }
+function hexRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function mix(h1, h2, t) {
+  const a = hexRgb(h1), b = hexRgb(h2);
+  return `rgb(${Math.round(lerp(a[0], b[0], t))},${Math.round(lerp(a[1], b[1], t))},${Math.round(lerp(a[2], b[2], t))})`;
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+/* 亮度：蓝顺序色阶（取自校验通过的 sequential blue ramp） */
+const LUMA_STEPS_L = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'];
+const LUMA_STEPS_D = ['#1c3350', '#20466f', '#245b91', '#2a78d6', '#3987e5', '#6da7ec', '#9ec5f4'];
+/* 色差：蓝（负）→ 中性灰（0）→ 红（正），等臂发散 */
+const DIV_NEG_L = '#2a78d6', DIV_MID_L = '#f0efec', DIV_POS_L = '#d03b3b';
+const DIV_NEG_D = '#3987e5', DIV_MID_D = '#383835', DIV_POS_D = '#e66767';
+
+function ramp(steps, t) {
+  const n = steps.length - 1;
+  const x = Math.min(0.999999, Math.max(0, t)) * n;
+  const i = Math.floor(x);
+  return mix(steps[i], steps[i + 1], x - i);
+}
+function lumaColor(v) {
+  const t = (v - LUMA_DOMAIN[0]) / (LUMA_DOMAIN[1] - LUMA_DOMAIN[0]);
+  return ramp(state.dark ? LUMA_STEPS_D : LUMA_STEPS_L, t);
+}
+function chromaColor(v) {
+  const neg = state.dark ? DIV_NEG_D : DIV_NEG_L;
+  const mid = state.dark ? DIV_MID_D : DIV_MID_L;
+  const pos = state.dark ? DIV_POS_D : DIV_POS_L;
+  if (v <= 0) return mix(neg, mid, (v - CHROMA_DOMAIN[0]) / (0 - CHROMA_DOMAIN[0]));
+  return mix(mid, pos, v / CHROMA_DOMAIN[1]);
+}
+function statusColor(mode) {
+  if (mode === 'double') return cssVar('--accent');
+  if (mode === 'single') return cssVar('--warn');
+  return cssVar('--invalid');
+}
+
+/* ================= 热图渲染 ================= */
+const CELL_W = 26, CELL_H = 30, PAD_TOP = 22, PAD_LEFT = 34;
+
+function canvasSetup(canvas, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function drawHatch(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.strokeStyle = cssVar('--invalid');
+  ctx.globalAlpha = 0.85;
+  ctx.lineWidth = 2;
+  for (let i = -h; i < w + h; i += 7) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y + h);
+    ctx.lineTo(x + i + h, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function baseGrid(ctx, ds, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = cssVar('--surface-2');
+  ctx.fillRect(0, 0, w, h);
+  ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
+  ctx.fillStyle = cssVar('--muted');
+  ctx.textBaseline = 'middle';
+  // 行号
+  for (let li = 0; li < ds.height; li++) {
+    const y = PAD_TOP + li * CELL_H;
+    ctx.fillText('L' + (li + 1), 4, y + CELL_H / 2);
+    ctx.strokeStyle = cssVar('--gridline');
+    ctx.beginPath();
+    ctx.moveTo(PAD_LEFT, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(PAD_LEFT, PAD_TOP + ds.height * CELL_H);
+  ctx.lineTo(w, PAD_TOP + ds.height * CELL_H);
+  ctx.stroke();
+}
+
+function drawSelection(ctx, line, g) {
+  if (line == null) return;
+  const gx = PAD_LEFT + g * CELL_W;
+  const gy = PAD_TOP + line * CELL_H;
+  ctx.save();
+  ctx.strokeStyle = cssVar('--fg');
+  ctx.lineWidth = 2;
+  ctx.strokeRect(gx + 1, gy + 1, CELL_W - 2, CELL_H - 2);
+  ctx.restore();
+}
+
+function renderMaps() {
+  const ds = state.dataset;
+  if (!ds) return;
+  const { results, G } = frameResult(state.frameIdx);
+  const w = PAD_LEFT + G * CELL_W;
+  const h = PAD_TOP + ds.height * CELL_H;
+  const at = (li, g) => results[li * G + g];
+
+  function prep(id) {
+    const c = document.getElementById(id);
+    const ctx = canvasSetup(c, w, h);
+    baseGrid(ctx, ds, w, h);
+    return { c, ctx };
+  }
+
+  // L（逐点，每点 CELL_W/4 宽）
+  {
+    const { c, ctx } = prep('mapL');
+    const pw = CELL_W / 4;
+    results.forEach((r) => {
+      for (let k = 0; k < 4; k++) {
+        const x = PAD_LEFT + r.g * CELL_W + k * pw;
+        const y = PAD_TOP + r.line * CELL_H;
+        if (!r.valid) {
+          ctx.fillStyle = cssVar('--invalid-soft');
+          ctx.fillRect(x, y, pw, CELL_H);
+        } else {
+          ctx.fillStyle = lumaColor(r.L[k]);
+          ctx.fillRect(x, y, pw, CELL_H);
+        }
+      }
+      if (!r.valid) drawHatch(ctx, PAD_LEFT + r.g * CELL_W, PAD_TOP + r.line * CELL_H, CELL_W, CELL_H);
+    });
+    drawSelection(ctx, state.selected?.line, state.selected?.g);
+    bindHit(c, 'L');
+  }
+  // U / V（组级，整组同色）
+  for (const [id, key] of [['mapU', 'U'], ['mapV', 'V']]) {
+    const { c, ctx } = prep(id);
+    results.forEach((r) => {
+      const x = PAD_LEFT + r.g * CELL_W;
+      const y = PAD_TOP + r.line * CELL_H;
+      if (!r.valid) {
+        ctx.fillStyle = cssVar('--invalid-soft');
+        ctx.fillRect(x, y, CELL_W, CELL_H);
+        drawHatch(ctx, x, y, CELL_W, CELL_H);
+      } else {
+        ctx.fillStyle = chromaColor(r[key]);
+        ctx.fillRect(x, y, CELL_W, CELL_H);
+      }
+    });
+    drawSelection(ctx, state.selected?.line, state.selected?.g);
+    bindHit(c, key);
+  }
+  // 路径
+  {
+    const { c, ctx } = prep('mapPath');
+    results.forEach((r) => {
+      const x = PAD_LEFT + r.g * CELL_W;
+      const y = PAD_TOP + r.line * CELL_H;
+      ctx.fillStyle = r.valid ? statusColor(r.mode) : cssVar('--invalid-soft');
+      ctx.fillRect(x + 1, y + 1, CELL_W - 2, CELL_H - 2);
+      if (!r.valid) drawHatch(ctx, x + 1, y + 1, CELL_W - 2, CELL_H - 2);
+      // 双行：画一条指向邻行的连线
+      if (r.mode === 'double') {
+        ctx.strokeStyle = cssVar('--surface');
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x + CELL_W / 2, y + (r.neighbor > r.line ? CELL_H - 2 : 2));
+        ctx.lineTo(x + CELL_W / 2, PAD_TOP + r.neighbor * CELL_H + (r.neighbor > r.line ? 2 : CELL_H - 2));
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    });
+    drawSelection(ctx, state.selected?.line, state.selected?.g);
+    bindHit(c, 'path');
+  }
+  document.getElementById('pathDomain').textContent =
+    `帧 ${state.frameIdx + 1}/${ds.frames.length} · 阈值 ${state.threshold}`;
+  paintRamps();
+}
+
+function paintRamps() {
+  const lSteps = state.dark ? LUMA_STEPS_D : LUMA_STEPS_L;
+  document.getElementById('rampL').style.background =
+    `linear-gradient(90deg, ${lSteps.join(',')})`;
+  const neg = state.dark ? DIV_NEG_D : DIV_NEG_L;
+  const mid = state.dark ? DIV_MID_D : DIV_MID_L;
+  const pos = state.dark ? DIV_POS_D : DIV_POS_L;
+  const grad = `linear-gradient(90deg, ${neg}, ${mid}, ${pos})`;
+  document.getElementById('rampU').style.background = grad;
+  document.getElementById('rampV').style.background = grad;
+}
+
+/* 命中检测与提示 */
+function eventGroup(evt, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const px = evt.clientX - rect.left;
+  const py = evt.clientY - rect.top;
+  const g = Math.floor((px - PAD_LEFT) / CELL_W);
+  const line = Math.floor((py - PAD_TOP) / CELL_H);
+  const ds = state.dataset;
+  if (!ds || g < 0 || g >= ds.width / 4 || line < 0 || line >= ds.height) return null;
+  return { line, g };
+}
+function bindHit(canvas, kind) {
+  canvas.onmousemove = (evt) => {
+    const hit = eventGroup(evt, canvas);
+    state.hover = hit;
+    if (!hit) { hideTooltip(); return; }
+    showTooltip(evt, hit, kind);
+  };
+  canvas.onmouseleave = () => { state.hover = null; hideTooltip(); };
+  canvas.onclick = (evt) => {
+    const hit = eventGroup(evt, canvas);
+    if (hit) { state.selected = hit; renderAll(); }
+  };
+}
+
+function showTooltip(evt, hit, kind) {
+  const ds = state.dataset;
+  const { results, G } = frameResult(state.frameIdx);
+  const r = results[hit.line * G + hit.g];
+  const tt = document.getElementById('tooltip');
+  let rows = '';
+  if (!r.valid) {
+    rows = `<tr><td>状态</td><td>无效组</td></tr>`;
+  } else {
+    const u4 = Math.round(r.U * 4), v4 = Math.round(r.V * 4);
+    rows = `
+      <tr><td>路径</td><td>${r.mode === 'double' ? '双行 ↔ L' + (r.neighbor + 1) : '单行回退'}</td></tr>
+      <tr><td>均值差</td><td>${r.metric == null ? '—' : r.metric.toFixed(2)}</td></tr>
+      <tr><td>L×4</td><td>${r.L.map((v) => Math.round(v * 4)).join(', ')}</td></tr>
+      <tr><td>U×4 / V×4</td><td>${u4} / ${v4}</td></tr>`;
+  }
+  tt.innerHTML = `<div class="tt-title">帧 ${state.frameIdx + 1} · L${hit.line + 1} · 组 ${hit.g}（x=${hit.g * 4}–${hit.g * 4 + 3}）</div>
+    <table>${rows}</table>`;
+  tt.classList.add('show');
+  const tw = tt.offsetWidth, th = tt.offsetHeight;
+  let x = evt.clientX + 14, y = evt.clientY + 14;
+  if (x + tw > window.innerWidth - 8) x = evt.clientX - tw - 14;
+  if (y + th > window.innerHeight - 8) y = evt.clientY - th - 14;
+  tt.style.left = x + 'px';
+  tt.style.top = y + 'px';
+}
+function hideTooltip() { document.getElementById('tooltip').classList.remove('show'); }
+
+/* ================= 统计与详情 ================= */
+function renderStats() {
+  const ds = state.dataset;
+  const el = document.getElementById('stats');
+  if (!ds) { el.innerHTML = ''; return; }
+  const { results } = frameResult(state.frameIdx);
+  let dbl = 0, sgl = 0, inv = 0;
+  results.forEach((r) => {
+    if (r.mode === 'double') dbl++;
+    else if (r.mode === 'single') sgl++;
+    else inv++;
+  });
+  const total = results.length;
+  const points = ds.width * ds.height;
+  el.innerHTML = `
+    <div class="stat"><div class="k">数据规模</div><div class="v">${ds.frames.length} 帧 · ${ds.width}×${ds.height}</div></div>
+    <div class="stat"><div class="k">当前帧</div><div class="v">${state.frameIdx + 1} / ${ds.frames.length}</div></div>
+    <div class="stat"><div class="k">阈值</div><div class="v">${state.threshold}</div></div>
+    <div class="stat"><div class="k">双行 / 单行 / 无效</div><div class="v">${dbl} / ${sgl} / ${inv}</div></div>
+    <div class="stat"><div class="k">双行占比</div><div class="v">${Math.round(dbl / total * 100)}%</div></div>
+    <div class="stat"><div class="k">本帧点数</div><div class="v">${points}</div></div>`;
+  document.getElementById('framePos').textContent = `帧 ${state.frameIdx + 1} / ${ds.frames.length}`;
+}
+
+function renderDetail() {
+  const ds = state.dataset;
+  const body = document.getElementById('detailBody');
+  const listEl = document.getElementById('fallbackList');
+  if (!ds) { body.innerHTML = '<span class="empty-note">尚未导入数据。</span>'; listEl.innerHTML = ''; return; }
+  const { results, G } = frameResult(state.frameIdx);
+
+  // 回退清单
+  const fb = results.filter((r) => r.mode === 'single' || r.mode === 'invalid');
+  if (fb.length === 0) {
+    listEl.innerHTML = '<span class="empty-note">本帧全部走双行，无回退组。</span>';
+  } else {
+    listEl.innerHTML = fb.map((r) => `
+      <div class="fb-row" data-line="${r.line}" data-g="${r.g}">
+        <span class="pill ${r.mode === 'invalid' ? 'invalid' : 'single'}">
+          <span class="dot"></span>${r.mode === 'invalid' ? '无效' : '单行'}
+        </span>
+        <span>L${r.line + 1} · 组 ${r.g}</span>
+        <span class="meta">${r.metric == null ? '—' : 'Δ=' + r.metric.toFixed(1)}</span>
+      </div>`).join('');
+    listEl.querySelectorAll('.fb-row').forEach((row) => {
+      row.onclick = () => {
+        state.selected = { line: +row.dataset.line, g: +row.dataset.g };
+        renderAll();
+      };
+    });
+  }
+
+  if (!state.selected) { body.innerHTML = '<span class="empty-note">点击热图选择一个四点组。</span>'; return; }
+  const { line, g } = state.selected;
+  const r = results[line * G + g];
+  const frame = ds.frames[state.frameIdx];
+  const grpLine = frame[line];
+  const rawVals = [0, 1, 2, 3].map((k) => sampleAt(grpLine, 4 * g + k));
+
+  if (!r.valid) {
+    body.innerHTML = `
+      <dl class="kv">
+        <dt>位置</dt><dd>帧 ${state.frameIdx + 1} · 行 L${line + 1}（sign=${grpLine.sign}, offset=${grpLine.offset}）· 组 ${g}（x=${g * 4}–${g * 4 + 3}）</dd>
+        <dt>原始样本</dt><dd>${rawVals.map((v) => v === null ? '<span style="color:var(--critical)">null/越界</span>' : v).join(', ')}</dd>
+        <dt>判定</dt><dd><span class="pill invalid"><span class="dot"></span>整组无效</span></dd>
+        <dt>原因</dt><dd>${r.reason}</dd>
+        <dt>输出</dt><dd>L/U/V 全部置 0，invalidMask=1</dd>
+      </dl>`;
+    return;
+  }
+
+  const candRows = r.candidates.map((c) =>
+    `<tr class="${r.neighbor === c.line ? 'picked' : ''}"><td class="lbl">L${c.line + 1}（sign=${frame[c.line].sign}）</td><td>${c.metric.toFixed(3)}</td><td>${r.neighbor === c.line ? '✓ 选中' : (c.metric > state.threshold ? '超阈值' : '候选')}</td></tr>`
+  ).join('') || '<tr><td class="lbl" colspan="3">无反极性完整相邻组</td></tr>';
+
+  const pointRows = [0, 1, 2, 3].map((k) => `
+    <tr>
+      <td class="lbl">x=${g * 4 + k}</td>
+      <td>${rawVals[k]}</td>
+      <td>${r.L[k].toFixed(2)}（×4=${Math.round(r.L[k] * 4)}）</td>
+      <td>${r.C[k].toFixed(2)}</td>
+    </tr>`).join('');
+
+  body.innerHTML = `
+    <dl class="kv" style="margin-bottom:10px">
+      <dt>位置</dt><dd>帧 ${state.frameIdx + 1} · 行 L${line + 1}（sign=${grpLine.sign}, offset=${grpLine.offset}）· 组 ${g}（x=${g * 4}–${g * 4 + 3}）</dd>
+      <dt>路径</dt><dd><span class="pill ${r.mode === 'double' ? 'double' : 'single'}"><span class="dot"></span>${r.mode === 'double' ? '双行联合 L' + (r.neighbor + 1) : '单行回退'}</span></dd>
+      <dt>原因</dt><dd>${r.reason}</dd>
+      <dt>U / V</dt><dd>U=${r.U.toFixed(2)}（×4=${Math.round(r.U * 4)}）　V=${r.V.toFixed(2)}（×4=${Math.round(r.V * 4)}）　极性 sign=${grpLine.sign}</dd>
+    </dl>
+    <div style="overflow-x:auto">
+    <table class="point-table">
+      <thead><tr><th class="lbl">点</th><th>原始 a</th><th>L（×4 整数）</th><th>C</th></tr></thead>
+      <tbody>${pointRows}</tbody>
+    </table>
+    </div>
+    <p style="margin:12px 0 6px" class="hint">相邻反极性完整组候选（均值差 = 四点绝对差均值）：</p>
+    <div style="overflow-x:auto">
+    <table class="point-table">
+      <thead><tr><th class="lbl">候选邻行</th><th>均值差</th><th>判定</th></tr></thead>
+      <tbody>${candRows}</tbody>
+    </table>
+    </div>`;
+}
+
+/* ================= 导出 ================= */
+function buildExport() {
+  const ds = state.dataset;
+  const { results, G } = frameResult(state.frameIdx);
+  const W = ds.width, H = ds.height;
+  const L = new Array(W * H).fill(0);
+  const U = new Array(W * H).fill(0);
+  const V = new Array(W * H).fill(0);
+  const invalidMask = new Array(W * H).fill(0);
+  results.forEach((r) => {
+    for (let k = 0; k < 4; k++) {
+      const idx = r.line * W + r.g * 4 + k;
+      if (!r.valid) { invalidMask[idx] = 1; continue; }
+      L[idx] = Math.round(r.L[k] * 4);
+      U[idx] = Math.round(r.U * 4);
+      V[idx] = Math.round(r.V * 4);
+    }
+  });
+  return {
+    frame: state.frameIdx,
+    width: W,
+    height: H,
+    threshold: state.threshold,
+    scale: 4,
+    note: 'L/U/V 为乘 4 整数；无效位置为 0 并在 invalidMask 标 1；行优先排列',
+    L, U, V, invalidMask,
+  };
+}
+
+function openExport() {
+  if (!state.dataset) return;
+  const obj = buildExport();
+  document.getElementById('exportText').textContent = JSON.stringify(obj, null, 1);
+  document.getElementById('modalBack').classList.add('show');
+}
+
+/* ================= 播放控制 ================= */
+function gotoFrame(i) {
+  const ds = state.dataset;
+  if (!ds) return;
+  state.frameIdx = Math.max(0, Math.min(ds.frames.length - 1, i));
+  renderAll();
+}
+function setPlaying(on) {
+  state.playing = on;
+  const btn = document.getElementById('playBtn');
+  if (on) {
+    btn.textContent = '⏸ 暂停';
+    const speed = +document.getElementById('speedSel').value;
+    state.playTimer = setInterval(() => {
+      const n = state.dataset.frames.length;
+      state.frameIdx = (state.frameIdx + 1) % n;   // 循环连播
+      renderAll();
+    }, speed);
+  } else {
+    btn.textContent = '▶ 连播';
+    clearInterval(state.playTimer);
+    state.playTimer = null;
+  }
+}
+
+/* ================= 整体渲染 ================= */
+function renderAll() {
+  if (!state.dataset) return;
+  renderStats();
+  renderMaps();
+  renderDetail();
+}
+function showInfo(msg) {
+  const el = document.getElementById('infoBanner');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
+function showError(msg) {
+  const el = document.getElementById('errBanner');
+  el.innerHTML = msg;
+  el.classList.add('show');
+}
+function clearError() { document.getElementById('errBanner').classList.remove('show'); }
+
+function syncThrControls() {
+  document.getElementById('thrRange').value = state.threshold;
+  document.getElementById('thrNumber').value = state.threshold;
+}
+function setThreshold(t) {
+  if (!Number.isFinite(t)) return;
+  t = Math.max(0, Math.min(1023, Math.round(t)));
+  state.threshold = t;
+  state.cache.clear();           // 阈值变化，全部重算；同一阈值结果恒定
+  syncThrControls();
+  renderAll();
+}
+
+/* ================= 事件绑定 ================= */
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const raw = JSON.parse(reader.result);
+      importRaw(raw, f.name);
+      clearError();
+    } catch (err) {
+      showError(`导入失败，已保留上一次导入：${escapeHtml(err.message)}`);
+    }
+  };
+  reader.onerror = () => showError('文件读取失败，已保留上一次导入。');
+  reader.readAsText(f);
+});
+document.getElementById('sampleBtn').addEventListener('click', () => {
+  try {
+    importRaw(window.EMBEDDED_SAMPLE, 'samples/line-comb.json（内置样本）');
+    clearError();
+  } catch (err) { showError(escapeHtml(err.message)); }
+});
+const dz = document.getElementById('dropzone');
+['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, () => dz.classList.remove('drag')));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { importRaw(JSON.parse(reader.result), f.name); clearError(); }
+    catch (err) { showError(`导入失败，已保留上一次导入：${escapeHtml(err.message)}`); }
+  };
+  reader.readAsText(f);
+});
+
+document.getElementById('thrRange').addEventListener('input', (e) => setThreshold(+e.target.value));
+document.getElementById('thrNumber').addEventListener('change', (e) => setThreshold(+e.target.value));
+document.getElementById('thrReset').addEventListener('click', () => setThreshold(state.fileThreshold));
+
+document.getElementById('firstBtn').onclick = () => gotoFrame(0);
+document.getElementById('prevBtn').onclick = () => gotoFrame(state.frameIdx - 1);
+document.getElementById('nextBtn').onclick = () => gotoFrame(state.frameIdx + 1);
+document.getElementById('lastBtn').onclick = () => gotoFrame(state.dataset ? state.dataset.frames.length - 1 : 0);
+document.getElementById('playBtn').onclick = () => setPlaying(!state.playing);
+document.getElementById('speedSel').onchange = () => { if (state.playing) { setPlaying(false); setPlaying(true); } };
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'ArrowLeft') gotoFrame(state.frameIdx - 1);
+  else if (e.key === 'ArrowRight') gotoFrame(state.frameIdx + 1);
+  else if (e.key === ' ') { e.preventDefault(); setPlaying(!state.playing); }
+});
+
+document.getElementById('exportBtn').onclick = openExport;
+document.getElementById('modalClose').onclick = () => document.getElementById('modalBack').classList.remove('show');
+document.getElementById('modalBack').addEventListener('click', (e) => {
+  if (e.target.id === 'modalBack') e.currentTarget.classList.remove('show');
+});
+document.getElementById('copyExport').onclick = async () => {
+  const text = document.getElementById('exportText').textContent;
+  const btn = document.getElementById('copyExport');
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = '已复制';
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    btn.textContent = '已复制（兼容方式）';
+  }
+  setTimeout(() => (btn.textContent = '复制 JSON'), 1600);
+};
+document.getElementById('downloadExport').onclick = () => {
+  const text = document.getElementById('exportText').textContent;
+  const blob = new Blob([text], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `frame-${state.frameIdx + 1}-LUV-x4.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
+document.getElementById('themeBtn').onclick = () => {
+  state.dark = !state.dark;
+  document.documentElement.setAttribute('data-theme', state.dark ? 'dark' : 'light');
+  paintRamps();
+  renderAll();
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ================= 启动：载入内置样本，首帧即完整工作态 ================= */
+try {
+  importRaw(window.EMBEDDED_SAMPLE, 'samples/line-comb.json（内置样本）');
+} catch (err) {
+  showError('内置样本加载失败：' + escapeHtml(err.message));
+}
+</script>
+</body>
+</html>
