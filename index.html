@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>手柄焦点调试台 · Focus Voyager</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #182036; --line: #2a3554; --text: #dbe4ff;
+    --dim: #8a96b8; --accent: #ffd23f; --ok: #4ade80; --bad: #f87171; --info: #7cc7ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; }
+  button, input[type="file"]::file-selector-button { background: #243058; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  button:hover { background: #2e3d6e; }
+  button:disabled { opacity: .4; cursor: default; }
+  input[type="number"], input[type="text"] { width: 70px; background: #0c1120; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font: inherit; }
+  main { display: flex; gap: 12px; padding: 12px 14px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { flex: 0 0 auto; }
+  canvas { background: #0a0e1a; border: 1px solid var(--line); display: block; image-rendering: pixelated; }
+  .hint { color: var(--dim); margin-top: 6px; max-width: 960px; }
+  aside { flex: 1 1 320px; min-width: 300px; display: flex; flex-direction: column; gap: 10px; }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+  section.card h2 { font-size: 12px; color: var(--dim); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .08em; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+  .warn { color: var(--bad); font-weight: 600; }
+  .ok { color: var(--ok); }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  #stateTable td { padding: 1px 8px 1px 0; vertical-align: top; }
+  #stateTable td:first-child { color: var(--dim); white-space: nowrap; }
+  .dirpad { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 30px); gap: 3px; }
+  .dirpad button { padding: 0; font-size: 14px; }
+  #histList { max-height: 180px; overflow: auto; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  #histList div { padding: 1px 4px; white-space: nowrap; }
+  #histList div.cur { background: #2e3d6e; }
+  #histList div .err { color: var(--bad); }
+  input[type="range"] { width: 100%; }
+  label.chk { color: var(--dim); display: flex; gap: 4px; align-items: center; }
+  #replayStat { font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎮 手柄焦点调试台</h1>
+  <input type="file" id="file" accept=".json,application/json">
+  <button id="loadSample">载入 samples/focus-voyager.json</button>
+  <span id="srcInfo" class="hint"></span>
+</header>
+<main>
+  <div class="stage">
+    <canvas id="cv" width="960" height="540"></canvas>
+    <div class="hint">
+      方向键移动焦点 · Esc 关闭弹层 · 点击画布把控件设为焦点（勾选“点击切换可用”后改为切换 enabled）。
+      焦点完全由本页引擎计算，不使用浏览器默认导航。虚线框 = 被裁剪/滚出视口的不可见控件。
+    </div>
+  </div>
+  <aside>
+    <section class="card">
+      <h2>状态</h2>
+      <table id="stateTable" class="mono"></table>
+    </section>
+    <section class="card">
+      <h2>操作</h2>
+      <div class="row">
+        <div class="dirpad">
+          <span></span><button data-dir="up">↑</button><span></span>
+          <button data-dir="left">←</button><button data-dir="down">↓</button><button data-dir="right">→</button>
+        </div>
+        <button id="btnClose">关闭弹层 (Esc)</button>
+      </div>
+      <div class="row">
+        <span class="hint">打开层</span><input type="number" id="openId" placeholder="层 id">
+        <button id="btnOpen">open</button>
+        <span class="hint" id="layerList"></span>
+      </div>
+      <div class="row">
+        <span class="hint">控件</span><input type="number" id="enableId" placeholder="id">
+        <button id="btnEnable">enable</button><button id="btnDisable">disable</button>
+        <label class="chk"><input type="checkbox" id="clickToggle"> 点击切换可用</label>
+      </div>
+    </section>
+    <section class="card">
+      <h2>日志回放 / 回看</h2>
+      <div class="row">
+        <button id="btnPrev">◀ 回退一步</button>
+        <button id="btnNext">执行下一步 ▶</button>
+        <button id="btnReplay">重放全部日志（计时）</button>
+        <button id="btnReset">重置</button>
+      </div>
+      <div class="row"><input type="range" id="slider" min="0" max="0" value="0"></div>
+      <div class="row hint">
+        <span id="stepInfo">步 0 / 0</span>
+        <span id="replayStat"></span>
+      </div>
+      <div class="row"><button id="btnExport">导出每步焦点与滚动量 (JSON)</button></div>
+    </section>
+    <section class="card">
+      <h2>历史（点击可跳转）</h2>
+      <div id="histList"></div>
+    </section>
+  </aside>
+</main>
+<script src="engine.js"></script>
+<script>
+(function () {
+'use strict';
+const MAX_CONTROLS = 20000, MAX_OPS = 20000, REPLAY_BUDGET_MS = 8000;
+
+const cv = document.getElementById('cv');
+const g = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+let engine = null, srcName = '';
+let log = [];                 // 导入的日志（截断到 MAX_OPS）
+let history = [];             // 每步 applyOp 结果（含手工操作）
+let pos = 0;                  // 当前回看位置：已应用 history[0..pos-1]
+let logCursor = 0;            // 日志已执行到的下标
+let scale = 3;
+let notice = '';
+
+function setNotice(msg) { notice = msg; render(); }
+
+// ---------- 导入 ----------
+function importData(data, name) {
+  const notes = [];
+  data = data || {};
+  const nBtn = (data.buttons || []).length;
+  if (nBtn > MAX_CONTROLS) { data.buttons = data.buttons.slice(0, MAX_CONTROLS); notes.push(`控件数 ${nBtn} 超过上限，已截断为 ${MAX_CONTROLS}`); }
+  const nOps = (data.log || []).length;
+  if (nOps > MAX_OPS) { data.log = data.log.slice(0, MAX_OPS); notes.push(`日志操作 ${nOps} 条超过上限，已截断为 ${MAX_OPS}`); }
+  engine = FocusEngine.createEngine(data);
+  srcName = name;
+  log = data.log || [];
+  history = []; pos = 0; logCursor = 0;
+  scale = Math.max(1, Math.min(6, Math.min(940 / engine.view.w, 520 / engine.view.h)));
+  cv.width = Math.round(engine.view.w * scale);
+  cv.height = Math.round(engine.view.h * scale);
+  $('srcInfo').textContent = `${name} · 层 ${engine.layerIds.length} · 面板 ${engine.panels.size} · 控件 ${engine.buttons.size} · 日志 ${log.length} 步`
+    + (notes.length ? ' · ⚠ ' + notes.join('；') : '');
+  $('layerList').textContent = '层: ' + engine.layerIds.join(', ');
+  render();
+}
+
+// ---------- 操作应用 ----------
+function doOp(op, logIdx) {
+  if (!engine) return;
+  if (pos < history.length) history.length = pos; // 回看后产生新分支，截断
+  const r = engine.applyOp(op);
+  if (logIdx !== undefined) r.logIdx = logIdx;
+  history.push(r);
+  pos = history.length;
+  if (logIdx !== undefined) logCursor = logIdx + 1;
+  render();
+}
+
+function gotoStep(p) {
+  if (!engine) return;
+  p = Math.max(0, Math.min(history.length, p));
+  engine.reset();
+  for (let i = 0; i < p; i++) engine.applyOp(history[i].op);
+  pos = p;
+  logCursor = 0;
+  for (let i = 0; i < p; i++) if (history[i].logIdx !== undefined) logCursor = Math.max(logCursor, history[i].logIdx + 1);
+  render();
+}
+
+function replayAll() {
+  if (!engine) return;
+  engine.reset();
+  history = []; pos = 0; logCursor = 0;
+  const t0 = performance.now();
+  for (let i = 0; i < log.length; i++) {
+    const r = engine.applyOp(log[i]);
+    r.logIdx = i;
+    history.push(r);
+  }
+  const dt = performance.now() - t0; // 只计引擎重放，不含画图
+  pos = history.length; logCursor = log.length;
+  const stat = $('replayStat');
+  stat.textContent = `重放 ${log.length} 步耗时 ${dt.toFixed(1)} ms（预算 ${REPLAY_BUDGET_MS} ms）`;
+  stat.className = dt <= REPLAY_BUDGET_MS ? 'ok' : 'warn';
+  render();
+}
+
+// ---------- 渲染 ----------
+function toX(sx) { return (sx - engine.view.x) * scale; }
+function toY(sy) { return (sy - engine.view.y) * scale; }
+
+function render() {
+  if (!engine) return;
+  const stack = engine.layerStack;
+  const active = engine.activeLayer();
+  const focus = engine.focus;
+
+  g.clearRect(0, 0, cv.width, cv.height);
+  // 视口边框
+  g.strokeStyle = '#3a4a7a'; g.lineWidth = 1;
+  g.strokeRect(0.5, 0.5, cv.width - 1, cv.height - 1);
+
+  for (let li = 0; li < stack.length; li++) {
+    const layerId = stack[li];
+    const isActive = li === stack.length - 1;
+    g.globalAlpha = isActive ? 1 : 0.3;
+    // 面板
+    for (const p of engine.panelsByLayer.get(layerId) || []) {
+      const r = engine.panelRect(p);
+      if (!r.vis) continue;
+      g.strokeStyle = '#3d6e8f';
+      g.lineWidth = 1;
+      g.strokeRect(toX(r.cx0) + 0.5, toY(r.cy0) + 0.5, (r.cx1 - r.cx0) * scale - 1, (r.cy1 - r.cy0) * scale - 1);
+      g.fillStyle = '#5aa0c8';
+      g.font = '10px ui-monospace, monospace';
+      g.fillText(`P${p.id} (${p.sx},${p.sy})`, toX(r.cx0) + 3, toY(r.cy0) + 11);
+    }
+    // 控件
+    for (const b of engine.layerButtons.get(layerId) || []) {
+      const vis = engine.clipOf(b);
+      if (vis) {
+        g.fillStyle = b.enabled ? (isActive ? '#2f9e5f' : '#27633f') : '#4a4a55';
+        g.fillRect(toX(b.cx0), toY(b.cy0), (b.cx1 - b.cx0) * scale, (b.cy1 - b.cy0) * scale);
+        g.strokeStyle = b.enabled ? '#63d68f' : '#666';
+        g.lineWidth = 1;
+        g.strokeRect(toX(b.cx0) + 0.5, toY(b.cy0) + 0.5, (b.cx1 - b.cx0) * scale - 1, (b.cy1 - b.cy0) * scale - 1);
+        if ((b.cx1 - b.cx0) * scale >= 20 && (b.cy1 - b.cy0) * scale >= 12) {
+          g.fillStyle = '#eaffea';
+          g.font = `${Math.min(12, (b.cy1 - b.cy0) * scale * 0.5)}px ui-monospace, monospace`;
+          g.fillText(String(b.id), toX(b.cx0) + 3, toY(b.cy0) + Math.min(13, (b.cy1 - b.cy0) * scale * 0.7));
+        }
+      } else {
+        // 不可见控件：虚线画未裁剪位置，便于发现“焦点回到看不见按钮”的问题
+        const x = toX(b.ux0), y = toY(b.uy0), w = (b.ux1 - b.ux0) * scale, h = (b.uy1 - b.uy0) * scale;
+        if (x < cv.width && y < cv.height && x + w > 0 && y + h > 0) {
+          g.strokeStyle = b.enabled ? '#7a5a3a' : '#444';
+          g.setLineDash([3, 3]);
+          g.lineWidth = 1;
+          g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+          g.setLineDash([]);
+        }
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
+  // 焦点高亮（焦点不可见时在虚线位置上画警示框）
+  let focusWarn = '';
+  if (focus != null) {
+    const b = engine.buttons.get(focus);
+    if (b) {
+      const vis = engine.clipOf(b);
+      const x = vis ? toX(b.cx0) : toX(b.ux0), y = vis ? toY(b.cy0) : toY(b.uy0);
+      const w = (vis ? b.cx1 - b.cx0 : b.ux1 - b.ux0) * scale, h = (vis ? b.cy1 - b.cy0 : b.uy1 - b.uy0) * scale;
+      g.strokeStyle = vis && b.enabled ? '#ffd23f' : '#f87171';
+      g.lineWidth = 3;
+      if (!vis || !b.enabled) g.setLineDash([5, 3]);
+      g.strokeRect(x - 1.5, y - 1.5, w + 3, h + 3);
+      g.setLineDash([]);
+      if (!b.enabled) focusWarn = `焦点 #${focus} 已禁用！`;
+      else if (!vis) focusWarn = `焦点 #${focus} 在不可见控件上！`;
+      else if (b.layer !== active) focusWarn = `焦点 #${focus} 不在活动层！`;
+    }
+  }
+
+  renderState(focusWarn);
+  renderHistory();
+}
+
+function renderState(focusWarn) {
+  const t = $('stateTable');
+  const stack = engine.layerStack;
+  const focus = engine.focus;
+  const rows = [];
+  rows.push(['层栈', stack.join(' → ') + ` （活动层 ${engine.activeLayer()}）`]);
+  if (focus != null) {
+    const b = engine.buttons.get(focus);
+    if (b) {
+      const vis = engine.clipOf(b);
+      rows.push(['焦点', `#${focus} · ${b.enabled ? '可用' : '禁用'} · ${vis ? '可见' : '不可见'}`]);
+      rows.push(['内容矩形', `[${b.x}, ${b.y}, ${b.w}, ${b.h}]${b.panel != null ? ' · 面板 P' + b.panel : ''}`]);
+      if (vis) rows.push(['裁剪后', `[${b.cx0}, ${b.cy0}, ${b.cx1 - b.cx0}, ${b.cy1 - b.cy0}] · 中心 (${((b.cx0 + b.cx1) / 2).toFixed(1)}, ${((b.cy0 + b.cy1) / 2).toFixed(1)})`]);
+    } else rows.push(['焦点', `#${focus}（控件不存在！）`]);
+  } else rows.push(['焦点', '（空）']);
+  const scrolls = engine.getScrolls();
+  const keys = Object.keys(scrolls);
+  rows.push(['滚动量', keys.length ? keys.map(k => {
+    const p = engine.panels.get(+k);
+    return `P${k}: (${scrolls[k][0]}, ${scrolls[k][1]}) / limit (${p.lx}, ${p.ly})`;
+  }).join(' · ') : '全部为 0']);
+  rows.push(['日志位置', `第 ${pos} 步 / 历史 ${history.length} 步 / 日志 ${log.length} 步`]);
+  let html = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+  if (focusWarn) html += `<tr><td colspan="2" class="warn">⚠ ${focusWarn}</td></tr>`;
+  if (notice) html += `<tr><td colspan="2" class="warn">⚠ ${notice}</td></tr>`;
+  notice = '';
+  t.innerHTML = html;
+  $('stepInfo').textContent = `步 ${pos} / ${history.length}（日志 ${logCursor}/${log.length}）`;
+  const sl = $('slider');
+  sl.max = history.length; sl.value = pos;
+  $('btnNext').disabled = logCursor >= log.length;
+}
+
+function renderHistory() {
+  const el = $('histList');
+  const from = Math.max(0, pos - 8);
+  const to = Math.min(history.length, from + 16);
+  let html = '';
+  for (let i = from; i < to; i++) {
+    const h = history[i];
+    const sc = h.scrolls.length ? ' 滚动[' + h.scrolls.map(s => `P${s[0]}→(${s[1]},${s[2]})`).join(' ') + ']' : '';
+    const err = h.error ? ` <span class="err">✗${h.error}</span>` : '';
+    html += `<div data-i="${i}" class="${i === pos - 1 ? 'cur' : ''}">#${i + 1} ${JSON.stringify(h.op)} → 焦点 ${h.focus === null ? '∅' : '#' + h.focus}${sc}${err}</div>`;
+  }
+  el.innerHTML = html || '<div class="hint">（空）</div>';
+  el.querySelectorAll('div[data-i]').forEach(d => d.addEventListener('click', () => gotoStep(+d.dataset.i + 1)));
+}
+
+// ---------- 导出 ----------
+function exportJSON() {
+  if (!engine) return;
+  // 由每步滚动增量还原每步完整非零滚动量
+  const cur = {};
+  const steps = history.map((h, i) => {
+    for (const [pid, x, y] of h.scrolls) cur[pid] = [x, y];
+    const nonzero = {};
+    for (const k of Object.keys(cur)) if (cur[k][0] !== 0 || cur[k][1] !== 0) nonzero[k] = cur[k].slice();
+    return { i: i + 1, op: h.op, focus: h.focus, layers: h.layers, scroll: nonzero, error: h.error || undefined };
+  });
+  const out = {
+    source: srcName,
+    exportedAt: new Date().toISOString(),
+    steps,
+    final: { focus: engine.focus, layers: engine.layerStack, scroll: engine.getScrolls() },
+  };
+  const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'focus-voyager-export.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---------- 事件 ----------
+window.addEventListener('keydown', e => {
+  if (!engine) return;
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
+  if (map[e.key]) { e.preventDefault(); doOp({ op: map[e.key] }); }
+  else if (e.key === 'Escape') { e.preventDefault(); doOp({ op: 'close' }); }
+});
+
+document.querySelectorAll('.dirpad button').forEach(b =>
+  b.addEventListener('click', () => doOp({ op: b.dataset.dir })));
+$('btnClose').addEventListener('click', () => doOp({ op: 'close' }));
+$('btnOpen').addEventListener('click', () => {
+  const id = +$('openId').value;
+  if (Number.isFinite(id)) doOp({ op: 'open', id });
+});
+$('btnEnable').addEventListener('click', () => doOp({ op: 'enable', id: +$('enableId').value, value: true }));
+$('btnDisable').addEventListener('click', () => doOp({ op: 'enable', id: +$('enableId').value, value: false }));
+$('btnNext').addEventListener('click', () => {
+  if (logCursor < log.length) doOp(log[logCursor], logCursor);
+});
+$('btnPrev').addEventListener('click', () => gotoStep(pos - 1));
+$('btnReplay').addEventListener('click', replayAll);
+$('btnReset').addEventListener('click', () => {
+  if (!engine) return;
+  engine.reset(); history = []; pos = 0; logCursor = 0;
+  $('replayStat').textContent = '';
+  render();
+});
+$('slider').addEventListener('change', () => gotoStep(+$('slider').value));
+$('btnExport').addEventListener('click', exportJSON);
+
+cv.addEventListener('click', e => {
+  if (!engine) return;
+  const rect = cv.getBoundingClientRect();
+  const sx = (e.clientX - rect.left) / scale + engine.view.x;
+  const sy = (e.clientY - rect.top) / scale + engine.view.y;
+  const stack = engine.layerStack;
+  for (let li = stack.length - 1; li >= 0; li--) {
+    const arr = engine.layerButtons.get(stack[li]) || [];
+    for (const b of arr) {
+      if (!engine.clipOf(b)) continue;
+      if (sx >= b.cx0 && sx < b.cx1 && sy >= b.cy0 && sy < b.cy1) {
+        if ($('clickToggle').checked) doOp({ op: 'enable', id: b.id, value: !b.enabled });
+        else {
+          if (li !== stack.length - 1) { setNotice(`#${b.id} 不在活动层，不能设为焦点`); return; }
+          if (!b.enabled) { setNotice(`#${b.id} 已禁用，不能设为焦点`); return; }
+          doOp({ op: 'focus', id: b.id });
+        }
+        return;
+      }
+    }
+  }
+});
+
+$('file').addEventListener('change', () => {
+  const f = $('file').files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try { importData(JSON.parse(rd.result), f.name); }
+    catch (err) { setNotice('JSON 解析失败: ' + err.message); }
+  };
+  rd.readAsText(f);
+});
+
+$('loadSample').addEventListener('click', () => {
+  fetch('samples/focus-voyager.json')
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(d => importData(d, 'samples/focus-voyager.json'))
+    .catch(err => setNotice('样例加载失败（file:// 下请用文件选择器）: ' + err.message));
+});
+
+// 拖拽导入
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { try { importData(JSON.parse(rd.result), f.name); } catch (err) { setNotice('JSON 解析失败: ' + err.message); } };
+  rd.readAsText(f);
+});
+
+// 启动时尝试自动载入样例（通过 http 服务打开时有效）
+fetch('samples/focus-voyager.json')
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  .then(d => importData(d, 'samples/focus-voyager.json'))
+  .catch(() => { $('srcInfo').textContent = '请选择或拖入 JSON 文件（file:// 下自动载入不可用）'; });
+})();
+</script>
+</body>
+</html>
