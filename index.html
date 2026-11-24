@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>孔径覆盖校片台</title>
+<style>
+  :root {
+    --bg: #f2f1ec;
+    --panel: #fbfaf7;
+    --panel-2: #f0eee8;
+    --ink: #1d2127;
+    --muted: #666d78;
+    --faint: #8d939d;
+    --line: #d9d5cb;
+    --line-strong: #c3bdb0;
+    --accent: #2c6b52;
+    --accent-ink: #ffffff;
+    --accent-soft: #dcebe2;
+    --err: #a8342a;
+    --err-soft: #f7e5e2;
+    --warn: #8a5a00;
+    --black-swatch: #14161a;
+    --mono: "SFMono-Regular", ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --radius: 9px;
+    --shadow: 0 1px 2px rgba(28, 24, 16, .06), 0 6px 20px rgba(28, 24, 16, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a;
+      --panel: #1b1e23;
+      --panel-2: #23272e;
+      --ink: #e7e4dd;
+      --muted: #a2a8b2;
+      --faint: #78808b;
+      --line: #31363e;
+      --line-strong: #434a55;
+      --accent: #67b894;
+      --accent-ink: #0d1410;
+      --accent-soft: #20302a;
+      --err: #e8837a;
+      --err-soft: #3a2321;
+      --warn: #dcae66;
+      --black-swatch: #08090b;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.28);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .app > * { min-width: 0; }
+  .app {
+    display: grid;
+    grid-template-columns: 352px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "head head" "rail main";
+    height: 100vh;
+  }
+  header {
+    grid-area: head;
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 13px 20px 12px; border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  header h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: .01em; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  header .spacer { flex: 1 1 auto; }
+  header .legend { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; }
+  .chip i { width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(0,0,0,.22); display: inline-block; }
+
+  aside {
+    grid-area: rail;
+    overflow: auto;
+    border-right: 1px solid var(--line);
+    padding: 14px 16px 28px;
+    background: var(--panel);
+  }
+  main {
+    grid-area: main;
+    overflow: auto;
+    padding: 18px 22px 40px;
+  }
+  section { margin: 0 0 20px; }
+  h2 {
+    margin: 0 0 8px; font-size: 11.5px; font-weight: 650;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+  }
+  h3 { margin: 16px 0 7px; font-size: 12.5px; font-weight: 650; color: var(--ink); }
+
+  /* ---------- controls ---------- */
+  .field { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; margin: 0 0 10px; }
+  .field label { font-size: 12.5px; color: var(--muted); }
+  .field .unit { font-size: 11px; color: var(--faint); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; grid-column: 1 / -1; }
+  input[type="number"], input[type="text"], select, textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 6px;
+    background: var(--panel-2); color: var(--ink); font: 12.5px/1.35 var(--mono);
+    transition: border-color .12s, box-shadow .12s;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  input[aria-invalid="true"] { border-color: var(--err); }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  textarea { resize: vertical; height: 150px; line-height: 1.42; font-size: 11.5px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    padding: 6px 11px; border: 1px solid var(--line-strong); border-radius: 6px;
+    background: var(--panel-2); color: var(--ink); font: 12.5px var(--sans);
+    cursor: pointer; transition: background .12s, border-color .12s, opacity .12s;
+    white-space: nowrap;
+  }
+  button:hover { background: var(--accent-soft); border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); background: var(--accent); }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:disabled:hover { background: var(--panel-2); border-color: var(--line-strong); }
+  .file-btn { position: relative; overflow: hidden; }
+  .file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .slider-wrap { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+  .slider-wrap input[type="range"] { flex: 1; }
+  .num-inline { width: 92px; flex: none; }
+
+  .hint { font-size: 11.5px; color: var(--faint); margin: 2px 0 0; line-height: 1.45; }
+
+  /* ---------- messages ---------- */
+  .msg { border-radius: 7px; padding: 9px 11px; font-size: 12.5px; margin: 4px 0 10px; display: none; }
+  .msg.show { display: block; }
+  .msg.err { background: var(--err-soft); color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 30%, transparent); }
+  .msg.err ul { margin: 4px 0 0; padding-left: 17px; }
+  .msg.err li { margin: 2px 0; line-height: 1.4; }
+  .msg.err .kept { margin-top: 6px; font-weight: 600; }
+  .msg.info { background: var(--accent-soft); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+  .status { font-size: 12px; color: var(--muted); min-height: 1.45em; margin: 6px 0 0; }
+  .status b { color: var(--ink); font-weight: 600; }
+  .status .ok { color: var(--accent); }
+
+  progress { width: 100%; height: 6px; margin-top: 8px; border: 0; border-radius: 3px; overflow: hidden; }
+  progress::-webkit-progress-bar { background: var(--panel-2); border-radius: 3px; }
+  progress::-webkit-progress-value { background: var(--accent); border-radius: 3px; }
+  progress::-moz-progress-bar { background: var(--accent); border-radius: 3px; }
+
+  /* ---------- main / preview ---------- */
+  .stage-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stage-head h2 { margin: 0; }
+  .stage-head .meta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .canvas-shell {
+    position: relative; display: inline-block; max-width: 100%;
+    border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden;
+    background: #000; box-shadow: var(--shadow); line-height: 0;
+  }
+  #preview {
+    display: block; width: 100%; max-width: min(100%, calc(96 * 12px)); height: auto;
+    image-rendering: pixelated; cursor: crosshair; touch-action: none;
+  }
+  #preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .canvas-shell .sel {
+    position: absolute; pointer-events: none; border: 1.5px solid #fff;
+    box-shadow: 0 0 0 1.5px rgba(0,0,0,.75), inset 0 0 0 1.5px rgba(0,0,0,.55);
+    display: none;
+  }
+  .empty-stage {
+    border: 1px dashed var(--line-strong); border-radius: 8px; padding: 34px 20px;
+    text-align: center; color: var(--muted); font-size: 13px; background: var(--panel);
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; margin-top: 16px; box-shadow: var(--shadow);
+  }
+  .panel > h2 { margin-bottom: 10px; }
+
+  /* ---------- inspector ---------- */
+  .insp-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(260px, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 1080px) { .insp-grid { grid-template-columns: 1fr; } }
+  .insp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .insp-head .coords { font: 12.5px var(--mono); color: var(--muted); }
+  .rgb-strip { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
+  .rgb-swatch { width: 34px; height: 34px; border-radius: 5px; border: 1px solid rgba(0,0,0,.25); flex: none; }
+  .rgb-strip .val { font: 12px var(--mono); color: var(--ink); }
+  .rgb-strip .lbl { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.rows { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  table.rows th, table.rows td { padding: 4px 7px; text-align: right; border-bottom: 1px solid var(--line); }
+  table.rows th:first-child, table.rows td:first-child { text-align: left; }
+  table.rows th { color: var(--muted); font-weight: 600; font-size: 11px; letter-spacing: .03em; text-transform: uppercase; }
+  table.rows td.src { white-space: nowrap; }
+  table.rows tbody tr.clickable { cursor: pointer; }
+  table.rows tbody tr.clickable:hover { background: var(--panel-2); }
+  table.rows tr.hl { background: var(--accent-soft); }
+  table.rows tfoot td { font-weight: 650; border-top: 1.5px solid var(--line-strong); border-bottom: 0; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.3); }
+  .mono { font-family: var(--mono); }
+  .dim { color: var(--faint); }
+
+  .pupil-wrap { text-align: center; }
+  #pupilView {
+    width: 100%; max-width: 360px; height: auto; border: 1px solid var(--line-strong);
+    border-radius: 6px; background: #0f1115; display: block; margin: 0 auto;
+  }
+  .pupil-cap { font-size: 11.5px; color: var(--faint); margin-top: 8px; line-height: 1.5; text-align: left; }
+  .empty-hint { color: var(--faint); font-size: 12.5px; padding: 10px 0; }
+
+  /* ---------- export ---------- */
+  .export-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  details.json-peek { margin-top: 10px; }
+  details.json-peek summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  details.json-peek pre {
+    max-height: 220px; overflow: auto; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 9px 11px; font: 11px/1.45 var(--mono); margin: 8px 0 0;
+  }
+  .kpi { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px; }
+  .kpi div { display: flex; flex-direction: column; gap: 1px; }
+  .kpi .k { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+  .kpi .v { font: 13px var(--mono); color: var(--ink); }
+
+  @media (max-width: 640px) {
+    /* 窄屏：隐藏 s−f 与百分比两列（占比本身与面积仍完整显示），避免表格横向滚动 */
+    table.rows th:nth-child(3), table.rows td:nth-child(3),
+    table.rows th:nth-child(6), table.rows td:nth-child(6) { display: none; }
+    table.rows th, table.rows td { padding: 4px 4px; font-size: 12px; }
+  }
+  @media (max-width: 920px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: "head" "rail" "main"; height: auto; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+    main { overflow: visible; padding: 16px 14px 40px; }
+    #preview { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>孔径覆盖校片台</h1>
+    <span class="sub">逐像素精确求孔径平面可见面积 · 归一化用原始孔径面积</span>
+    <span class="spacer"></span>
+    <span class="legend">
+      <span class="chip"><i style="background:#0b0c0e"></i>光阑外=黑</span>
+      <span class="chip"><i id="legendBg" style="background:#2a3340"></i>背景</span>
+      <span class="chip"><i style="background:linear-gradient(135deg,#d2612f,#3c7fb4)"></i>三角形</span>
+    </span>
+  </header>
+
+  <aside>
+    <section>
+      <h2>场景</h2>
+      <div class="row">
+        <label class="file-btn"><button type="button" class="ghost">载入 JSON…</button>
+          <input type="file" id="fileInput" accept=".json,application/json">
+        </label>
+        <button type="button" id="loadSample">样例</button>
+        <button type="button" id="loadDemo">演示画面</button>
+        <button type="button" id="showScene">编辑场景</button>
+      </div>
+      <div id="sceneEditor" style="display:none; margin-top:10px;">
+        <textarea id="sceneText" spellcheck="false" aria-label="场景 JSON"></textarea>
+        <div class="row" style="margin-top:8px;">
+          <button type="button" class="primary" id="applyScene">应用场景</button>
+          <button type="button" id="resetScene">恢复当前场景</button>
+        </div>
+      </div>
+      <div class="msg err" id="errBox" role="alert"></div>
+      <div class="msg info" id="infoBox" role="status"></div>
+    </section>
+
+    <section>
+      <h2>焦面与光阑</h2>
+      <div class="field">
+        <label for="focusRange">焦面偏移系数 f<span class="unit">（有效 s = s − f）</span></label>
+        <input type="number" id="focusNum" class="num-inline" step="0.01" value="0" aria-label="焦面偏移系数">
+        <div class="slider-wrap">
+          <input type="range" id="focusRange" min="-3" max="3" step="0.005" value="0" aria-label="焦面偏移系数滑块">
+        </div>
+      </div>
+      <div class="field">
+        <label>光阑 offset<span class="unit">（孔径单位）</span></label>
+        <span class="unit">x / y</span>
+        <div class="pair">
+          <input type="number" id="stopOx" step="0.05" aria-label="光阑 offset x">
+          <input type="number" id="stopOy" step="0.05" aria-label="光阑 offset y">
+        </div>
+      </div>
+      <div class="field">
+        <label>光阑 slope<span class="unit">（随像素位移）</span></label>
+        <span class="unit">x / y</span>
+        <div class="pair">
+          <input type="number" id="stopSx" step="0.01" aria-label="光阑 slope x">
+          <input type="number" id="stopSy" step="0.01" aria-label="光阑 slope y">
+        </div>
+      </div>
+      <div class="row" style="margin-top:2px;">
+        <button type="button" id="resetOptics">恢复场景光阑与 f=0</button>
+      </div>
+      <p class="hint">改数值即重渲染；光阑越偏、f 越大，边角的黑份额越明显。</p>
+    </section>
+
+    <section>
+      <h2>渲染</h2>
+      <div class="row">
+        <button type="button" class="primary" id="renderBtn">重新渲染</button>
+        <button type="button" id="exportBtn" disabled>导出 JSON</button>
+      </div>
+      <progress id="prog" value="0" max="1" style="display:none;"></progress>
+      <p class="status" id="status">尚未渲染。</p>
+    </section>
+  </aside>
+
+  <main>
+    <div class="stage-head">
+      <h2>预览</h2>
+      <span class="meta" id="stageMeta">—</span>
+    </div>
+    <div class="empty-stage" id="emptyStage">载入场景或点「样例」开始。渲染后点击像素查看各片可见区域与占比。</div>
+    <div class="canvas-shell" id="canvasShell" style="display:none;">
+      <canvas id="preview" width="4" height="3" tabindex="0" aria-label="孔径覆盖预览，点击查看像素"></canvas>
+      <div class="sel" id="selBox"></div>
+    </div>
+
+    <div class="panel" id="inspectorPanel" style="display:none;">
+      <h2>像素检查</h2>
+      <div id="inspBody"></div>
+    </div>
+
+    <div class="panel" id="exportPanel" style="display:none;">
+      <h2>导出</h2>
+      <div id="exportBody"></div>
+    </div>
+  </main>
+</div>
+
+<script src="engine.js"></script>
+<script src="session.js"></script>
+<script>
+'use strict';
+(function () {
+  const E = window.PupilEngine;
+  const $ = id => document.getElementById(id);
+  const session = new window.PupilSession.Session();
+
+  const SAMPLE = {
+    width: 4, height: 3,
+    pupil: [[-1, -1], [1, -1], [1, 1], [-1, 1]],
+    stop: { offset: [0, 0], slope: [0.05, 0] },
+    bg: [0.1, 0.15, 0.25],
+    triangles: [{ id: 1, depth: 1, s: 0.35, xy: [[0.6, 0.5], [3, 1], [1.1, 2.4]], rgb: [0.9, 0.3, 0.1] }]
+  };
+
+  // ---------- 显示辅助 ----------
+  function srgb1(c) {
+    c = c < 0 ? 0 : c > 1 ? 1 : c;
+    return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  }
+  function cssRGB(rgb) {
+    return 'rgb(' + rgb.map(c => Math.round(srgb1(c) * 255)).join(' ') + ')';
+  }
+  function fmt(x, d) {
+    if (!Number.isFinite(x)) return '—';
+    return x.toFixed(d === undefined ? 6 : d);
+  }
+  function fmtShare(x) { return x.toFixed(9); }
+  function fmtPct(x) { return (x * 100).toFixed(3) + '%'; }
+
+  function showError(errors, kept) {
+    const box = $('errBox');
+    box.innerHTML = '<b>场景无效</b><ul>' + errors.map(e => '<li>' + esc(e) + '</li>').join('') + '</ul>' +
+      (kept ? '<div class="kept">已保留上一次的有效结果，仍可点查与导出。</div>' : '');
+    box.classList.add('show');
+    $('infoBox').classList.remove('show');
+  }
+  function hideError() { $('errBox').classList.remove('show'); }
+  function hideInfo() { const b = $('infoBox'); clearTimeout(b._t); b.classList.remove('show'); }
+  function showInfo(text) {
+    const box = $('infoBox');
+    box.textContent = text;
+    box.classList.add('show');
+    clearTimeout(box._t);
+    box._t = setTimeout(() => box.classList.remove('show'), 3200);
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---------- 状态 ----------
+  let selected = null;      // {x, y}
+  let lastRender = null;
+  let renderToken = 0;
+  let rendering = false;    // 渲染进行中：画布内容与新结果尚未对应，屏蔽点查
+
+  function sceneFromText() {
+    try {
+      return { ok: true, scene: JSON.parse($('sceneText').value) };
+    } catch (e) {
+      return { ok: false, error: '场景 JSON 解析失败：' + e.message };
+    }
+  }
+
+  function loadSceneObject(scene, label) {
+    const res = session.loadScene(scene);
+    if (!res.ok) {
+      hideInfo();
+      showError(res.errors, res.keptResult);
+      return false;
+    }
+    hideError();
+    syncOpticsInputs();
+    renderFull(label ? '载入 ' + label : '初始渲染');
+    if (label) showInfo(label);
+    return true;
+  }
+
+  function syncOpticsInputs() {
+    const stop = session.stop || (session.prepared && session.prepared.stop);
+    if (stop) {
+      $('stopOx').value = stop.offset[0];
+      $('stopOy').value = stop.offset[1];
+      $('stopSx').value = stop.slope[0];
+      $('stopSy').value = stop.slope[1];
+    }
+    $('focusNum').value = session.focusOffset;
+    $('focusRange').value = session.focusOffset;
+    if (session.prepared) $('legendBg').style.background = cssRGB(session.prepared.bg);
+  }
+
+  function readNumberInput(el) {
+    const v = el.value.trim();
+    if (v === '') return NaN;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  }
+
+  // ---------- 渲染 ----------
+  function renderFull(reason) {
+    if (!session.prepared) return;
+    const token = ++renderToken;
+    const w = session.prepared.width, h = session.prepared.height;
+    const canvas = $('preview');
+    canvas.width = w; canvas.height = h;
+    // 小画面放大到易点，大画面按容器宽度。
+    const cell = Math.max(10, Math.min(80, Math.floor(900 / Math.max(w, h))));
+    canvas.style.width = (w * cell) + 'px';
+    canvas.style.maxWidth = '100%';
+    canvas.style.imageRendering = 'pixelated';
+
+    $('emptyStage').style.display = 'none';
+    $('canvasShell').style.display = 'inline-block';
+    $('exportPanel').style.display = 'block';
+    $('inspectorPanel').style.display = 'block';
+
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const pixels = new Array(w * h);
+
+    rendering = true;
+    $('prog').style.display = 'block';
+    $('prog').value = 0;
+    $('renderBtn').disabled = true;
+    $('stageMeta').textContent = '渲染中…';
+
+    const t0 = performance.now();
+    // 渲染期间用户继续拖动滑杆会生成新的 token；本次渲染用快照 opts，
+    // 结束时也把快照写进结果，保证像素与元数据始终一致。
+    const opts = session.opts();
+    let y = 0;
+    function step() {
+      if (token !== renderToken) return;
+      const slice = performance.now() + 24;
+      while (y < h && performance.now() < slice) {
+        for (let x = 0; x < w; x++) {
+          const rec = E.computePixelShares(session.prepared, x, y, opts);
+          pixels[y * w + x] = rec;
+          const o = (y * w + x) * 4;
+          img.data[o] = Math.round(srgb1(rec.rgb[0]) * 255);
+          img.data[o + 1] = Math.round(srgb1(rec.rgb[1]) * 255);
+          img.data[o + 2] = Math.round(srgb1(rec.rgb[2]) * 255);
+          img.data[o + 3] = 255;
+        }
+        y++;
+      }
+      ctx.putImageData(img, 0, 0);
+      $('prog').value = y / h;
+      const elapsed = (performance.now() - t0) / 1000;
+      $('stageMeta').textContent = `渲染中 ${Math.round(y / h * 100)}% · ${elapsed.toFixed(2)}s`;
+      if (y < h) { setTimeout(step, 0); return; }
+
+      const total = (performance.now() - t0) / 1000;
+      let residual = 0;
+      for (let i = 0; i < pixels.length; i++) {
+        const d = Math.abs(pixels[i].shareSum - 1);
+        if (d > residual) residual = d;
+      }
+      lastRender = {
+        width: w, height: h, pixels, elapsedMs: total * 1000,
+        pupilArea: session.prepared.pupilArea, shareResidualMax: residual,
+        focusOffset: opts.focusOffset, stop: opts.stop,
+        opts,
+        triCount: session.prepared.triangles.length,
+      };
+      session.result = lastRender;
+      session.renderCount++;
+
+      rendering = false;
+      $('renderBtn').disabled = false;
+      $('exportBtn').disabled = false;
+      $('prog').style.display = 'none';
+      $('stageMeta').textContent = `${w}×${h} · ${lastRender.triCount} 片 · ${total.toFixed(2)}s`;
+      $('status').innerHTML = `<b>${esc(reason || '完成')}</b> · ${w}×${h}、${lastRender.triCount} 片三角形、` +
+        `耗时 ${total.toFixed(3)} s · 占比合计偏差 ${residual.toExponential(1)}`;
+      renderExportSummary();
+      if (selected) {
+        if (session.inspect(selected.x, selected.y)) inspectPixel(selected.x, selected.y, true);
+        else { selected = null; $('selBox').style.display = 'none'; clearInspector(); }
+      } else clearInspector();
+    }
+    setTimeout(step, 0);
+  }
+
+  // ---------- 像素检查 ----------
+  function clearInspector() {
+    $('inspBody').innerHTML = '<div class="empty-hint">点击预览中的任意像素，查看各片可见区域与面积占比。</div>';
+  }
+
+  function inspectPixel(x, y, keepScroll) {
+    const info = session.inspect(x, y);
+    if (!info) return;
+    selected = { x, y };
+    drawSelection(x, y);
+
+    const rec = info.pixel;
+    const p = session.prepared;
+    const triRows = rec.tri.slice().sort((a, b) => a.depth - b.depth || a.id - b.id);
+
+    let html = '';
+    html += `<div class="insp-head"><span class="coords">像素 (${x}, ${y}) · q = (${fmt(rec.q[0], 1)}, ${fmt(rec.q[1], 1)})</span>` +
+      `<span class="dim" style="font-size:12px;">光阑中心 (${fmt(rec.stopCenter[0], 3)}, ${fmt(rec.stopCenter[1], 3)})</span></div>`;
+
+    html += '<div class="rgb-strip">' +
+      `<span class="rgb-swatch" style="background:${cssRGB(rec.rgb)}" title="线性 RGB 显示色"></span>` +
+      '<div><div class="lbl">线性 RGB</div>' +
+      `<div class="val">[${rec.rgb.map(v => v.toFixed(9)).join(', ')}]</div></div></div>`;
+
+    html += '<div class="table-scroll"><table class="rows"><thead><tr>' +
+      '<th>来源</th><th>depth</th><th>s − f</th><th>可见面积</th><th>占比（/原始孔径面积）</th><th>百分比</th>' +
+      '</tr></thead><tbody>';
+
+    for (const t of triRows) {
+      html += `<tr class="clickable" data-hl="${t.id}">` +
+        `<td class="src"><span class="sw" style="background:${cssRGB(t.rgb)}"></span>id ${t.id}</td>` +
+        `<td>${t.depth}</td><td class="dim">${fmt(t.sEff, 3)}</td>` +
+        `<td>${t.area.toPrecision(8)}</td><td>${fmtShare(t.share)}</td><td class="dim">${fmtPct(t.share)}</td></tr>`;
+    }
+    if (triRows.length === 0) {
+      html += '<tr><td colspan="6" class="dim">本像素没有被任何三角形覆盖</td></tr>';
+    }
+    html += `<tr><td class="src"><span class="sw" style="background:${cssRGB(p.bg)}"></span>背景（未遮挡）</td>` +
+      `<td>—</td><td>—</td><td>${rec.bg.area.toPrecision(8)}</td><td>${fmtShare(rec.bg.share)}</td><td class="dim">${fmtPct(rec.bg.share)}</td></tr>`;
+    html += `<tr><td class="src"><span class="sw" style="background:var(--black-swatch)"></span>光阑外（算黑）</td>` +
+      `<td>—</td><td>—</td><td>${rec.black.area.toPrecision(8)}</td><td>${fmtShare(rec.black.share)}</td><td class="dim">${fmtPct(rec.black.share)}</td></tr>`;
+    html += '</tbody><tfoot><tr><td>合计</td><td></td><td></td>' +
+      `<td>${rec.pupilArea.toPrecision(8)}</td><td>${fmtShare(rec.shareSum)}</td><td class="dim">${fmtPct(rec.shareSum)}</td></tr></tfoot></table></div>`;
+
+    html += '<div class="pupil-wrap" style="margin-top:14px;">' +
+      '<canvas id="pupilView" width="720" height="720" aria-label="孔径平面可见区域"></canvas>' +
+      '<div class="pupil-cap">孔径平面：黑=光阑外份额；背景色=孔径内未遮挡；其余色块为各三角形实际可见区域。' +
+      '实线=原始孔径，虚线=光阑。鼠标移到下表某行会高亮对应区域。</div></div>';
+
+    $('inspBody').innerHTML = html;
+
+    // 行高亮交互
+    const rows = $('inspBody').querySelectorAll('tr[data-hl]');
+    rows.forEach(row => {
+      row.addEventListener('mouseenter', () => {
+        highlightRegion(Number(row.getAttribute('data-hl')));
+        row.classList.add('hl');
+      });
+      row.addEventListener('mouseleave', () => {
+        highlightRegion(null);
+        row.classList.remove('hl');
+      });
+    });
+
+    window.__insp = { info };
+    drawPupilView(info);
+    if (!keepScroll) $('inspectorPanel').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  let lastRegions = null;
+  function highlightRegion(id) { lastRegions = id; if (window.__pupilRedraw) window.__pupilRedraw(); }
+
+  function drawSelection(x, y) {
+    const shell = $('canvasShell');
+    const cv = $('preview');
+    const box = $('selBox');
+    const rect = cv.getBoundingClientRect();
+    const shellRect = shell.getBoundingClientRect();
+    const cw = rect.width / cv.width, ch = rect.height / cv.height;
+    box.style.display = 'block';
+    box.style.left = (rect.left - shellRect.left + x * cw) + 'px';
+    box.style.top = (rect.top - shellRect.top + y * ch) + 'px';
+    box.style.width = cw + 'px';
+    box.style.height = ch + 'px';
+  }
+
+  function drawPupilView(info) {
+    const cv = $('pupilView');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height, pad = 34;
+    const reg = info.regions;
+    const p = session.prepared;
+
+    // 视图范围：原始孔径 + 光阑 + 可见区域
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    const add = poly => {
+      for (const q of poly) {
+        if (q[0] < minx) minx = q[0]; if (q[0] > maxx) maxx = q[0];
+        if (q[1] < miny) miny = q[1]; if (q[1] > maxy) maxy = q[1];
+      }
+    };
+    add(reg.pupil); add(reg.stopPoly);
+    for (const [, polys] of reg.visible) for (const pl of polys) add(pl);
+    for (const pl of reg.bgPieces) add(pl);
+    const span = Math.max(maxx - minx, maxy - miny, 1e-6);
+    const sc = Math.min((W - 2 * pad) / Math.max(1e-9, maxx - minx), (H - 2 * pad) / Math.max(1e-9, maxy - miny));
+    const ox = (W - sc * (maxx - minx)) / 2, oy = (H - sc * (maxy - miny)) / 2;
+    const X = u => ox + (u - minx) * sc;
+    const Y = v => H - oy - (v - miny) * sc;
+
+    const path = poly => {
+      ctx.beginPath();
+      for (let i = 0; i < poly.length; i++) {
+        const q = poly[i];
+        if (i === 0) ctx.moveTo(X(q[0]), Y(q[1]));
+        else ctx.lineTo(X(q[0]), Y(q[1]));
+      }
+      ctx.closePath();
+    };
+    const fillPoly = (poly, fill, stroke) => {
+      if (poly.length < 3) return;
+      path(poly);
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+    };
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0f1115';
+    ctx.fillRect(0, 0, W, H);
+
+    // 孔径全区域先涂黑（光阑外份额）
+    fillPoly(reg.pupil, '#000', null);
+    // 光阑内可定义域：先叠背景，再把各片可见区域画上
+    for (const pl of reg.bgPieces) fillPoly(pl, cssRGB(p.bg), null);
+    for (const [id, polys] of reg.visible) {
+      const t = p.triById.get(id);
+      const color = cssRGB(t.rgb);
+      for (const pl of polys) fillPoly(pl, color, null);
+    }
+
+    // 轮廓
+    ctx.lineJoin = 'round';
+    path(reg.pupil);
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.setLineDash([9, 7]);
+    path(reg.stopPoly);
+    ctx.strokeStyle = 'rgba(255,210,90,.95)'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 高亮：先把整张压暗，再把该片可见区域原色重绘并加粗黄边，对比明显。
+    if (lastRegions !== null && reg.visible.has(lastRegions)) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(8,10,14,.55)';
+      ctx.fill();
+      const t = p.triById.get(lastRegions);
+      for (const pl of reg.visible.get(lastRegions)) fillPoly(pl, cssRGB(t.rgb), null);
+      for (const pl of reg.visible.get(lastRegions)) fillPoly(pl, null, '#ffe14d');
+      ctx.restore();
+    }
+
+    // 坐标轴刻度
+    ctx.font = '20px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = 'rgba(230,232,238,.55)';
+    ctx.textBaseline = 'top';
+    const step = span > 2 ? 1 : span > 1 ? 0.5 : 0.25;
+    for (let u = Math.ceil(minx / step) * step; u <= maxx + 1e-9; u += step) {
+      ctx.fillText(u.toFixed(step < 1 ? 2 : 0), X(u) + 3, H - 26);
+    }
+    for (let v = Math.ceil(miny / step) * step; v <= maxy + 1e-9; v += step) {
+      ctx.fillText(v.toFixed(step < 1 ? 2 : 0), 4, Y(v) + 2);
+    }
+  }
+
+  window.__pupilRedraw = () => {
+    if (!window.__insp) return;
+    // 只重画高亮层：重新画整张（代价很小）
+    drawPupilView(window.__insp.info);
+  };
+
+  // ---------- 导出 ----------
+  function renderExportSummary() {
+    if (!lastRender) { $('exportPanel').style.display = 'none'; return; }
+    $('exportPanel').style.display = 'block';
+    const r = lastRender;
+    $('exportBody').innerHTML =
+      '<div class="kpi">' +
+      `<div><span class="k">画面</span><span class="v">${r.width}×${r.height}</span></div>` +
+      `<div><span class="k">三角形</span><span class="v">${r.triCount}</span></div>` +
+      `<div><span class="k">原始孔径面积</span><span class="v">${r.pupilArea.toPrecision(8)}</span></div>` +
+      `<div><span class="k">f</span><span class="v">${r.focusOffset}</span></div>` +
+      `<div><span class="k">光阑 offset</span><span class="v">[${r.stop.offset.join(', ')}]</span></div>` +
+      `<div><span class="k">光阑 slope</span><span class="v">[${r.stop.slope.join(', ')}]</span></div>` +
+      `<div><span class="k">占比合计最大偏差</span><span class="v">${r.shareResidualMax.toExponential(1)}</span></div>` +
+      '</div>' +
+      '<div class="export-row"><button type="button" id="exportBtn2">下载 pupil-coverage-export.json</button>' +
+      '<button type="button" id="copyExport">复制 JSON</button>' +
+      '<button type="button" class="ghost" id="peekExport">查看前 2 个像素</button></div>' +
+      '<p class="hint">导出为线性 RGB（不转 sRGB）与相对原始孔径面积的占比；每个像素 tri 各项 + bg + black = 1。</p>';
+    $('exportBtn2').addEventListener('click', downloadExport);
+    $('copyExport').addEventListener('click', copyExport);
+    $('peekExport').addEventListener('click', peekExport);
+  }
+
+  function exportText(pretty) { return session.exportJSON(pretty); }
+
+  function downloadExport() {
+    const text = exportText(false);
+    if (!text) return;
+    const blob = new Blob([text], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pupil-coverage-export.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    showInfo('已导出 ' + lastRender.width + '×' + lastRender.height + ' 像素的线性 RGB 与占比。');
+  }
+
+  async function copyExport() {
+    const text = exportText(false);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showInfo('导出 JSON 已复制到剪贴板。');
+    } catch (e) {
+      showInfo('剪贴板不可用，请用下载。');
+    }
+  }
+
+  function peekExport() {
+    const obj = session.exportObject();
+    if (!obj) return;
+    const sample = Object.assign({}, obj, { pixels: obj.pixels.slice(0, 2) });
+    $('inspBody').insertAdjacentHTML('afterbegin', '');
+    let pre = document.getElementById('peekPre');
+    if (!pre) {
+      pre = document.createElement('pre');
+      pre.id = 'peekPre';
+      pre.style.maxHeight = '240px';
+      pre.style.overflow = 'auto';
+      pre.style.background = 'var(--panel-2)';
+      pre.style.border = '1px solid var(--line)';
+      pre.style.borderRadius = '6px';
+      pre.style.padding = '9px 11px';
+      pre.style.font = '11px/1.45 var(--mono)';
+      $('exportBody').appendChild(pre);
+    }
+    pre.textContent = JSON.stringify(sample, null, 2);
+  }
+
+  // ---------- 事件 ----------
+  $('showScene').addEventListener('click', () => {
+    const ed = $('sceneEditor');
+    const open = ed.style.display === 'none';
+    ed.style.display = open ? 'block' : 'none';
+    if (open && session.scene) $('sceneText').value = JSON.stringify(session.scene, null, 2);
+  });
+
+  $('applyScene').addEventListener('click', () => {
+    const parsed = sceneFromText();
+    if (!parsed.ok) { showError([parsed.error], !!lastRender); return; }
+    if (loadSceneObject(parsed.scene, '场景已应用')) {
+      $('sceneEditor').style.display = 'none';
+    }
+  });
+
+  $('resetScene').addEventListener('click', () => {
+    if (session.scene) $('sceneText').value = JSON.stringify(session.scene, null, 2);
+  });
+
+  $('loadSample').addEventListener('click', async () => {
+    if (location.protocol === 'file:') {
+      // file:// 下浏览器禁止 fetch 本地文件，直接用内置副本。
+      $('sceneText').value = JSON.stringify(SAMPLE, null, 2);
+      loadSceneObject(JSON.parse(JSON.stringify(SAMPLE)), '已载入内置样例');
+      return;
+    }
+    try {
+      const r = await fetch('samples/pupil-coverage.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const scene = await r.json();
+      $('sceneText').value = JSON.stringify(scene, null, 2);
+      loadSceneObject(scene, '已载入 samples/pupil-coverage.json');
+    } catch (e) {
+      // file:// 下 fetch 会失败：退回内置样例
+      $('sceneText').value = JSON.stringify(SAMPLE, null, 2);
+      loadSceneObject(JSON.parse(JSON.stringify(SAMPLE)), '已载入内置样例');
+    }
+  });
+
+  if (location.protocol === 'file:') {
+    // file:// 下不能 fetch 本地 JSON，演示按钮改为提示，避免点了才报错。
+    $('loadDemo').disabled = true;
+    $('loadDemo').title = '需要经 HTTP 打开（python3 -m http.server）；也可用「载入 JSON…」选 samples/pupil-demo.json';
+  }
+  $('loadDemo').addEventListener('click', async () => {
+    try {
+      const r = await fetch('samples/pupil-demo.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const scene = await r.json();
+      $('sceneText').value = JSON.stringify(scene, null, 2);
+      loadSceneObject(scene, '已载入 samples/pupil-demo.json');
+    } catch (e) {
+      showError(['读取演示画面失败：' + e.message], !!lastRender);
+    }
+  });
+
+  $('fileInput').addEventListener('change', ev => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      $('sceneText').value = String(rd.result);
+      const parsed = sceneFromText();
+      if (!parsed.ok) { showError([parsed.error], !!lastRender); return; }
+      loadSceneObject(parsed.scene, '已载入 ' + f.name);
+    };
+    rd.onerror = () => showError(['读取文件失败'], !!lastRender);
+    rd.readAsText(f);
+  });
+
+  function applyFocus(f) {
+    const r = session.setFocusOffset(f);
+    if (!r.ok) { showError(r.errors, !!lastRender); return; }
+    if (session.prepared) scheduleRender('焦面偏移 f = ' + f, 60);
+  }
+
+  let renderTimer = null;
+  function scheduleRender(reason, delay) {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => { renderTimer = null; renderFull(reason); }, delay || 0);
+  }
+
+  $('focusRange').addEventListener('input', () => {
+    const v = Number($('focusRange').value);
+    $('focusNum').value = v;
+    applyFocus(v);
+  });
+  $('focusNum').addEventListener('change', () => {
+    const v = readNumberInput($('focusNum'));
+    if (!Number.isFinite(v)) { showError(['焦面偏移系数须为有限数'], !!lastRender); $('focusNum').value = session.focusOffset; return; }
+    $('focusRange').value = Math.max(-3, Math.min(3, v));
+    applyFocus(v);
+  });
+
+  function applyStop(reportInvalid) {
+    const ox = readNumberInput($('stopOx')), oy = readNumberInput($('stopOy'));
+    const sx = readNumberInput($('stopSx')), sy = readNumberInput($('stopSy'));
+    if (![ox, oy, sx, sy].every(Number.isFinite)) {
+      // 输入过程中（如只打了个负号）先不打断，失焦/回车时再报错。
+      if (reportInvalid) { showError(['光阑 offset / slope 须各为两个有限数'], !!lastRender); syncOpticsInputs(); }
+      return;
+    }
+    const r = session.setStop([ox, oy], [sx, sy]);
+    if (!r.ok) {
+      if (reportInvalid) { showError(r.errors, !!lastRender); syncOpticsInputs(); }
+      return;
+    }
+    hideError();
+    if (session.prepared) scheduleRender('光阑已更新', 60);
+  }
+  for (const id of ['stopOx', 'stopOy', 'stopSx', 'stopSy']) {
+    $(id).addEventListener('input', () => { if (session.prepared) applyStop(false); });
+    $(id).addEventListener('change', () => { if (session.prepared) applyStop(true); });
+  }
+
+  $('resetOptics').addEventListener('click', () => {
+    if (!session.prepared) return;
+    session.setFocusOffset(0);
+    session.resetStopToScene();
+    syncOpticsInputs();
+    renderFull('已恢复场景光阑与 f = 0');
+  });
+
+  $('renderBtn').addEventListener('click', () => { if (session.prepared) renderFull('重新渲染'); });
+  $('exportBtn').addEventListener('click', downloadExport);
+
+  // 画布点击 / 键盘
+  function canvasPixel(ev) {
+    const cv = $('preview');
+    const rect = cv.getBoundingClientRect();
+    const x = Math.floor((ev.clientX - rect.left) / rect.width * cv.width);
+    const y = Math.floor((ev.clientY - rect.top) / rect.height * cv.height);
+    if (x < 0 || y < 0 || x >= cv.width || y >= cv.height) return null;
+    return { x, y };
+  }
+  $('preview').addEventListener('click', ev => {
+    // 新场景仍在渲染时画布尺寸已变，旧结果与画布不匹配，先忽略点击。
+    if (!lastRender || rendering) return;
+    const pt = canvasPixel(ev);
+    if (pt) inspectPixel(pt.x, pt.y);
+  });
+  $('preview').addEventListener('keydown', ev => {
+    if (!lastRender || rendering) return;
+    let { x, y } = selected || { x: 0, y: 0 };
+    if (ev.key === 'ArrowLeft') x--;
+    else if (ev.key === 'ArrowRight') x++;
+    else if (ev.key === 'ArrowUp') y--;
+    else if (ev.key === 'ArrowDown') y++;
+    else return;
+    ev.preventDefault();
+    if (x >= 0 && y >= 0 && x < lastRender.width && y < lastRender.height) inspectPixel(x, y);
+  });
+  window.addEventListener('resize', () => { if (selected) drawSelection(selected.x, selected.y); });
+
+  // ---------- 启动 ----------
+  $('sceneText').value = JSON.stringify(SAMPLE, null, 2);
+  loadSceneObject(JSON.parse(JSON.stringify(SAMPLE)), null);
+
+  // 供自动化测试读取
+  window.__app = { session, get lastRender() { return lastRender; }, inspectPixel, renderFull };
+})();
+</script>
+</body>
+</html>
