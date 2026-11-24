@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试与解压产物
+_samples_extract/
+_shots/
+test-results/

@@ -1,0 +1,16 @@
+{
+  "name": "inverse-lut-proof-desk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "反查调色表校样网页：精确整数四面体插值 + 全局最优反查",
+  "scripts": {
+    "test": "node --test test/lut-core.test.js",
+    "bench": "node test/bench.mjs",
+    "smoke": "node test/browser-smoke.mjs",
+    "ref": "python3 -I reference/ref_bruteforce.py"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

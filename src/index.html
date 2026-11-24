@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>反查校样台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* 布局：顶部控制区 + 左右双图校样，窄屏纵向堆叠 */
+:root {
+  --bg: #eef2f4;
+  --panel: #ffffff;
+  --panel-2: #f6f9fa;
+  --fg: #16202a;
+  --muted: #5b6b78;
+  --line: #d4dde3;
+  --accent: #0e7c86;
+  --accent-weak: #dceff1;
+  --accent-fg: #ffffff;
+  --danger: #b3261e;
+  --danger-weak: #fbe3e1;
+  --warn: #9a5b06;
+  --warn-weak: #f8ecd6;
+  --ok: #1a7f4b;
+  --ok-weak: #ddf2e6;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 32, 42, .06), 0 4px 14px rgba(16, 32, 42, .06);
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f151b;
+    --panel: #16202a;
+    --panel-2: #1c2834;
+    --fg: #e3ebf0;
+    --muted: #93a4b1;
+    --line: #2a3845;
+    --accent: #4cc0c9;
+    --accent-weak: #14353a;
+    --accent-fg: #062226;
+    --danger: #f1877f;
+    --danger-weak: #3a1d1b;
+    --warn: #e0b25c;
+    --warn-weak: #382a12;
+    --ok: #6fd39a;
+    --ok-weak: #12301f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .28);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f151b;
+  --panel: #16202a;
+  --panel-2: #1c2834;
+  --fg: #e3ebf0;
+  --muted: #93a4b1;
+  --line: #2a3845;
+  --accent: #4cc0c9;
+  --accent-weak: #14353a;
+  --accent-fg: #062226;
+  --danger: #f1877f;
+  --danger-weak: #3a1d1b;
+  --warn: #e0b25c;
+  --warn-weak: #382a12;
+  --ok: #6fd39a;
+  --ok-weak: #12301f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .28);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+h1 { font-size: 22px; font-weight: 700; letter-spacing: .2px; }
+h2 { font-size: 15px; font-weight: 600; }
+h3 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+header.app-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.app-head .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.icon-btn {
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  border-radius: 8px; padding: 7px 11px; font: inherit; cursor: pointer;
+  white-space: nowrap; flex: none;
+}
+.icon-btn:hover { border-color: var(--accent); }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px; min-width: 0;
+}
+.grid { display: grid; gap: 16px; }
+.grid.two { grid-template-columns: 1fr 1fr; }
+.grid.controls { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 860px) {
+  .grid.two, .grid.controls { grid-template-columns: 1fr; }
+}
+
+/* 导入区 */
+.dropzone {
+  border: 1.5px dashed var(--line); border-radius: var(--radius);
+  padding: 18px; text-align: center; color: var(--muted);
+  background: var(--panel-2); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.dropzone.drag { border-color: var(--accent); background: var(--accent-weak); color: var(--fg); }
+.dropzone strong { color: var(--fg); font-weight: 600; }
+.file-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+  background: var(--panel-2); font-size: 13px; min-width: 0;
+}
+.file-chip .name { font-family: var(--font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.file-chip.ok { border-color: var(--ok); }
+.file-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.file-chip.ok .dot { background: var(--ok); }
+
+/* 表单 */
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input {
+  width: 100%; font: 500 13px var(--font-mono); color: var(--fg);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px;
+}
+.field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.field input.invalid { border-color: var(--danger); outline-color: var(--danger); }
+.field .hint { font-size: 11px; color: var(--danger); min-height: 0; }
+.range-pair { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.range-pair span { color: var(--muted); }
+.range-pair.three { grid-template-columns: 1fr 1fr 1fr; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+button.primary {
+  background: var(--accent); color: var(--accent-fg); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 9px 18px; font: 600 14px var(--font-body); cursor: pointer;
+}
+button.primary:disabled { opacity: .5; cursor: default; }
+button.ghost {
+  background: transparent; color: var(--fg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 16px; font: 600 14px var(--font-body); cursor: pointer;
+}
+button.ghost:disabled { opacity: .45; cursor: default; }
+button.ghost:hover:not(:disabled), button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* 状态条 */
+.progress { height: 8px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+.stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+.stat { display: flex; flex-direction: column; }
+.stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.stat .v { font: 600 15px var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* 告警 */
+.banner {
+  border-radius: var(--radius); padding: 11px 14px; font-size: 13px;
+  border: 1px solid; display: none; gap: 8px; align-items: baseline;
+}
+.banner.show { display: flex; }
+.banner.error { background: var(--danger-weak); border-color: var(--danger); color: var(--danger); }
+.banner.warn { background: var(--warn-weak); border-color: var(--warn); color: var(--warn); }
+.banner .field-name { font-family: var(--font-mono); font-weight: 600; }
+
+/* 图像对比 */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .compare { grid-template-columns: 1fr; } }
+.img-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.img-panel .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.img-panel .panel-head .meta { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+.canvas-box {
+  position: relative; background:
+    repeating-conic-gradient(var(--panel-2) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 120px; padding: 8px;
+}
+.canvas-box canvas { image-rendering: pixelated; max-width: 100%; height: auto; cursor: crosshair; display: block; }
+.canvas-box .placeholder { color: var(--muted); font-size: 13px; padding: 26px 10px; text-align: center; }
+.marker {
+  position: absolute; border: 1.5px solid var(--accent); pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35); display: none;
+}
+.code-canvas { image-rendering: pixelated; }
+
+/* 像素检查器 */
+.inspector { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 18px; }
+@media (max-width: 640px) { .inspector { grid-template-columns: 1fr; } }
+.insp-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.insp-item .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.insp-item .v { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; word-break: break-all; }
+.swatch { display: inline-block; width: 13px; height: 13px; border: 1px solid var(--line); border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+.diff-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12.5px; }
+.diff-table th, .diff-table td { padding: 5px 8px; text-align: right; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.diff-table th:first-child, .diff-table td:first-child { text-align: left; }
+.diff-table th { color: var(--muted); font-weight: 500; }
+
+.dl-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.foot { color: var(--muted); font-size: 12px; text-align: center; padding-block: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app-head">
+    <div>
+      <h1>反查校样台</h1>
+      <p class="sub">非等距节点 LUT · 精确整数四面体插值 · 允许码内全局最优反查</p>
+    </div>
+    <button class="icon-btn" id="themeToggle" type="button" title="切换明暗主题">◐ 主题</button>
+  </header>
+
+  <!-- 导入 -->
+  <section class="card">
+    <h2>1 · 导入数据</h2>
+    <div style="margin-top:12px" class="dropzone" id="dropzone" tabindex="0" role="button"
+         aria-label="拖入或选择 zip / table.json / target.ppm">
+      把 <strong>inverse-color-cases.zip</strong> 拖到这里，或点击选择文件<br>
+      也可分别选择 <strong>table.json</strong> 与 <strong>.ppm（P6）</strong>
+      <input type="file" id="fileInput" multiple accept=".zip,.json,.ppm,.pnm" hidden>
+    </div>
+    <div class="file-row">
+      <span class="file-chip" id="chipTable"><span class="dot"></span>表：<span class="name" id="nameTable">未导入</span></span>
+      <span class="file-chip" id="chipImage"><span class="dot"></span>目标 P6：<span class="name" id="nameImage">未导入</span></span>
+    </div>
+    <div class="banner error" id="banner" role="alert" style="margin-top:12px"></div>
+  </section>
+
+  <!-- 参数 -->
+  <section class="card">
+    <h2>2 · 反查参数</h2>
+    <div class="grid controls" style="margin-top:14px">
+      <div class="field">
+        <label>R 输入码闭区间</label>
+        <div class="range-pair">
+          <input type="number" id="bRlo" min="0" max="63" step="1" value="0">
+          <span>–</span>
+          <input type="number" id="bRhi" min="0" max="63" step="1" value="63">
+        </div>
+        <span class="hint" id="hint-bR"></span>
+      </div>
+      <div class="field">
+        <label>G 输入码闭区间</label>
+        <div class="range-pair">
+          <input type="number" id="bGlo" min="0" max="63" step="1" value="0">
+          <span>–</span>
+          <input type="number" id="bGhi" min="0" max="63" step="1" value="63">
+        </div>
+        <span class="hint" id="hint-bG"></span>
+      </div>
+      <div class="field">
+        <label>B 输入码闭区间</label>
+        <div class="range-pair">
+          <input type="number" id="bBlo" min="0" max="63" step="1" value="0">
+          <span>–</span>
+          <input type="number" id="bBhi" min="0" max="63" step="1" value="63">
+        </div>
+        <span class="hint" id="hint-bB"></span>
+      </div>
+      <div class="field">
+        <label>参考码 anchor（0–63，RGB）</label>
+        <div class="range-pair three">
+          <input type="number" id="aR" min="0" max="63" step="1" value="32">
+          <input type="number" id="aG" min="0" max="63" step="1" value="32">
+          <input type="number" id="aB" min="0" max="63" step="1" value="32">
+        </div>
+        <span class="hint" id="hint-anchor"></span>
+      </div>
+      <div class="field">
+        <label>通道权重（1–8 整数，RGB）</label>
+        <div class="range-pair three">
+          <input type="number" id="wR" min="1" max="8" step="1" value="1">
+          <input type="number" id="wG" min="1" max="8" step="1" value="1">
+          <input type="number" id="wB" min="1" max="8" step="1" value="1">
+        </div>
+        <span class="hint" id="hint-weight"></span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="primary" id="applyBtn" type="button" disabled>应用参数并反查</button>
+      <button class="ghost" id="cancelBtn" type="button" disabled>中止</button>
+    </div>
+    <div style="margin-top:14px">
+      <div class="progress"><div id="progressBar"></div></div>
+      <div class="stats">
+        <div class="stat"><span class="k">候选整数码</span><span class="v" id="statCandidates">—</span></div>
+        <div class="stat"><span class="k">不同正向输出</span><span class="v" id="statOutputs">—</span></div>
+        <div class="stat"><span class="k">构建耗时</span><span class="v" id="statBuild">—</span></div>
+        <div class="stat"><span class="k">反查耗时</span><span class="v" id="statSolve">—</span></div>
+        <div class="stat"><span class="k">状态</span><span class="v" id="statStatus">等待导入</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 对比 -->
+  <section class="card">
+    <h2>3 · 目标与校样对比（点击像素查看码值与误差）</h2>
+    <div class="compare" style="margin-top:14px">
+      <div class="img-panel">
+        <div class="panel-head">
+          <h3>目标 P6</h3>
+          <span class="meta" id="metaTarget">未导入</span>
+        </div>
+        <div class="canvas-box" id="boxTarget">
+          <span class="placeholder" id="phTarget">导入目标 P6 后显示</span>
+          <canvas id="cvTarget" hidden></canvas>
+          <div class="marker" id="mkTarget"></div>
+        </div>
+      </div>
+      <div class="img-panel">
+        <div class="panel-head">
+          <h3>校样（正向回算）</h3>
+          <span class="meta" id="metaProof">—</span>
+        </div>
+        <div class="canvas-box" id="boxProof">
+          <span class="placeholder" id="phProof">提交反查后显示</span>
+          <canvas id="cvProof" hidden></canvas>
+          <div class="marker" id="mkProof"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="panel-head" style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <h3>码图（下载文件为原始 0–63 码值，不拉伸；此处仅显示放大 4 倍）</h3>
+        <span class="meta" id="metaCodes">—</span>
+      </div>
+      <div class="canvas-box" id="boxCodes" style="margin-top:8px">
+        <span class="placeholder" id="phCodes">提交反查后显示</span>
+        <canvas id="cvCodes" class="code-canvas" hidden></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- 像素检查器 -->
+  <section class="card">
+    <h2>4 · 像素检查</h2>
+    <div class="inspector" style="margin-top:12px">
+      <div class="insp-item"><span class="k">坐标 (x, y)</span><span class="v" id="piXY">—</span></div>
+      <div class="insp-item"><span class="k">输入码 (r,g,b) ∈ 0–63</span><span class="v" id="piCode">—</span></div>
+      <div class="insp-item"><span class="k">目标 RGB</span><span class="v" id="piTarget">—</span></div>
+      <div class="insp-item"><span class="k">校样 RGB</span><span class="v" id="piProof">—</span></div>
+      <div class="insp-item"><span class="k">加权平方误差 Σw·Δ²</span><span class="v" id="piWErr">—</span></div>
+      <div class="insp-item"><span class="k">到参考码曼哈顿距离</span><span class="v" id="piMan">—</span></div>
+    </div>
+    <div style="margin-top:14px; overflow-x:auto">
+      <table class="diff-table" id="diffTable" hidden>
+        <thead><tr><th>通道</th><th>目标</th><th>校样</th><th>Δ（校样−目标）</th><th>权重</th><th>w·Δ²</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 下载 -->
+  <section class="card">
+    <h2>5 · 下载 P6</h2>
+    <div class="btn-row">
+      <button class="ghost" id="dlCodes" type="button" disabled>下载码图 codes.ppm</button>
+      <button class="ghost" id="dlProof" type="button" disabled>下载校样 proof.ppm</button>
+    </div>
+    <p class="dl-note">两张 P6 尺寸与目标一致；码图逐字节写入原始 0–63 输入码，不做任何拉伸或映射。</p>
+  </section>
+
+  <p class="foot">全部计算在浏览器本地完成，精确整数运算 · 无现成反查库</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
