@@ -1,0 +1,30 @@
+{
+ "width": 4,
+ "height": 4,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 89,
+   "seq": 0,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     4,
+     4
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  }
+ ],
+ "truncated": {
+  "offset": 101,
+  "reason": "长度字段不完整（文件尾截断）"
+ }
+}

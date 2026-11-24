@@ -1,0 +1,120 @@
+{
+ "width": 6,
+ "height": 6,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 169,
+   "seq": 10,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     6,
+     6
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 1,
+   "offset": 181,
+   "length": 41,
+   "seq": 11,
+   "base": 10,
+   "key": false,
+   "moves": [],
+   "dirty": [
+    [
+     1,
+     1,
+     2,
+     2
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 2,
+   "offset": 226,
+   "length": 29,
+   "seq": null,
+   "base": null,
+   "key": false,
+   "moves": [],
+   "dirty": [],
+   "valid": false,
+   "reason": "CRC32 校验失败",
+   "anchorIndex": -1
+  },
+  {
+   "index": 3,
+   "offset": 259,
+   "length": 29,
+   "seq": 13,
+   "base": 12,
+   "key": false,
+   "moves": [],
+   "dirty": [
+    [
+     2,
+     2,
+     1,
+     1
+    ]
+   ],
+   "valid": false,
+   "reason": "差量帧出现在断链状态",
+   "anchorIndex": -1
+  },
+  {
+   "index": 4,
+   "offset": 292,
+   "length": 169,
+   "seq": 20,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     6,
+     6
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 4
+  },
+  {
+   "index": 5,
+   "offset": 465,
+   "length": 61,
+   "seq": 21,
+   "base": 20,
+   "key": false,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     3,
+     3
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 4
+  }
+ ],
+ "truncated": null
+}

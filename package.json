@@ -1,0 +1,16 @@
+{
+  "name": "capture-move-reel",
+  "version": "1.0.0",
+  "description": "CXR1 屏幕录制差量逐帧核对网页",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "fixtures": "node test/make-fixtures.mjs",
+    "test": "node test/run-correctness.mjs && node test/run-png-test.mjs && node test/run-limits.mjs",
+    "bench:gen": "node test/make-bench.mjs && node test/make-bench-4k.mjs",
+    "bench": "node --expose-gc test/run-bench.mjs test/bench/bench-1920x1080-10000.cxr",
+    "bench:4k": "node --expose-gc test/run-bench.mjs test/bench/bench-4096x2160-1200.cxr",
+    "e2e": "node test/playwright-e2e.mjs",
+    "serve": "node tools/serve.mjs"
+  }
+}

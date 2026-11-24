@@ -1,0 +1,113 @@
+{
+ "width": 12,
+ "height": 10,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 505,
+   "seq": 0,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     12,
+     10
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 1,
+   "offset": 517,
+   "length": 85,
+   "seq": 1,
+   "base": 0,
+   "key": false,
+   "moves": [
+    [
+     2,
+     2,
+     4,
+     4,
+     9,
+     7
+    ]
+   ],
+   "dirty": [
+    [
+     -2,
+     -1,
+     4,
+     3
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 2,
+   "offset": 606,
+   "length": 61,
+   "seq": 2,
+   "base": 1,
+   "key": false,
+   "moves": [
+    [
+     0,
+     0,
+     2,
+     2,
+     50,
+     50
+    ]
+   ],
+   "dirty": [
+    [
+     100,
+     100,
+     2,
+     2
+    ],
+    [
+     3,
+     3,
+     0,
+     0
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 3,
+   "offset": 671,
+   "length": 29,
+   "seq": 3,
+   "base": 2,
+   "key": false,
+   "moves": [
+    [
+     -2,
+     -2,
+     6,
+     6,
+     4,
+     4
+    ]
+   ],
+   "dirty": [],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  }
+ ],
+ "truncated": null
+}

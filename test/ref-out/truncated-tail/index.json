@@ -1,0 +1,50 @@
+{
+ "width": 4,
+ "height": 4,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 89,
+   "seq": 0,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     4,
+     4
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 1,
+   "offset": 101,
+   "length": 41,
+   "seq": 1,
+   "base": 0,
+   "key": false,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     2,
+     2
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  }
+ ],
+ "truncated": {
+  "offset": 146,
+  "reason": "声明长度 100 越过文件尾（剩余 10 字节）"
+ }
+}

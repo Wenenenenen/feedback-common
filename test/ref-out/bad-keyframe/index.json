@@ -1,0 +1,49 @@
+{
+ "width": 5,
+ "height": 5,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 29,
+   "seq": 0,
+   "base": 4294967295,
+   "key": true,
+   "moves": [
+    [
+     0,
+     0,
+     1,
+     1,
+     0,
+     0
+    ]
+   ],
+   "dirty": [],
+   "valid": false,
+   "reason": "关键帧不满足满画布等约束",
+   "anchorIndex": -1
+  },
+  {
+   "index": 1,
+   "offset": 41,
+   "length": 125,
+   "seq": 1,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     5,
+     5
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 1
+  }
+ ],
+ "truncated": null
+}

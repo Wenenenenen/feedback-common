@@ -1,0 +1,87 @@
+{
+ "width": 5,
+ "height": 5,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 125,
+   "seq": 0,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     5,
+     5
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 1,
+   "offset": 137,
+   "length": 29,
+   "seq": 1,
+   "base": 99,
+   "key": false,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     1,
+     1
+    ]
+   ],
+   "valid": false,
+   "reason": "base=99 与上一成功帧 seq=0 不符",
+   "anchorIndex": -1
+  },
+  {
+   "index": 2,
+   "offset": 170,
+   "length": 125,
+   "seq": 5,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     5,
+     5
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 2
+  },
+  {
+   "index": 3,
+   "offset": 299,
+   "length": 29,
+   "seq": 4,
+   "base": 5,
+   "key": false,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     1,
+     1
+    ]
+   ],
+   "valid": false,
+   "reason": "成功帧 seq 未严格递增：4 <= 5",
+   "anchorIndex": -1
+  }
+ ],
+ "truncated": null
+}

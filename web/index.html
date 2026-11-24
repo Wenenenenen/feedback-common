@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>CXR 逐帧核对台</title>
+<style>
+/* ---- 设计令牌：深色优先的帧审查工具，中性色偏冷，语义色独立于强调色 ---- */
+:root {
+  --bg: #0e1116;
+  --bg-panel: #151a22;
+  --bg-raised: #1c232e;
+  --bg-hover: #232c39;
+  --border: #2a3442;
+  --border-strong: #3b4859;
+  --fg: #e6ebf2;
+  --fg-dim: #9aa7b6;
+  --fg-faint: #6b7787;
+  --accent: #4da3ff;
+  --accent-soft: rgba(77, 163, 255, 0.14);
+  --move: #38d6c4;          /* 移动块：青色 */
+  --move-soft: rgba(56, 214, 196, 0.16);
+  --dirty: #f0a848;         /* 脏块：琥珀色 */
+  --dirty-soft: rgba(240, 168, 72, 0.16);
+  --bad: #f26075;           /* 故障/断链：红 */
+  --bad-soft: rgba(242, 96, 117, 0.14);
+  --good: #54c98b;
+  --radius: 10px;
+  --radius-sm: 7px;
+  --font-body: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, "Cascadia Code", monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f9;
+  --bg-panel: #ffffff;
+  --bg-raised: #f7f9fc;
+  --bg-hover: #edf1f6;
+  --border: #d8dee7;
+  --border-strong: #b7c1cf;
+  --fg: #1b2430;
+  --fg-dim: #556272;
+  --fg-faint: #8592a2;
+  --accent: #1f6fd6;
+  --accent-soft: rgba(31, 111, 214, 0.1);
+  --move: #0c9c8c;
+  --move-soft: rgba(12, 156, 140, 0.13);
+  --dirty: #b96a12;
+  --dirty-soft: rgba(185, 106, 18, 0.12);
+  --bad: #d13b52;
+  --bad-soft: rgba(209, 59, 82, 0.1);
+  --good: #23915c;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  height: 100%;
+  padding-block: 14px;
+  max-width: 1500px;
+  margin-inline: auto;
+}
+
+/* ---- 顶栏 ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), var(--move));
+  display: grid; place-items: center;
+  color: #08111c; font-weight: 800; font-size: 15px;
+  flex: none;
+}
+.brand h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: 0.2px; }
+.brand .sub { font-size: 12px; color: var(--fg-faint); }
+.topbar .spacer { flex: 1; }
+
+.btn {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--fg);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #07131f; font-weight: 700; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--bg-hover); }
+.btn.small { padding: 5px 10px; font-size: 12.5px; }
+
+.theme-toggle {
+  width: 36px; height: 36px; padding: 0;
+  display: grid; place-items: center;
+}
+
+/* ---- 主体两栏 ---- */
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+  min-height: 0;
+}
+@media (max-width: 980px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 1fr) auto; overflow: auto; }
+  .side { max-height: none; }
+}
+
+.stage-col { display: flex; flex-direction: column; gap: 12px; min-height: 0; min-width: 0; }
+
+/* ---- 画布卡片 ---- */
+.stage-card {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex: 1;
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 10px;
+}
+.stage-inner {
+  position: relative;
+  line-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+}
+#frameCanvas {
+  display: block;
+  border-radius: 3px;
+  image-rendering: pixelated;
+  /* 实际显示尺寸由 JS 按容器等比计算（小画布放大、大画布缩小），
+     画布内部像素始终保持原始分辨率，导出不受影响 */
+}
+#overlayCanvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.stage-badge {
+  position: absolute;
+  top: 12px; left: 12px;
+  display: flex; gap: 8px;
+  z-index: 3;
+  pointer-events: none;
+}
+.pill {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(14, 17, 22, 0.82);
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.pill.key { color: var(--accent); border-color: var(--accent); }
+.pill.bad { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+.pill.good { color: var(--good); border-color: var(--good); }
+
+.overlay-legend {
+  position: absolute;
+  right: 12px; bottom: 12px;
+  display: flex; gap: 12px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 24px);
+  background: rgba(14, 17, 22, 0.82);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  z-index: 2;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.swatch { width: 13px; height: 13px; border-radius: 3px; border: 2px solid; }
+.swatch.move { border-color: var(--move); background: var(--move-soft); }
+.swatch.dirty { border-color: var(--dirty); background: var(--dirty-soft); }
+
+/* ---- 空状态 / 拖放 ---- */
+.dropzone {
+  width: min(560px, 92%);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 44px 28px;
+  text-align: center;
+  color: var(--fg-dim);
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+.dropzone.dragging { border-color: var(--accent); background: var(--accent-soft); color: var(--fg); }
+.dropzone .dz-title { font-size: 16px; font-weight: 700; color: var(--fg); margin-bottom: 6px; }
+.dropzone .dz-hint { font-size: 12.5px; color: var(--fg-faint); margin-top: 10px; }
+.dropzone input { display: none; }
+
+/* ---- 时间轴 / 导航 ---- */
+.nav-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.nav-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nav-row .grow { flex: 1; min-width: 160px; }
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.frame-pos {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+.frame-pos input {
+  width: 86px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+}
+.strip {
+  display: flex; gap: 3px;
+  height: 30px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 4px;
+}
+.strip-cell {
+  flex: none;
+  min-width: 7px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--bg-raised);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.strip-cell.keyframe { background: var(--accent); }
+.strip-cell.invalid { background: var(--bad); }
+.strip-cell.current { outline: 2px solid var(--fg); outline-offset: 1px; }
+.strip-cell:hover { filter: brightness(1.3); }
+
+/* ---- 侧栏 ---- */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 14px;
+  min-width: 0;
+}
+.card h2 {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: var(--fg-faint);
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; font-size: 12.5px; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; font-family: var(--font-mono); color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+.kv dd.bad { color: var(--bad); }
+.kv dd.good { color: var(--good); }
+
+.rect-list { display: flex; flex-direction: column; gap: 7px; }
+.rect-item {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+}
+.rect-item.move { border-left-color: var(--move); }
+.rect-item.dirty { border-left-color: var(--dirty); }
+.rect-item .rt { font-family: var(--font-body); font-weight: 700; font-size: 11.5px; margin-bottom: 3px; }
+.rect-item.move .rt { color: var(--move); }
+.rect-item.dirty .rt { color: var(--dirty); }
+.rect-item .rv { color: var(--fg-dim); overflow-wrap: anywhere; }
+.rect-empty { color: var(--fg-faint); font-size: 12.5px; }
+
+.alert {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  border: 1px solid;
+  display: flex;
+  gap: 9px;
+  line-height: 1.45;
+}
+.alert.bad { border-color: var(--bad); background: var(--bad-soft); color: var(--fg); }
+.alert.warn { border-color: var(--dirty); background: var(--dirty-soft); color: var(--fg); }
+.alert .mono { color: var(--bad); }
+.alert.warn .mono { color: var(--dirty); }
+
+.toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--fg);
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  z-index: 50;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+.toggle-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-dim); cursor: pointer; }
+.toggle-row input { accent-color: var(--accent); }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  min-width: 0;
+}
+.stat .v { font-family: var(--font-mono); font-size: 17px; font-weight: 700; }
+.stat .l { font-size: 11px; color: var(--fg-faint); margin-top: 2px; }
+.stat .v.bad { color: var(--bad); }
+.stat .v.good { color: var(--good); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">CXR</div>
+      <div>
+        <h1>逐帧核对台</h1>
+        <div class="sub">屏幕录制差量 · 移动块 / 脏块审查</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="openBtn">打开 CXR 文件</button>
+    <button class="btn" id="exportBtn" disabled>导出当前帧 PNG</button>
+    <button class="btn ghost theme-toggle" id="themeBtn" title="切换明暗主题" aria-label="切换主题">◐</button>
+  </header>
+
+  <main class="main">
+    <section class="stage-col">
+      <div class="stage-card" id="stageCard">
+        <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="选择或拖入 CXR 文件">
+          <div class="dz-title">拖入 .cxr 录制文件，或点击选择</div>
+          <div>支持 CXR1 · 最大 128MiB / 2 万帧 / 4096×2160</div>
+          <div class="dz-hint">解析在 Worker 中进行，不会阻塞页面；文件不会上传</div>
+          <input type="file" id="fileInput" accept=".cxr,application/octet-stream">
+        </div>
+        <div class="stage-inner" id="stageInner" hidden>
+          <canvas id="frameCanvas"></canvas>
+          <canvas id="overlayCanvas"></canvas>
+          <div class="stage-badge">
+            <span class="pill" id="pillFrame"></span>
+            <span class="pill" id="pillState"></span>
+          </div>
+          <div class="overlay-legend">
+            <span class="legend-item"><span class="swatch move"></span>移动块（取自上一成功帧）</span>
+            <span class="legend-item"><span class="swatch dirty"></span>脏块（直通覆盖）</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-card" id="navCard" hidden>
+        <div class="nav-row">
+          <button class="btn small" id="firstBtn">⏮ 首帧</button>
+          <button class="btn small" id="prevBtn">◀ 上一有效</button>
+          <div class="grow">
+            <input type="range" id="scrub" min="0" max="0" value="0" step="1">
+          </div>
+          <button class="btn small" id="nextBtn">下一有效 ▶</button>
+          <button class="btn small" id="lastBtn">末帧 ⏭</button>
+          <div class="frame-pos">
+            帧 <input type="number" id="frameInput" min="0" value="0">
+            <span id="frameTotal"></span>
+          </div>
+        </div>
+        <div class="strip" id="strip" aria-label="帧类型条带"></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card" id="fileCard" hidden>
+        <h2>录制概况</h2>
+        <div class="stat-grid">
+          <div class="stat"><div class="v" id="stFrames">–</div><div class="l">记录帧</div></div>
+          <div class="stat"><div class="v good" id="stValid">–</div><div class="l">可重建</div></div>
+          <div class="stat"><div class="v bad" id="stBad">–</div><div class="l">坏帧 / 断链</div></div>
+          <div class="stat"><div class="v" id="stCanvas">–</div><div class="l">画布</div></div>
+        </div>
+        <div id="truncAlert" style="margin-top:10px" hidden>
+          <div class="alert warn">
+            <div>截断尾帧停在 <span class="mono" id="truncOff"></span><br><span id="truncReason"></span><br>此前的成功帧仍可查看。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="frameCard" hidden>
+        <h2>当前帧</h2>
+        <dl class="kv">
+          <dt>帧序号</dt><dd id="kvIndex">–</dd>
+          <dt>seq</dt><dd id="kvSeq">–</dd>
+          <dt>base</dt><dd id="kvBase">–</dd>
+          <dt>类型</dt><dd id="kvKind">–</dd>
+          <dt>文件偏移</dt><dd id="kvOffset">–</dd>
+          <dt>帧长度 L</dt><dd id="kvLen">–</dd>
+          <dt>锚点帧</dt><dd id="kvAnchor">–</dd>
+        </dl>
+        <div style="margin-top:10px">
+          <label class="toggle-row">
+            <input type="checkbox" id="overlayToggle" checked> 显示叠加框（不影响导出像素）
+          </label>
+        </div>
+        <div id="badFrameAlert" style="margin-top:10px" hidden>
+          <div class="alert bad"><div id="badFrameText"></div></div>
+        </div>
+      </div>
+
+      <div class="card" id="rectCard" hidden>
+        <h2>移动块范围</h2>
+        <div class="rect-list" id="moveList"></div>
+      </div>
+
+      <div class="card" id="dirtyCard" hidden>
+        <h2>脏块范围</h2>
+        <div class="rect-list" id="dirtyList"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

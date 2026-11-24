@@ -1,0 +1,73 @@
+{
+ "width": 4,
+ "height": 4,
+ "frames": [
+  {
+   "index": 0,
+   "offset": 8,
+   "length": 89,
+   "seq": 0,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     4,
+     4
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 0
+  },
+  {
+   "index": 1,
+   "offset": 101,
+   "length": 29,
+   "seq": null,
+   "base": null,
+   "key": false,
+   "moves": [],
+   "dirty": [],
+   "valid": false,
+   "reason": "脏块像素数据越界",
+   "anchorIndex": -1
+  },
+  {
+   "index": 2,
+   "offset": 134,
+   "length": 18,
+   "seq": null,
+   "base": null,
+   "key": false,
+   "moves": [],
+   "dirty": [],
+   "valid": false,
+   "reason": "帧体未恰好用完：消费 13 / 14",
+   "anchorIndex": -1
+  },
+  {
+   "index": 3,
+   "offset": 156,
+   "length": 89,
+   "seq": 3,
+   "base": 4294967295,
+   "key": true,
+   "moves": [],
+   "dirty": [
+    [
+     0,
+     0,
+     4,
+     4
+    ]
+   ],
+   "valid": true,
+   "reason": null,
+   "anchorIndex": 3
+  }
+ ],
+ "truncated": null
+}
