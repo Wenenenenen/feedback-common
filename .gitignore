@@ -15,3 +15,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 生成的大文件与临时产物
+work/big.opus
+work/*.opus
+/tmp/

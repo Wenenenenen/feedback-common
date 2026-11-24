@@ -1,0 +1,32 @@
+import { chromium } from "/home/wendy/.nvm/versions/node/v22.23.2/lib/node_modules/playwright/index.mjs";
+import { readFileSync } from "node:fs";
+const ROOT = "/home/wendy/jianzhi/feedback-tasks/opus-chain-cutroom";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+const errs = [];
+page.on("pageerror", e => errs.push("PAGEERROR " + e.message));
+page.on("console", m => { if (m.type() === "error") errs.push(m.text()); });
+await page.goto("file://" + ROOT + "/index.html");
+await page.waitForSelector("#demoBtn");
+// corrupt a body byte of page 3 (offset 9600) in mono20, upload via file input using setInputFiles
+const src = readFileSync(ROOT + "/test/fixtures/mono20.opus");
+const bad = Buffer.from(src); bad[9600] ^= 0xff;
+const fs = await import("node:fs");
+fs.writeFileSync("/tmp/opus-tools/corrupt.opus", bad);
+await page.setInputFiles("#file", "/tmp/opus-tools/corrupt.opus");
+await page.waitForTimeout(600);
+console.log("status:", await page.textContent("#statusText"));
+console.log("page rows (valid, should stop before bad page):", await page.locator("#pageTable tbody tr").count());
+await page.locator('.tab[data-pane="diag"]').click();
+const diag = await page.locator("#diagList .diagitem").allTextContents();
+console.log("diag:", diag.map(d=>d.replace(/\s+/g,' ')).slice(0,3));
+// truncated file
+const trunc = Buffer.from(src.subarray(0, 10000));
+fs.writeFileSync("/tmp/opus-tools/trunc.opus", trunc);
+await page.setInputFiles("#file", "/tmp/opus-tools/trunc.opus");
+await page.waitForTimeout(500);
+console.log("trunc status:", await page.textContent("#statusText"));
+console.log("trunc page rows:", await page.locator("#pageTable tbody tr").count());
+await page.screenshot({ path: "/tmp/opus-tools/shot_corrupt.png" });
+console.log("errors:", errs.length ? errs : "none");
+await browser.close();
