@@ -1,0 +1,358 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>拉丝金属反射采样校验</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* ===== 设计令牌：冷色仪器面板，钢蓝单色阶表达密度，状态色仅用于拒收/校验 =====
+   布局：左控制右结果，窄屏堆叠。热力图顺序色阶（蓝，浅→深）经 dataviz 校验。 */
+:root {
+  --bg: #f4f6f8;
+  --surface: #fcfcfb;
+  --surface-2: #eef1f5;
+  --ink: #0d141c;
+  --ink-2: #46505c;
+  --muted: #7c8590;
+  --line: #d8dde3;
+  --accent: #256abf;
+  --accent-soft: #e3edfa;
+  --heat-1: #cde2fb; --heat-2: #86b6ef; --heat-3: #5598e7;
+  --heat-4: #256abf; --heat-5: #0d366b;
+  --reject: #d03b3b;
+  --reject-soft: #fbe9e9;
+  --good: #0ca30c;
+  --warn: #c98500;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(13,20,28,.06), 0 4px 14px rgba(13,20,28,.05);
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b0e12; --surface: #161b21; --surface-2: #1e252d;
+    --ink: #eef1f5; --ink-2: #b6bfc9; --muted: #838d99; --line: #2b333d;
+    --accent: #5598e7; --accent-soft: #18273a;
+    --heat-1: #184f95; --heat-2: #256abf; --heat-3: #3987e5;
+    --heat-4: #6da7ec; --heat-5: #9ec5f4;
+    --reject: #e66767; --reject-soft: #33201f;
+    --good: #46c046; --warn: #e0b13e;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0e12; --surface: #161b21; --surface-2: #1e252d;
+  --ink: #eef1f5; --ink-2: #b6bfc9; --muted: #838d99; --line: #2b333d;
+  --accent: #5598e7; --accent-soft: #18273a;
+  --heat-1: #184f95; --heat-2: #256abf; --heat-3: #3987e5;
+  --heat-4: #6da7ec; --heat-5: #9ec5f4;
+  --reject: #e66767; --reject-soft: #33201f;
+  --good: #46c046; --warn: #e0b13e;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 20px 48px; }
+h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; letter-spacing: -.01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 18px; font-size: 13px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+}
+.layout { display: grid; grid-template-columns: 320px minmax(0,1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* ---- 表单 ---- */
+.field { margin-bottom: 12px; }
+.field label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+.field label .val { font-family: var(--mono); color: var(--accent); font-size: 12px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="number"], input[type="text"] {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--surface-2); color: var(--ink); font-family: var(--mono); font-size: 13px;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.vec input { text-align: center; }
+button {
+  font-family: var(--sans); font-size: 13px; font-weight: 600; border-radius: 8px;
+  padding: 9px 14px; cursor: pointer; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; }
+button.danger { color: var(--reject); border-color: var(--reject); background: transparent; width: 100%; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:hover:not(:disabled) { filter: brightness(1.05); }
+.btn-row { display: flex; gap: 8px; }
+.btn-row button { flex: 1; }
+.hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.err { color: var(--reject); font-size: 12px; margin-top: 8px; white-space: pre-line; }
+.file-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.file-row input[type="file"] { font-size: 12px; color: var(--muted); min-width: 0; }
+
+/* ---- 指标瓦片 ---- */
+.tiles { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+@media (max-width: 640px) { .tiles { grid-template-columns: repeat(2,1fr); } }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+.tile .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.tile .v { font-size: 22px; font-weight: 650; font-family: var(--mono); letter-spacing: -.02em; }
+.tile .d { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.tile.reject .v { color: var(--reject); }
+.tile.good .v { color: var(--good); }
+
+/* ---- 进度 ---- */
+.progress { height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin-top: 10px; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+.status-line { font-size: 12px; color: var(--ink-2); margin-top: 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.pill.run { background: var(--accent-soft); color: var(--accent); }
+.pill.done { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.pill.cancel { background: var(--reject-soft); color: var(--reject); }
+
+/* ---- 热力图 ---- */
+.heat-wrap { overflow-x: auto; }
+.heat { display: grid; grid-template-columns: auto repeat(16, minmax(30px,1fr)); gap: 2px; min-width: 640px; }
+.heat .corner { font-size: 10px; color: var(--muted); }
+.heat .axis-x, .heat .axis-y { font-size: 10px; color: var(--muted); display: flex; align-items: center; justify-content: center; font-family: var(--mono); }
+.heat .axis-y { justify-content: flex-end; padding-right: 6px; }
+.cell {
+  aspect-ratio: 1; border-radius: 3px; cursor: pointer; position: relative;
+  border: 1px solid transparent; min-height: 26px;
+}
+.cell:hover, .cell.sel { border-color: var(--ink); outline: 2px solid var(--accent); outline-offset: 1px; }
+.cell .n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-family: var(--mono); color: var(--ink); opacity: 0; transition: opacity .1s; }
+.cell.show-n .n { opacity: .85; }
+.legend { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.legend .bar { width: 220px; height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--heat-1), var(--heat-2), var(--heat-3), var(--heat-4), var(--heat-5)); }
+.legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 4px; }
+.toggle-group { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.toggle-group button { border: 0; border-radius: 0; padding: 5px 10px; font-size: 12px; background: var(--surface); }
+.toggle-group button.on { background: var(--accent); color: #fff; }
+
+/* ---- 表格 ---- */
+.table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { padding: 6px 9px; text-align: right; border-bottom: 1px solid var(--line); font-family: var(--mono); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface-2); color: var(--muted); font-weight: 600; cursor: pointer; z-index: 1; }
+th:first-child, td:first-child { text-align: left; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--accent-soft); }
+tbody tr.sel { background: var(--accent-soft); }
+tr.reject-row td { color: var(--reject); font-weight: 600; }
+
+/* ---- 详情面板 ---- */
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; }
+.kv { background: var(--surface-2); border-radius: 7px; padding: 8px 10px; min-width: 0; }
+.kv .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.kv .v { font-family: var(--mono); font-size: 13px; word-break: break-all; }
+.sample-list { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; }
+.sample-list table { font-size: 11px; }
+.section-gap { margin-top: 16px; }
+.formula { font-family: var(--mono); font-size: 11px; color: var(--ink-2); background: var(--surface-2); padding: 8px 10px; border-radius: 7px; overflow-x: auto; white-space: pre; }
+.check-ok { color: var(--good); font-weight: 600; }
+.check-bad { color: var(--reject); font-weight: 600; }
+.check-warn { color: var(--warn); font-weight: 600; }
+.muted { color: var(--muted); }
+a.theme-link { color: var(--accent); }
+.tab-row { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tab-row button { background: var(--surface); }
+.tab-row button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+[hidden] { display: none !important; }
+</style>
+
+<div class="wrap">
+  <h1>拉丝金属反射采样校验</h1>
+  <p class="sub">各向异性 GGX · 可见微表面法线（VNDF）采样 · 手写实现无第三方材质库 · 拒收样本不重抽且保留在分母</p>
+
+  <div class="layout">
+    <!-- ============ 左：控制区 ============ -->
+    <div class="stack">
+      <section class="card">
+        <h2>工况导入</h2>
+        <div class="file-row">
+          <input type="file" id="fileInput" accept=".json,application/json">
+          <button id="loadDefaultBtn" type="button">载入内置样例</button>
+        </div>
+        <p class="hint">按 samples/microfacet-proof.json 结构导入；也可直接在下方修改。</p>
+        <div id="importMsg" class="hint"></div>
+      </section>
+
+      <section class="card">
+        <h2>观察方向 v（指离表面，世界系）</h2>
+        <div class="row3 vec field">
+          <div><label>vx</label><input type="number" id="vx" step="0.01"></div>
+          <div><label>vy</label><input type="number" id="vy" step="0.01"></div>
+          <div><label>vz</label><input type="number" id="vz" step="0.01"></div>
+        </div>
+        <p class="hint">归一前须非零且 z 为正；归一后 vz ≥ 0.01（贴地极限）。</p>
+
+        <h2 style="margin-top:14px">材质参数</h2>
+        <div class="field">
+          <label>横向粗糙度 ax（拉丝方向）<span class="val" id="axVal"></span></label>
+          <input type="range" id="ax" min="0.02" max="1" step="0.01">
+        </div>
+        <div class="field">
+          <label>纵向粗糙度 ay（垂直拉丝）<span class="val" id="ayVal"></span></label>
+          <input type="range" id="ay" min="0.02" max="1" step="0.01">
+        </div>
+        <div class="field">
+          <label>拉丝角 angle（度，世界 XY 绕 z 反转）<span class="val" id="angleVal"></span></label>
+          <input type="range" id="angle" min="-180" max="180" step="1">
+        </div>
+        <div class="field">
+          <label>反射率 F0<span class="val" id="f0Val"></span></label>
+          <input type="range" id="f0" min="0" max="1" step="0.01">
+        </div>
+
+        <h2 style="margin-top:14px">采样控制</h2>
+        <div class="row2">
+          <div class="field">
+            <label>种子（非零 u32）</label>
+            <input type="number" id="seed" min="1" max="4294967295" step="1">
+          </div>
+          <div class="field">
+            <label>尝试次数</label>
+            <input type="number" id="count" min="1" max="1000000" step="1000">
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="primary" id="runBtn" type="button">开始采样</button>
+          <button class="danger" id="cancelBtn" type="button" disabled>取消</button>
+        </div>
+        <div class="progress"><i id="progBar"></i></div>
+        <div class="status-line">
+          <span id="statusText">未运行</span>
+          <span id="runPill"></span>
+        </div>
+        <div id="paramErr" class="err"></div>
+      </section>
+
+      <section class="card">
+        <h2>实现要点</h2>
+        <div class="formula">D(h)=1/(π ax ay ((hx/ax)²+(hy/ay)²+hz²)²)
+Λ(w)=(√(1+((ax wx)²+(ay wy)²)/wz²)-1)/2
+pH=D·max(0,v·h)/(vz(1+Λ(v)))      // 半向量密度
+pL=pH/(4|v·h|), h=normalize(v+l)   // 反射方向密度
+F=F0+(1-F0)(1-|v·h|)^5
+BRDF=F·D/(4 vz lz (1+Λ(v)+Λ(l)))</div>
+        <p class="hint" style="margin-top:8px">每次尝试两次 xorshift32；lz≤0 记拒收、不重抽。能量采样估计把拒收记 0 后除以<b>总尝试次数</b>。</p>
+      </section>
+    </div>
+
+    <!-- ============ 右：结果区 ============ -->
+    <div class="stack">
+      <div class="tiles">
+        <div class="tile"><div class="k">尝试 / 接受</div><div class="v" id="tAttempt">–</div><div class="d" id="tAcceptSub"></div></div>
+        <div class="tile reject"><div class="k">拒收率（经验）</div><div class="v" id="tReject">–</div><div class="d" id="tRejectAna"></div></div>
+        <div class="tile good"><div class="k">反射能量 · 采样</div><div class="v" id="tEMc">–</div><div class="d">Σ权重 / 总次数</div></div>
+        <div class="tile"><div class="k">反射能量 · 积分</div><div class="v" id="tEDir">–</div><div class="d" id="tEDirSub"></div></div>
+      </div>
+
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <h2 style="margin:0">上半球分格（8 z 带 × 16 方位，等立体角）</h2>
+          <div class="toggle-group" role="group" aria-label="热力图度量">
+            <button data-metric="freq" class="on" type="button">经验频率</button>
+            <button data-metric="density" type="button">积分密度 pL</button>
+            <button data-metric="ratio" type="button">频率/概率比</button>
+          </div>
+        </div>
+        <div class="legend">
+          <span>低</span>
+          <span class="bar"></span>
+          <span>高</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="showNum"> 显示格内数字
+          </label>
+          <span><span class="swatch" id="rejSwatch"></span>拒收（下半球，不占格）</span>
+          <span class="muted">刻度：</span>
+          <div class="toggle-group" role="group" aria-label="色阶">
+            <button data-scale="log" class="on" type="button">对数</button>
+            <button data-scale="linear" type="button">线性</button>
+          </div>
+        </div>
+        <div class="heat-wrap" style="margin-top:12px">
+          <div class="heat" id="heat"></div>
+        </div>
+        <p class="hint" style="margin-top:8px">行：z=cosθ 带（顶部 z→1 极区，底部 z→0 地平线）；列：方位 φ。点击任意格查看样本与逐格统计。</p>
+      </section>
+
+      <section class="card">
+        <h2>逐格统计与导出</h2>
+        <div class="tab-row">
+          <button data-tab="grid" class="on" type="button">格统计表</button>
+          <button data-tab="query" type="button">方向查询（pH 与 pL）</button>
+          <button data-tab="checks" type="button">校验诊断</button>
+          <button data-tab="export" type="button">导出</button>
+        </div>
+
+        <div data-pane="grid">
+          <p class="hint">频率 = 该格样本 / <b>总尝试次数</b>（含拒收，不剔除分母）；条件频率 = 该格 / 接受数。点行联动热力图。</p>
+          <div class="table-wrap">
+            <table id="binTable">
+              <thead><tr>
+                <th data-sort="bin">格#</th><th data-sort="z">z 区间</th><th data-sort="phi">φ 区间</th>
+                <th data-sort="n">样本数</th><th data-sort="freq">频率(全分母)</th><th data-sort="cfreq">条件频率</th>
+                <th data-sort="prob">积分概率</th><th data-sort="density">积分密度 pL</th>
+                <th data-sort="ratio">频率/概率</th><th data-sort="rej">拒收率</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div data-pane="query" hidden>
+          <p class="hint">输入世界系出射方向 l（自动归一，须在上半球），同时返回采样半向量密度 pH 与换算后的反射方向密度 pL。</p>
+          <div class="row3 vec field">
+            <div><label>lx</label><input type="number" id="qlx" step="0.05" value="0.35"></div>
+            <div><label>ly</label><input type="number" id="qly" step="0.05" value="0.12"></div>
+            <div><label>lz</label><input type="number" id="qlz" step="0.05" value="0.93"></div>
+          </div>
+          <button class="primary" id="queryBtn" type="button" style="max-width:200px">查询密度</button>
+          <div id="queryOut" class="detail-grid section-gap"></div>
+        </div>
+
+        <div data-pane="checks" hidden>
+          <div id="checksOut"></div>
+        </div>
+
+        <div data-pane="export" hidden>
+          <p class="hint">导出包含：尝试数、拒收数、逐格样本数与积分概率/密度、两种能量结果、参数与种子。沙箱内若下载被拦截，请用“复制”按钮。</p>
+          <div class="btn-row" style="max-width:420px">
+            <button id="dlCsvBtn" type="button">下载逐格 CSV</button>
+            <button id="copyCsvBtn" type="button">复制 CSV</button>
+          </div>
+          <div class="btn-row section-gap" style="max-width:420px">
+            <button id="dlJsonBtn" type="button">下载完整 JSON</button>
+            <button id="copyJsonBtn" type="button">复制 JSON</button>
+          </div>
+          <div id="exportMsg" class="hint section-gap"></div>
+        </div>
+      </section>
+
+      <section class="card" id="detailCard" hidden>
+        <h2 id="detailTitle">格详情</h2>
+        <div class="detail-grid" id="detailStats"></div>
+        <div class="sample-list">
+          <table id="sampleTable">
+            <thead><tr><th>#</th><th>l=(x,y,z)</th><th>h=(x,y,z)</th><th>pH</th><th>pL</th><th>u1</th><th>u2</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="hint" id="sampleHint"></p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
