@@ -1,0 +1,20 @@
+{
+  "name": "rational-knot-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "2-5 次夹持有理 B 样条编辑网页：精确分数运算、齐次不变节点插入、严格节点删除、双侧导数、撤销重做与 0.25 误差 SVG 导出。",
+  "scripts": {
+    "test": "node tests/run-tests.mjs && node tests/acceptance.mjs && node tests/stress.mjs",
+    "test:unit": "node tests/run-tests.mjs",
+    "test:acceptance": "node tests/acceptance.mjs",
+    "test:stress": "node tests/stress.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:drag": "node tests/drag-check.mjs",
+    "dump": "node tools/dump_exports.mjs",
+    "verify:py": "node tools/dump_exports.mjs && python3 -I tools/independent_check.py /tmp/rks-check && python3 -I tools/acceptance_ap5.py /tmp/rks-check/ap5-spike.svg",
+    "serve": "python3 -m http.server 8765"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

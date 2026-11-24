@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>有理样条节点工作室 · Rational Knot Studio</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">∿</span>
+    <div>
+      <h1>有理样条节点工作室</h1>
+      <span class="subtitle">2–5 次夹持有理 B 样条 · 精确分数运算 · 节点插入/可验证删除</span>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button id="btn-undo" class="btn" type="button" title="撤销 (Ctrl+Z)">↶ 撤销</button>
+    <button id="btn-redo" class="btn" type="button" title="重做 (Ctrl+Shift+Z / Ctrl+Y)">↷ 重做</button>
+    <span id="history-info" class="history-info" aria-live="polite">undo 0 · redo 0</span>
+    <span class="sep"></span>
+    <button id="btn-load-sample" class="btn" type="button">载入样例</button>
+    <button id="btn-open-file" class="btn" type="button">打开 JSON…</button>
+    <input id="file-input" type="file" accept=".json,application/json" hidden />
+    <span class="sep"></span>
+    <button id="btn-download-json" class="btn primary" type="button">下载曲线 JSON</button>
+    <button id="btn-download-svg" class="btn primary" type="button">下载 SVG 折线</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ================= 左：画布 / 查询 / 导出 ================= -->
+  <section class="col-main">
+    <div class="panel stage-panel">
+      <div class="panel-head">
+        <h2>轮廓画布</h2>
+        <div class="stage-tools">
+          <span class="hint">拖动方形控制点＝按投影坐标移点（保留 W）；菱形为节点</span>
+          <button id="btn-fit-view" class="btn tiny" type="button">复位视图</button>
+        </div>
+      </div>
+      <div id="stage-wrap" class="stage-wrap">
+        <svg id="stage" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet"
+             role="img" aria-label="有理样条编辑画布">
+          <rect x="0" y="0" width="1000" height="620" class="stage-bg"/>
+          <g id="g-grid"></g>
+          <g id="g-polygon"></g>
+          <g id="g-knots"></g>
+          <path id="curve-path" class="curve-path" d=""/>
+          <g id="g-query" pointer-events="none"></g>
+          <g id="g-points"></g>
+        </svg>
+      </div>
+      <div id="status-message" class="status" role="status" aria-live="assertive">就绪。</div>
+    </div>
+
+    <div class="panel query-panel">
+      <div class="panel-head"><h2>参数探针：精确坐标与左右导数</h2></div>
+      <div class="query-form">
+        <label for="query-u">参数 u（整数或 a/b 分数，如 <code>1/2</code>）</label>
+        <input id="query-u" class="input" type="text" value="1/2" spellcheck="false"/>
+        <button id="btn-query" class="btn primary" type="button">查询</button>
+      </div>
+      <div id="query-result" class="query-result">
+        <div class="qr-row">
+          <span class="qr-label">精确坐标 C(u)</span>
+          <span id="q-point" class="qr-exact">—</span>
+        </div>
+        <div class="qr-row sub"><span class="qr-label">十进制</span><span id="q-point-decimal">—</span></div>
+        <div class="qr-row sub"><span class="qr-label">齐次 H=(X,Y,W)</span><span id="q-homogeneous">—</span></div>
+        <div class="qr-grid">
+          <div class="qr-side qr-left">
+            <div class="qr-side-title">左导数 dC⁻/du</div>
+            <div id="q-left-exact" class="qr-exact">—</div>
+            <div id="q-left-dec" class="sub">—</div>
+          </div>
+          <div class="qr-side qr-right">
+            <div class="qr-side-title">右导数 dC⁺/du</div>
+            <div id="q-right-exact" class="qr-exact">—</div>
+            <div id="q-right-dec" class="sub">—</div>
+          </div>
+        </div>
+        <div class="hint">端点只显示存在的一侧；重复节点处两侧分别按左/右极限计算，不会只显示一侧。</div>
+      </div>
+    </div>
+
+    <div class="panel export-panel">
+      <div class="panel-head">
+        <h2>导出曲线 JSON（约分分数）</h2>
+        <div>
+          <button id="btn-copy-json" class="btn tiny" type="button">复制</button>
+        </div>
+      </div>
+      <textarea id="export-json" class="code-area" rows="5" readonly spellcheck="false"
+                aria-label="导出的约分曲线 JSON"></textarea>
+    </div>
+
+    <div class="panel export-panel">
+      <div class="panel-head">
+        <h2>导出 SVG 折线（每段 data-u0 / data-u1）</h2>
+        <span id="svg-stats" class="hint"></span>
+        <button id="btn-copy-svg" class="btn tiny" type="button">复制</button>
+      </div>
+      <div id="svg-export-host" class="svg-host" aria-label="导出 SVG 预览"></div>
+      <textarea id="export-svg" class="code-area" rows="8" readonly spellcheck="false"
+                aria-label="导出的 SVG 源码"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 右：导入 / 节点 / 控制点 ================= -->
+  <aside class="col-side">
+    <div class="panel">
+      <div class="panel-head"><h2>导入 JSON</h2></div>
+      <textarea id="import-json" class="code-area" rows="6" spellcheck="false"
+                placeholder='{"degree":2,"knots":[...],"points":[["X","Y","W"],...]}'></textarea>
+      <div class="row-end">
+        <button id="btn-import-json" class="btn primary" type="button">导入文本 JSON</button>
+      </div>
+      <div id="curve-meta" class="meta"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>节点编辑（每次一个内部节点）</h2></div>
+      <div class="query-form">
+        <label for="insert-u">插入内部节点值（域内分数，允许提高重数至 p）</label>
+        <div class="inline-row">
+          <input id="insert-u" class="input" type="text" placeholder="例如 1/3" spellcheck="false"/>
+          <button id="btn-insert-knot" class="btn primary" type="button">插入节点</button>
+        </div>
+      </div>
+      <div class="knot-current">
+        <span>选中出现位置：</span><strong id="selected-knot">无</strong>
+        <button id="btn-remove-knot" class="btn danger" type="button">删除选中节点</button>
+      </div>
+      <div id="knot-list" class="knot-list" aria-label="内部节点出现位置列表"></div>
+      <div class="hint">删除仅在「减点后权重全为正」且「重插后每个齐次控制点完全相等」时成功；失败不改曲线，也不清空重做。</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>控制点编辑</h2><span id="selected-info" class="hint">未选中</span></div>
+      <div class="edit-grid">
+        <label for="cp-x">投影 x</label>
+        <input id="cp-x" class="input" type="text" spellcheck="false"/>
+        <label for="cp-y">投影 y</label>
+        <input id="cp-y" class="input" type="text" spellcheck="false"/>
+      </div>
+      <div class="row-end">
+        <button id="btn-move-cp" class="btn primary" type="button">按投影坐标移点（保留 W）</button>
+      </div>
+      <div class="inline-row weight-row">
+        <label for="cp-w">权重 W</label>
+        <input id="cp-w" class="input" type="text" spellcheck="false"/>
+        <button id="btn-set-weight" class="btn" type="button">改权重（保投影）</button>
+      </div>
+    </div>
+
+    <div class="panel cp-table-panel">
+      <div class="panel-head"><h2>控制点表（最多 512）</h2></div>
+      <div id="cp-table-wrap" class="cp-table-wrap">
+        <table id="cp-table" class="cp-table">
+          <thead><tr><th>#</th><th>X</th><th>Y</th><th>W</th><th>投影</th></tr></thead>
+          <tbody id="cp-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- 经典脚本：file:// 直接打开也可运行（不依赖 ES Module / 网络） -->
+<script src="js/frac.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/tessellate.js"></script>
+<script src="js/studio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
