@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>录音降位深校验台 · 抖动与误差反馈</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>录音降位深校验台</h1>
+  <p class="subtitle">整数 TPDF 抖动 · 3/4 误差反馈 · 重置帧状态重起 · 48kHz / 16-bit PCM</p>
+</header>
+
+<main class="layout">
+  <!-- 左：输入与参数 -->
+  <section class="panel panel-left" aria-label="输入与参数">
+    <h2>1. 导入</h2>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button"
+         aria-label="选择或拖入 WAV 或 ZIP 文件">
+      <input type="file" id="fileInput" accept=".wav,.zip,audio/wav,application/zip" hidden>
+      <p class="dz-title">点击选择或拖入文件</p>
+      <p class="dz-hint">单声道 / 双声道 16-bit PCM WAV（≤180 秒），或含 settings.json 与 WAV 的 ZIP</p>
+      <p class="dz-name" id="loadedName"></p>
+    </div>
+    <div class="file-meta" id="fileMeta" hidden>
+      <span id="metaChannels"></span>
+      <span id="metaRate"></span>
+      <span id="metaFrames"></span>
+      <span id="metaDuration"></span>
+    </div>
+    <div class="alert" id="importAlert" hidden role="alert"></div>
+
+    <h2>2. 参数</h2>
+    <div class="control">
+      <label for="kRange">丢弃位数 k（量化步长 2<sup>k</sup>）</label>
+      <div class="k-row">
+        <input type="range" id="kRange" min="2" max="12" step="1" value="5">
+        <input type="number" id="kNumber" min="2" max="12" step="1" value="5"
+               class="num-small" aria-label="丢弃位数 k 数值">
+      </div>
+      <p class="hint">取值 2–12。夹位范围 −32768 至 <span id="hiHint">32736</span>。</p>
+    </div>
+
+    <div id="channelControls"></div>
+
+    <div class="button-row">
+      <button type="button" id="renderBtn" class="primary" disabled>整轨渲染</button>
+      <button type="button" id="resetParamsBtn" disabled>恢复导入设置</button>
+    </div>
+    <div class="progress" id="progress" hidden>
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <p class="render-status" id="renderStatus" role="status"></p>
+    <div class="alert" id="paramAlert" hidden role="alert"></div>
+  </section>
+
+  <!-- 右：波形、选区、逐样本 -->
+  <section class="panel panel-right" aria-label="波形与逐样本校验">
+    <h2>3. 波形与半开选区 <span class="hint inline">[起点, 终点)</span></h2>
+    <canvas id="waveform" height="180" aria-label="输入与输出波形"></canvas>
+    <div class="legend">
+      <span class="swatch swatch-in"></span>输入（低透明度）
+      <span class="swatch swatch-out"></span>降位深输出
+      <span class="swatch swatch-sel"></span>选区
+    </div>
+    <div class="selection-row">
+      <label>起点帧 <input type="number" id="selStart" min="0" value="0" class="num-med"></label>
+      <label>终点帧（不含）<input type="number" id="selEnd" min="0" value="0" class="num-med"></label>
+      <button type="button" id="selAllBtn" disabled>全选</button>
+      <button type="button" id="selClearBtn" disabled>清除</button>
+      <span class="hint" id="selInfo"></span>
+    </div>
+
+    <h2>4. 试听与导出</h2>
+    <div class="button-row">
+      <button type="button" id="playSelBtn" disabled>试听选区</button>
+      <button type="button" id="stopBtn" disabled>停止</button>
+      <button type="button" id="exportSelBtn" class="primary" disabled>导出选区 WAV</button>
+      <button type="button" id="exportFullBtn" disabled>导出整轨 WAV</button>
+    </div>
+    <p class="hint" id="consistencyHint">选区与整轨共用同一条逐样本渲染链，导出样本与整轨对应帧逐位一致。</p>
+
+    <h2>5. 逐样本查验</h2>
+    <div class="inspect-row">
+      <label>声道
+        <select id="inspectChannel"></select>
+      </label>
+      <label>帧号 <input type="number" id="inspectFrame" min="0" value="0" class="num-med"></label>
+      <button type="button" id="inspectPrev" disabled>‹ 上一样本</button>
+      <button type="button" id="inspectNext" disabled>下一样本 ›</button>
+    </div>
+    <div class="table-wrap">
+      <table id="inspectTable" class="kv">
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="hint" id="resetHint"></p>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>所有运算均为精确整数运算，在浏览器本地完成，文件不上传。</span>
+</footer>
+
+<script src="js/zip-import.js"></script>
+<script src="js/dither-core.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
