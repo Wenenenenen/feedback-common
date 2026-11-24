@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 解压的不可信样本数据与测试截图
+data-extracted/
+tests/shot-*.png
+tests/smoke-*.png
