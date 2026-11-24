@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cookfest 节庆料理排程台</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">🍲</div>
+        <div>
+          <h1>Cookfest 节庆料理排程台</h1>
+          <p class="subtitle">半开区间占用 · 同拍汇总扣料 · 最早完工 / 最低费用 / 工序号字典序</p>
+        </div>
+      </div>
+      <div class="toolbar" role="toolbar" aria-label="导入导出与求解">
+        <button id="loadSampleBtn" class="btn secondary" type="button">载入 samples/cookfest-plan.json</button>
+        <button id="importBtn" class="btn secondary" type="button">导入 JSON / 核验包</button>
+        <input id="fileInput" type="file" accept=".json,application/json" hidden />
+        <button id="solveBtn" class="btn primary" type="button">重新求解</button>
+        <button id="exportBtn" class="btn" type="button" disabled>导出核验包</button>
+      </div>
+    </header>
+
+    <section id="alertSlot" class="alert-slot" aria-live="polite"></section>
+
+    <main class="layout">
+      <aside class="editor-column" aria-label="排程输入编辑">
+        <section class="card" id="summaryCard">
+          <div class="card-head">
+            <h2>求解状态</h2>
+            <span id="statusPill" class="pill neutral">尚未求解</span>
+          </div>
+          <div id="summaryBody" class="summary-body">
+            <p class="muted">导入样例后会自动求解。</p>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>时限与库存</h2>
+          </div>
+          <div id="metaEditor" class="meta-editor"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>工作台停用段</h2>
+            <p class="hint">区间为 <code>[起点, 终点)</code>；工序区间不能与其重叠。</p>
+          </div>
+          <div id="stationEditor" class="station-editor"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>工序与开工锁</h2>
+            <p class="hint">勾选锁后，求解器只会把该工序放在指定开工拍。</p>
+          </div>
+          <div id="jobEditor" class="job-editor"></div>
+        </section>
+      </aside>
+
+      <section class="result-column" aria-label="排程结果">
+        <section class="card chart-card">
+          <div class="card-head row-between">
+            <div>
+              <h2>甘特图</h2>
+              <p class="hint">色块为工序占用 <code>[开工, 完工)</code>，斜纹为停用段；同一工作台相邻区间可在边界拍交接。</p>
+            </div>
+            <div id="ganttLegend" class="legend"></div>
+          </div>
+          <div id="ganttContainer" class="gantt-container">
+            <div class="empty-state">尚无甘特图。</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head row-between">
+            <div>
+              <h2>逐拍账本</h2>
+              <p class="hint">每拍先入库全部完工产物，再汇总扣减本拍全部开工用料。</p>
+            </div>
+            <label class="check-line"><input id="onlyLedgerIssues" type="checkbox" /> 只看异常拍</label>
+          </div>
+          <div id="ledgerContainer" class="table-scroll">
+            <div class="empty-state">尚无账本。</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>开工核验</h2>
+            <p class="hint">重导核验包或计划 JSON 后，会按题目方案重新计算每次开工的物料、工具、前置和占用。</p>
+          </div>
+          <div id="verificationContainer" class="verification-container">
+            <div class="empty-state">导出后重新导入该文件，即可在这里逐次核验开工。</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>当前 JSON</h2>
+            <div class="tiny-actions">
+              <button id="copyJsonBtn" class="btn tiny" type="button">复制</button>
+            </div>
+          </div>
+          <pre id="jsonPreview" class="json-preview" tabindex="0"></pre>
+        </section>
+      </section>
+    </main>
+
+    <div id="tooltip" class="chart-tooltip" role="tooltip" hidden></div>
+  </div>
+
+  <script src="js/cookfest.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

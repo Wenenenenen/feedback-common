@@ -1,0 +1,18 @@
+{
+  "name": "cookfest-station-plan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "节庆料理工作台排程、逐拍物料账本与开工核验网页",
+  "scripts": {
+    "start": "python3 -m http.server 8123",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "NODE_PATH=$(npm root -g) node tests/e2e.ui.js"
+  },
+  "keywords": [
+    "scheduling",
+    "gantt",
+    "ledger",
+    "constraint-solver"
+  ],
+  "license": "UNLICENSED"
+}
