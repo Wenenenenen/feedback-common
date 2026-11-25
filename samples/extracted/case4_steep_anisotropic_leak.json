@@ -1,0 +1,199 @@
+{
+  "meshId": "case4_steep_anisotropic_leak",
+  "grid": {
+    "origin": [
+      0,
+      0,
+      0
+    ],
+    "dims": [
+      20,
+      20,
+      20
+    ],
+    "spacing": [
+      1.0,
+      1.25,
+      1.5
+    ]
+  },
+  "separatingMode": "6-separating",
+  "floodConnectivity": 26,
+  "vertices": [
+    [
+      10,
+      2,
+      2
+    ],
+    [
+      16,
+      8,
+      2
+    ],
+    [
+      10,
+      14,
+      2
+    ],
+    [
+      4,
+      8,
+      2
+    ],
+    [
+      10,
+      2,
+      16
+    ],
+    [
+      16,
+      8,
+      16
+    ],
+    [
+      10,
+      14,
+      16
+    ],
+    [
+      4,
+      8,
+      16
+    ]
+  ],
+  "triangles": [
+    {
+      "id": 0,
+      "indices": [
+        0,
+        2,
+        1
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 1,
+      "indices": [
+        0,
+        3,
+        2
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 2,
+      "indices": [
+        4,
+        5,
+        6
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 3,
+      "indices": [
+        4,
+        6,
+        7
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 4,
+      "indices": [
+        0,
+        1,
+        5
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 5,
+      "indices": [
+        0,
+        5,
+        4
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 6,
+      "indices": [
+        1,
+        2,
+        6
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 7,
+      "indices": [
+        1,
+        6,
+        5
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 8,
+      "indices": [
+        2,
+        3,
+        7
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 9,
+      "indices": [
+        2,
+        7,
+        6
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 10,
+      "indices": [
+        3,
+        0,
+        4
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    },
+    {
+      "id": 11,
+      "indices": [
+        3,
+        4,
+        7
+      ],
+      "material": 5,
+      "group": "slanted_shell",
+      "enabled": true
+    }
+  ],
+  "edits": []
+}

@@ -1,0 +1,371 @@
+{
+  "meshId": "case2_hollow_double_shell",
+  "grid": {
+    "origin": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "dims": [
+      16,
+      16,
+      16
+    ],
+    "spacing": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "separatingMode": "26-separating",
+  "floodConnectivity": 6,
+  "vertices": [
+    [
+      2.0,
+      2.0,
+      2.0
+    ],
+    [
+      14.0,
+      2.0,
+      2.0
+    ],
+    [
+      14.0,
+      14.0,
+      2.0
+    ],
+    [
+      2.0,
+      14.0,
+      2.0
+    ],
+    [
+      2.0,
+      2.0,
+      14.0
+    ],
+    [
+      14.0,
+      2.0,
+      14.0
+    ],
+    [
+      14.0,
+      14.0,
+      14.0
+    ],
+    [
+      2.0,
+      14.0,
+      14.0
+    ],
+    [
+      5.0,
+      5.0,
+      5.0
+    ],
+    [
+      11.0,
+      5.0,
+      5.0
+    ],
+    [
+      11.0,
+      11.0,
+      5.0
+    ],
+    [
+      5.0,
+      11.0,
+      5.0
+    ],
+    [
+      5.0,
+      5.0,
+      11.0
+    ],
+    [
+      11.0,
+      5.0,
+      11.0
+    ],
+    [
+      11.0,
+      11.0,
+      11.0
+    ],
+    [
+      5.0,
+      11.0,
+      11.0
+    ]
+  ],
+  "triangles": [
+    {
+      "id": 0,
+      "indices": [
+        0,
+        2,
+        1
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 1,
+      "indices": [
+        0,
+        3,
+        2
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 2,
+      "indices": [
+        4,
+        5,
+        6
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 3,
+      "indices": [
+        4,
+        6,
+        7
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 4,
+      "indices": [
+        0,
+        1,
+        5
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 5,
+      "indices": [
+        0,
+        5,
+        4
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 6,
+      "indices": [
+        2,
+        3,
+        7
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 7,
+      "indices": [
+        2,
+        7,
+        6
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 8,
+      "indices": [
+        0,
+        4,
+        7
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 9,
+      "indices": [
+        0,
+        7,
+        3
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 10,
+      "indices": [
+        1,
+        2,
+        6
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 11,
+      "indices": [
+        1,
+        6,
+        5
+      ],
+      "material": 1,
+      "group": "outer_shell",
+      "enabled": true
+    },
+    {
+      "id": 12,
+      "indices": [
+        8,
+        9,
+        10
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 13,
+      "indices": [
+        8,
+        10,
+        11
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 14,
+      "indices": [
+        12,
+        14,
+        13
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 15,
+      "indices": [
+        12,
+        15,
+        14
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 16,
+      "indices": [
+        8,
+        13,
+        9
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 17,
+      "indices": [
+        8,
+        12,
+        13
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 18,
+      "indices": [
+        10,
+        15,
+        11
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 19,
+      "indices": [
+        10,
+        14,
+        15
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 20,
+      "indices": [
+        8,
+        15,
+        12
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 21,
+      "indices": [
+        8,
+        11,
+        15
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 22,
+      "indices": [
+        9,
+        14,
+        10
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    },
+    {
+      "id": 23,
+      "indices": [
+        9,
+        13,
+        14
+      ],
+      "material": 3,
+      "group": "inner_cavity",
+      "enabled": true
+    }
+  ],
+  "edits": []
+}
