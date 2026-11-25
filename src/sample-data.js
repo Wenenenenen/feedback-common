@@ -1,0 +1,6 @@
+/* 由 sample/ 生成的内嵌样例（base64），保证 file:// 下也能一键载入。勿手改，可重新生成。 */
+window.GK_EMBEDDED_SAMPLE = {
+  'project.json': {"width": 4, "height": 3, "modulus": 8, "fill_mode": "premult", "offset": 2, "tolerance": 1, "fill": [{"t": 100, "id": 7, "image": "fill.ppm"}, {"t": 110, "id": 8, "image": "fill.ppm"}, {"t": 120, "id": 9, "image": "fill.ppm"}], "key": [{"t": 122, "id": 1, "image": "key.pgm"}, {"t": 102, "id": 7, "image": "key.pgm"}, {"t": 113, "id": 0, "image": "key.pgm"}]},
+  'fill.ppm': 'UDYKNCAzCjI1NQoMHCghMjcsFgsAAAAMHCghMjcsFgsAAAAMHCghMjcsFgsAAAA=',
+  'key.pgm': 'UDUKNCAzCjI1NQpAgP8AQID/AECA/wA='
+};

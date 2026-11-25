@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Node / 测试与录屏产物
+node_modules/
+.qa/
+test-results/
+playwright-report/
+*.log

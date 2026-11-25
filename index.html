@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232456d6'/%3E%3Ccircle cx='6' cy='8' r='3' fill='white'/%3E%3Crect x='9' y='5' width='4' height='6' rx='1' fill='%239db8ff'/%3E%3C/svg%3E" />
+  <title>Genlock 填充/透明键配对核对台</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Genlock 填充画面 × 透明键 配对核对台</h1>
+      <p class="subtitle">
+        模帧号回绕 / 重采同格下的顺序保持最优配对：配对数最大 → 总绝对时差最小 → 键位置序列最小（空位排最后）。
+        支持直通/预乘合成、逐帧核对、PNG 序列与完整配对表导出。
+      </p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 1. 导入与参数 -->
+    <section class="card" id="importCard">
+      <h2>1 · 导入工程</h2>
+      <div class="row wrap">
+        <label class="btn primary" for="fileInput">选择 project.json / 样例 zip / 图像（可多选）</label>
+        <input id="fileInput" data-testid="file-input" type="file" multiple
+               accept=".zip,.json,.ppm,.pgm,.png,.jpg,.jpeg,.webp,.bmp,.gif" hidden />
+        <button id="loadSampleBtn" data-testid="load-sample" class="btn">载入内置样例</button>
+        <label class="btn ghost" for="folderInput">选择整个文件夹</label>
+        <input id="folderInput" type="file" hidden webkitdirectory directory multiple />
+        <span id="fileHint" class="hint">尚未选择文件。可直接选择 <code>samples/genlock-key-cases.zip</code>。</span>
+      </div>
+
+      <div id="status" data-testid="status" class="status" role="status">等待导入。</div>
+
+      <div id="errorPanel" data-testid="error-panel" class="error-panel" hidden>
+        <div class="error-title">本次提交/重算失败，已保留上一次成功结果。</div>
+        <pre id="errorMessage" class="error-message"></pre>
+        <ul id="errorList" data-testid="error-list" class="error-list"></ul>
+      </div>
+
+      <div class="params">
+        <label>时差校正 offset（有符号 i32）
+          <input id="offsetInput" data-testid="offset-input" type="number" step="1" />
+        </label>
+        <label>容差 tolerance（u32，含端点）
+          <input id="toleranceInput" data-testid="tolerance-input" type="number" min="0" step="1" />
+        </label>
+        <label>合成规则
+          <select id="modeSelect" data-testid="mode-select">
+            <option value="premult">预乘色 premult（255c/a，半偶舍入）</option>
+            <option value="straight">直通色 straight</option>
+          </select>
+        </label>
+        <button id="solveBtn" data-testid="solve-button" class="btn primary big">提交并求解</button>
+        <div class="param-meta">
+          <span>模数 modulus：<b id="modulusLabel">–</b></span>
+          <span>画幅：<b id="dimLabel">–</b></span>
+          <span>工程合成模式：<b id="projectModeLabel">–</b></span>
+        </div>
+      </div>
+
+      <div id="staleBanner" data-testid="stale-banner" class="stale-banner" hidden></div>
+    </section>
+
+    <!-- 2. 汇总指标 -->
+    <section class="card">
+      <h2>2 · 配对汇总</h2>
+      <div class="stats">
+        <div class="stat"><div class="stat-k">填充记录</div><div class="stat-v" id="sumFill">–</div></div>
+        <div class="stat"><div class="stat-k">键记录</div><div class="stat-v" id="sumKey">–</div></div>
+        <div class="stat"><div class="stat-k">可配候选对</div><div class="stat-v" id="sumCandidates" data-testid="summary-candidates">–</div></div>
+        <div class="stat ok"><div class="stat-k">配对数</div><div class="stat-v" id="pairCount" data-testid="summary-pair-count">–</div></div>
+        <div class="stat warn"><div class="stat-k">未配填充</div><div class="stat-v" id="unpairedCount">–</div></div>
+        <div class="stat"><div class="stat-k">总绝对时差</div><div class="stat-v" id="totalAbsDt" data-testid="summary-total-abs-dt">–</div></div>
+        <div class="stat"><div class="stat-k">求解耗时</div><div class="stat-v" id="solveMs">–</div></div>
+      </div>
+    </section>
+
+    <div class="grid-two">
+      <!-- 3. 帧核对 -->
+      <section class="card" id="inspectorCard">
+        <h2>3 · 回到任一填充帧核对</h2>
+        <div class="row wrap frame-jump">
+          <button id="prevFrame" class="btn">← 上一帧</button>
+          <input id="frameJump" data-testid="frame-jump" class="frame-input" type="number" min="0" value="0" />
+          <button id="jumpBtn" class="btn primary">跳到该填充位置</button>
+          <button id="nextFrame" class="btn">下一帧 →</button>
+          <span id="framePosLabel" class="hint"></span>
+        </div>
+        <input id="frameSlider" type="range" min="0" max="0" value="0" class="slider" aria-label="填充帧滑动条" />
+
+        <div class="preview-wrap">
+          <div class="checkerboard canvas-box">
+            <canvas id="previewCanvas" data-testid="preview-canvas"></canvas>
+          </div>
+          <div class="thumbs">
+            <figure><figcaption>填充原图</figcaption><canvas id="fillCanvas"></canvas></figure>
+            <figure><figcaption>灰度键 α</figcaption><canvas id="keyCanvas"></canvas></figure>
+          </div>
+        </div>
+
+        <table class="detail" id="frameDetail" data-testid="frame-detail">
+          <tbody></tbody>
+        </table>
+
+        <div class="row wrap">
+          <button id="downloadPngBtn" data-testid="download-png" class="btn" disabled>下载当前帧 PNG（按填充排序位置命名）</button>
+        </div>
+      </section>
+
+      <!-- 4. 导出 + 配对表 -->
+      <section class="card" id="tableCard">
+        <h2>4 · 完整配对表与导出</h2>
+        <div class="row wrap">
+          <button id="downloadTableJson" data-testid="download-table-json" class="btn primary" disabled>下载完整配对表 JSON</button>
+          <button id="downloadTableCsv" data-testid="download-table-csv" class="btn" disabled>下载 CSV</button>
+        </div>
+        <div class="row wrap range-box">
+          <label>区间起点（含）<input id="rangeStart" data-testid="range-start" type="number" min="0" value="0" /></label>
+          <label>区间终点（不含，左闭右开）<input id="rangeEnd" data-testid="range-end" type="number" min="1" value="1" /></label>
+          <button id="downloadRangeBtn" data-testid="download-range-zip" class="btn" disabled>下载区间 PNG（ZIP，≤120 帧）</button>
+          <span id="rangeHint" class="hint"></span>
+        </div>
+
+        <div class="row wrap table-controls">
+          <label>筛选
+            <select id="filterSelect" data-testid="filter-select">
+              <option value="all">全部填充位置</option>
+              <option value="paired">仅已配</option>
+              <option value="unpaired">仅未配</option>
+            </select>
+          </label>
+          <label>每页
+            <select id="pageSizeSelect">
+              <option>20</option><option selected>50</option><option>100</option><option>500</option>
+            </select>
+          </label>
+          <div class="pager">
+            <button id="firstPage" class="btn tiny">«</button>
+            <button id="prevPage" class="btn tiny">‹</button>
+            <span id="pageInfo" data-testid="page-info">–</span>
+            <button id="nextPage" class="btn tiny">›</button>
+            <button id="lastPage" class="btn tiny">»</button>
+          </div>
+        </div>
+
+        <div class="table-scroll">
+          <table class="pair-table" id="pairTable" data-testid="pair-table">
+            <thead>
+              <tr>
+                <th data-k="fill_sorted_position">填充排序位置</th>
+                <th data-k="fill_original_position">填充原始位置</th>
+                <th data-k="fill_t">填充 t</th>
+                <th data-k="fill_id">填充 id</th>
+                <th data-k="key_sorted_position">键排序位置</th>
+                <th data-k="key_original_position">键原始位置</th>
+                <th data-k="key_t">键 t</th>
+                <th data-k="key_id">键 id</th>
+                <th data-k="dt">带符号时差 dt</th>
+                <th data-k="abs_dt">|dt|</th>
+              </tr>
+            </thead>
+            <tbody id="pairTableBody" data-testid="pair-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <footer class="foot">
+      纯前端实现，数据不出浏览器。核心算法见 <code>src/engine.js</code>，程序化接口 <code>window.genlock</code>。
+    </footer>
+  </main>
+
+  <script src="src/zip.js"></script>
+  <script src="src/codec.js"></script>
+  <script src="src/engine.js"></script>
+  <script src="src/sample-data.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

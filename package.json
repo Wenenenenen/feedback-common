@@ -1,0 +1,18 @@
+{
+  "name": "genlock-key-fill",
+  "version": "1.0.0",
+  "private": true,
+  "description": "播出前填充画面与透明键核对台：回绕帧号、顺序保持最优配对、预乘/直通合成与导出",
+  "main": "src/engine.js",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "dev": "node tools/serve.js",
+    "preview": "node tools/serve.js",
+    "serve": "node tools/serve.js",
+    "test": "node tests/engine.test.js && node tests/codec.test.js && node tests/perf.test.js",
+    "test:browser": "node tests/browser.smoke.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
