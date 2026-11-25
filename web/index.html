@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>着色器缓冲重排台 · Shader Block Rebinder</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">SB</div>
+    <div>
+      <h1>着色器缓冲重排台</h1>
+      <p class="subtitle">std140 / std430 布局自算 · 字段路径⇄字节偏移 · 按位迁移 · 撤销重做</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <label class="btn primary" for="file-import">导入归档 / layout.json + dump.bin
+      <input id="file-import" type="file" multiple accept=".zip,.json,.bin,application/zip,application/json,application/octet-stream" hidden>
+    </label>
+    <label class="btn" for="file-archive">仅 ZIP
+      <input id="file-archive" type="file" accept=".zip,application/zip" hidden>
+    </label>
+    <label class="btn" for="file-layout">layout.json
+      <input id="file-layout" type="file" accept=".json,application/json" hidden>
+    </label>
+    <label class="btn" for="file-dump">dump.bin
+      <input id="file-dump" type="file" accept=".bin,.raw,application/octet-stream" hidden>
+    </label>
+    <button class="btn" id="btn-sample" type="button">载入内置样例</button>
+    <span class="sep"></span>
+    <button class="btn" id="btn-export" type="button" disabled>导出整个转储</button>
+    <button class="btn icon" id="btn-undo" type="button" title="撤销 (Ctrl+Z)" disabled>↶ 撤销</button>
+    <button class="btn icon" id="btn-redo" type="button" title="重做 (Ctrl+Y / Ctrl+Shift+Z)" disabled>↷ 重做</button>
+  </div>
+</header>
+
+<div class="statusbar">
+  <div id="status" class="idle">尚未导入项目。可打开 <code>samples/shader-block-cases.zip</code>，或分别选择 layout.json 与 dump.bin。</div>
+  <div id="timing" class="timing"></div>
+</div>
+
+<main class="layout">
+  <!-- 左栏：视图 + 迁移批次 -->
+  <aside class="col col-left">
+    <section class="card">
+      <h2>缓冲视图 <span class="hint" id="view-count"></span></h2>
+      <div id="project-meta" class="meta"></div>
+      <div id="view-list" class="view-list">
+        <div class="empty">导入后在此列出 1–64 个视图</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>迁移批次 <span class="hint">最多 64 对 · 500 万次写入 · 整批原子</span></h2>
+      <div class="pair-builder">
+        <select id="pair-src" aria-label="源视图"></select>
+        <button class="btn mini" id="btn-swap-pair" type="button" title="交换源/目标">⇄</button>
+        <select id="pair-dst" aria-label="目标视图"></select>
+        <button class="btn mini primary" id="btn-add-pair" type="button">加入</button>
+      </div>
+      <div id="pair-list" class="pair-list">
+        <div class="empty">还没有迁移对</div>
+      </div>
+      <details class="pair-json-box" open>
+        <summary>用 JSON 批量指定迁移对（格式 [["源","目标"], …]）</summary>
+        <textarea id="pairs-json" spellcheck="false" placeholder='[["legacy","reload"],["reload","legacy"]]'></textarea>
+        <button class="btn mini" id="btn-apply-json" type="button">应用 JSON 到批次</button>
+      </details>
+      <div class="run-row">
+        <button class="btn primary big" id="btn-run-batch" type="button" disabled>执行整批迁移</button>
+      </div>
+      <div id="batch-summary" class="batch-summary"></div>
+    </section>
+  </aside>
+
+  <!-- 中栏：结构 / Hex -->
+  <section class="col col-center">
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tab-tree" data-tab="tree" role="tab" type="button">结构 · 字段路径</button>
+      <button class="tab" id="tab-hex" data-tab="hex" role="tab" type="button">字节 · Hex 转储</button>
+    </div>
+
+    <section class="tab-panel" id="panel-tree">
+      <div class="path-bar">
+        <select id="path-view" aria-label="路径所属视图"></select>
+        <input id="path-input" type="text" spellcheck="false" placeholder="输入字段路径，如 head.qs[1].f 或 pose[1].m[1][2]（也接受 pose[1][1][2]）">
+        <button class="btn primary" id="btn-path-locate" type="button">路径 → 偏移</button>
+      </div>
+      <div id="path-result" class="path-result"></div>
+      <div id="tree" class="tree">
+        <div class="empty">暂无结构</div>
+      </div>
+    </section>
+
+    <section class="tab-panel hidden" id="panel-hex">
+      <div class="hex-toolbar">
+        <label>绝对偏移
+          <input id="offset-input" type="text" spellcheck="false" placeholder="184 或 0xb8">
+        </label>
+        <button class="btn primary" id="btn-offset-query" type="button">偏移 → 路径</button>
+        <span class="sep"></span>
+        <button class="btn mini" id="hex-prev" type="button">← 上一页</button>
+        <span id="hex-page" class="hex-page"></span>
+        <button class="btn mini" id="hex-next" type="button">下一页 →</button>
+        <label class="hex-jump">跳页
+          <input id="hex-jump" type="text" spellcheck="false" placeholder="偏移">
+        </label>
+        <button class="btn mini" id="hex-goto" type="button">跳转</button>
+      </div>
+      <div class="hex-legend">
+        <span><i class="lg comp"></i>标量分量</span>
+        <span><i class="lg pad"></i>填充</span>
+        <span><i class="lg sel"></i>选中</span>
+        <span class="hint">着色依据左侧当前视图；点击任意字节列出全部覆盖视图</span>
+      </div>
+      <div id="hex-wrap" class="hex-wrap">
+        <div id="hex" class="hex"></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- 右栏：反查 + 检查器 + 历史 -->
+  <aside class="col col-right">
+    <section class="card">
+      <h2>绝对字节反查 <span class="hint">列出所有覆盖视图</span></h2>
+      <div id="query-results" class="query-results">
+        <div class="empty">在 Hex 中点击字节，或输入绝对偏移查询</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>选中标量 · 32 位原位值</h2>
+      <div id="inspector" class="inspector">
+        <div class="empty">在结构树中点选标量，或在反查结果中选择分量</div>
+      </div>
+    </section>
+
+    <section class="card grow">
+      <h2>历史 <span class="hint">成功编辑 / 整批迁移各一项</span></h2>
+      <div id="history-list" class="history-list">
+        <div class="empty">暂无历史项</div>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/layout.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

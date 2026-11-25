@@ -1,0 +1,15 @@
+{
+  "name": "shader-block-rebinder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "着色器 std140/std430 缓冲重排、字节反查与按位迁移工具（纯前端，无反射库）",
+  "scripts": {
+    "serve": "python3 -m http.server 8123",
+    "test:layout": "node tools/test-layout.cjs",
+    "test:engine": "node tools/test-engine.cjs",
+    "test:matching": "node tools/test-matching.cjs",
+    "test:property": "node tools/test-property.cjs",
+    "test": "node tools/test-layout.cjs && node tools/test-engine.cjs && node tools/test-matching.cjs && node tools/test-property.cjs",
+    "bench": "node tools/bench-perf.cjs"
+  }
+}
