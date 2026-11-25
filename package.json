@@ -1,0 +1,12 @@
+{
+  "name": "parity-stem-restorer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "多轨录音缺块修复台：纯前端逐字节异或 GF(2) 求解，无现成纠删码依赖",
+  "scripts": {
+    "test": "node test/run.js",
+    "test:property": "node test/property.js",
+    "test:browser": "node test/browser-e2e.js",
+    "serve": "python3 -m http.server 8000"
+  }
+}

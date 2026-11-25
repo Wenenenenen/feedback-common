@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多轨录音缺块修复台 · 异或校验求解</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">▚▞</span>
+    <div>
+      <h1>多轨录音缺块修复台</h1>
+      <p class="sub">48kHz / PCM16 单声道 · 逐字节异或求解 · 无现成纠删码组件</p>
+    </div>
+  </div>
+  <div class="import-box">
+    <label class="file-btn">
+      导入归档 JSON
+      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    </label>
+    <span id="fileName" class="file-name">尚未导入文件</span>
+  </div>
+</header>
+
+<div id="importError" class="banner error" hidden></div>
+<div id="busyBanner" class="banner info" hidden>校验行已变更，正在重新求解（连改只发布最后一版结果）…</div>
+
+<main id="app" hidden>
+  <!-- 总览 -->
+  <section class="card">
+    <h2>求解总览</h2>
+    <div id="stats" class="stats"></div>
+    <div class="legend">
+      <span><i class="dot known"></i>有效原音块</span>
+      <span><i class="dot recovered"></i>已恢复</span>
+      <span><i class="dot undetermined"></i>未定（含缺失/坏块）</span>
+      <span><i class="dot contradiction"></i>矛盾封锁</span>
+    </div>
+  </section>
+
+  <div class="two-col">
+    <!-- 分轨块网格 -->
+    <section class="card">
+      <h2>分轨块状态</h2>
+      <div id="trackGrids"></div>
+      <p class="hint">点击任意块查看详情；坏 CRC/畸形载荷的原音块按缺失处理并在详情中给出原因。</p>
+    </section>
+
+    <!-- 块详情 -->
+    <section class="card">
+      <h2>块详情</h2>
+      <div id="blockDetail" class="detail-empty">点击左侧块网格中的块查看状态与恢复依据。</div>
+    </section>
+  </div>
+
+  <!-- 矛盾报告 -->
+  <section class="card">
+    <h2>矛盾报告</h2>
+    <div class="two-col">
+      <div>
+        <h3>纯已知矛盾（无未知量的校验行）</h3>
+        <div id="pureContradictions"></div>
+      </div>
+      <div>
+        <h3>被矛盾封锁的连通组</h3>
+        <div id="contradictionGroups"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 连通组 -->
+  <section class="card">
+    <h2>连通组与自由度</h2>
+    <div id="groupsSummary" class="groups-summary"></div>
+    <details>
+      <summary>查看全部连通组</summary>
+      <div id="groupList" class="group-list"></div>
+    </details>
+  </section>
+
+  <!-- 校验行管理 -->
+  <section class="card">
+    <h2>校验行管理（停用 / 恢复）</h2>
+    <div class="check-toolbar">
+      <div class="filters" id="checkFilters">
+        <button data-filter="all" class="active">全部</button>
+        <button data-filter="enabled">启用中</button>
+        <button data-filter="disabled">已停用</button>
+      </div>
+      <input type="search" id="checkSearch" placeholder="按校验行 id 或块号筛选">
+      <button id="enableAll" class="ghost">全部恢复启用</button>
+      <span id="checkPageInfo" class="page-info"></span>
+      <button id="checkPrev" class="ghost">上一页</button>
+      <button id="checkNext" class="ghost">下一页</button>
+    </div>
+    <table class="check-table">
+      <thead><tr><th>行 id</th><th>成员块</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody id="checkTbody"></tbody>
+    </table>
+    <div id="badChecks" class="bad-list"></div>
+  </section>
+
+  <!-- 试听与导出 -->
+  <section class="card">
+    <h2>按轨试听与 WAV 导出</h2>
+    <div class="audio-controls">
+      <label>轨
+        <select id="trackSelect"></select>
+      </label>
+      <label>起始采样 <input type="number" id="rangeStart" min="0" step="1"></label>
+      <label>结束采样（半开） <input type="number" id="rangeEnd" min="1" step="1"></label>
+      <button id="buildRange">生成区间缓冲</button>
+      <span id="rangeInfo" class="range-info"></span>
+    </div>
+    <div id="unresolvedBox" class="unresolved" hidden>
+      <h4>区间内未定 / 矛盾块（试听与导出均按静音处理，须确认后才允许导出）</h4>
+      <div id="unresolvedList"></div>
+      <label class="confirm-line"><input type="checkbox" id="silenceConfirm"> 我已确认：上述块在本区间补静音</label>
+    </div>
+    <div class="audio-actions">
+      <button id="playBtn" disabled>▶ 试听</button>
+      <button id="stopBtn" disabled>■ 停止</button>
+      <button id="exportBtn" disabled>导出 WAV（与试听逐样本一致）</button>
+      <span id="audioMsg" class="range-info"></span>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  求解在浏览器本地完成 · 校验组合可逐行重新异或验证 · 结构错误的导入不会覆盖上一份结果
+</footer>
+
+<script src="js/engine.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

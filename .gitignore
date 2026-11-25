@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 样本解压产物（测试可从 zip 自行解压）
+samples/extracted/
