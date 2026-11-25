@@ -1,0 +1,15 @@
+{
+  "name": "event-exposure-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "事件相机快门校片网页：EVL1 解析、锚点+事件对数轨迹重建、任意半开曝光窗解析积分与 LUM1 导出",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "oracle": "python3 -I tools/gen_oracle.py && python3 -I tools/dense_check.py",
+    "test": "node tools/test.mjs && node tools/acceptance.test.mjs",
+    "acceptance": "node tools/acceptance.test.mjs",
+    "perf": "node tools/perf.mjs uniform && node tools/perf.mjs concentrated",
+    "smoke": "node tools/browser-smoke.mjs"
+  },
+  "license": "UNLICENSED"
+}

@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 本项目
+node_modules/
+.smoke-shots/
+tools/generated/full.evl
+tools/generated/full-concentrated.evl
+tools/generated/canonical.evl
