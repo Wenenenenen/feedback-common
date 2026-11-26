@@ -15,3 +15,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Node / QA artifacts
+node_modules/
+coverage/
+.qa/
+playwright-report/
+test-results/

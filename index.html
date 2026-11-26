@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN" data-curve-ready="0" data-conflict="0" data-rev="0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>循环环境音 · 周期上限限幅台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">∞</div>
+    <div>
+      <h1>循环环境音 · 周期上限限幅台</h1>
+      <p class="subtitle">48&nbsp;kHz 双声道 PCM16 → 周期四点插值 192&nbsp;kHz · 每帧两声道共用整数增益 · 环上逐点最大可行曲线</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="btn-load-sample" class="btn" type="button" data-testid="load-builtin">载入内置 loop 案例</button>
+    <button id="btn-import" class="btn btn-primary" type="button" data-testid="import-button">导入 WAV / cyclic-ceiling-cases.zip</button>
+    <input id="file-input" type="file" accept=".wav,.zip,audio/wav,application/zip,application/x-zip-compressed" multiple hidden data-testid="file-input">
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ============ 左侧设定栏 ============ -->
+  <aside class="sidebar">
+    <section class="card" id="source-card">
+      <h2>素材</h2>
+      <div id="source-meta" class="source-meta" data-testid="source-meta">尚未载入素材。</div>
+      <label class="case-select-row" hidden>
+        <span>ZIP 内 WAV</span>
+        <select id="case-select" data-testid="case-select"></select>
+      </label>
+      <div class="limit-hint">仅接受 48&nbsp;kHz / 双声道 / PCM16 WAV，时长 ≤ 60&nbsp;s（一圈）。</div>
+    </section>
+
+    <section class="card" id="settings-card">
+      <h2>限幅设定</h2>
+      <div class="field">
+        <label for="input-ceiling">绝对码值上限 <span class="kw">ceiling</span></label>
+        <div class="input-unit">
+          <input id="input-ceiling" type="number" min="0" max="32767" step="1" value="16000" data-testid="ceiling-input">
+          <span class="unit">码 / 0–32767</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="input-up">每帧最大升幅 <span class="kw">up</span></label>
+        <div class="input-unit">
+          <input id="input-up" type="number" min="0" max="65536" step="1" value="30" data-testid="up-input">
+          <span class="unit">增益码 / 帧</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="input-down">每帧最大降幅 <span class="kw">down</span></label>
+        <div class="input-unit">
+          <input id="input-down" type="number" min="0" max="65536" step="1" value="120" data-testid="down-input">
+          <span class="unit">增益码 / 帧</span>
+        </div>
+      </div>
+
+      <button id="btn-apply" class="btn btn-primary btn-block" type="button" data-testid="apply-button">应用并求逐点最大曲线</button>
+      <div id="solve-time" class="solve-time" data-testid="solve-time">尚未求解。</div>
+
+      <div id="conflict-panel" class="conflict-panel" hidden data-testid="conflict-panel">
+        <div class="conflict-title">⚠ 有锁达不到，已保留上次可行曲线</div>
+        <p class="conflict-sub">下列锁在“把锁也作为上限”传播后低于目标值：</p>
+        <ul id="conflict-list" class="conflict-list" data-testid="conflict-list"></ul>
+        <details class="lockonly-details">
+          <summary>按约定“仅把锁当上限”的锁间冲突</summary>
+          <ul id="lockonly-list" class="conflict-list subtle" data-testid="lockonly-list"></ul>
+        </details>
+      </div>
+    </section>
+
+    <section class="card" id="locks-card">
+      <h2>增益锁定</h2>
+      <div class="lock-add">
+        <div class="field">
+          <label for="lock-frame">192k 帧号</label>
+          <input id="lock-frame" type="number" min="0" step="1" placeholder="0 … 4N−1" data-testid="lock-frame-input">
+        </div>
+        <div class="field">
+          <label for="lock-gain">整数增益</label>
+          <input id="lock-gain" type="number" min="0" max="65536" step="1" placeholder="0 … 65536" data-testid="lock-gain-input">
+        </div>
+        <button id="btn-add-lock" class="btn" type="button" data-testid="add-lock-button">锁定该帧</button>
+      </div>
+      <p class="lock-tip">也可以在增益曲线上点击 / 右键来锁定或删除最近帧。每帧至多一个锁；重复添加会覆盖。</p>
+      <ul id="lock-list" class="lock-list" data-testid="lock-list"></ul>
+      <button id="btn-clear-locks" class="btn btn-ghost btn-block" type="button" data-testid="clear-locks-button">清空全部锁</button>
+    </section>
+  </aside>
+
+  <!-- ============ 右侧可视化与导出 ============ -->
+  <section class="workspace">
+    <section class="stat-row" id="stat-row">
+      <div class="stat"><span class="stat-label">圈长</span><span class="stat-value" id="stat-length" data-testid="stat-length">—</span></div>
+      <div class="stat"><span class="stat-label">原始峰值 · 左 / 右（48k 码）</span>
+        <span class="stat-value" id="peak-orig" data-testid="peak-orig"><i class="peak-tag tag-l">左</i><span id="peak-orig-l">—</span> / <i class="peak-tag tag-r">右</i><span id="peak-orig-r">—</span></span></div>
+      <div class="stat"><span class="stat-label">插值峰值 · 左 / 右（192k）</span>
+        <span class="stat-value" id="peak-interp" data-testid="peak-interp"><i class="peak-tag tag-l">左</i><span id="peak-interp-l">—</span> / <i class="peak-tag tag-r">右</i><span id="peak-interp-r">—</span></span></div>
+      <div class="stat stat-ok"><span class="stat-label">限幅后峰值 · 左 / 右（≤ ceiling）</span>
+        <span class="stat-value" id="peak-out" data-testid="peak-out"><i class="peak-tag tag-l">左</i><span id="peak-out-l">—</span> / <i class="peak-tag tag-r">右</i><span id="peak-out-r">—</span></span></div>
+      <div class="stat"><span class="stat-label">增益 min / max</span><span class="stat-value" id="stat-gainrange" data-testid="stat-gainrange">—</span></div>
+    </section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>限幅前波形</h2>
+        <div class="chart-controls">
+          <div class="segmented" role="group" aria-label="限幅前信号源">
+            <button type="button" class="seg active" data-before-src="interp" data-testid="before-interp">周期插值 192k</button>
+            <button type="button" class="seg" data-before-src="orig" data-testid="before-orig">原始 48k</button>
+          </div>
+          <span class="legend"><i class="dot dot-l"></i>左声道<i class="dot dot-r"></i>右声道</span>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="wrap-before">
+        <canvas id="wave-before" data-testid="wave-before"></canvas>
+        <div class="crosshair" hidden></div>
+      </div>
+    </section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>限幅后波形（192k 码值）</h2>
+        <div class="chart-controls">
+          <span class="legend"><i class="dot dot-l"></i>左<i class="dot dot-r"></i>右</span>
+          <span class="legend"><i class="line line-ceil"></i>±ceiling</span>
+          <span class="hint-drag">拖动可框选导出区间</span>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="wrap-after">
+        <canvas id="wave-after" data-testid="wave-after"></canvas>
+        <div class="crosshair" hidden></div>
+      </div>
+    </section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>增益曲线（环上逐点最大可行解）</h2>
+        <div class="chart-controls">
+          <span class="legend"><i class="line line-gain"></i>增益 g</span>
+          <span class="legend"><i class="line line-cap"></i>上限帽 cap</span>
+          <span class="legend"><i class="mk mk-lock"></i>锁</span>
+          <span class="hint-drag">单击锁定最近帧 · 右键删锁 · 拖动框选</span>
+        </div>
+      </div>
+      <div class="canvas-wrap gain-wrap" id="wrap-gain">
+        <canvas id="gain-canvas" data-testid="gain-canvas"></canvas>
+        <div class="crosshair" hidden></div>
+      </div>
+    </section>
+
+    <div id="tooltip" class="tooltip" hidden data-testid="chart-tooltip"></div>
+
+    <section class="card transport-card">
+      <div class="transport">
+        <button id="btn-play" class="btn btn-primary" type="button" data-testid="play-button">▶ 试听循环</button>
+        <button id="btn-stop" class="btn" type="button" data-testid="stop-button">■ 停止</button>
+        <label class="check"><input id="check-loop-sel" type="checkbox" data-testid="loop-selection-checkbox"> 只循环选区</label>
+        <label class="monitor">试听信号
+          <select id="monitor-source" data-testid="monitor-source">
+            <option value="limited" selected>限幅后 192k</option>
+            <option value="interp">插值未限幅 192k</option>
+            <option value="original">原始 48k</option>
+          </select>
+        </label>
+        <span id="play-state" class="play-state" data-testid="play-state">未播放</span>
+      </div>
+    </section>
+
+    <section class="card export-card">
+      <h2>选区导出（左闭右开帧区间 · 192 kHz WAV）</h2>
+      <div class="export-row">
+        <label>起帧 <input id="sel-start" type="number" min="0" step="1" value="0" data-testid="selection-start"></label>
+        <label>止帧（不含） <input id="sel-end" type="number" min="1" step="1" value="1" data-testid="selection-end"></label>
+        <span id="sel-length" class="sel-length" data-testid="selection-length">—</span>
+        <button id="btn-sel-full" class="btn" type="button" data-testid="select-full-button">选整圈 [0, 4N)</button>
+        <button id="btn-download-sel" class="btn btn-primary" type="button" data-testid="download-selection-button">下载选区 WAV</button>
+        <button id="btn-download-full" class="btn" type="button" data-testid="download-full-button">下载整圈 WAV</button>
+      </div>
+      <div id="export-note" class="export-note">导出码值与上方求解结果逐码一致；整圈切片即完整一圈，首尾按同一 up/down 规则约束。</div>
+    </section>
+
+    <section class="card spec-card">
+      <h2>精确规则（评测口径）</h2>
+      <ol class="spec-list">
+        <li>一圈 4N 个 192k 帧。相位 s=j/4，取循环基率索引 i−1,i,i+1,i+2 的 a,b,c,d，插值 <code>(2b+(−a+c)s+(2a−5b+4c−d)s²+(−a+3b−3c+d)s³)/2 = K/128</code>。</li>
+        <li><code>g∈[0,65536]</code> 整数，两声道共用；输出 <code>round_half_even(K·g/2²³)</code>，先舍入后检查 <code>|码|≤ceiling</code>，不另削顶。</li>
+        <li>相邻帧（含末→首）：<code>g[k+1]−g[k]≤up</code>，<code>g[k]−g[k+1]≤down</code>。</li>
+        <li>逐点最大曲线 = 所有上限源沿环正向 +up、反向 +down 传播后的逐点最小值，O(4N)。</li>
+        <li>锁冲突：把锁也作为上限传播后，曲线低于目标值的锁；冲突时保留上次可行曲线并列出这些帧。</li>
+      </ol>
+    </section>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden data-testid="toast"></div>
+
+<script src="js/ccl-core.js"></script>
+<script src="js/wav-codec.js"></script>
+<script src="js/zip-read.js"></script>
+<script src="js/sample-data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

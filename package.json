@@ -1,0 +1,12 @@
+{
+  "name": "cyclic-ceiling-limiter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "循环环境音周期上限限幅台：48k PCM16 立体声 -> 周期四点插值 192k，环上逐点最大可行整数增益",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "test": "node tests/run-tests.js",
+    "test:browser": "node tests/browser-verify.js",
+    "test:http": "node tests/http-smoke.js"
+  }
+}
