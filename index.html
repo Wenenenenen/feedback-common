@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QG01 限码四叉树归档台</title>
+  <meta name="description" content="在固定载荷预算内求取代价最优的灰度四叉树归档，并检查 QG01 位流、块边界与回环。">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="30" height="30">
+          <rect x="2" y="2" width="28" height="28" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M16 2v30M2 16h14M16 10h14M22 10v6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        </svg>
+      </div>
+      <div>
+        <h1>QG01 限码四叉树归档台</h1>
+        <p class="subtitle">常值 / 逐像素 / 四分 · 整图预算精确最优 · 位级回环与错误定位</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="load-sample" class="btn ghost" type="button" data-testid="load-sample">载入 16×16 样图与掩膜</button>
+      <button id="export-qg01" class="btn primary" type="button" disabled data-testid="export-qg01">导出 QG01</button>
+      <label class="btn secondary file-button" for="qg01-input">重新导入 QG01</label>
+      <input id="qg01-input" data-testid="qg01-input" type="file" accept=".qg01,.qg,.bin,application/octet-stream" hidden>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar panel">
+      <section class="control-section">
+        <h2>1. 导入 P5 图</h2>
+        <label class="file-drop" for="image-input" id="image-drop">
+          <input id="image-input" data-testid="image-input" type="file" accept=".pgm,image/x-portable-graymap" hidden>
+          <span class="file-drop-title">选择 8 位 P5 灰度 PGM</span>
+          <span class="file-drop-meta">边长 16–512，二次幂方形</span>
+          <span id="image-name" class="file-name">尚未选择灰度图</span>
+        </label>
+
+        <label class="file-drop subtle" for="mask-input" id="mask-drop">
+          <input id="mask-input" data-testid="mask-input" type="file" accept=".pgm,image/x-portable-graymap" hidden>
+          <span class="file-drop-title">可选有效掩膜</span>
+          <span class="file-drop-meta">同尺寸 P5；非零为有效，只影响平方误差</span>
+          <span id="mask-name" class="file-name">未使用掩膜（全部像素有效）</span>
+        </label>
+      </section>
+
+      <section class="control-section">
+        <div class="section-heading">
+          <h2>2. 载荷预算</h2>
+          <output id="budget-output" for="budget-range budget-number">512 位</output>
+        </div>
+        <div class="budget-row">
+          <input id="budget-range" data-testid="budget-range" type="range" min="10" max="4096" step="1" value="512">
+          <input id="budget-number" data-testid="budget-input" type="number" min="10" max="4096" step="1" value="512" aria-label="载荷预算位数">
+        </div>
+        <div class="preset-row" aria-label="预算快捷值">
+          <button type="button" class="chip" data-budget="10">10</button>
+          <button type="button" class="chip" data-budget="41">41</button>
+          <button type="button" class="chip" data-budget="128">128</button>
+          <button type="button" class="chip" data-budget="512">512</button>
+          <button type="button" class="chip" data-budget="1024">1024</button>
+          <button type="button" class="chip" data-budget="4096">4096</button>
+        </div>
+        <button id="encode-button" class="btn primary full" type="button" data-testid="encode-button" disabled>执行整图最优编码</button>
+        <p class="hint">计费只含 QG01 载荷：分支 1 位；常值叶 10 位；原样叶 2 + 8×块面积。文件头不计入预算。</p>
+      </section>
+
+      <section class="control-section stats-grid" aria-label="编码统计">
+        <div class="stat"><span>实际载荷</span><strong id="stat-used" data-testid="stat-used">—</strong></div>
+        <div class="stat"><span>剩余预算</span><strong id="stat-left">—</strong></div>
+        <div class="stat"><span>平方误差</span><strong id="stat-error" data-testid="stat-error">—</strong></div>
+        <div class="stat"><span>叶块 / 节点</span><strong id="stat-blocks" data-testid="stat-blocks">—</strong></div>
+        <div class="stat"><span>边长</span><strong id="stat-size">—</strong></div>
+        <div class="stat"><span>掩膜有效点</span><strong id="stat-valid">—</strong></div>
+      </section>
+
+      <section id="roundtrip-card" class="notice success" hidden data-testid="roundtrip-success">
+        <strong>QG01 回环一致</strong>
+        <span id="roundtrip-text"></span>
+      </section>
+      <section id="import-banner" class="notice info" hidden>
+        <strong>正在查看导入的 QG01</strong>
+        <span>错误和边界来自该位流；<button id="return-encoded" class="link" type="button">返回本次编码预览</button></span>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div id="alert-panel" class="alert-panel" hidden>
+        <div id="error-panel" class="alert error" role="alert" data-testid="import-error">
+          <strong id="error-title">导入失败</strong>
+          <span id="error-message"></span>
+        </div>
+        <div id="status-panel" class="alert status" role="status" data-testid="status" hidden></div>
+      </div>
+
+      <div class="view-grid">
+        <article class="panel viewer">
+          <header><h2>原图 / 有效掩膜</h2><label class="mini-toggle"><input id="mask-toggle" type="checkbox" checked> 掩膜无效点压暗</label></header>
+          <div class="canvas-stage">
+            <canvas id="original-canvas" data-testid="original-canvas" width="16" height="16"></canvas>
+            <div id="original-placeholder" class="placeholder">导入 P5 PGM 后显示原图</div>
+          </div>
+        </article>
+
+        <article class="panel viewer">
+          <header><h2>重建图</h2><span id="recon-tag" class="tag">等待编码</span></header>
+          <div class="canvas-stage">
+            <canvas id="reconstruction-canvas" data-testid="reconstruction-canvas" width="16" height="16"></canvas>
+            <div id="recon-placeholder" class="placeholder">最优编码后显示重建像素</div>
+          </div>
+        </article>
+
+        <article class="panel viewer boundary-viewer">
+          <header><h2>块边界（点击检查）</h2><span class="tag" id="boundary-tag">叶块</span></header>
+          <div class="canvas-stage boundary-stage" id="boundary-stage">
+            <canvas id="boundary-canvas" data-testid="boundary-canvas" width="16" height="16"></canvas>
+            <svg id="boundary-svg" data-testid="boundary-svg" viewBox="0 0 16 16" preserveAspectRatio="none" aria-label="四叉树叶块边界"></svg>
+            <div id="boundary-placeholder" class="placeholder">编码后可点击块</div>
+          </div>
+        </article>
+      </div>
+
+      <div class="bottom-grid">
+        <section class="panel inspector" data-testid="block-info">
+          <header><h2>块检查器</h2><span id="block-mode" class="mode-badge" data-testid="block-mode">未选择</span></header>
+          <div id="block-empty" class="inspector-empty">在块边界图中点击任意块；也可用上方路径选择四分父节点。</div>
+          <dl id="block-details" class="detail-grid" hidden>
+            <div><dt>位置 / 尺寸</dt><dd id="block-position" data-testid="block-position">—</dd></div>
+            <div><dt>模式</dt><dd id="block-mode-long">—</dd></div>
+            <div><dt>平方误差</dt><dd id="block-error" data-testid="block-error">—</dd></div>
+            <div><dt>载荷位区间</dt><dd id="block-bits" class="mono" data-testid="block-bit-range">—</dd></div>
+            <div><dt>字段区间</dt><dd id="block-fields" class="mono small">—</dd></div>
+            <div><dt>块路径</dt><dd id="block-ancestors" class="ancestors"></dd></div>
+          </dl>
+        </section>
+
+        <section class="panel bitstream-panel">
+          <header>
+            <h2>载荷位流</h2>
+            <div class="bitstream-legend">
+              <span><i class="dot branch"></i>分支</span>
+              <span><i class="dot constant"></i>常值</span>
+              <span><i class="dot raw"></i>原样</span>
+            </div>
+          </header>
+          <div id="bitstream" class="bitstream mono" data-testid="bitstream" aria-label="QG01 payload bits"></div>
+          <div id="byte-hex" class="byte-hex mono small" data-testid="byte-hex"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>QG01：ASCII QG01 + uint16LE 边长 + uint32LE 载荷位数，随后高位先读。</span>
+    <span id="worker-state">DP 将在 Web Worker 中运行</span>
+  </footer>
+
+  <script src="src/qg01-core.js"></script>
+  <script src="src/sample-data.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "budget-quadtree-archive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QG01 限码灰度四叉树编码、解码与块级检查页面",
+  "scripts": {
+    "test": "node tests/fuzz-optimizer.cjs && node tests/codec-errors.cjs",
+    "test:browser": "node tests/browser-smoke.cjs",
+    "serve": "python3 -m http.server 8141 --bind 127.0.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
