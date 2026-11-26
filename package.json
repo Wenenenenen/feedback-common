@@ -1,0 +1,13 @@
+{
+  "name": "imprint-stack-inference",
+  "version": "1.0.0",
+  "private": true,
+  "description": "纸样叠印顺序全局最小失配复核网页",
+  "scripts": {
+    "test": "node --test tests/solver.test.js",
+    "start": "python3 -m http.server 8173 --bind 127.0.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

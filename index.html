@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>叠印顺序复核台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <script id="sampleFallback" type="application/json">
+    {"width":4,"height":3,"layers":4,"cover":[0,1,3,2,1,5,7,6,0,8,12,8],"observed":[0,1,1,2,1,3,3,3,0,4,3,4],"weight":[3,5,5,4,4,8,10,6,1,10,5,6],"above":[[3,2]]}
+  </script>
+
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="title-block">
+        <p class="eyebrow">Imprint stack review</p>
+        <h1>纸样叠印顺序复核台</h1>
+        <p class="subtitle">覆盖位图逐点预测最高覆盖层，用子集动态规划求全局加权最小失配；不调用现成排序求解器。</p>
+      </div>
+      <div class="top-actions">
+        <button id="loadSampleBtn" class="btn" type="button" data-testid="load-sample">载入 samples 示例</button>
+        <label class="btn primary file-btn" data-testid="import-label">
+          导入 imprint-stack.json
+          <input id="fileInput" type="file" accept=".json,application/json" hidden data-testid="file-input">
+        </label>
+      </div>
+    </header>
+
+    <section id="dataSummary" class="data-summary" aria-live="polite"></section>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section class="card" aria-labelledby="solveTitle">
+          <div class="card-heading">
+            <h2 id="solveTitle">全局求解</h2>
+            <span id="solveStatePill" class="pill neutral">等待数据</span>
+          </div>
+          <p class="card-note">顺序按从上到下记录。同分结果选择层号序列字典序最小者。</p>
+          <button id="solveBtn" class="btn primary block" type="button" disabled data-testid="solve-button">开始全局求解</button>
+          <div class="stat-grid">
+            <div class="stat">
+              <span class="stat-label">总分 / 加权失配</span>
+              <strong id="scoreValue" class="stat-value" data-testid="total-score">—</strong>
+            </div>
+            <div class="stat">
+              <span class="stat-label">失配点数</span>
+              <strong id="mismatchCountValue" class="stat-value" data-testid="mismatch-count">—</strong>
+            </div>
+            <div class="stat">
+              <span class="stat-label">动态规划状态</span>
+              <strong id="dpStatesValue" class="stat-value">—</strong>
+            </div>
+            <div class="stat">
+              <span class="stat-label">当前锁定</span>
+              <strong id="lockCountValue" class="stat-value">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="lockTitle">
+          <div class="card-heading">
+            <h2 id="lockTitle">必须在上的层对</h2>
+          </div>
+          <form id="lockForm" class="lock-form">
+            <label class="field">
+              <span>上层 a</span>
+              <select id="lockAboveSelect" name="above" data-testid="lock-above"></select>
+            </label>
+            <span class="lock-direction" aria-hidden="true">在</span>
+            <label class="field">
+              <span>下层 b</span>
+              <select id="lockBelowSelect" name="below" data-testid="lock-below"></select>
+            </label>
+            <button class="btn primary" type="submit" data-testid="add-lock">添加锁定</button>
+          </form>
+          <div id="lockList" class="lock-list" data-testid="lock-list"></div>
+
+          <div id="cyclePanel" class="alert critical" hidden data-testid="cycle-panel">
+            <div class="alert-title">锁定关系存在环</div>
+            <div id="cycleChain" class="cycle-chain"></div>
+            <p id="cycleHint" class="alert-text">请删除环中的至少一条关系后重新求解。上次成功结果仍保留在下方。</p>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="reverseTitle">
+          <div class="card-heading">
+            <h2 id="reverseTitle">反转任意两层</h2>
+          </div>
+          <p class="card-note">以当前成功层序中的相对位置为准，加入相反强制关系后重新做全局最优求解。</p>
+          <div class="pair-grid">
+            <label class="field">
+              <span>层 A</span>
+              <select id="pairASelect" data-testid="pair-a"></select>
+            </label>
+            <button id="swapPairBtn" class="btn icon-btn" type="button" title="交换 A/B" aria-label="交换 A 和 B">⇄</button>
+            <label class="field">
+              <span>层 B</span>
+              <select id="pairBSelect" data-testid="pair-b"></select>
+            </label>
+          </div>
+          <button id="reverseBtn" class="btn primary block" type="button" disabled data-testid="reverse-button">查询反转后的最小代价</button>
+          <div id="pairMessage" class="inline-message" role="status"></div>
+          <div id="reverseSummary" class="reverse-summary" hidden data-testid="reverse-summary"></div>
+        </section>
+
+        <section class="card" aria-labelledby="exportTitle">
+          <div class="card-heading">
+            <h2 id="exportTitle">导出结果</h2>
+          </div>
+          <p class="card-note">导出当前保留的成功层序、总分、逐像素预测、失配标记与权值。</p>
+          <div class="export-grid">
+            <button id="exportJsonBtn" class="btn" type="button" disabled data-testid="export-json">结果 JSON</button>
+            <button id="exportCsvBtn" class="btn" type="button" disabled data-testid="export-csv">逐像素 CSV</button>
+            <button id="exportPredPngBtn" class="btn" type="button" disabled data-testid="export-pred-png">预测图 PNG</button>
+            <button id="exportMismatchPngBtn" class="btn" type="button" disabled data-testid="export-mismatch-png">失配图 PNG</button>
+            <button id="copyJsonBtn" class="btn" type="button" disabled data-testid="copy-json">复制 JSON</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="card order-card" aria-labelledby="orderTitle">
+          <div class="card-heading wrap">
+            <div>
+              <h2 id="orderTitle">当前成功层序 <span class="direction">从上到下</span></h2>
+              <p id="successMeta" class="card-note">尚未载入数据。</p>
+            </div>
+            <span id="preservedPill" class="pill warning" hidden>已保留上次成功结果</span>
+          </div>
+          <ol id="orderList" class="order-list" data-testid="order-list">
+            <li class="empty-state">导入 JSON 后，这里会显示字典序最小的最优层序。</li>
+          </ol>
+        </section>
+
+        <section class="card maps-card-shell" aria-labelledby="mapsTitle">
+          <div class="card-heading">
+            <h2 id="mapsTitle">逐像素复核图</h2>
+            <div id="legend" class="legend" data-testid="legend"></div>
+          </div>
+
+          <div class="maps-grid">
+            <figure class="map-card">
+              <figcaption>
+                <span>预测可见层</span>
+                <small>颜色 = 该点最高覆盖层</small>
+              </figcaption>
+              <div class="map-well">
+                <canvas id="predictionCanvas" data-map="prediction" data-testid="prediction-canvas" width="1" height="1" aria-label="预测图"></canvas>
+              </div>
+            </figure>
+
+            <figure class="map-card">
+              <figcaption>
+                <span>失配图</span>
+                <small>红色 = 与实测不同；权为 0 也会标记</small>
+              </figcaption>
+              <div class="map-well">
+                <canvas id="mismatchCanvas" data-map="mismatch" data-testid="mismatch-canvas" width="1" height="1" aria-label="当前失配图"></canvas>
+              </div>
+            </figure>
+
+            <figure id="reverseMapCard" class="map-card reverse-map-card" hidden data-testid="reverse-map-card">
+              <figcaption>
+                <span id="reverseMapTitle">反转方案失配图</span>
+                <small id="reverseMapSubtitle"></small>
+              </figcaption>
+              <div class="map-well">
+                <canvas id="reverseMismatchCanvas" data-map="reverseMismatch" data-testid="reverse-mismatch-canvas" width="1" height="1" aria-label="反转方案失配图"></canvas>
+              </div>
+              <div class="map-actions">
+                <button id="downloadReversePngBtn" class="btn small" type="button">下载反转失配图</button>
+              </div>
+            </figure>
+          </div>
+
+          <div id="pixelInspector" class="pixel-inspector" data-testid="pixel-inspector">
+            将指针移到图上查看像素；触屏点按即可固定查看。
+          </div>
+        </section>
+
+        <section class="card method-card" aria-labelledby="methodTitle">
+          <h2 id="methodTitle">求解与判定规则</h2>
+          <div class="method-grid">
+            <div>
+              <h3>单点预测</h3>
+              <p>按层序寻找第一个覆盖该点的层；覆盖位图为 0 时预测为 0。预测层与 <code>observed</code> 不同即失配，总分累加该点 <code>weight</code>。</p>
+            </div>
+            <div>
+              <h3>全局最优</h3>
+              <p>把已选高层集合作为子集状态。预处理每层在各覆盖掩码补集上的加权代价，再做 <code>O(n2ⁿ + n²2ⁿ)</code> 子集动态规划。</p>
+            </div>
+            <div>
+              <h3>锁定与并列</h3>
+              <p>转移只允许所有必在上层已出现的层。回溯时始终选择最小层号的可行最优转移，因此同分得到层序字典序最小解。</p>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div id="tooltip" class="tooltip" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="solver.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
