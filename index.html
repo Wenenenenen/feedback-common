@@ -1,0 +1,1349 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>补帧校对台 · Flow In-between Review</title>
+<style>
+  :root {
+    --bg: #0f141b;
+    --panel: #171e28;
+    --panel-2: #1e2733;
+    --line: #2a3645;
+    --text: #e6ebf2;
+    --muted: #93a1b3;
+    --accent: #5aa2ff;
+    --ok: #2ea043;
+    --err: #e5534b;
+    --warn: #e69f00;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 16px;
+    padding: 16px 20px 28px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: none;
+    color: var(--muted);
+    margin: 0 0 10px;
+    letter-spacing: .04em;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row + .row { margin-top: 10px; }
+  button, input::file-selector-button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover, input::file-selector-button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 650; }
+  input[type="number"] {
+    width: 86px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+  .stage {
+    background:
+      linear-gradient(45deg, #10161e 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(-45deg, #10161e 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(45deg, transparent 75%, #10161e 75%) 0 0/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #10161e 75%) 0 0/16px 16px,
+      #0c1118;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 260px;
+    overflow: auto;
+  }
+  canvas#view {
+    /* 后备缓冲仍是原生分辨率；仅放大显示，像素化保持锐利，点击按比例换算 */
+    height: min(420px, 62vh);
+    width: auto;
+    max-width: 100%;
+    image-rendering: pixelated;
+    cursor: crosshair;
+    border-radius: 4px;
+  }
+  .status {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    border: 1px solid var(--line);
+  }
+  .status.error { display: flex; background: rgba(229, 83, 75, .12); border-color: var(--err); color: #ffb4af; }
+  .status.ok { display: flex; background: rgba(46, 160, 67, .1); border-color: var(--ok); color: #9be0a6; }
+  .muted { color: var(--muted); }
+  .meta { font-size: 12.5px; color: var(--muted); }
+  #renderInfo { font-variant-numeric: tabular-nums; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .step-grid {
+    display: grid;
+    grid-template-columns: repeat(11, 1fr);
+    gap: 4px;
+    max-height: 168px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    background: var(--panel-2);
+  }
+  .step-cb {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .step-cb input { accent-color: var(--accent); margin: 0; }
+  #inspector { font-size: 12.5px; }
+  #inspector .insp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  #inspector .insp-rgb { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #inspector .insp-rgb b { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+  table.contrib { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 6px; }
+  table.contrib th, table.contrib td {
+    border: 1px solid var(--line);
+    padding: 3px 5px;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  table.contrib thead th { color: var(--muted); font-weight: 600; }
+  tr.dropped { color: var(--muted); opacity: .75; }
+  tr.used td { color: var(--text); }
+  .legend-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .val { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+  .file-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  label.inline { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>补帧校对台</h1>
+  <span class="sub">自实现双向流插帧 · 往返一致性筛选 · 深度层混色 · 空洞溯源（不调用任何现成插帧接口）</span>
+</header>
+
+<div class="layout">
+  <!-- 左列：控制与预览 -->
+  <main>
+    <div id="statusBar" class="status"></div>
+
+    <section class="panel">
+      <h2>数据载入</h2>
+      <div class="row">
+        <input id="fileInput" type="file" multiple accept=".ppm,.bin">
+        <button id="demoBtn" type="button">载入内置演示数据</button>
+      </div>
+      <p class="file-hint">一次选择四个文件：a.ppm、b.ppm、a.bin、b.bin（顺序无关，按文件名识别）。解析失败或尺寸错配会指出具体文件，并保留上一次画面。</p>
+      <p id="datasetInfo" class="meta">尚未载入数据。</p>
+    </section>
+
+    <section class="panel">
+      <h2>时间与深度</h2>
+      <div class="row">
+        <span style="min-width:84px">时间档 n</span>
+        <input id="stepSlider" type="range" min="0" max="64" step="1" value="32">
+        <span class="val" id="stepValue">32</span>
+        <span class="meta">/ 64（0 与 64 直接显示原帧）</span>
+      </div>
+      <div class="row">
+        <span style="min-width:84px">深度容差</span>
+        <input id="tolSlider" type="range" min="0" max="65535" step="1" value="10">
+        <span class="val" id="tolValue">10</span>
+        <input id="tolNum" type="number" min="0" max="65535" step="1" value="10">
+        <span class="meta">整数 0–65535，混色深度窗 [zmin, zmin+容差]</span>
+      </div>
+      <div class="row">
+        <label class="inline"><input id="overlayChk" type="checkbox"> 叠加逐像素分类着色</label>
+      </div>
+      <p id="renderInfo" class="meta"></p>
+    </section>
+
+    <div class="stage">
+      <canvas id="view" width="320" height="180" title="点击任意像素查看最小深度与供色来源"></canvas>
+    </div>
+
+    <section class="panel">
+      <h2>当前帧分类统计</h2>
+      <div id="classStats" class="chips"></div>
+      <p class="legend-note">
+        分类：0 端点原图 · 1 至少一项往返通过并参与供色 · 2 仅未通过者供色 · 3 由原非空像素补洞 · 4 全空黑色。
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>导出所选时点</h2>
+      <div class="row">
+        <button id="selAll" type="button">全选 65 档</button>
+        <button id="selEnds" type="button">仅两端 0/64</button>
+        <button id="selCurrent" type="button">仅当前档</button>
+        <button id="selClear" type="button">清空</button>
+      </div>
+      <div id="stepGrid" class="step-grid" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:12px">
+        <button id="exportBtn" class="primary" type="button">导出 ZIP（PPM + 分类 P5）</button>
+        <button id="exportCurrentBtn" type="button">另存当前帧 PPM</button>
+      </div>
+      <p class="file-hint">ZIP 内文件按档位两位编号 frame_nn.ppm / class_nn.p5；导出像素与当前预览完全一致。至少选择一个档位。</p>
+    </section>
+  </main>
+
+  <!-- 右列：点选检查器 -->
+  <aside>
+    <section class="panel">
+      <h2>像素检查器</h2>
+      <div id="inspector">
+        <p class="muted">在左侧画面点击任意像素：查看该点最小非零深度、深度层筛选、每个供色贡献的来源帧 / 源坐标 / 权重 / 往返状态，以及补洞复制来源。</p>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>规则速览</h2>
+      <div class="stack meta">
+        <div>往返：沿整条位移到另一帧，floor(坐标+0.5) 取最近像素；越界、对方 z=0 或两轴有符号位移之和绝对值 &gt; 8（1/8 像素单位）即未通过，未通过只影响选择优先级。</div>
+        <div>投影：a 走 t、b 走 1−t，按双线性系数落到四邻像素，再乘来源时间权重（a:1−t，b:t）。</div>
+        <div>混色：先取目的点全部贡献的最小非零深度 zmin，深度窗内若有往返通过点则只用通过点，否则用窗内全部贡献；颜色按贡献权重归一化加权。</div>
+        <div>补洞：对补洞前的非空像素求曼哈顿最近点，同距取行列号最小；整帧无有效像素时填黑（分类 4）。</div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<!-- ===== 内联脚本（由 tools/build.mjs 生成） ===== -->
+<script>
+(function () {
+/*
+ * flow-inbetween-review 纯逻辑引擎
+ *
+ * 规则来源：samples 内 format.txt
+ *  - 位移单位 1/8 像素；z=0 表示无深度，跳过
+ *  - 往返检查：沿整条位移到另一帧，floor(坐标+0.5) 选最近像素；
+ *    越界、对方 z=0、或任一轴两侧有符号位移相加绝对值 > 8 单位 => 未通过
+ *  - 档位 n∈[1,63]，t=n/64；a 投影 p+t*f/8，b 投影 p+(1-t)*f/8
+ *  - 双线性投到四邻，时间权重 a:1-t / b:t，忽略零权重与越界
+ *  - 目的像素先找最小非零深度 zmin，再在 [zmin, zmin+容差] 内
+ *    优先保留全部往返通过者，没有通过者才保留该层全部未通过者
+ *  - RGB 按贡献权重归一化加权平均，就近取整，半整数取较大值
+ *  - 空洞补色：补洞前曼哈顿距离最近的非空像素，同距取行列号最小；全空黑
+ *
+ * 本文件不依赖 DOM，可直接在 Node 中 require，也由 build 脚本内联进网页。
+ */
+'use strict';
+
+const PASS_BIT = 0x80000000;
+const IDX_MASK = 0x7fffffff;
+
+/* ---------------- PPM / BIN 严格解析 ---------------- */
+
+/**
+ * 严格解析 8 位 P6：
+ *   必须为 P6\n 、十进制宽 + 空格 + 高 + \n、255 + \n，随后恰好 W*H*3 字节。
+ * 任何不符抛出带文件名的 Error。
+ */
+function parsePPM(bytes, fileName) {
+  const name = fileName || 'PPM';
+  const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const fail = (msg) => { throw new Error(`${name}: ${msg}`); };
+
+  if (u.length < 2 || u[0] !== 0x50 /* P */ || u[1] !== 0x36 /* 6 */) {
+    fail('不是 P6 格式');
+  }
+  let i = 2;
+  if (u[i] !== 0x0a) fail('文件头必须为 P6 后紧跟换行');
+  i += 1;
+
+  const readNum = () => {
+    let v = 0;
+    let any = false;
+    while (i < u.length && u[i] >= 0x30 && u[i] <= 0x39) {
+      v = v * 10 + (u[i] - 0x30);
+      if (v > 0x7fffffff) fail('尺寸数值过大');
+      any = true;
+      i += 1;
+    }
+    if (!any) fail('文件头缺少十进制数值');
+    return v;
+  };
+
+  const width = readNum();
+  if (u[i] !== 0x20) fail('宽高之间必须是单个空格');
+  i += 1;
+  const height = readNum();
+  if (u[i] !== 0x0a) fail('高度后必须是换行');
+  i += 1;
+  const maxVal = readNum();
+  if (maxVal !== 255) fail(`仅支持 8 位最大值 255，读到 ${maxVal}`);
+  if (u[i] !== 0x0a) fail('最大值 255 后必须是换行');
+  i += 1;
+  const headerLen = i;
+
+  if (width < 1 || height < 1) fail('宽、高各至少为 1');
+  const need = width * height * 3;
+  const got = u.length - headerLen;
+  if (got < need) {
+    fail(`数据截断：需要 ${need} 字节 RGB，实际只剩 ${got} 字节`);
+  }
+  if (got > need) {
+    fail(`数据多余：声明 ${width}×${height} 应含 ${need} 字节，实际 ${got} 字节`);
+  }
+  const rgb = u.slice(headerLen, headerLen + need);
+  return { width, height, rgb, header: u.slice(0, headerLen) };
+}
+
+/**
+ * 解析无头 BIN：栅格顺序 6 字节小端记录 int16 dx, int16 dy, uint16 z。
+ * 记录数必须与像素数一致。
+ */
+function parseBIN(bytes, width, height, fileName) {
+  const name = fileName || 'BIN';
+  const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const n = width * height;
+  if (u.length !== n * 6) {
+    throw new Error(
+      `${name}: 尺寸错配/截断：${width}×${height} 应有 ${n * 6} 字节，实际 ${u.length} 字节`
+    );
+  }
+  const dv = new DataView(u.buffer, u.byteOffset, u.byteLength);
+  const dx = new Int16Array(n);
+  const dy = new Int16Array(n);
+  const z = new Uint16Array(n);
+  let o = 0;
+  for (let k = 0; k < n; k += 1, o += 6) {
+    dx[k] = dv.getInt16(o, true);
+    dy[k] = dv.getInt16(o + 2, true);
+    z[k] = dv.getUint16(o + 4, true);
+  }
+  return { dx, dy, z };
+}
+
+/**
+ * 成组载入并交叉校验。任何一项失败都抛出，调用方负责保留上一次画面。
+ * files: { aPPM, bPPM, aBIN, bBIN }，每项 { name, bytes }
+ */
+function loadDataset(files) {
+  const a = parsePPM(files.aPPM.bytes, files.aPPM.name);
+  const b = parsePPM(files.bPPM.bytes, files.bPPM.name);
+  if (a.width !== b.width || a.height !== b.height) {
+    throw new Error(
+      `尺寸错配：${files.aPPM.name} 为 ${a.width}×${a.height}，` +
+      `${files.bPPM.name} 为 ${b.width}×${b.height}`
+    );
+  }
+  const W = a.width;
+  const H = a.height;
+  const fa = parseBIN(files.aBIN.bytes, W, H, files.aBIN.name);
+  const fb = parseBIN(files.bBIN.bytes, W, H, files.bBIN.name);
+  return {
+    width: W,
+    height: H,
+    rgbA: a.rgb,
+    rgbB: b.rgb,
+    flowA: fa,
+    flowB: fb,
+    names: {
+      aPPM: files.aPPM.name,
+      bPPM: files.bPPM.name,
+      aBIN: files.aBIN.name,
+      bBIN: files.bBIN.name,
+    },
+  };
+}
+
+/* ---------------- 往返检查 ---------------- */
+
+/**
+ * 逐像素往返通过标志（Uint8Array，1=通过）。自身 z=0 不算通过。
+ */
+function computeRoundTrip(flowSelf, flowOther, W, H) {
+  const n = W * H;
+  const pass = new Uint8Array(n);
+  const { dx, dy, z } = flowSelf;
+  for (let p = 0; p < n; p += 1) {
+    if (z[p] === 0) continue;
+    const px = p % W;
+    const py = (p - px) / W;
+    // floor(坐标 + 0.5) 选最近像素；位移单位 1/8
+    const fx = px + dx[p] / 8;
+    const fy = py + dy[p] / 8;
+    const qx = Math.floor(fx + 0.5);
+    const qy = Math.floor(fy + 0.5);
+    if (qx < 0 || qx >= W || qy < 0 || qy >= H) continue;
+    const q = qy * W + qx;
+    if (flowOther.z[q] === 0) continue;
+    if (Math.abs(dx[p] + flowOther.dx[q]) > 8) continue;
+    if (Math.abs(dy[p] + flowOther.dy[q]) > 8) continue;
+    pass[p] = 1;
+  }
+  return pass;
+}
+
+/* ---------------- 核心渲染 ---------------- */
+
+/**
+ * 曼哈顿距离补洞（两遍精确距离变换）。
+ * 非空 = head[d] !== -1（投影后有任意贡献，与最终分类无关）。
+ * 同距按行优先线性索引（即行列号最小）择优；全空 label 保持 -1。
+ */
+function fillHoles(head, W, H) {
+  const N = W * H;
+  const label = new Int32Array(N).fill(-1);
+  const dist = new Int32Array(N).fill(0x7fffffff);
+  for (let d = 0; d < N; d += 1) {
+    if (head[d] !== -1) {
+      label[d] = d;
+      dist[d] = 0;
+    }
+  }
+  const relax = (d, nb) => {
+    if (label[nb] < 0) return;
+    const nd = dist[nb] + 1;
+    if (nd < dist[d] || (nd === dist[d] && label[nb] < label[d])) {
+      dist[d] = nd;
+      label[d] = label[nb];
+    }
+  };
+  // 前向：上、左
+  for (let y = 0; y < H; y += 1) {
+    const row = y * W;
+    for (let x = 0; x < W; x += 1) {
+      const d = row + x;
+      if (dist[d] === 0) continue;
+      if (y > 0) relax(d, d - W);
+      if (x > 0) relax(d, d - 1);
+    }
+  }
+  // 反向：下、右
+  for (let y = H - 1; y >= 0; y -= 1) {
+    const row = y * W;
+    for (let x = W - 1; x >= 0; x -= 1) {
+      const d = row + x;
+      if (dist[d] === 0) continue;
+      if (y + 1 < H) relax(d, d + W);
+      if (x + 1 < W) relax(d, d + 1);
+    }
+  }
+  return { label, dist };
+}
+
+/**
+ * 渲染一个中间档。n∈[1,63]，t=n/64。
+ * 返回带分类、补洞来源和贡献链表的完整结果，供预览与点选共用。
+ */
+function renderFrame(ds, n, tolerance, passes) {
+  const W = ds.width;
+  const H = ds.height;
+  const N = W * H;
+  const t = n / 64;
+  const oneMinusT = 1 - t;
+  const tol = Math.max(0, Math.min(65535, tolerance | 0));
+
+  const passA = passes.passA;
+  const passB = passes.passB;
+
+  // 贡献以链表挂在目的像素上。每条贡献：
+  //   cSrc[k]  高位置 PASS_BIT，低 31 位为源像素索引
+  //   cSide[k] 0=来自 a，1=来自 b
+  //   cZ[k]    源深度（非零）
+  //   cW[k]    总权重 = 双线性系数 × 时间权重
+  //   cNext[k] 链表下一项
+  const cap = N * 8 + 16;
+  const cSrc = new Uint32Array(cap);
+  const cSide = new Uint8Array(cap);
+  const cZ = new Uint16Array(cap);
+  const cW = new Float64Array(cap);
+  const cNext = new Int32Array(cap);
+  const head = new Int32Array(N).fill(-1);
+  let count = 0;
+
+  const pushContribution = (dst, srcIdx, side, zVal, w, ok) => {
+    const k = count;
+    cSrc[k] = (srcIdx & IDX_MASK) | (ok ? PASS_BIT : 0);
+    cSide[k] = side;
+    cZ[k] = zVal;
+    cW[k] = w;
+    cNext[k] = head[dst];
+    head[dst] = k;
+    count += 1;
+  };
+
+  const projectSide = (side) => {
+    const flow = side === 0 ? ds.flowA : ds.flowB;
+    const timeW = side === 0 ? oneMinusT : t;
+    const pass = side === 0 ? passA : passB;
+    const { dx, dy, z } = flow;
+    for (let p = 0; p < N; p += 1) {
+      if (z[p] === 0) continue; // 无深度，跳过
+      const px = p % W;
+      const py = (p - px) / W;
+      // a: p + t*f/8 ；b: p + (1-t)*f/8
+      const step = side === 0 ? t : oneMinusT;
+      const fx = px + (dx[p] / 8) * step;
+      const fy = py + (dy[p] / 8) * step;
+
+      const x0 = Math.floor(fx);
+      const y0 = Math.floor(fy);
+      const ax = fx - x0;
+      const ay = fy - y0;
+      const wx = [1 - ax, ax];
+      const wy = [1 - ay, ay];
+
+      for (let jy = 0; jy < 2; jy += 1) {
+        const gy = y0 + jy;
+        if (gy < 0 || gy >= H) continue;
+        for (let jx = 0; jx < 2; jx += 1) {
+          const gx = x0 + jx;
+          if (gx < 0 || gx >= W) continue;
+          const bilin = wx[jx] * wy[jy];
+          if (bilin === 0) continue; // 忽略零权重
+          const w = bilin * timeW;
+          if (w === 0) continue;
+          pushContribution(gy * W + gx, p, side, z[p], w, pass[p] === 1);
+        }
+      }
+    }
+  };
+
+  projectSide(0);
+  projectSide(1);
+
+  // 目的像素汇总
+  const out = new Uint8Array(N * 3);
+  const cls = new Uint8Array(N);     // 1=通过者供色 2=仅未通过者供色
+  const zMinArr = new Uint16Array(N);
+  const fillSrc = new Int32Array(N).fill(-1);
+
+  for (let d = 0; d < N; d += 1) {
+    if (head[d] === -1) continue; // 空洞，稍后补
+    let zmin = 65535;
+    for (let k = head[d]; k !== -1; k = cNext[k]) {
+      if (cZ[k] < zmin) zmin = cZ[k];
+    }
+    const zhi = Math.min(65535, zmin + tol);
+    zMinArr[d] = zmin;
+
+    // 该层是否存在往返通过贡献
+    let hasPass = false;
+    for (let k = head[d]; k !== -1; k = cNext[k]) {
+      if (cZ[k] >= zmin && cZ[k] <= zhi && (cSrc[k] & PASS_BIT) !== 0) {
+        hasPass = true;
+        break;
+      }
+    }
+
+    let rSum = 0;
+    let gSum = 0;
+    let bSum = 0;
+    let wSum = 0;
+    for (let k = head[d]; k !== -1; k = cNext[k]) {
+      if (cZ[k] < zmin || cZ[k] > zhi) continue;
+      if (hasPass && (cSrc[k] & PASS_BIT) === 0) continue;
+      const src = cSrc[k] & IDX_MASK;
+      const rgb = cSide[k] === 0 ? ds.rgbA : ds.rgbB;
+      const o3 = src * 3;
+      const w = cW[k];
+      rSum += rgb[o3] * w;
+      gSum += rgb[o3 + 1] * w;
+      bSum += rgb[o3 + 2] * w;
+      wSum += w;
+    }
+
+    const o3 = d * 3;
+    // 归一化加权平均，就近取整，半整数取较大值（floor(v+0.5)）
+    out[o3] = clamp255(Math.floor(rSum / wSum + 0.5));
+    out[o3 + 1] = clamp255(Math.floor(gSum / wSum + 0.5));
+    out[o3 + 2] = clamp255(Math.floor(bSum / wSum + 0.5));
+    cls[d] = hasPass ? 1 : 2;
+  }
+
+  // 补洞：在补洞前的非空集合上求曼哈顿最近来源
+  const { label } = fillHoles(head, W, H);
+  for (let d = 0; d < N; d += 1) {
+    if (head[d] !== -1) continue;
+    const src = label[d];
+    if (src < 0) {
+      cls[d] = 4; // 全空黑色，out 已为零
+      continue;
+    }
+    fillSrc[d] = src;
+    const s3 = src * 3;
+    const d3 = d * 3;
+    // 复制该非空像素补好的颜色（其分类为 1/2 的结果色）
+    out[d3] = out[s3];
+    out[d3 + 1] = out[s3 + 1];
+    out[d3 + 2] = out[s3 + 2];
+    cls[d] = 3;
+  }
+
+  return {
+    n,
+    t,
+    tolerance: tol,
+    width: W,
+    height: H,
+    rgb: out,
+    cls,
+    zMin: zMinArr,
+    fillSrc,
+    // 贡献链表（点选用）
+    _head: head,
+    _cSrc: cSrc,
+    _cSide: cSide,
+    _cZ: cZ,
+    _cW: cW,
+    _cNext: cNext,
+    _count: count,
+  };
+}
+
+function clamp255(v) {
+  return v > 255 ? 255 : v < 0 ? 0 : v;
+}
+
+/**
+ * 点选：返回该像素的最小深度与供色来源明细。
+ */
+function inspectPixel(result, ds, x, y) {
+  const W = result.width;
+  const H = result.height;
+  if (x < 0 || y < 0 || x >= W || y >= H) return null;
+  const d = y * W + x;
+  const c = result.cls[d];
+  const base = {
+    x,
+    y,
+    cls: c,
+    rgb: [result.rgb[d * 3], result.rgb[d * 3 + 1], result.rgb[d * 3 + 2]],
+  };
+  if (result.endpoint) {
+    return { ...base, endpoint: true, sideName: result.n === 0 ? 'a（前帧）' : 'b（后帧）' };
+  }
+  if (c === 3) {
+    const s = result.fillSrc[d];
+    return {
+      ...base,
+      fillFrom: { x: s % W, y: (s / W) | 0, index: s },
+      note: '补洞像素：颜色复制自补洞前最近的非空像素（同距取行列号最小）',
+    };
+  }
+  if (c === 4) {
+    return { ...base, note: '全空：无任何非空像素可达，填黑' };
+  }
+  // c === 1 或 2：列出该目的像素全部贡献及深度层筛选情况
+  const zmin = result.zMin[d];
+  const zhi = Math.min(65535, zmin + result.tolerance);
+  const items = [];
+  let hasPassInLayer = false;
+  for (let k = result._head[d]; k !== -1; k = result._cNext[k]) {
+    const src = result._cSrc[k] & IDX_MASK;
+    const side = result._cSide[k];
+    const ok = (result._cSrc[k] & PASS_BIT) !== 0;
+    const inLayer = result._cZ[k] >= zmin && result._cZ[k] <= zhi;
+    if (inLayer && ok) hasPassInLayer = true;
+    items.push({
+      side,
+      sideName: side === 0 ? 'a（前帧）' : 'b（后帧）',
+      srcX: src % W,
+      srcY: (src / W) | 0,
+      z: result._cZ[k],
+      weight: result._cW[k],
+      pass: ok,
+      inLayer,
+    });
+  }
+  for (const it of items) {
+    it.used = it.inLayer && (!hasPassInLayer || it.pass);
+  }
+  return { ...base, zmin, layerHigh: zhi, hasPassInLayer, contributors: items };
+}
+
+/* ---------------- 分类图与 PPM 编码 ---------------- */
+
+const CLASS_NAMES = ['端点原图', '往返通过供色', '仅未通过供色', '补洞复制', '全空黑色'];
+
+function encodePPM(rgb, W, H) {
+  const header = strBytes(`P6\n${W} ${H}\n255\n`);
+  return concatBytes([header, rgb]);
+}
+
+function encodeP5(cls, W, H) {
+  const header = strBytes(`P5\n${W} ${H}\n255\n`);
+  return concatBytes([header, cls]);
+}
+
+function strBytes(s) {
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(s);
+  return Uint8Array.from(Array.from(s).map((ch) => ch.charCodeAt(0)));
+}
+
+function concatBytes(parts) {
+  let len = 0;
+  for (const p of parts) len += p.length;
+  const out = new Uint8Array(len);
+  let off = 0;
+  for (const p of parts) {
+    out.set(p, off);
+    off += p.length;
+  }
+  return out;
+}
+
+/** 端点帧：直接返回原帧与全 0 分类图（端点不做投影与补洞）。 */
+function endpointFrame(ds, side) {
+  const W = ds.width;
+  const H = ds.height;
+  const N = W * H;
+  const rgb = (side === 0 ? ds.rgbA : ds.rgbB).slice();
+  const cls = new Uint8Array(N);
+  return {
+    n: side === 0 ? 0 : 64,
+    t: side === 0 ? 0 : 1,
+    tolerance: null,
+    width: W,
+    height: H,
+    rgb,
+    cls,
+    zMin: new Uint16Array(N),
+    fillSrc: new Int32Array(N).fill(-1),
+    endpoint: true,
+  };
+}
+
+const api = {
+  parsePPM,
+  parseBIN,
+  loadDataset,
+  computeRoundTrip,
+  renderFrame,
+  fillHoles,
+  inspectPixel,
+  encodePPM,
+  encodeP5,
+  endpointFrame,
+  CLASS_NAMES,
+  PASS_BIT,
+  IDX_MASK,
+};
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.FlowEngine = api;
+}
+
+})();
+</script>
+<script>
+(function () {
+/*
+ * 极简 ZIP 写出器（无第三方依赖）。
+ * 仅使用 method=0（STORE，不压缩），保证确定性与可移植性；
+ * 生成的文件可被 unzip / 系统解压直接打开。
+ */
+'use strict';
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) {
+    c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function strU8(s) {
+  return new TextEncoder().encode(s);
+}
+
+/**
+ * entries: [{ name: string, data: Uint8Array }]
+ * 返回完整 ZIP 的 Uint8Array。
+ */
+function buildZip(entries) {
+  const localParts = [];
+  const central = [];
+  let offset = 0;
+  const dosTime = 0; // 固定时间戳，输出确定
+  const dosDate = 0x21; // 1980-01-01，合法 DOS 日期即可
+
+  for (const entry of entries) {
+    const name = strU8(entry.name);
+    const data = entry.data;
+    const crc = crc32(data);
+    const size = data.length;
+
+    // ---- 本地文件头 (0x04034b50) ----
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);   // 版本
+    local.setUint16(6, 0, true);    // 标志位
+    local.setUint16(8, 0, true);    // STORE
+    local.setUint16(10, dosTime, true);
+    local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, size, true);
+    local.setUint32(22, size, true);
+    local.setUint16(26, name.length, true);
+    local.setUint16(28, 0, true);   // 无 extra
+    localParts.push(new Uint8Array(local.buffer), name, data);
+
+    // ---- 中央目录头 (0x02014b50) ----
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true);
+    cd.setUint16(4, 20, true);
+    cd.setUint16(6, 20, true);
+    cd.setUint16(8, 0, true);
+    cd.setUint16(10, 0, true);
+    cd.setUint16(12, dosTime, true);
+    cd.setUint16(14, dosDate, true);
+    cd.setUint32(16, crc, true);
+    cd.setUint32(20, size, true);
+    cd.setUint32(24, size, true);
+    cd.setUint16(28, name.length, true);
+    cd.setUint16(30, 0, true); // extra
+    cd.setUint16(32, 0, true); // comment
+    cd.setUint16(34, 0, true); // disk
+    cd.setUint16(36, 0, true); // 内部属性
+    cd.setUint32(38, 0, true); // 外部属性
+    cd.setUint32(42, offset, true);
+    central.push(new Uint8Array(cd.buffer), name);
+
+    offset += 30 + name.length + size;
+  }
+
+  const centralStart = offset;
+  let centralSize = 0;
+  for (const p of central) centralSize += p.length;
+
+  // ---- 中央目录结束记录 (0x06054b50) ----
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 0x06054b50, true);
+  eocd.setUint16(4, 0, true);
+  eocd.setUint16(6, 0, true);
+  eocd.setUint16(8, entries.length, true);
+  eocd.setUint16(10, entries.length, true);
+  eocd.setUint32(12, centralSize, true);
+  eocd.setUint32(16, centralStart, true);
+  eocd.setUint16(20, 0, true);
+
+  const all = [...localParts, ...central, new Uint8Array(eocd.buffer)];
+  let total = 0;
+  for (const p of all) total += p.length;
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of all) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+
+const api = { buildZip, crc32 };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+if (typeof globalThis !== 'undefined') globalThis.FlowZip = api;
+
+})();
+</script>
+<script>
+// 内置演示数据（samples/flow-inbetween-cases，base64 内嵌）
+globalThis.FlowDemoData = {
+  aPPM: "UDYKNjQgMzYKMjU1ChQoWBUoXBYoYBcoZBgoaBkobBoocBsodBwoWB0oXB4oYB8oZCAoaCEobCIocCModCQoWCUoXCYoYCcoZCgoaCkobCoocCsodCwoWC0oXC4oYC8oZDAoaDEobDIocDModDQoWDUoXDYoYDcoZDgoaDkobDoocDsodDwoWD0oXD4oYD8oZEAoaEEobEIocEModEQoWEUoXEYoYEcoZEgoaEkobEoocEsodEwoWE0oXE4oYE8oZFAoaFEobFIocFModBQpWBUpXBYpYBcpZBgpaBkpbBopcBspdBwpWB0pXB4pYB8pZCApaCEpbCIpcCMpdCQpWCUpXCYpYCcpZCgpaCkpbCopcCspdCwpWC0pXC4pYC8pZDApaDEpbDIpcDMpdDQpWDUpXDYpYDcpZDgpaDkpbDopcDspdDwpWD0pXD4pYD8pZEApaEEpbEIpcEMpdEQpWEUpXEYpYEcpZEgpaEkpbEopcEspdEwpWE0pXE4pYE8pZFApaFEpbFIpcFMpdBQqWBUqXBYqYBcqZBgqaBkqbBoqcBsqdBwqWB0qXB4qYB8qZCAqaCEqbCIqcCMqdCQqWCUqXCYqYCcqZCgqaCkqbCoqcCsqdCwqWC0qXC4qYC8qZDAqaDEqbDIqcDMqdDQqWDUqXDYqYDcqZDgqaDkqbDoqcDsqdDwqWD0qXD4qYD8qZEAqaEEqbEIqcEMqdEQqWEUqXEYqYEcqZEgqaEkqbEoqcEsqdEwqWE0qXE4qYE8qZFAqaFEqbFIqcFMqdBQrWBUrXBYrYBcrZBgraBkrbBorcBsrdBwrWB0rXB4rYB8rZCAraCErbCIrcCMrdCQrWCUrXCYrYCcrZCgraCkrbCorcCsrdCwrWC0rXC4rYC8rZDAraDErbDIrcDMrdDQrWDUrXDYrYDcrZDgraDkrbDorcDsrdDwrWD0rXD4rYD8rZEAraEErbEIrcEMrdEQrWEUrXEYrYEcrZEgraEkrbEorcEsrdEwrWE0rXE4rYE8rZFAraFErbFIrcFMrdBQsWBUsXBYsYBcsZBgsaBksbBoscBssdBwsWB0sXB4sYB8sZCAsaCEsbCIscCMsdCQsWCUsXCYsYCcsZCgsaCksbCoscCssdCwsWC0sXC4sYC8sZDAsaDEsbDIscDMsdDQsWDUsXDYsYDcsZDgsaDksbDoscDssdDwsWD0sXD4sYD8sZEAsaEEsbEIscEMsdEQsWEUsXEYsYEcsZEgsaEksbEoscEssdEwsWE0sXE4sYE8sZFAsaFEsbFIscFMsdBQtWBUtXBYtYBctZBgtaBktbBotcBstdBwtWB0tXB4tYB8tZCAtaCEtbCItcCMtdCQtWCUtXCYtYCctZCgtaCktbCotcCstdCwtWC0tXC4tYC8tZDAtaDEtbDItcDMtdDQtWDUtXDYtYDctZDgtaDktbDotcDstdDwtWD0tXD4tYD8tZEAtaEEtbEItcEMtdEQtWEUtXEYtYEctZEgtaEktbEotcEstdEwtWE0tXE4tYE8tZFAtaFEtbFItcFMtdBQuWBUuXBYuYBcuZBguaBkubBoucBsudBwuWB0uXB4uYB8uZCAuaCEubCIucCMudCQuWCUuXCYuYCcuZCguaCkubCoucCsudCwuWC0uXC4uYC8uZDAuaDEubDIucDMudDQuWDUuXDYuYDcuZDguaDkubDoucDsudDwuWD0uXD4uYD8uZEAuaEEubEIucEMudEQuWEUuXEYuYEcuZEguaEkubEoucEsudEwuWE0uXE4uYE8uZFAuaFEubFIucFMudBQvWBUvXBYvYBcvZBgvaBkvbBovcBsvdBwvWB0vXB4vYB8vZCAvaCEvbCIvcCMvdCQvWCUvXCYvYCcvZCgvaCkvbCovcCsvdCwvWC0vXC4vYC8vZDAvaDEvbDIvcDMvdDQvWDUvXDYvYDcvZDgvaDkvbDovcDsvdDwvWD0vXD4vYD8vZEAvaEEvbEIvcEMvdEQvWEUvXEYvYEcvZEgvaEkvbEovcEsvdEwvWE0vXE4vYE8vZFAvaFEvbFIvcFMvdBQwWBUwXBYwYBcwZBgwaBkwbBowcBswdBwwWB0wXB4wYB8wZCAwaCEwbCIwcCMwdCQwWCUwXCYwYCcwZCgwaCkwbCowcCswdCwwWC0wXC4wYC8wZDAwaDEwbDIwcDMwdDQwWDUwXDYwYDcwZDgwaDkwbDowcDswdDwwWD0wXD4wYD8wZEAwaEEwbEIwcEMwdEQwWEUwXEYwYEcwZEgwaEkwbEowcEswdEwwWE0wXE4wYE8wZFAwaFEwbFIwcFMwdBQxWBUxXBYxYBcxZBgxaBkxbBoxcBsxdBwxWB0xXB4xYB8xZNotOdoxOdo1Odo5Odo9OdpBOdpFOdpJ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ZBhEaBlEbBpEcBtEdBxEWB1EXB5EYB9EZCBEaCFEbCJEcCNEdCREWCVEXCZEYCdEZChEaClEbCpEcCtEdCxEWC1EXC5EYC9EZDBEaDFEbDJEcDNEdDREWDVEXDZEYDdEZDhEaDlEbDpEcDtEdDxEWD1EXD5EYD9EZEBEaEFEbEJEcENEdEREWEVEXEZEYEdEZEhEaElEbEpEcEtEdExEWE1EXE5EYE9EZFBEaFFEbFJEcFNEdBRFWBVFXBZFYBdFZBhFaBlFbBpFcBtFdBxFWB1FXB5FYB9FZCBFaCFFbCJFcCNFdCRFWCVFXCZFYCdFZChFaClFbCpFcCtFdCxFWC1FXC5FYC9FZDBFaDFFbDJFcDNFdDRFWDVFXDZFYDdFZDhFaDlFbDpFcDtFdDxFWD1FXD5FYD9FZEBFaEFFbEJFcENFdERFWEVFXEZFYEdFZEhFaElFbEpFcEtFdExFWE1FXE5FYE9FZFBFaFFFbFJFcFNFdBRGWBVGXBZGYBdGZBhGaBlGbBpGcBtGdBxGWB1GXB5GYB9GZCBGaCFGbCJGcCNGdCRGWCVGXCZGYCdGZChGaClGbCpGcCtGdCxGWC1GXC5GYC9GZDBGaDFGbDJGcDNGdDRGWDVGXDZGYDdGZDhGaDlGbDpGcDtGdDxGWD1GXD5GYD9GZEBGaEFGbEJGcENGdERGWEVGXEZGYEdGZEhGaElGbEpGcEtGdExGWE1GXE5GYE9GZFBGaFFGbFJGcFNGdBRHWBVHXBZHYBdHZBhHaBlHbBpHcBtHdBxHWB1HXB5HYB9HZCBHaCFHbCJHcCNHdCRHWCVHXCZHYCdHZChHaClHbCpHcCtHdCxHWC1HXC5HYC9HZDBHaDFHbDJHcDNHdDRHWDVHXDZHYDdHZDhHaDlHbDpHcDtHdDxHWD1HXD5HYD9HZEBHaEFHbEJHcENHdERHWEVHXEZHYEdHZEhHaElHbEpHcEtHdExHWE1HXE5HYE9HZFBHaFFHbFJHcFNHdBRIWBVIXBZIYBdIZBhIaBlIbBpIcBtIdBxIWB1IXB5IYB9IZCBIaCFIbCJIcCNIdCRIWCVIXCZIYCdIZChIaClIbCpIcCtIdCxIWC1IXC5IYC9IZDBIaDFIbDJIcDNIdDRIWDVIXDZIYDdIZDhIaDlIbDpIcDtIdDxIWD1IXD5IYD9IZEBIaEFIbEJIcENIdERIWEVIXEZIYEdIZEhIaElIbEpIcEtIdExIWE1IXE5IYE9IZFBIaFFIbFJIcFNIdBRJWBVJXBZJYBdJZBhJaBlJbBpJcBtJdBxJWB1JXB5JYB9JZCBJaCFJbCJJcCNJdCRJWCVJXCZJYCdJZChJaClJbCpJcCtJdCxJWC1JXC5JYC9JZDBJaDFJbDJJcDNJdDRJWDVJXDZJYDdJZDhJaDlJbDpJcDtJdDxJWD1JXD5JYD9JZEBJaEFJbEJJcENJdERJWEVJXEZJYEdJZEhJaElJbEpJcEtJdExJWE1JXE5JYE9JZFBJaFFJbFJJcFNJdBRKWBVKXBZKYBdKZBhKaBlKbBpKcBtKdBxKWB1KXB5KYB9KZCBKaCFKbCJKcCNKdCRKWCVKXCZKYCdKZChKaClKbCpKcCtKdCxKWC1KXC5KYC9KZDBKaDFKbDJKcDNKdDRKWDVKXDZKYDdKZDhKaDlKbDpKcDtKdDxKWD1KXD5KYD9KZEBKaEFKbEJKcENKdERKWEVKXEZKYEdKZEhKaElKbEpKcEtKdExKWE1KXE5KYE9KZFBKaFFKbFJKcFNKdBRLWBVLXBZLYBdLZBhLaBlLbBpLcBtLdBxLWB1LXB5LYB9LZCBLaCFLbCJLcCNLdCRLWCVLXCZLYCdLZChLaClLbCpLcCtLdCxLWC1LXC5LYC9LZDBLaDFLbDJLcDNLdDRLWDVLXDZLYDdLZDhLaDlLbDpLcDtLdDxLWD1LXD5LYD9LZEBLaEFLbEJLcENLdERLWEVLXEZLYEdLZEhLaElLbEpLcEtLdExLWE1LXE5LYE9LZFBLaFFLbFJLcFNLdA==",
+  bPPM: "UDYKNjQgMzYKMjU1ChQoWBUoXBYoYBcoZBgoaBkobBoocBsodBwoWB0oXB4oYB8oZCAoaCEobCIocCModCQoWCUoXCYoYCcoZCgoaCkobCoocCsodCwoWC0oXC4oYC8oZDAoaDEobDIocDModDQoWDUoXDYoYDcoZDgoaDkobDoocDsodDwoWD0oXD4oYD8oZEAoaEEobEIocEModEQoWEUoXEYoYEcoZEgoaEkobEoocEsodEwoWE0oXE4oYE8oZFAoaFEobFIocFModBQpWBUpXBYpYBcpZBgpaBkpbBopcBspdBwpWB0pXB4pYB8pZCApaCEpbCIpcCMpdCQpWCUpXCYpYCcpZCgpaCkpbCopcCspdCwpWC0pXC4pYC8pZDApaDEpbDIpcDMpdDQpWDUpXDYpYDcpZDgpaDkpbDopcDspdDwpWD0pXD4pYD8pZEApaEEpbEIpcEMpdEQpWEUpXEYpYEcpZEgpaEkpbEopcEspdEwpWE0pXE4pYE8pZFApaFEpbFIpcFMpdBQqWBUqXBYqYBcqZBgqaBkqbBoqcBsqdBwqWB0qXB4qYB8qZCAqaCEqbCIqcCMqdCQqWCUqXCYqYCcqZCgqaCkqbCoqcCsqdCwqWC0qXC4qYC8qZDAqaDEqbDIqcDMqdDQqWDUqXDYqYDcqZDgqaDkqbDoqcDsqdDwqWD0qXD4qYD8qZEAqaEEqbEIqcEMqdEQqWEUqXEYqYEcqZEgqaEkqbEoqcEsqdEwqWE0qXE4qYE8qZFAqaFEqbFIqcFMqdBQrWBUrXBYrYBcrZBgraBkrbBorcBsrdBwrWB0rXB4rYB8rZCAraCErbCIrcCMrdCQrWCUrXCYrYCcrZCgraCkrbCorcCsrdCwrWC0rXC4rYC8rZDAraDErbDIrcDMrdDQrWDUrXDYrYDcrZDgraDkrbDorcDsrdDwrWD0rXD4rYD8rZEAraEErbEIrcEMrdEQrWEUrXEYrYEcrZEgraEkrbEorcEsrdEwrWE0rXE4rYE8rZFAraFErbFIrcFMrdBQsWBUsXBYsYBcsZBgsaBksbBoscBssdBwsWB0sXB4sYB8sZCAsaCEsbCIscCMsdCQsWCUsXCYsYCcsZCgsaCksbCoscCssdCwsWC0sXC4sYC8sZDAsaDEsbDIscDMsdDQsWDUsXDYsYDcsZDgsaDksbDoscDssdDwsWD0sXD4sYD8sZEAsaEEsbEIscEMsdEQsWEUsXEYsYEcsZEgsaEksbEoscEssdEwsWE0sXE4sYE8sZFAsaFEsbFIscFMsdBQtWBUtXBYtYBctZBgtaBktbBotcBstdBwtWB0tXB4tYB8tZCAtaCEtbCItcCMtdCQtWCUtXCYtYCctZCgtaCktbCotcCstdCwtWC0tXC4tYC8tZDAtaDEtbDItcDMtdDQtWDUtXDYtYDctZDgtaDktbDotcDstdDwtWD0tXD4tYD8tZEAtaEEtbEItcEMtdEQtWEUtXEYtYEctZEgtaEktbEotcEstdEwtWE0tXE4tYE8tZFAtaFEtbFItcFMtdBQuWBUuXBYuYBcuZBguaBkubBoucBsudBwuWB0uXB4uYB8uZCAuaCEubCIucCMudCQuWCUuXCYuYCcuZCguaCkubCoucCsudCwuWC0uXC4uYC8uZDAuaDEubDIucDMudDQuWDUuXDYuYDcuZDguaDkubDoucDsudDwuWD0uXD4uYD8uZEAuaEEubEIucEMudEQuWEUuXEYuYEcuZEguaEkubEoucEsudEwuWE0uXE4uYE8uZFAuaFEubFIucFMudBQvWBUvXBYvYBcvZBgvaBkvbBovcBsvdBwvWB0vXB4vYB8vZCAvaCEvbCIvcCMvdCQvWCUvXCYvYCcvZCgvaCkvbCovcCsvdCwvWC0vXC4vYC8vZDAvaDEvbDIvcDMvdDQvWDUvXDYvYDcvZDgvaDkvbDovcDsvdDwvWD0vXD4vYD8vZEAvaEEvbEIvcEMvdEQvWEUvXEYvYEcvZEgvaEkvbEovcEsvdEwvWE0vXE4vYE8vZFAvaFEvbFIvcFMvdBQwWBUwXBYwYBcwZBgwaBkwbBowcBswdBwwWB0wXB4wYB8wZCAwaCEwbCIwcCMwdCQwWCUwXCYwYCcwZCgwaCkwbCowcCswdCwwWC0wXC4wYC8wZDAwaDEwbDIwcDMwdDQwWDUwXDYwYDcwZDgwaDkwbDowcDswdDwwWD0wXD4wYD8wZEAwaEEwbEIwcEMwdEQwWEUwXEYwYEcwZEgwaEkwbEowcEswdEwwWE0wXE4wYE8wZFAwaFEwbFIwcFMwdBQxWBUxXBYxYBcxZBgxaBkxbBoxcBsxdBwxWB0xXB4xYB8xZCAxaCExbCIxcCMxdCQxWCUxXCYxYCcx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ZBhEaBlEbBpEcBtEdBxEWB1EXB5EYB9EZCBEaCFEbCJEcCNEdCREWCVEXCZEYCdEZChEaClEbCpEcCtEdCxEWC1EXC5EYC9EZDBEaDFEbDJEcDNEdDREWDVEXDZEYDdEZDhEaDlEbDpEcDtEdDxEWD1EXD5EYD9EZEBEaEFEbEJEcENEdEREWEVEXEZEYEdEZEhEaElEbEpEcEtEdExEWE1EXE5EYE9EZFBEaFFEbFJEcFNEdBRFWBVFXBZFYBdFZBhFaBlFbBpFcBtFdBxFWB1FXB5FYB9FZCBFaCFFbCJFcCNFdCRFWCVFXCZFYCdFZChFaClFbCpFcCtFdCxFWC1FXC5FYC9FZDBFaDFFbDJFcDNFdDRFWDVFXDZFYDdFZDhFaDlFbDpFcDtFdDxFWD1FXD5FYD9FZEBFaEFFbEJFcENFdERFWEVFXEZFYEdFZEhFaElFbEpFcEtFdExFWE1FXE5FYE9FZFBFaFFFbFJFcFNFdBRGWBVGXBZGYBdGZBhGaBlGbBpGcBtGdBxGWB1GXB5GYB9GZCBGaCFGbCJGcCNGdCRGWCVGXCZGYCdGZChGaClGbCpGcCtGdCxGWC1GXC5GYC9GZDBGaDFGbDJGcDNGdDRGWDVGXDZGYDdGZDhGaDlGbDpGcDtGdDxGWD1GXD5GYD9GZEBGaEFGbEJGcENGdERGWEVGXEZGYEdGZEhGaElGbEpGcEtGdExGWE1GXE5GYE9GZFBGaFFGbFJGcFNGdBRHWBVHXBZHYBdHZBhHaBlHbBpHcBtHdBxHWB1HXB5HYB9HZCBHaCFHbCJHcCNHdCRHWCVHXCZHYCdHZChHaClHbCpHcCtHdCxHWC1HXC5HYC9HZDBHaDFHbDJHcDNHdDRHWDVHXDZHYDdHZDhHaDlHbDpHcDtHdDxHWD1HXD5HYD9HZEBHaEFHbEJHcENHdERHWEVHXEZHYEdHZEhHaElHbEpHcEtHdExHWE1HXE5HYE9HZFBHaFFHbFJHcFNHdBRIWBVIXBZIYBdIZBhIaBlIbBpIcBtIdBxIWB1IXB5IYB9IZCBIaCFIbCJIcCNIdCRIWCVIXCZIYCdIZChIaClIbCpIcCtIdCxIWC1IXC5IYC9IZDBIaDFIbDJIcDNIdDRIWDVIXDZIYDdIZDhIaDlIbDpIcDtIdDxIWD1IXD5IYD9IZEBIaEFIbEJIcENIdERIWEVIXEZIYEdIZEhIaElIbEpIcEtIdExIWE1IXE5IYE9IZFBIaFFIbFJIcFNIdBRJWBVJXBZJYBdJZBhJaBlJbBpJcBtJdBxJWB1JXB5JYB9JZCBJaCFJbCJJcCNJdCRJWCVJXCZJYCdJZChJaClJbCpJcCtJdCxJWC1JXC5JYC9JZDBJaDFJbDJJcDNJdDRJWDVJXDZJYDdJZDhJaDlJbDpJcDtJdDxJWD1JXD5JYD9JZEBJaEFJbEJJcENJdERJWEVJXEZJYEdJZEhJaElJbEpJcEtJdExJWE1JXE5JYE9JZFBJaFFJbFJJcFNJdBRKWBVKXBZKYBdKZBhKaBlKbBpKcBtKdBxKWB1KXB5KYB9KZCBKaCFKbCJKcCNKdCRKWCVKXCZKYCdKZChKaClKbCpKcCtKdCxKWC1KXC5KYC9KZDBKaDFKbDJKcDNKdDRKWDVKXDZKYDdKZDhKaDlKbDpKcDtKdDxKWD1KXD5KYD9KZEBKaEFKbEJKcENKdERKWEVKXEZKYEdKZEhKaElKbEpKcEtKdExKWE1KXE5KYE9KZFBKaFFKbFJKcFNKdBRLWBVLXBZLYBdLZBhLaBlLbBpLcBtLdBxLWB1LXB5LYB9LZCBLaCFLbCJLcCNLdCRLWCVLXCZLYCdLZChLaClLbCpLcCtLdCxLWC1LXC5LYC9LZDBLaDFLbDJLcDNLdDRLWDVLXDZLYDdLZDhLaDlLbDpLcDtLdDxLWD1LXD5LYD9LZEBLaEFLbEJLcENLdERLWEVLXEZLYEdLZEhLaElLbEpLcEtLdExLWE1LXE5LYE9LZFBLaFFLbFJLcFNLdA==",
+  aBIN: "AAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAQAAAACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwA",
+  bBIN: "AAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAwP8AACMAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwAAAAAAIwA",
+};
+</script>
+<script>
+(function () {
+/*
+ * 界面层：只负责 DOM 交互与预览，所有像素逻辑都走 engine.js。
+ * 依赖全局 FlowEngine、FlowZip（由 build 脚本内联，Node 测试不加载本文件）。
+ */
+'use strict';
+
+const CLASS_COLORS = [
+  [120, 120, 120], // 0 端点原图（灰，仅图例用，端点不叠加）
+  [46, 160, 67],   // 1 通过供色：绿
+  [230, 159, 0],   // 2 仅未通过：橙
+  [0, 114, 178],   // 3 补洞：蓝
+  [204, 50, 50],   // 4 全空黑：红
+];
+
+const state = {
+  ds: null,
+  passes: null,
+  result: null,          // 当前预览结果
+  step: 32,
+  tolerance: 10,
+  overlay: false,
+  selected: new Set(),
+  lastGoodResult: null,  // 出错时保留的上一次画面
+  renderMs: 0,
+  inspectCoord: null,    // 当前点选坐标，重渲染后自动刷新检查器
+};
+
+const el = (id) => document.getElementById(id);
+
+function setStatus(kind, message) {
+  const bar = el('statusBar');
+  bar.className = `status ${kind}`;
+  bar.textContent = message;
+  bar.style.display = message ? 'flex' : 'none';
+}
+
+/* ---------------- 数据载入 ---------------- */
+
+async function readFileEntry(fileEntry) {
+  // input 拿到的是普通 File，直接读 arrayBuffer；不做 .file 真值判断
+  // （File 原型上存在 file() 之类的成员，真值判断会误入 DataView 分支）
+  const buf = await fileEntry.arrayBuffer();
+  return { name: fileEntry.name, bytes: new Uint8Array(buf) };
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  // 按“文件基名”精确识别，避免目录名或后缀造成误判
+  const slotOf = (name) => {
+    const base = name.split(/[\\/]/).pop().toLowerCase();
+    if (base === 'a.ppm') return 'aPPM';
+    if (base === 'b.ppm') return 'bPPM';
+    if (base === 'a.bin') return 'aBIN';
+    if (base === 'b.bin') return 'bBIN';
+    return null;
+  };
+  const picked = {};
+  const unknown = [];
+  for (const f of files) {
+    const slot = slotOf(f.name);
+    if (slot) picked[slot] = f;
+    else unknown.push(f.name);
+  }
+  const missing = ['aPPM', 'bPPM', 'aBIN', 'bBIN'].filter((k) => !picked[k]);
+  if (missing.length || unknown.length) {
+    const parts = [];
+    if (missing.length) parts.push(`缺少 ${missing.join('、')}`);
+    if (unknown.length) parts.push(`无法识别 ${unknown.join('、')}`);
+    setStatus('error', `${parts.join('；')}（需要恰好 a.ppm、b.ppm、a.bin、b.bin）。已保留上一次画面。`);
+    return;
+  }
+  try {
+    const payload = {
+      aPPM: await readFileEntry(picked.aPPM),
+      bPPM: await readFileEntry(picked.bPPM),
+      aBIN: await readFileEntry(picked.aBIN),
+      bBIN: await readFileEntry(picked.bBIN),
+    };
+    const ds = FlowEngine.loadDataset(payload);
+    // 全部校验通过后才替换现场，保证失败时上一次画面完整保留
+    state.ds = ds;
+    state.passes = {
+      passA: FlowEngine.computeRoundTrip(ds.flowA, ds.flowB, ds.width, ds.height),
+      passB: FlowEngine.computeRoundTrip(ds.flowB, ds.flowA, ds.width, ds.height),
+    };
+    state.selected = new Set([state.step]);
+    el('datasetInfo').textContent =
+      `已载入 ${ds.names.aPPM} / ${ds.names.bPPM}，尺寸 ${ds.width}×${ds.height}`;
+    setStatus('ok', `载入成功：${ds.width}×${ds.height}，往返检查已建立。`);
+    buildStepGrid();
+    renderCurrent();
+  } catch (err) {
+    setStatus('error', `${err.message}。已保留上一次画面。`);
+  }
+}
+
+/* ---------------- 渲染与预览 ---------------- */
+
+function computeResult() {
+  const { ds, step, tolerance, passes } = state;
+  if (!ds) return null;
+  if (step === 0) return FlowEngine.endpointFrame(ds, 0);
+  if (step === 64) return FlowEngine.endpointFrame(ds, 1);
+  return FlowEngine.renderFrame(ds, step, tolerance, passes);
+}
+
+function renderCurrent() {
+  if (!state.ds) return;
+  const t0 = performance.now();
+  const result = computeResult();
+  state.renderMs = performance.now() - t0;
+  state.result = result;
+  state.lastGoodResult = result;
+  drawPreview();
+  updateStats();
+  // 若已有点选，按当前结果刷新检查器（坐标在同尺寸下始终有效）
+  if (state.inspectCoord) {
+    const info = FlowEngine.inspectPixel(result, state.ds, state.inspectCoord.x, state.inspectCoord.y);
+    if (info) renderInspector(info);
+  }
+}
+
+function drawPreview() {
+  const r = state.result;
+  if (!r) return;
+  const W = r.width;
+  const H = r.height;
+  const canvas = el('view');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  for (let d = 0; d < W * H; d += 1) {
+    const o = d * 4;
+    const s = d * 3;
+    img.data[o] = r.rgb[s];
+    img.data[o + 1] = r.rgb[s + 1];
+    img.data[o + 2] = r.rgb[s + 2];
+    img.data[o + 3] = 255;
+  }
+  if (state.overlay && !r.endpoint) {
+    for (let d = 0; d < W * H; d += 1) {
+      const c = r.cls[d];
+      if (c === 0) continue;
+      const [cr, cg, cb] = CLASS_COLORS[c];
+      const o = d * 4;
+      // 60% 原图 + 40% 分类色，既保留画面又看清区域
+      img.data[o] = Math.round(img.data[o] * 0.6 + cr * 0.4);
+      img.data[o + 1] = Math.round(img.data[o + 1] * 0.6 + cg * 0.4);
+      img.data[o + 2] = Math.round(img.data[o + 2] * 0.6 + cb * 0.4);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function updateStats() {
+  const r = state.result;
+  if (!r) return;
+  const counts = [0, 0, 0, 0, 0];
+  for (const c of r.cls) counts[c] += 1;
+  const N = r.width * r.height;
+  const rows = counts.map((cnt, i) => {
+    const pct = (cnt / N * 100).toFixed(1);
+    return `<span class="chip c${i}"><i style="background:rgb(${CLASS_COLORS[i].join(',')})"></i>` +
+      `${FlowEngine.CLASS_NAMES[i]} ${cnt}（${pct}%）</span>`;
+  }).join('');
+  el('classStats').innerHTML = rows;
+  const tolText = r.endpoint ? '端点（不投影/不补洞）' : `容差 ±${r.tolerance}`;
+  el('renderInfo').textContent =
+    `档位 n=${r.n}（t=${(r.t).toFixed(4)}） · ${tolText} · 渲染 ${state.renderMs.toFixed(1)} ms`;
+}
+
+/* ---------------- 点选 ---------------- */
+
+function inspectAt(clientX, clientY) {
+  const r = state.result;
+  if (!r) return;
+  const canvas = el('view');
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.floor((clientX - rect.left) / rect.width * r.width);
+  const y = Math.floor((clientY - rect.top) / rect.height * r.height);
+  if (x < 0 || y < 0 || x >= r.width || y >= r.height) return;
+  state.inspectCoord = { x, y };
+  const info = FlowEngine.inspectPixel(r, state.ds, x, y);
+  renderInspector(info);
+}
+
+function renderInspector(info) {
+  if (!info) return;
+  const swatch = `rgb(${info.rgb.join(',')})`;
+  let html = `
+    <div class="insp-head">
+      <span>像素 (x=${info.x}, y=${info.y})</span>
+      <span class="chip c${info.cls}"><i style="background:rgb(${CLASS_COLORS[info.cls].join(',')})"></i>${FlowEngine.CLASS_NAMES[info.cls]}</span>
+    </div>
+    <div class="insp-rgb"><span>结果 RGB</span><b style="background:${swatch}"></b>${info.rgb.join(', ')}</div>`;
+
+  if (info.endpoint) {
+    html += `<p class="muted">${info.sideName} 原图，端点不做投影与补洞。</p>`;
+  } else if (info.cls === 4) {
+    html += `<p class="muted">${info.note}</p>`;
+  } else if (info.cls === 3) {
+    const f = info.fillFrom;
+    html += `<p class="muted">${info.note}</p>
+      <p>复制来源：<b>(${f.x}, ${f.y})</b>（线性索引 ${f.index}）</p>`;
+  } else {
+    html += `<p>最小非零深度 <b>zmin=${info.zmin}</b>，深度层 [${info.zmin}, ${info.layerHigh}]；` +
+      `${info.hasPassInLayer ? '层内有往返通过点，<b>仅用通过点</b>混色' : '层内无通过点，使用该层全部未通过贡献'}</p>`;
+    const rows = info.contributors.map((c) => {
+      const tag = c.side === 0 ? 'a' : 'b';
+      const status = !c.inLayer ? '深度层外·剔除'
+        : !c.used ? '优先级剔除'
+          : c.pass ? '通过·供色' : '未通过·供色';
+      return `<tr class="${c.used ? 'used' : 'dropped'}">
+        <td>${tag}</td><td>(${c.srcX}, ${c.srcY})</td>
+        <td>z=${c.z}</td><td>${c.weight.toFixed(5)}</td>
+        <td>${c.pass ? '✓' : '✗'}</td><td>${status}</td></tr>`;
+    }).join('');
+    html += `<table class="contrib"><thead><tr>
+      <th>帧</th><th>源坐标</th><th>深度</th><th>权重</th><th>往返</th><th>状态</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  el('inspector').innerHTML = html;
+}
+
+/* ---------------- 档位选择网格 ---------------- */
+
+function buildStepGrid() {
+  const grid = el('stepGrid');
+  grid.innerHTML = '';
+  for (let n = 0; n <= 64; n += 1) {
+    const lab = document.createElement('label');
+    lab.className = 'step-cb';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = String(n);
+    cb.checked = state.selected.has(n);
+    cb.addEventListener('change', () => {
+      if (cb.checked) state.selected.add(n);
+      else state.selected.delete(n);
+    });
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(String(n)));
+    grid.appendChild(lab);
+  }
+}
+
+function syncGridChecks() {
+  el('stepGrid').querySelectorAll('input').forEach((cb) => {
+    cb.checked = state.selected.has(Number(cb.value));
+  });
+}
+
+/* ---------------- 导出 ---------------- */
+
+function selectedSteps() {
+  return [...state.selected].filter((n) => n >= 0 && n <= 64).sort((a, b) => a - b);
+}
+
+async function exportZip() {
+  if (!state.ds) {
+    setStatus('error', '请先载入数据。');
+    return;
+  }
+  const steps = selectedSteps();
+  if (steps.length === 0) {
+    setStatus('error', '请至少选择一个档位再导出。');
+    return;
+  }
+  const btn = el('exportBtn');
+  btn.disabled = true;
+  try {
+    const entries = [];
+    for (let i = 0; i < steps.length; i += 1) {
+      const n = steps[i];
+      const r = n === 0 ? FlowEngine.endpointFrame(state.ds, 0)
+        : n === 64 ? FlowEngine.endpointFrame(state.ds, 1)
+          : FlowEngine.renderFrame(state.ds, n, state.tolerance, state.passes);
+      const tag = String(n).padStart(2, '0');
+      entries.push({ name: `frame_${tag}.ppm`, data: FlowEngine.encodePPM(r.rgb, r.width, r.height) });
+      entries.push({ name: `class_${tag}.p5`, data: FlowEngine.encodeP5(r.cls, r.width, r.height) });
+      setStatus('ok', `打包进度 ${i + 1}/${steps.length}（档位 ${tag}）…`);
+      // 让出主线程，保持进度条可读
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const zipBytes = FlowZip.buildZip(entries);
+    const blob = new Blob([zipBytes], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inbetween_tol${state.tolerance}_${steps.length}steps.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    setStatus('ok', `已导出 ${steps.length} 个档位（${entries.length} 个文件）：PPM + 分类 P5。`);
+  } catch (err) {
+    setStatus('error', `导出失败：${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function exportCurrentPPM() {
+  const r = state.result;
+  if (!r) {
+    setStatus('error', '请先载入数据。');
+    return;
+  }
+  const data = FlowEngine.encodePPM(r.rgb, r.width, r.height);
+  const blob = new Blob([data], { type: 'image/x-portable-pixmap' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `frame_${String(r.n).padStart(2, '0')}.ppm`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/* ---------------- 演示数据 ---------------- */
+
+async function loadDemo() {
+  try {
+    const dt = FlowDemoData;
+    const payload = {
+      aPPM: { name: 'a.ppm', bytes: decode64(dt.aPPM) },
+      bPPM: { name: 'b.ppm', bytes: decode64(dt.bPPM) },
+      aBIN: { name: 'a.bin', bytes: decode64(dt.aBIN) },
+      bBIN: { name: 'b.bin', bytes: decode64(dt.bBIN) },
+    };
+    const ds = FlowEngine.loadDataset(payload);
+    state.ds = ds;
+    state.passes = {
+      passA: FlowEngine.computeRoundTrip(ds.flowA, ds.flowB, ds.width, ds.height),
+      passB: FlowEngine.computeRoundTrip(ds.flowB, ds.flowA, ds.width, ds.height),
+    };
+    state.selected = new Set([state.step]);
+    el('datasetInfo').textContent =
+      `演示数据（samples/flow-inbetween-cases）· ${ds.width}×${ds.height}`;
+    setStatus('ok', '演示数据载入成功，可直接拖动时间轴。');
+    buildStepGrid();
+    renderCurrent();
+  } catch (err) {
+    setStatus('error', `演示数据载入失败：${err.message}`);
+  }
+}
+
+function decode64(b64) {
+  const bin = atob(b64);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+/* ---------------- 事件绑定 ---------------- */
+
+function bindUI() {
+  el('fileInput').addEventListener('change', (e) => handleFiles(e.target.files));
+  el('demoBtn').addEventListener('click', loadDemo);
+
+  const stepSlider = el('stepSlider');
+  stepSlider.addEventListener('input', () => {
+    state.step = Number(stepSlider.value);
+    el('stepValue').textContent = state.step;
+    state.selected.add(state.step);
+    syncGridChecks();
+    renderCurrent();
+  });
+
+  const tolSlider = el('tolSlider');
+  tolSlider.addEventListener('input', () => {
+    state.tolerance = Number(tolSlider.value);
+    el('tolValue').textContent = state.tolerance;
+    el('tolNum').value = state.tolerance;
+    renderCurrent();
+  });
+  el('tolNum').addEventListener('change', () => {
+    let v = Number(el('tolNum').value);
+    if (Number.isNaN(v)) v = state.tolerance;
+    v = Math.max(0, Math.min(65535, Math.round(v)));
+    state.tolerance = v;
+    el('tolNum').value = v;
+    el('tolSlider').value = v;
+    el('tolValue').textContent = v;
+    renderCurrent();
+  });
+
+  el('overlayChk').addEventListener('change', (e) => {
+    state.overlay = e.target.checked;
+    drawPreview();
+  });
+
+  el('view').addEventListener('click', (e) => inspectAt(e.clientX, e.clientY));
+
+  el('selAll').addEventListener('click', () => {
+    state.selected = new Set(Array.from({ length: 65 }, (_, i) => i));
+    syncGridChecks();
+  });
+  el('selEnds').addEventListener('click', () => {
+    state.selected = new Set([0, 64]);
+    syncGridChecks();
+  });
+  el('selCurrent').addEventListener('click', () => {
+    state.selected = new Set([state.step]);
+    syncGridChecks();
+  });
+  el('selClear').addEventListener('click', () => {
+    state.selected = new Set();
+    syncGridChecks();
+  });
+
+  el('exportBtn').addEventListener('click', exportZip);
+  el('exportCurrentBtn').addEventListener('click', exportCurrentPPM);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindUI();
+  buildStepGrid();
+  setStatus('', '');
+  el('stepValue').textContent = state.step;
+  el('tolValue').textContent = state.tolerance;
+});
+
+})();
+</script>
+</body>
+</html>

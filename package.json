@@ -1,0 +1,19 @@
+{
+  "name": "flow-inbetween-review",
+  "version": "1.0.0",
+  "private": true,
+  "description": "短片补帧校对网页：双向流自实现插帧、往返一致性筛选、深度层混色与空洞溯源",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test:engine": "node tools/test_engine.mjs",
+    "test:synthetic": "node tools/test_synthetic.mjs",
+    "test:build": "node tools/test_build.mjs",
+    "test:e2e": "node tools/test_e2e.mjs",
+    "test:perf": "node tools/test_perf_browser.mjs",
+    "test": "npm run build && npm run test:engine && npm run test:synthetic && npm run test:build && npm run test:e2e && npm run test:perf"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

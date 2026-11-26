@@ -15,3 +15,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# 解压出的不可信样本与测试临时工作区（原始 zip 保留在 samples/）
+samples/extracted/
+samples/.test-work/
+node_modules/

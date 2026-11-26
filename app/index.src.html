@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>补帧校对台 · Flow In-between Review</title>
+<style>
+  :root {
+    --bg: #0f141b;
+    --panel: #171e28;
+    --panel-2: #1e2733;
+    --line: #2a3645;
+    --text: #e6ebf2;
+    --muted: #93a1b3;
+    --accent: #5aa2ff;
+    --ok: #2ea043;
+    --err: #e5534b;
+    --warn: #e69f00;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 16px;
+    padding: 16px 20px 28px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: none;
+    color: var(--muted);
+    margin: 0 0 10px;
+    letter-spacing: .04em;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row + .row { margin-top: 10px; }
+  button, input::file-selector-button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover, input::file-selector-button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 650; }
+  input[type="number"] {
+    width: 86px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 8px;
+  }
+  input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+  .stage {
+    background:
+      linear-gradient(45deg, #10161e 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(-45deg, #10161e 25%, transparent 25%) -8px 0/16px 16px,
+      linear-gradient(45deg, transparent 75%, #10161e 75%) 0 0/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #10161e 75%) 0 0/16px 16px,
+      #0c1118;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 260px;
+    overflow: auto;
+  }
+  canvas#view {
+    /* 后备缓冲仍是原生分辨率；仅放大显示，像素化保持锐利，点击按比例换算 */
+    height: min(420px, 62vh);
+    width: auto;
+    max-width: 100%;
+    image-rendering: pixelated;
+    cursor: crosshair;
+    border-radius: 4px;
+  }
+  .status {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    border: 1px solid var(--line);
+  }
+  .status.error { display: flex; background: rgba(229, 83, 75, .12); border-color: var(--err); color: #ffb4af; }
+  .status.ok { display: flex; background: rgba(46, 160, 67, .1); border-color: var(--ok); color: #9be0a6; }
+  .muted { color: var(--muted); }
+  .meta { font-size: 12.5px; color: var(--muted); }
+  #renderInfo { font-variant-numeric: tabular-nums; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chip i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .step-grid {
+    display: grid;
+    grid-template-columns: repeat(11, 1fr);
+    gap: 4px;
+    max-height: 168px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    background: var(--panel-2);
+  }
+  .step-cb {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .step-cb input { accent-color: var(--accent); margin: 0; }
+  #inspector { font-size: 12.5px; }
+  #inspector .insp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  #inspector .insp-rgb { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #inspector .insp-rgb b { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+  table.contrib { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 6px; }
+  table.contrib th, table.contrib td {
+    border: 1px solid var(--line);
+    padding: 3px 5px;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  table.contrib thead th { color: var(--muted); font-weight: 600; }
+  tr.dropped { color: var(--muted); opacity: .75; }
+  tr.used td { color: var(--text); }
+  .legend-note { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .val { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+  .file-hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  label.inline { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>补帧校对台</h1>
+  <span class="sub">自实现双向流插帧 · 往返一致性筛选 · 深度层混色 · 空洞溯源（不调用任何现成插帧接口）</span>
+</header>
+
+<div class="layout">
+  <!-- 左列：控制与预览 -->
+  <main>
+    <div id="statusBar" class="status"></div>
+
+    <section class="panel">
+      <h2>数据载入</h2>
+      <div class="row">
+        <input id="fileInput" type="file" multiple accept=".ppm,.bin">
+        <button id="demoBtn" type="button">载入内置演示数据</button>
+      </div>
+      <p class="file-hint">一次选择四个文件：a.ppm、b.ppm、a.bin、b.bin（顺序无关，按文件名识别）。解析失败或尺寸错配会指出具体文件，并保留上一次画面。</p>
+      <p id="datasetInfo" class="meta">尚未载入数据。</p>
+    </section>
+
+    <section class="panel">
+      <h2>时间与深度</h2>
+      <div class="row">
+        <span style="min-width:84px">时间档 n</span>
+        <input id="stepSlider" type="range" min="0" max="64" step="1" value="32">
+        <span class="val" id="stepValue">32</span>
+        <span class="meta">/ 64（0 与 64 直接显示原帧）</span>
+      </div>
+      <div class="row">
+        <span style="min-width:84px">深度容差</span>
+        <input id="tolSlider" type="range" min="0" max="65535" step="1" value="10">
+        <span class="val" id="tolValue">10</span>
+        <input id="tolNum" type="number" min="0" max="65535" step="1" value="10">
+        <span class="meta">整数 0–65535，混色深度窗 [zmin, zmin+容差]</span>
+      </div>
+      <div class="row">
+        <label class="inline"><input id="overlayChk" type="checkbox"> 叠加逐像素分类着色</label>
+      </div>
+      <p id="renderInfo" class="meta"></p>
+    </section>
+
+    <div class="stage">
+      <canvas id="view" width="320" height="180" title="点击任意像素查看最小深度与供色来源"></canvas>
+    </div>
+
+    <section class="panel">
+      <h2>当前帧分类统计</h2>
+      <div id="classStats" class="chips"></div>
+      <p class="legend-note">
+        分类：0 端点原图 · 1 至少一项往返通过并参与供色 · 2 仅未通过者供色 · 3 由原非空像素补洞 · 4 全空黑色。
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>导出所选时点</h2>
+      <div class="row">
+        <button id="selAll" type="button">全选 65 档</button>
+        <button id="selEnds" type="button">仅两端 0/64</button>
+        <button id="selCurrent" type="button">仅当前档</button>
+        <button id="selClear" type="button">清空</button>
+      </div>
+      <div id="stepGrid" class="step-grid" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:12px">
+        <button id="exportBtn" class="primary" type="button">导出 ZIP（PPM + 分类 P5）</button>
+        <button id="exportCurrentBtn" type="button">另存当前帧 PPM</button>
+      </div>
+      <p class="file-hint">ZIP 内文件按档位两位编号 frame_nn.ppm / class_nn.p5；导出像素与当前预览完全一致。至少选择一个档位。</p>
+    </section>
+  </main>
+
+  <!-- 右列：点选检查器 -->
+  <aside>
+    <section class="panel">
+      <h2>像素检查器</h2>
+      <div id="inspector">
+        <p class="muted">在左侧画面点击任意像素：查看该点最小非零深度、深度层筛选、每个供色贡献的来源帧 / 源坐标 / 权重 / 往返状态，以及补洞复制来源。</p>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>规则速览</h2>
+      <div class="stack meta">
+        <div>往返：沿整条位移到另一帧，floor(坐标+0.5) 取最近像素；越界、对方 z=0 或两轴有符号位移之和绝对值 &gt; 8（1/8 像素单位）即未通过，未通过只影响选择优先级。</div>
+        <div>投影：a 走 t、b 走 1−t，按双线性系数落到四邻像素，再乘来源时间权重（a:1−t，b:t）。</div>
+        <div>混色：先取目的点全部贡献的最小非零深度 zmin，深度窗内若有往返通过点则只用通过点，否则用窗内全部贡献；颜色按贡献权重归一化加权。</div>
+        <div>补洞：对补洞前的非空像素求曼哈顿最近点，同距取行列号最小；整帧无有效像素时填黑（分类 4）。</div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<!-- ===== 内联脚本（由 tools/build.mjs 生成） ===== -->
+/*__ENGINE__*/
+/*__ZIP__*/
+/*__DEMO__*/
+/*__UI__*/
+</body>
+</html>
