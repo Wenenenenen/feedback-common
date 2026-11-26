@@ -1,0 +1,10 @@
+{
+  "name": "run-mask-topology",
+  "version": "1.0.0",
+  "private": true,
+  "description": "超大二值扫描图横段裁区检查网页：横段拓扑核算（前景4连通/背景8连通），零依赖静态页。",
+  "scripts": {
+    "test": "node test/validate.mjs",
+    "serve": "python3 -m http.server 8123"
+  }
+}

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%2310233f'/%3E%3Cpath fill='%237dd3fc' d='M4 6h7v3H4zm9 0h7v3h-7zM4 10.5h16v3H4zM4 15h5v3H4zm7 0h9v3h-9z'/%3E%3C/svg%3E" />
+  <title>横段掩码裁区拓扑检查台 · Run Mask Topology</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 5h8v3H3zM13 5h8v3h-8zM3 10.5h18v3H3zM3 16h5v3H3zM10 16h11v3H10z"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>横段掩码裁区拓扑检查台</h1>
+        <p>前景四连通 · 背景八连通 · 横段并查集核算，不展开逐像素整图</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-sample" class="btn" type="button">加载示例</button>
+      <button id="btn-import" class="btn" type="button">导入 JSON…</button>
+      <input id="file-input" type="file" accept=".json,application/json" hidden />
+      <button id="btn-benchmark" class="btn btn-warn" type="button">生成满额压测数据</button>
+      <span class="action-sep"></span>
+      <button id="btn-copy-json" class="btn" type="button" disabled>复制导出 JSON</button>
+      <button id="btn-export" class="btn btn-primary" type="button" disabled>查看 / 导出裁区结果</button>
+    </div>
+  </header>
+
+  <section class="cropbar" aria-label="裁区输入">
+    <form id="crop-form" class="crop-form">
+      <span class="cropbar-title">裁区（原图整数坐标，半开区间）</span>
+      <label>列起 x0 <input id="input-crop-x0" data-crop="col-start" type="number" step="1" inputmode="numeric" value="0" /></label>
+      <label>行起 y0 <input id="input-crop-y0" data-crop="row-start" type="number" step="1" inputmode="numeric" value="0" /></label>
+      <label>列止 x1 <input id="input-crop-x1" data-crop="col-end" type="number" step="1" inputmode="numeric" value="0" /></label>
+      <label>行止 y1 <input id="input-crop-y1" data-crop="row-end" type="number" step="1" inputmode="numeric" value="0" /></label>
+      <button id="btn-apply-crop" class="btn btn-primary" type="submit">应用裁区</button>
+      <button id="btn-reset-crop" class="btn" type="button">整图</button>
+      <span class="trim-group">
+        从顶部裁掉
+        <input id="input-trim-top" type="number" min="1" step="1" value="1" /> 行
+        <button id="btn-trim-top" class="btn" type="button">裁切并检查孔连通</button>
+      </span>
+      <span id="crop-timing" class="crop-timing"></span>
+    </form>
+  </section>
+
+  <main class="layout">
+    <section class="stage-col">
+      <div class="panel overview-panel">
+        <div class="panel-head">
+          <h2>整图导航</h2>
+          <span class="panel-hint">在图上按住拖选新裁区；框内为当前裁区</span>
+          <span id="overview-size" class="panel-meta"></span>
+        </div>
+        <div class="canvas-wrap overview-wrap">
+          <canvas id="overview-canvas"></canvas>
+          <div id="overview-empty" class="empty-hint">尚未载入数据。点击右上角「加载示例」或「导入 JSON…」。</div>
+        </div>
+      </div>
+
+      <div class="panel crop-panel">
+        <div class="panel-head">
+          <h2>裁区视图</h2>
+          <span class="panel-hint">单击格点选组件 / 孔；拖拽平移；滚轮缩放；双击适应</span>
+          <div class="head-tools">
+            <button id="crop-zoom-out" class="icon-btn" type="button" title="缩小">−</button>
+            <button id="crop-zoom-fit" class="btn btn-small" type="button">适应</button>
+            <button id="crop-zoom-in" class="icon-btn" type="button" title="放大">+</button>
+          </div>
+        </div>
+        <div class="canvas-wrap crop-wrap" id="crop-wrap">
+          <canvas id="crop-canvas"></canvas>
+          <div class="legend">
+            <span><i class="lg-fg"></i>前景</span>
+            <span><i class="lg-hole"></i>孔（背景八连通、不贴边）</span>
+            <span><i class="lg-sel-fg"></i>选中组件</span>
+            <span><i class="lg-sel-hole"></i>选中孔</span>
+          </div>
+          <div id="cursor-coords" class="cursor-coords">x: — y: —</div>
+          <div id="crop-busy" class="busy" hidden>拓扑核算中…</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <section class="panel stats-panel">
+        <div class="panel-head"><h2>裁后统计</h2><span id="time-crop" class="panel-meta"></span></div>
+        <div class="stat-grid">
+          <div class="stat"><span class="stat-k">原图尺寸</span><span id="stat-width-height" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">原始 / 规范横段</span><span id="stat-raw-runs" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">裁区范围</span><span id="stat-crop-rect" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">裁区尺寸 / 格数</span><span id="stat-crop-area" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">裁内规范横段</span><span id="stat-crop-runs" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">前景格数</span><span id="stat-fg-pixels" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">背景格数</span><span id="stat-bg-pixels" class="stat-v">—</span></div>
+          <div class="stat stat-accent"><span class="stat-k">前景四连通组件</span><span id="stat-fg-components" class="stat-v">—</span></div>
+          <div class="stat stat-hole"><span class="stat-k">背景孔（八连通）</span><span id="stat-holes" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">孔内背景格数</span><span id="stat-hole-pixels" class="stat-v">—</span></div>
+          <div class="stat stat-perim"><span class="stat-k">前景总周长（含裁切边）</span><span id="stat-perimeter" class="stat-v">—</span></div>
+          <div class="stat"><span class="stat-k">整图核算耗时</span><span id="time-full" class="stat-v">—</span></div>
+        </div>
+      </section>
+
+      <section class="panel track-panel">
+        <div class="panel-head"><h2>孔贯通跟踪</h2></div>
+        <p id="track-status" class="track-status">在「孔」列表或画布中选中一个孔，点「跟踪此孔」；之后裁掉顶边若干行，可直接看它是否已与外部八连通。</p>
+        <div class="track-actions">
+          <button id="btn-track-hole" class="btn btn-small" type="button" disabled>跟踪当前选中孔</button>
+          <button id="btn-clear-track" class="btn btn-small" type="button" disabled>取消跟踪</button>
+        </div>
+      </section>
+
+      <section class="panel detail-panel">
+        <div class="panel-head"><h2>点选明细</h2></div>
+        <div id="selection-detail" class="selection-detail">
+          <p class="muted">尚未选中组件或孔。可在画布上单击，或从下方列表选择。</p>
+        </div>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="tabs" role="tablist">
+          <button id="tab-components" class="tab active" type="button" role="tab">前景组件 <b id="count-components">0</b></button>
+          <button id="tab-holes" class="tab" type="button" role="tab">背景孔 <b id="count-holes">0</b></button>
+        </div>
+        <div class="jump-row">
+          <label>跳转编号 <input id="input-jump-number" type="number" min="1" step="1" placeholder="#" /></label>
+          <button id="btn-jump" class="btn btn-small" type="button">定位</button>
+        </div>
+        <div id="component-list" class="vlist" role="listbox" aria-label="前景组件列表"></div>
+        <div id="hole-list" class="vlist" hidden role="listbox" aria-label="背景孔列表"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="export-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="export-title">
+      <div class="modal-head">
+        <h2 id="export-title">裁区规范横段与统计（原图坐标）</h2>
+        <button id="btn-close-modal" class="icon-btn" type="button" title="关闭">×</button>
+      </div>
+      <p class="modal-sub" id="export-meta"></p>
+      <textarea id="export-text" class="export-text" spellcheck="false" readonly></textarea>
+      <div class="modal-actions">
+        <button id="btn-download" class="btn btn-primary" type="button">下载 JSON 文件</button>
+        <button id="btn-modal-copy" class="btn" type="button">复制全文</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- 机器可读状态，便于自动化核对（与界面同步） -->
+  <script id="machine-state" type="application/json">{}</script>
+  <script src="js/topology.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
