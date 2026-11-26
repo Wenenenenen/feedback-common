@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨 UV 接缝投影涂色</title>
+<style>
+  :root {
+    --bg: #1f2328; --panel: #282e36; --border: #3a424d; --text: #d6dde5;
+    --muted: #8b97a5; --accent: #6ea8fe; --err: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  h1 { font-size: 16px; margin: 0 0 12px; }
+  .layout { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px;
+  }
+  .canvases { display: flex; gap: 16px; flex-wrap: wrap; }
+  figure { margin: 0; }
+  figcaption { color: var(--muted); margin-bottom: 6px; font-size: 12px; }
+  canvas {
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    background: rgb(32, 36, 40); border: 1px solid var(--border); border-radius: 4px;
+    cursor: crosshair; display: block;
+  }
+  #texCanvas { cursor: pointer; }
+  .controls { width: 260px; display: flex; flex-direction: column; gap: 10px; }
+  label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  input[type="number"] { width: 70px; background: #1b1f24; color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; }
+  input[type="range"] { flex: 1; }
+  button {
+    background: #334054; color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px; padding: 6px 10px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  .row { display: flex; gap: 8px; }
+  .row button { flex: 1; }
+  #swatch { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border); }
+  #status { color: var(--muted); min-height: 18px; }
+  #error {
+    display: none; background: rgba(255, 123, 114, .12); border: 1px solid var(--err);
+    color: var(--err); border-radius: 5px; padding: 6px 8px;
+  }
+  #info {
+    min-height: 90px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px; white-space: pre-wrap; word-break: break-all;
+    background: #1b1f24; border-radius: 5px; padding: 8px;
+  }
+  .hint { color: var(--muted); font-size: 11px; }
+  .filebtn { position: relative; overflow: hidden; text-align: center; }
+  .filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>跨 UV 接缝投影涂色</h1>
+<div class="layout">
+  <div class="panel">
+    <div class="canvases">
+      <figure>
+        <figcaption>正交预览（在此拖动绘制；悬停看覆盖面）</figcaption>
+        <canvas id="viewCanvas" width="160" height="104"></canvas>
+      </figure>
+      <figure>
+        <figcaption>纹理（点击纹素看归属面 / 投影 / 最前深度）</figcaption>
+        <canvas id="texCanvas" width="160" height="96"></canvas>
+      </figure>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <button class="filebtn">导入场景 JSON
+      <input id="fileInput" type="file" accept=".json,application/json">
+    </button>
+
+    <label>笔刷直径 <span id="dVal"></span>
+      <input type="range" id="brushD" min="1" max="64" step="1" value="8">
+    </label>
+    <label>R <input type="number" id="brushR" min="0" max="255" value="220"></label>
+    <label>G <input type="number" id="brushG" min="0" max="255" value="60"></label>
+    <label>B <input type="number" id="brushB" min="0" max="255" value="60"></label>
+    <label>透明度 a <span id="aVal"></span>
+      <input type="range" id="brushA" min="0" max="255" step="1" value="255">
+    </label>
+    <label>当前颜色 <span id="swatch"></span></label>
+
+    <div class="row">
+      <button id="undoBtn" disabled>撤销</button>
+      <button id="redoBtn" disabled>重做</button>
+    </div>
+    <button id="exportBtn">导出 RGB PNG</button>
+
+    <div id="status"></div>
+    <div id="error"></div>
+    <div>
+      <div class="hint">拾取信息</div>
+      <div id="info">导入场景后，点击纹理纹素或悬停预览查看。</div>
+    </div>
+    <div class="hint">快捷键：Ctrl+Z 撤销，Ctrl+Y / Ctrl+Shift+Z 重做。历史至少保留 256 笔。</div>
+  </div>
+</div>
+
+<script src="src/core.js"></script>
+<script src="src/app.js"></script>
+<script>
+  // 滑杆标签联动
+  var d = document.getElementById('brushD');
+  var a = document.getElementById('brushA');
+  function syncLabels() {
+    document.getElementById('dVal').textContent = d.value + ' px';
+    document.getElementById('aVal').textContent = a.value;
+  }
+  d.addEventListener('input', syncLabels);
+  a.addEventListener('input', syncLabels);
+  syncLabels();
+</script>
+</body>
+</html>

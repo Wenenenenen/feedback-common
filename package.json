@@ -1,0 +1,12 @@
+{
+  "name": "seam-projected-brush",
+  "version": "1.0.0",
+  "description": "跨 UV 接缝的模型投影涂色网页（自研纹素归属与可见性，无投射绘画库）",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/core.test.js tests/edge.test.js tests/spec.test.js && node tests/e2e.test.js",
+    "test:browser": "node --test tests/browser.test.js",
+    "serve": "node -e \"const http=require('http'),fs=require('fs'),p=require('path');const t={'.html':'text/html','.js':'text/javascript'};http.createServer((q,r)=>{let f=q.url==='/'?'/index.html':q.url;const fp=p.join(process.cwd(),f);fs.readFile(fp,(e,d)=>{if(e){r.writeHead(404);r.end('404');return}r.writeHead(200,{'Content-Type':t[p.extname(fp)]||'application/octet-stream'});r.end(d)})}).listen(8123,()=>console.log('http://localhost:8123'))\""
+  },
+  "license": "MIT"
+}
