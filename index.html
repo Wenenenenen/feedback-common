@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>扫描灰阶曲线校样台 · Anchored Tone Curve</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <h1>扫描灰阶曲线校样台</h1>
+      <p class="subtitle">
+        4096 项整数曲线 · 输出 0–1023 · 斜率 0–3 · 相邻斜率差 ≤ 1 · 锁点精确命中 · 全像素加权平方误差全局最小
+      </p>
+    </div>
+    <div class="header-badge" id="engine-badge">DP 全局最优 / 字典序平局规则</div>
+  </header>
+
+  <main class="dashboard">
+    <section class="card import-card">
+      <h2>1. 导入案例</h2>
+      <p class="hint">
+        可直接选择 <code>anchored-tone-cases.zip</code>，也可一次多选 <code>source.pgm</code>、<code>target.pgm</code>、可选 <code>weights.pgm</code> 和 <code>locks.json</code>。
+      </p>
+
+      <div class="import-actions">
+        <label class="file-button primary">
+          导入 ZIP 或多选文件
+          <input id="case-files" type="file" multiple
+                 accept=".zip,.pgm,.json,image/x-portable-graymap,application/zip,application/json">
+        </label>
+        <button id="load-builtin" class="button" type="button">载入 samples 内置样例</button>
+      </div>
+
+      <div class="file-grid">
+        <label class="file-field">
+          <span>源图 P5（12 位，大端 16-bit）</span>
+          <input id="source-file" type="file" accept=".pgm,.p5,image/x-portable-graymap">
+        </label>
+        <label class="file-field">
+          <span>目标 P5（同尺寸，10 位）</span>
+          <input id="target-file" type="file" accept=".pgm,.p5,image/x-portable-graymap">
+        </label>
+        <label class="file-field">
+          <span>权重图 P5（可选，8 位）</span>
+          <input id="weights-file" type="file" accept=".pgm,.p5,image/x-portable-graymap">
+          <button id="clear-weights" class="link-button" type="button">移除权重图（全部按 1）</button>
+        </label>
+        <label class="file-field">
+          <span>锁点 JSON（最多 32 个）</span>
+          <input id="locks-file" type="file" accept=".json,application/json">
+        </label>
+      </div>
+
+      <div id="import-status" class="status" role="status" aria-live="polite">等待导入数据。</div>
+      <div id="dataset-meta" class="meta-grid"></div>
+    </section>
+
+    <section class="card locks-card">
+      <div class="section-heading">
+        <h2>2. 锁点</h2>
+        <span id="lock-count" class="pill">0/32</span>
+      </div>
+
+      <form id="lock-form" class="lock-form">
+        <label>
+          源值 x（0–4095）
+          <input id="lock-x" type="number" min="0" max="4095" step="1" inputmode="numeric" required>
+        </label>
+        <label>
+          曲线值 y（0–1023）
+          <input id="lock-y" type="number" min="0" max="1023" step="1" inputmode="numeric" required>
+        </label>
+        <button class="button primary" id="add-lock" type="submit">添加 / 更新同 x 锁点</button>
+      </form>
+
+      <div class="table-wrap">
+        <table class="lock-table">
+          <thead>
+            <tr><th>源值 x</th><th>曲线值 y</th><th>操作</th></tr>
+          </thead>
+          <tbody id="lock-tbody">
+            <tr class="empty-row"><td colspan="3">暂无锁点</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="compute-row">
+        <button id="compute-button" class="button primary large" type="button">重新计算全局最优曲线</button>
+        <label class="check-label">
+          <input id="auto-compute" type="checkbox" checked>
+          锁点改动后自动重算
+        </label>
+      </div>
+      <div id="solve-status" class="status" role="status" aria-live="assertive">尚未计算。</div>
+    </section>
+
+    <section class="card chart-card">
+      <div class="section-heading">
+        <h2>3. 曲线与斜率</h2>
+        <div class="legend">
+          <span><i class="swatch curve"></i>采用曲线</span>
+          <span><i class="swatch lock-ok"></i>已命中锁点</span>
+          <span><i class="swatch lock-bad"></i>未满足/草稿锁点</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="curve-canvas" width="1200" height="430" aria-label="4096 项灰阶曲线"></canvas>
+        <div id="curve-hover-line" class="chart-hover-line"></div>
+        <div id="curve-tooltip" class="chart-tooltip" hidden></div>
+      </div>
+      <div class="chart-wrap slope-wrap">
+        <canvas id="slope-canvas" width="1200" height="170" aria-label="相邻斜率"></canvas>
+      </div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat"><span>加权平方误差</span><strong id="stat-sse">—</strong></div>
+        <div class="stat"><span>使用像素</span><strong id="stat-pixels">—</strong></div>
+        <div class="stat"><span>曲线值域</span><strong id="stat-range">—</strong></div>
+        <div class="stat"><span>斜率范围</span><strong id="stat-slopes">—</strong></div>
+        <div class="stat"><span>最大相邻斜率差</span><strong id="stat-jump">—</strong></div>
+        <div class="stat"><span>锁点命中</span><strong id="stat-locks">—</strong></div>
+      </div>
+    </section>
+
+    <section class="card export-card">
+      <h2>4. 导出原始结果</h2>
+      <p class="hint">
+        JSON 为求解器得到的 4096 个整数；P5 按 <code>proof[x,y] = curve[source[x,y]]</code> 查原始曲线生成，
+        <strong>不是</strong>画布上的 8 位显示量化结果。
+      </p>
+      <div class="export-actions">
+        <button id="export-curve" class="button primary" type="button" disabled>导出 4096 项曲线 JSON</button>
+        <button id="export-p5" class="button primary" type="button" disabled>导出 10 位校样 P5</button>
+      </div>
+      <div id="export-status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card images-card">
+      <div class="section-heading">
+        <h2>5. 源图 / 目标 / 校样对照</h2>
+        <span class="hint">点击任一图像像素，查看该像素的原始误差；红十字为同一像素位置。</span>
+      </div>
+      <div class="image-grid">
+        <figure class="image-panel">
+          <figcaption>源图 · 12 位原始值（线性映射到 8 位显示）</figcaption>
+          <div class="canvas-frame">
+            <canvas id="source-canvas" data-image="source" role="img" aria-label="源图 12 位灰阶图像"></canvas>
+            <div class="crosshair crosshair-v"></div>
+            <div class="crosshair crosshair-h"></div>
+          </div>
+        </figure>
+        <figure class="image-panel">
+          <figcaption>目标样张 · 10 位原始值（线性映射显示）</figcaption>
+          <div class="canvas-frame">
+            <canvas id="target-canvas" data-image="target" role="img" aria-label="目标样张 10 位灰阶图像"></canvas>
+            <div class="crosshair crosshair-v"></div>
+            <div class="crosshair crosshair-h"></div>
+          </div>
+        </figure>
+        <figure class="image-panel">
+          <figcaption>校样 · 曲线查值后的 10 位 P5（显示经映射，导出为原始值）</figcaption>
+          <div class="canvas-frame">
+            <canvas id="proof-canvas" data-image="proof" role="img" aria-label="校样 曲线查值得到的 10 位灰阶图像"></canvas>
+            <div class="crosshair crosshair-v"></div>
+            <div class="crosshair crosshair-h"></div>
+          </div>
+        </figure>
+      </div>
+      <div id="pixel-info" class="pixel-info">点击任一图像中的像素，查看源值、目标值、校样值、权重和本项误差。</div>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    纯本地计算，不上传图像。无解时会保留并继续展示/导出上一次成功曲线。
+  </footer>
+
+  <script src="solver.js"></script>
+  <script src="io.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

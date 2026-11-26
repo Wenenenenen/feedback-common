@@ -1,0 +1,14 @@
+{
+  "name": "anchored-tone-curve",
+  "version": "1.0.0",
+  "private": true,
+  "description": "扫描设备灰阶曲线校样网页：全局最优整数 LUT、锁点、约束 DP、P5 对照与导出",
+  "scripts": {
+    "test": "node --test tests/solver.test.cjs",
+    "start": "./scripts/start.sh",
+    "check": "node --check solver.js && node --check io.js && node --check sample-data.js && node --check app.js && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
