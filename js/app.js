@@ -475,6 +475,8 @@
         $('inspect-channel').value = String(lane.ch);
         $('inspect-frame').value = String(f);
         renderInspector(false);
+        var panel = $('inspector-panel');
+        if (panel && panel.scrollIntoView) panel.scrollIntoView({ block: 'nearest' });
       } else if (state.selection) {
         // keep selection; inspect its first frame on this channel
         state.inspect.ch = lane.ch; state.inspect.frame = state.selection.f0; state.inspect.tick = null;
