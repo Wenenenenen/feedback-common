@@ -1,0 +1,13 @@
+{
+  "name": "disc-sector-consensus",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "老光盘音轨逐样本合议工作台",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tests/unit.test.js",
+    "e2e": "node tests/e2e.mjs",
+    "bench": "node tests/bench.mjs"
+  }
+}

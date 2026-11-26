@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>光盘音轨合议台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23191919'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23cce3fd'/%3E%3Ccircle cx='16' cy='16' r='1.6' fill='%23191919'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-theme-auto>
+<a class="skip" href="#main">跳到主内容</a>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="currentColor" opacity=".12"/><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="1.6" fill="currentColor"/></svg>
+    <div>
+      <h1>光盘音轨合议台</h1>
+      <p class="tag">逐样本对齐 · 按声道投票 · 争议可追溯</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="btn-sample" class="btn ghost" type="button">载入样例</button>
+    <label class="btn primary file-btn">
+      导入 ZIP
+      <input id="file-zip" type="file" accept=".zip,application/zip" hidden>
+    </label>
+    <button id="btn-run" class="btn accent" type="button" disabled>开始校对</button>
+    <button id="btn-theme" class="btn icon" type="button" aria-label="切换明暗主题" title="切换明暗主题">◐</button>
+  </div>
+</header>
+
+<div id="drop-hint" class="drop-hint hidden"><div>松开导入 disc-consensus ZIP</div></div>
+
+<main id="main">
+  <!-- 空状态 -->
+  <section id="empty-state" class="panel empty">
+    <div class="empty-inner">
+      <h2>导入一份基准与最多七份读档</h2>
+      <p>压缩包内需要 <code>disc.json</code> 与各 WAV：双声道、44100&nbsp;Hz、16&nbsp;位 PCM，各长 90 秒以内。
+        每份副本最多 256 块。点「载入样例」可先看随仓库自带的两副本示例。</p>
+      <div class="empty-actions">
+        <label class="btn primary file-btn">选择 ZIP<input id="file-zip-2" type="file" accept=".zip,application/zip" hidden></label>
+        <button id="btn-sample-2" class="btn ghost" type="button">载入样例</button>
+      </div>
+      <div id="import-error" class="err-box hidden" role="alert"></div>
+    </div>
+  </section>
+
+  <!-- 工作区 -->
+  <section id="workspace" class="hidden">
+    <div id="status-line" class="status-line" role="status" aria-live="polite">
+      <span id="status-msg">已载入，点「开始校对」。</span>
+      <span id="status-meta" class="muted"></span>
+    </div>
+
+    <!-- 无解 -->
+    <div id="nosolution" class="panel err-panel hidden" role="alert">
+      <h2>无法排出可行偏移</h2>
+      <p id="nosolution-msg"></p>
+      <p class="muted">该次不生成交付文件。可放宽「读档块清单」后重新导入，或调整坏区标记再试。</p>
+    </div>
+
+    <!-- 概要条 -->
+    <div id="summary" class="summary hidden">
+      <div class="stat"><span class="stat-label">合议帧数</span><span class="stat-value" id="sum-frames">—</span><span class="stat-sub" id="sum-frames-sub"></span></div>
+      <div class="stat"><span class="stat-label">参与读档</span><span class="stat-value" id="sum-reads">—</span><span class="stat-sub">含基准</span></div>
+      <div class="stat"><span class="stat-label">争议声道帧</span><span class="stat-value" id="sum-disputes">—</span><span class="stat-sub" id="sum-disputes-sub"></span></div>
+      <div class="stat"><span class="stat-label">左 / 右缺口</span><span class="stat-value" id="sum-gaps">—</span><span class="stat-sub">无有效票</span></div>
+      <div class="stat"><span class="stat-label">对齐总得分</span><span class="stat-value" id="sum-score">—</span><span class="stat-sub">各副本之和</span></div>
+      <div class="stat"><span class="stat-label">本次用时</span><span class="stat-value" id="sum-time">—</span><span class="stat-sub" id="sum-time-sub"></span></div>
+    </div>
+
+    <div class="toolbar" id="toolbar-wrap">
+      <div class="seg" role="tablist" aria-label="查看粒度">
+        <button class="seg-btn active" data-view="sector" role="tab" aria-selected="true">按扇区</button>
+        <button class="seg-btn" data-view="frame" role="tab" aria-selected="false">单帧</button>
+      </div>
+      <div class="toolbar-right">
+        <button id="btn-export-wav" class="btn primary" type="button" disabled>导出 WAV</button>
+        <button id="btn-export-csv" class="btn" type="button" disabled>导出争议表</button>
+        <button id="btn-export-align" class="btn ghost" type="button" disabled>导出对齐表</button>
+      </div>
+    </div>
+
+    <!-- 扇区视图 -->
+    <div id="view-sector" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>扇区总览 <span class="muted small">每扇区 588 帧；点选查看明细</span></h2>
+          <div class="legend" id="sector-legend"></div>
+        </div>
+        <div class="sector-canvas-wrap">
+          <canvas id="sector-canvas" tabindex="0" role="img"
+                  aria-label="整盘扇区状态总览；左右方向键移动一个扇区，Shift 加速"></canvas>
+          <div id="sector-tip" class="sector-tip hidden" role="tooltip"></div>
+        </div>
+        <div class="sector-nav">
+          <button id="sector-prev" class="btn tiny" type="button" aria-label="上一扇区">◀</button>
+          <input id="sector-input" class="jump" type="number" min="1" step="1" aria-label="扇区号">
+          <span id="sector-total" class="muted"></span>
+          <button id="sector-next" class="btn tiny" type="button" aria-label="下一扇区">▶</button>
+          <button id="sector-first-dispute" class="btn tiny ghost" type="button">跳到首个争议扇区</button>
+          <span class="muted small" id="sector-hint">点画布任意位置跳转</span>
+        </div>
+      </div>
+      <div class="panel" id="sector-detail-panel">
+        <div class="panel-head">
+          <h2 id="sector-title">本扇区明细</h2>
+          <span id="sector-range" class="muted small"></span>
+        </div>
+        <h3 class="sub">读档覆盖与经过的块</h3>
+        <div class="table-wrap"><table id="sector-reads" class="data-table"></table></div>
+        <h3 class="sub">争议段</h3>
+        <div id="sector-disputes" class="dispute-list"></div>
+        <h3 class="sub">声道状态构成</h3>
+        <div id="sector-status" class="status-bars"></div>
+      </div>
+    </div>
+
+    <!-- 单帧视图 -->
+    <div id="view-frame" class="view hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>单帧检查</h2>
+          <span class="muted small" id="frame-pos"></span>
+        </div>
+        <div class="frame-nav">
+          <button id="frame-first" class="btn tiny" type="button">⇤</button>
+          <button id="frame-prev" class="btn tiny" type="button">◀ 帧</button>
+          <input id="frame-input" class="jump wide" type="number" min="0" step="1" aria-label="盘面帧号">
+          <button id="frame-next" class="btn tiny" type="button">帧 ▶</button>
+          <button id="frame-last" class="btn tiny" type="button">⇥</button>
+          <button id="frame-goto-dispute" class="btn tiny ghost" type="button">跳到首个争议</button>
+        </div>
+        <div id="frame-vote" class="vote-cards"></div>
+        <h3 class="sub">每个读档在这一帧</h3>
+        <div class="table-wrap"><table id="frame-reads" class="data-table"></table></div>
+        <h3 class="sub">计票明细（每份有效读档一票）</h3>
+        <div id="frame-tallies" class="tallies"></div>
+      </div>
+    </div>
+
+    <!-- 块偏移 -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>块偏移</h2>
+        <div class="inline-controls">
+          <label>读档 <select id="copy-select"></select></label>
+          <span class="muted small" id="copy-score"></span>
+        </div>
+      </div>
+      <div class="table-wrap tall"><table id="copy-blocks" class="data-table"></table></div>
+    </div>
+
+    <!-- 坏区编辑 -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>坏区标记 <span class="muted small">改后自动重新对齐并投票</span></h2>
+        <div class="inline-controls">
+          <label>读档 <select id="bad-read"></select></label>
+          <label>声道 <select id="bad-channel"><option value="0">左</option><option value="1">右</option></select></label>
+        </div>
+      </div>
+      <div id="bad-editor" class="bad-editor">
+        <div class="bad-add">
+          <label>起帧 <input id="bad-start" class="jump wide" type="number" min="0" step="1"></label>
+          <label>止帧 <input id="bad-end" class="jump wide" type="number" min="0" step="1"></label>
+          <button id="bad-add-btn" class="btn tiny" type="button">添加/合并</button>
+          <span id="bad-limit" class="muted small"></span>
+        </div>
+        <div id="bad-spans" class="bad-spans"></div>
+        <p class="muted small">坏区按源坐标（读档自身 WAV 的帧号）给出，半开区间；被标坏的帧不参与评分、不参与投票。</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="busy" class="busy hidden" aria-live="assertive">
+  <div class="spinner"></div>
+  <span id="busy-text">计算中…</span>
+</div>
+
+<footer class="foot">
+  <span>全部计算在本地浏览器完成，无外部请求。</span>
+  <span id="foot-mode" class="muted"></span>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
