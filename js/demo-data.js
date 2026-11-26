@@ -1,0 +1,3 @@
+/* Auto-generated: samples/demo.pdq embedded as base64 so the one-click demo
+   works from file:// too. Regenerate from samples/demo.pdq. */
+(function(g){var B64="UERRMfD///+AAQAAAiDw////uQAD/vnnn3/++eeff/75559//vnnn3/++eeff/75559//vnnn3/++eeff/75559//gF0vgIYqQAAAMcAA2EYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYhmEYbJ9iXQ==";function bin(s){if(typeof atob==="function"){var b=atob(s),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u.buffer;}return Buffer.from(s,"base64").buffer;}var api={base64:B64,arrayBuffer:function(){return bin(B64);},uint8:function(){return new Uint8Array(bin(B64));}};if(typeof module==="object"&&module.exports)module.exports=api;else g.PDQDemo=api;})(typeof self!=="undefined"?self:this);

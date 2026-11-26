@@ -1,0 +1,1 @@
+{"header": {"anchor": 4294967280, "totalTicks": 256, "channels": 1, "D": 64, "headerOk": true, "headerError": null}, "truncated": null, "recordCount": 2, "badCrc": [], "adopted": [true, true], "recordOffsets": [14, 41], "pcm": [[-132, 5728, 27684, 25453]], "affected": [[1, 1, 1, 0]], "intervals": [[[0, 3]]], "frames": 4}

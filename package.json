@@ -1,0 +1,17 @@
+{
+  "name": "pdm-decimation-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PDQ1 多麦克风原始录音抽取校验网页：分包/回绕解析、CRC 校验、末次好记录胜出、绝对相位补位、三阶 PDM 抽取 48k PCM16、缺位影响区间与逐位来源时间线。",
+  "main": "js/engine.js",
+  "scripts": {
+    "test": "node test/run.js",
+    "vectors": "python3 -I tools/gen_fixtures.py",
+    "reference": "python3 -I tools/pdq_reference.py",
+    "perf": "node test/perf.js --assert",
+    "e2e": "NODE_PATH=\"$(npm root -g)\" node test/browser-e2e.js",
+    "serve": "python3 -m http.server 8137"
+  },
+  "keywords": ["PDM", "PCM", "decimation", "PDQ1", "CRC32", "multi-microphone", "audio"],
+  "license": "UNLICENSED"
+}

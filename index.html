@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PDM 多麦原始录音抽取校验台 · PDQ1 Reel</title>
+<meta name="description" content="PDQ1 多麦克风原始录音分包解析、CRC 校验、PDM 三阶抽取 PCM16、缺位影响区间与逐位来源时间线。" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 12h2l2-7 4 14 3-10 2 3h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <div class="brand-text">
+      <h1>PDM 抽取校验台 <span class="brand-sub">PDQ1 · 多麦原始录音 Reel</span></h1>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="load-demo-btn" class="btn" type="button">载入内置示例</button>
+    <label id="pick-file-label" class="btn btn-primary" for="file-input">选择 PDQ1 文件</label>
+    <input id="file-input" type="file" accept=".pdq,.bin,.pdq1,application/octet-stream" hidden />
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- 空状态 / 拖放区 -->
+  <section id="dropzone" class="dropzone" tabindex="0" role="button"
+           aria-label="选择或拖入 PDQ1 文件">
+    <div class="dz-inner">
+      <div class="dz-icon" aria-hidden="true">⇪</div>
+      <p class="dz-title">把 <code>.pdq</code> 原始录音拖到这里，或点击选择文件</p>
+      <p class="dz-sub">自行解析分包 / 32 位时标回绕 / 逐路位流 · 坏 CRC 不覆盖好包 · 末次好记录胜出 · 绝对相位补位</p>
+      <div class="dz-chips">
+        <span class="chip">≤ 64 MiB</span>
+        <span class="chip">≤ 120 000 条记录</span>
+        <span class="chip">≤ 4 声道</span>
+        <span class="chip">30 s</span>
+        <span class="chip">D = 32 / 64</span>
+        <span class="chip">48 kHz PCM16 WAV</span>
+      </div>
+      <p class="dz-hint">没有文件？点右上角「载入内置示例」查看 demo.pdq（时标回绕用例）。</p>
+    </div>
+  </section>
+
+  <!-- 进度 -->
+  <section id="progress" class="progress hidden" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="progress-text">正在解析…</span>
+  </section>
+
+  <!-- 致命错误（文件头/魔数） -->
+  <section id="fatal-banner" class="banner banner-critical hidden" role="alert">
+    <strong>无法导入：</strong><span id="fatal-text"></span>
+  </section>
+
+  <div id="workspace" class="workspace hidden">
+
+    <!-- KPI -->
+    <section class="kpi-grid" aria-label="文件指标">
+      <div class="kpi"><div class="kpi-label">输出格式</div><div class="kpi-value">48 kHz · PCM16</div><div class="kpi-sub" id="kpi-bitrate">—</div></div>
+      <div class="kpi"><div class="kpi-label">声道 / 抽取倍数</div><div class="kpi-value"><span id="kpi-channels">–</span> 路 · D=<span id="kpi-d">–</span></div><div class="kpi-sub" id="kpi-pdmrate">–</div></div>
+      <div class="kpi"><div class="kpi-label">总输入 tick</div><div class="kpi-value" id="kpi-ticks">–</div><div class="kpi-sub" id="kpi-anchor">首时标 –</div></div>
+      <div class="kpi"><div class="kpi-label">输出帧 / 时长</div><div class="kpi-value"><span id="kpi-frames">–</span> 帧</div><div class="kpi-sub" id="kpi-duration">–</div></div>
+      <div class="kpi"><div class="kpi-label">记录</div><div class="kpi-value"><span id="kpi-rec-total">–</span> 条</div><div class="kpi-sub" id="kpi-rec-detail">采用 –</div></div>
+      <div class="kpi" id="kpi-trunc-card"><div class="kpi-label">末尾截断</div><div class="kpi-value" id="kpi-trunc">无</div><div class="kpi-sub" id="kpi-trunc-sub">所有记录完整</div></div>
+      <div class="kpi kpi-time"><div class="kpi-label">导入 → PCM/区间可查看</div><div class="kpi-value" id="perf-time">–</div><div class="kpi-sub">满额预算 20 s</div></div>
+    </section>
+
+    <!-- 告警区（截断 / 结构问题） -->
+    <section id="alerts" class="alerts"></section>
+
+    <!-- 播放 / 选区 / 导出 工具条 -->
+    <section class="panel toolbar" aria-label="试听与导出">
+      <div class="tool-group">
+        <span class="tool-label">试听</span>
+        <button id="play-full" class="btn" type="button">▶ 播放整轨</button>
+        <button id="play-sel" class="btn" type="button" disabled>▶ 播放选区</button>
+        <button id="stop-btn" class="btn btn-ghost" type="button">■ 停止</button>
+        <span id="play-time" class="play-time" aria-live="off">00:00.0 / 00:00.0</span>
+      </div>
+      <div class="tool-group">
+        <span class="tool-label">选区(帧)</span>
+        <input id="sel-start" class="num-input" type="number" min="0" step="1" placeholder="起" aria-label="选区起始帧" />
+        <span class="dash">–</span>
+        <input id="sel-end" class="num-input" type="number" min="0" step="1" placeholder="止(不含)" aria-label="选区结束帧(不含)" />
+        <button id="apply-sel" class="btn btn-ghost" type="button">设定</button>
+        <button id="clear-sel" class="btn btn-ghost" type="button" disabled>清除选区</button>
+        <span id="selection-info" class="sel-info">未选择（在波形上拖出区间，或点击区间列表）</span>
+      </div>
+      <div class="tool-group tool-export">
+        <span class="tool-label">导出</span>
+        <button id="export-wav-full" class="btn btn-primary" type="button">导出整轨 WAV</button>
+        <button id="export-wav-sel" class="btn" type="button" disabled>导出选区 WAV</button>
+        <button id="export-json-full" class="btn" type="button">导出影响区间 JSON（整轨）</button>
+        <button id="export-json-sel" class="btn" type="button" disabled>导出选区区间 JSON</button>
+      </div>
+    </section>
+
+    <!-- 时间线 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>逐路时间线 · PCM 波形与受影响帧</h2>
+        <div class="zoom-controls">
+          <button id="zoom-out" class="btn btn-ghost btn-sm" type="button" aria-label="缩小">－</button>
+          <button id="zoom-reset" class="btn btn-ghost btn-sm" type="button">整轨</button>
+          <button id="zoom-in" class="btn btn-ghost btn-sm" type="button" aria-label="放大">＋</button>
+        </div>
+      </div>
+      <p class="panel-hint">在波形上<span class="em">拖动</span>选择帧区间；<span class="em">单击</span>某一帧展开它依赖的输入位与来源。滚轮以光标为中心缩放。红/琥珀色顶条表示该像素列含受缺位影响的输出帧。</p>
+      <div id="lanes" class="lanes"></div>
+      <div class="axis-row">
+        <div class="axis-spacer"></div>
+        <div class="lane-canvas-wrap"><canvas id="axis" class="axis"></canvas></div>
+      </div>
+    </section>
+
+    <!-- 帧检查器 -->
+    <section class="panel inspector" id="inspector-panel">
+      <div class="panel-head inspector-head">
+        <h2>单帧抽取核验 · 输入位 / 来源 / 三阶和</h2>
+        <div class="inspect-controls">
+          <label>声道
+            <select id="inspect-channel" aria-label="检查声道"></select>
+          </label>
+          <label>输出帧
+            <input id="inspect-frame" class="num-input" type="number" min="0" step="1" value="0" aria-label="要展开的输出帧" />
+          </label>
+          <button id="inspect-btn" class="btn btn-primary btn-sm" type="button">展开该帧</button>
+          <span class="frame-step">
+            <button id="frame-prev" class="btn btn-ghost btn-sm" type="button" aria-label="上一帧">‹</button>
+            <button id="frame-next" class="btn btn-ghost btn-sm" type="button" aria-label="下一帧">›</button>
+          </span>
+        </div>
+      </div>
+      <div id="frame-inspector" class="frame-inspector">
+        <p class="muted">单击上方波形中的任意位置，或输入帧号后点「展开该帧」。这里会列出该输出帧按滤波器真实依赖区间 <code>[T−3(D−1), T]</code> 涉及的全部 PDM 输入位、补位/零填充状态、滤波器系数贡献，以及每个位来自哪条记录（含被坏 CRC 否决或被重传覆盖的来源）。</p>
+      </div>
+    </section>
+
+    <div class="two-col">
+      <!-- 影响区间 -->
+      <section class="panel" id="intervals-panel">
+        <div class="panel-head"><h2>各声道最大连续受影响区间（半开帧）</h2></div>
+        <div id="intervals-root" class="intervals-root"></div>
+      </section>
+
+      <!-- 记录 -->
+      <section class="panel" id="records-panel">
+        <div class="panel-head">
+          <h2>分包记录</h2>
+          <div class="rec-controls">
+            <select id="rec-filter" aria-label="记录筛选">
+              <option value="all">全部</option>
+              <option value="problem">仅坏 CRC / 未采用 / 截断</option>
+              <option value="badcrc">仅坏 CRC</option>
+            </select>
+          </div>
+        </div>
+        <div id="records-summary" class="records-summary"></div>
+        <div class="table-wrap">
+          <table class="rec-table">
+            <thead><tr>
+              <th>#</th><th>字节偏移</th><th>相对 tick</th><th>tick 数</th><th>掩膜</th><th>载荷 B</th><th>CRC32</th><th>状态</th>
+            </tr></thead>
+            <tbody id="records-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button id="rec-prev" class="btn btn-ghost btn-sm" type="button">上一页</button>
+          <span id="rec-page-info" class="page-info">–</span>
+          <button id="rec-next" class="btn btn-ghost btn-sm" type="button">下一页</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- JSON 预览 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>影响区间 JSON 结构预览</h2>
+        <button id="refresh-json-preview" class="btn btn-ghost btn-sm" type="button">刷新预览</button>
+      </div>
+      <pre id="json-preview" class="json-preview">导入文件后显示。完整 JSON 请用「导出影响区间 JSON」下载。</pre>
+    </section>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <span>纯前端 · 无外部依赖 · 所有解析与计算均在本机浏览器完成</span>
+  <span id="footer-api-hint">自动化接口：<code>window.PDMReel</code></span>
+</footer>
+
+<script src="js/engine.js"></script>
+<script src="js/wav.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
