@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 测试渲染产物
+tests/out/
+*.ppm

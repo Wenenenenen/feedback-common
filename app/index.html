@@ -1,0 +1,285 @@
+<title>镜面反射视束核对台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 布局概念：左「视窗」右「控制台」的工程工作台，青色光束作为唯一强调色 */
+:root {
+  --bg: #eef2f6;
+  --panel: #ffffff;
+  --panel-2: #f7fafc;
+  --ink: #16202b;
+  --muted: #5c6b7a;
+  --line: #d7dee7;
+  --accent: #0e7490;
+  --accent-soft: #d9f0f5;
+  --warn: #b45309;
+  --warn-soft: #fdf0dd;
+  --ok: #15803d;
+  --bad: #b91c1c;
+  --bad-soft: #fde8e8;
+  --canvas-bg: #05070a;
+  --shadow: 0 1px 2px rgba(16, 24, 32, .06), 0 8px 24px rgba(16, 24, 32, .07);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117; --panel: #161d26; --panel-2: #1b232e; --ink: #e6edf3;
+    --muted: #93a2b2; --line: #2b3643; --accent: #38e1ff; --accent-soft: #10333d;
+    --warn: #f0b429; --warn-soft: #33270c; --ok: #4ade80; --bad: #f87171;
+    --bad-soft: #3a1719; --canvas-bg: #000;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --panel: #161d26; --panel-2: #1b232e; --ink: #e6edf3;
+  --muted: #93a2b2; --line: #2b3643; --accent: #38e1ff; --accent-soft: #10333d;
+  --warn: #f0b429; --warn-soft: #33270c; --ok: #4ade80; --bad: #f87171;
+  --bad-soft: #3a1719; --canvas-bg: #000;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(12px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-bottom, 0px));
+}
+h1, h2, h3 { font-family: "Space Grotesk", Inter, sans-serif; margin: 0; text-wrap: balance; }
+code, .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; }
+.muted { color: var(--muted); }
+[hidden] { display: none !important; }
+
+header.band {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px;
+}
+header.band h1 { font-size: 20px; letter-spacing: -.01em; }
+header.band .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+
+button, select, input[type="number"], textarea {
+  font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px;
+}
+button { cursor: pointer; font-weight: 500; }
+button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+select { padding-right: 26px; }
+input[type="number"] { width: 76px; padding-block: 5px; }
+input:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+
+.layout { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; box-shadow: var(--shadow); min-width: 0;
+}
+.card + .card { margin-top: 16px; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
+
+.canvas-wrap { background: var(--canvas-bg); border-radius: 10px; padding: 10px; display: grid; place-items: center; }
+#canvas {
+  width: 100%; max-width: 480px; aspect-ratio: 4 / 3; image-rendering: pixelated;
+  cursor: crosshair; border-radius: 4px; display: block;
+}
+.canvas-caption { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+@media (max-width: 480px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+.tile { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+.tile .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tile .v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+#statMode { margin-top: 10px; font-size: 12.5px; padding: 7px 10px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+#statMode.warn { background: var(--warn-soft); color: var(--warn); }
+.param-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; }
+.param-row label { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+.mirror-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.mirror-chip { border-radius: 999px; padding: 6px 14px; font-size: 13px; }
+.mirror-chip.sel { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mirror-chip.off { text-decoration: line-through; opacity: .6; }
+
+.editor-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: center; margin-top: 12px; }
+.editor-grid label { color: var(--muted); font-size: 12.5px; }
+.refl-row { display: flex; gap: 8px; align-items: center; }
+table.verts { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+table.verts th, table.verts td { padding: 4px 6px; text-align: left; font-size: 12.5px; }
+table.verts input { width: 100%; min-width: 0; padding: 5px 7px; }
+table.verts th { color: var(--muted); font-weight: 500; }
+
+#beamTree { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+.beam-row {
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px;
+  margin-left: var(--indent); background: var(--panel-2); font-size: 12.5px;
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
+}
+.beam-row.inactive { opacity: .52; }
+.beam-path { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--accent); font-weight: 500; }
+.beam-meta { color: var(--muted); }
+.beam-state { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+.beam-row.active .beam-state { background: var(--accent-soft); color: var(--accent); }
+.beam-row.inactive .beam-state { background: var(--line); color: var(--muted); }
+
+#tracePanel { display: flex; flex-direction: column; gap: 6px; }
+.trace-title { font-weight: 600; margin: 0 0 4px; font-size: 13px; }
+.trace-step { border-radius: 9px; padding: 9px 11px; border: 1px solid var(--line); background: var(--panel-2); }
+.trace-step.mirror { border-left: 3px solid var(--accent); }
+.trace-step.tri { border-left: 3px solid var(--ok); }
+.trace-head { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.trace-head .idx {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: inline-grid; place-items: center; font-size: 11px;
+}
+.trace-step.tri .trace-head .idx { background: var(--ok); }
+.trace-body { color: var(--muted); font-size: 12.5px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.trace-arrow { text-align: center; color: var(--muted); line-height: 1; }
+
+#errorBanner {
+  background: var(--bad-soft); border: 1px solid var(--bad); color: var(--bad);
+  border-radius: 10px; padding: 11px 14px; margin-bottom: 14px;
+}
+#errorBanner h3 { font-size: 13.5px; margin-bottom: 6px; }
+#errorList { margin: 0; padding-left: 18px; font-size: 12.5px; display: grid; gap: 3px; }
+#errorList .tag { font-family: "JetBrains Mono", monospace; font-weight: 600; }
+#errorBanner button { margin-top: 8px; border-color: var(--bad); color: var(--bad); }
+
+details.import { margin-top: 16px; }
+details.import textarea { width: 100%; min-height: 120px; font-family: "JetBrains Mono", monospace; font-size: 12px; margin-block: 8px; }
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(8, 12, 16, .55);
+  display: grid; place-items: center; padding: 16px; z-index: 50;
+}
+.modal { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; width: min(680px, 100%); max-height: 86vh; display: flex; flex-direction: column; padding: 18px; gap: 12px; }
+.modal textarea { flex: 1; min-height: 280px; font-family: "JetBrains Mono", monospace; font-size: 12px; }
+.modal .row { display: flex; gap: 8px; justify-content: flex-end; }
+footer.notes { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+</style>
+
+<header class="band">
+  <div>
+    <h1>镜面反射视束核对台</h1>
+    <div class="sub">主视锥逐层展开 · 三维凸视束裁剪 · 前缀闭合配额 DP · 层次遮挡光栅化（无三维引擎）</div>
+  </div>
+  <div class="toolbar">
+    <select id="sampleSelect" aria-label="选择样例场景">
+      <option value="case1_single_mirror">样例 1 · 单面斜镜</option>
+      <option value="case2_periscope_relay">样例 2 · 潜望中转</option>
+      <option value="case3_occluded_mirror">样例 3 · 镜面遮挡</option>
+    </select>
+    <button id="btnUndo" title="撤销 (Ctrl+Z)">撤销</button>
+    <button id="btnRedo" title="重做 (Ctrl+Y)">重做</button>
+    <button id="btnImport">导入场景</button>
+    <button id="btnExport" class="primary">导出结果 JSON</button>
+  </div>
+</header>
+
+<div id="errorBanner" hidden>
+  <h3>场景校验未通过，已保留当前有效场景</h3>
+  <ul id="errorList"></ul>
+  <button id="btnDismissError">知道了</button>
+</div>
+
+<main class="layout">
+  <section>
+    <div class="card">
+      <h2>渲染画布（点击像素查展开光路）</h2>
+      <div class="canvas-wrap">
+        <canvas id="canvas" width="320" height="240" aria-label="反射渲染结果"></canvas>
+        <span id="crosshair" hidden></span>
+        <p id="emptyHint" class="muted" hidden></p>
+      </div>
+      <div class="canvas-caption">
+        <span id="canvasSize" class="mono"></span>
+        <span>中心采样 · 前向线性深度 · 累乘 RGB 反射率</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">候选视束</div><div class="v" id="statCand">–</div></div>
+        <div class="tile"><div class="k">激活视束</div><div class="v" id="statSel">–</div></div>
+        <div class="tile"><div class="k">选中总分</div><div class="v" id="statScore">–</div></div>
+        <div class="tile"><div class="k">重算耗时</div><div class="v" id="statTime">–</div></div>
+      </div>
+      <div id="statMode"></div>
+      <div class="param-row">
+        <label>配额 K（1–32）<input type="number" id="kInput" min="1" max="32" step="1"></label>
+        <label>最大反射层数（0–4）<input type="number" id="bounceInput" min="0" max="4" step="1"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>像素展开光路</h2>
+      <p id="traceEmpty" class="muted">在画布上点击任意像素，查看它依次经过的镜面与最终命中的三角形。</p>
+      <div id="tracePanel"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>镜面（点击选择后编辑，单镜面编辑走子树增量重算）</h2>
+      <div class="mirror-list" id="mirrorList"></div>
+      <div id="noMirrorHint" class="muted" hidden>当前场景没有镜面。</div>
+      <div id="editor" hidden>
+        <h3 id="editorTitle" style="margin-top:14px"></h3>
+        <div class="editor-grid">
+          <label>镜面 id</label><span id="mId" class="mono"></span>
+          <label>启用</label>
+          <div class="refl-row"><input type="checkbox" id="mEnabled"> <span class="muted">停用后该镜面不参与展开</span></div>
+          <label>反射率 RGB</label>
+          <div class="refl-row">
+            R <input type="number" id="mRefl0" min="0" max="1" step="0.01">
+            G <input type="number" id="mRefl1" min="0" max="1" step="0.01">
+            B <input type="number" id="mRefl2" min="0" max="1" step="0.01">
+          </div>
+        </div>
+        <table class="verts">
+          <thead><tr><th>顶点</th><th>x</th><th>y</th><th>z</th></tr></thead>
+          <tbody id="vertexTable"></tbody>
+        </table>
+        <p class="muted" style="font-size:12px;margin-top:8px">非共面、非凸或越界的修改会被拒绝并指出编号与原因，当前场景保持不变。</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>反射视束树与得分</h2>
+      <div id="beamTree"></div>
+    </div>
+
+    <details class="import card">
+      <summary style="cursor:pointer;font-weight:600">从 JSON 文本导入场景</summary>
+      <textarea id="importText" placeholder='粘贴 SPEC §1 结构的场景 JSON …'></textarea>
+      <div class="toolbar" style="margin-left:0">
+        <button id="btnImportApply">校验并载入</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+    </details>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="exportModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="导出结果">
+    <h2 style="color:var(--ink)">导出结果 JSON（SPEC §7）</h2>
+    <textarea id="exportArea" readonly></textarea>
+    <div class="row">
+      <button id="btnCopyExport">复制 JSON</button>
+      <button id="btnCloseExport" class="primary">关闭</button>
+    </div>
+  </div>
+</div>
+
+<footer class="notes">
+  判定阈值遵循 SPEC：虚相机正面 h &gt; 1e-6、父镜面半空间 1e-6、面积剪枝 1e-7、深度并列 1e-6；
+  奇数次反射自动翻转单面三角形屏幕绕序判据；同视束深度并列依次取层数小、图元号小者；
+  配额超 K 时在「选子必选父」约束下精确求总分最高的至多 K 条，并列依次比较条数与路径字典序。
+</footer>
+
+<script type="module" src="./app.js"></script>
