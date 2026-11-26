@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>材料分区标记 · 扩边争地</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1d222b; --panel2: #252c37; --line: #333c49;
+    --fg: #e6e9ee; --muted: #97a1b0; --accent: #5b9dff; --warn: #ffb454;
+    --ok: #5fd08a; --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: grid; grid-template-columns: 300px 1fr 320px; grid-template-rows: auto 1fr;
+    grid-template-areas: "head head head" "left center right";
+    gap: 12px; padding: 12px;
+  }
+  header { grid-area: head; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; overflow: auto;
+  }
+  #left { grid-area: left; }
+  #center { grid-area: center; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  #right { grid-area: right; }
+  .group { margin-bottom: 16px; }
+  .group h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 8px; font-weight: 600;
+  }
+  label.field { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 7px 0; }
+  label.field span { color: var(--muted); }
+  input[type=number], select {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 6px; padding: 5px 8px; width: 96px; font-size: 13px;
+  }
+  input[type=range] { flex: 1; }
+  .tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  button {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 7px; padding: 8px 6px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.active { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; width: 100%; padding: 10px; }
+  button.ghost { width: 100%; }
+  .palette { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+  .swatch {
+    aspect-ratio: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; cursor: pointer; border: 2px solid transparent;
+    color: rgba(0,0,0,.65);
+  }
+  .swatch.sel { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+  .canvas-wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  canvas { background: #0c0f13; border-radius: 6px; image-rendering: pixelated; max-width: 100%; max-height: 100%; touch-action: none; cursor: crosshair; }
+  .status { font-size: 12px; color: var(--muted); min-height: 20px; }
+  .status .ok { color: var(--ok); } .status .warn { color: var(--warn); } .status .err { color: var(--danger); }
+  .bar { height: 6px; background: var(--panel2); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .info-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+  .info-row b { font-weight: 600; }
+  .src-box { background: var(--panel2); border-radius: 7px; padding: 9px; margin: 8px 0; font-size: 12px; }
+  .src-box .lab-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+  .toggle { display: flex; gap: 6px; }
+  .toggle button { flex: 1; }
+  .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .file-row { display: flex; gap: 6px; }
+  .file-row button { flex: 1; }
+  code.k { background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>材料分区标记 · 扩边争地</h1>
+  <span class="sub">精确平方欧氏距离 · 异类余量裁决 · 周期环绕</span>
+  <span class="sub" id="dim-label"></span>
+</header>
+
+<aside class="panel" id="left">
+  <div class="group">
+    <h2>工具</h2>
+    <div class="tools">
+      <button data-tool="paint" class="active">画种子</button>
+      <button data-tool="erase">擦除</button>
+      <button data-tool="inspect">查看</button>
+    </div>
+    <div class="hint">画/擦支持按住拖动；查看点击格子读取两条来源与精确距离。</div>
+  </div>
+
+  <div class="group">
+    <h2>标签 1–32</h2>
+    <div class="palette" id="palette"></div>
+  </div>
+
+  <div class="group">
+    <h2>物理间距（整数 1–32）</h2>
+    <label class="field"><span>横向 sx</span>
+      <input type="number" id="sx" min="1" max="32" step="1" value="2"></label>
+    <label class="field"><span>纵向 sy</span>
+      <input type="number" id="sy" min="1" max="32" step="1" value="1"></label>
+  </div>
+
+  <div class="group">
+    <h2>环绕</h2>
+    <div class="toggle">
+      <button data-wrap="0">不环绕</button>
+      <button data-wrap="1" class="active">双轴环绕</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>填充参数</h2>
+    <label class="field"><span>半径（距离单位）</span>
+      <input type="number" id="radius" min="0" step="1" value="6"></label>
+    <label class="field"><span>余量（平方距离单位）</span>
+      <input type="number" id="margin" min="0" step="1" value="3"></label>
+    <div class="hint">仅当 <code class="k">d1²≤半径²</code> 且 <code class="k">d2²−d1²≥余量</code> 才填该标签，否则 0；无异类时余量视为无限。</div>
+  </div>
+</aside>
+
+<section id="center">
+  <div class="canvas-wrap"><canvas id="canvas" width="2048" height="2048"></canvas></div>
+  <div>
+    <div class="status" id="status">就绪。</div>
+    <div class="bar"><i id="prog"></i></div>
+  </div>
+</section>
+
+<aside class="panel" id="right">
+  <div class="group">
+    <h2>计算</h2>
+    <button class="primary" id="run">应用设置并计算</button>
+    <div class="hint" id="perf-hint"></div>
+  </div>
+
+  <div class="group">
+    <h2>种子 / 结果</h2>
+    <div class="info-row"><span>种子数</span><b id="seed-count">0</b></div>
+    <div class="info-row"><span>填充格数</span><b id="fill-count">—</b></div>
+    <div class="info-row"><span>计算耗时</span><b id="elapsed">—</b></div>
+  </div>
+
+  <div class="group">
+    <h2>点格信息</h2>
+    <div class="info-row"><span>坐标 (列,行)</span><b id="cell-coord">—</b></div>
+    <div class="info-row"><span>输出标签</span><b id="cell-label">—</b></div>
+    <div class="src-box" id="src1">最近种子：—</div>
+    <div class="src-box" id="src2">最近异类：—</div>
+  </div>
+
+  <div class="group">
+    <h2>导入 / 导出</h2>
+    <div class="file-row">
+      <button class="ghost" id="import-btn">导入 JSON</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+    </div>
+    <div class="hint" style="margin:6px 0">按 samples/label-margin.json 格式：width,height,seeds[[列,行,标签]],spacing,wrap,radius,margin。</div>
+    <button class="ghost" id="export-p5">导出标签 P5 (PGM)</button>
+  </div>
+
+  <div class="group">
+    <h2>视图</h2>
+    <div class="toggle">
+      <button id="view-seeds" class="active">种子</button>
+      <button id="view-fill">填充结果</button>
+    </div>
+    <label class="field" style="margin-top:8px"><span>缩放</span>
+      <input type="range" id="zoom" min="0" max="100" value="40"></label>
+  </div>
+</aside>
+
+<script src="js/sdt-core.js"></script>
+<script src="js/compute.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
