@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>竖屏重构 · 裁框规划器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div>
+        <h1>竖屏重构</h1>
+        <p class="sub">裁框规划器</p>
+      </div>
+    </div>
+
+    <div class="loadbar">
+      <button id="btnOpen" class="btn">打开素材包</button>
+      <button id="btnSample" class="btn ghost">载入示例</button>
+      <input id="fileInput" type="file" accept=".zip,application/zip" hidden>
+      <span id="projName" class="projname">未载入项目</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="metrics" id="metrics">
+      <div class="metric"><span class="k">总分</span><span class="v" id="mScore">—</span></div>
+      <div class="metric"><span class="k">二阶差和</span><span class="v" id="mAccel">—</span></div>
+      <div class="metric"><span class="k">求解</span><span class="v" id="mTime">—</span></div>
+    </div>
+
+    <div class="history">
+      <button id="btnUndo" class="icon-btn" title="撤销 (Ctrl+Z)" disabled>↶</button>
+      <button id="btnRedo" class="icon-btn" title="重做 (Ctrl+Shift+Z)" disabled>↷</button>
+    </div>
+  </header>
+
+  <div id="statusBar" class="statusbar" role="status">
+    <span id="statusDot" class="dot idle"></span>
+    <span id="statusText">等待载入素材</span>
+    <span id="statusDetail" class="status-detail"></span>
+  </div>
+
+  <main class="layout">
+
+    <!-- ---------------- left : shot strip + path ---------------- -->
+    <section class="panel left">
+      <div class="panel-head">
+        <h2>镜头序列</h2>
+        <span id="frameCount" class="pill">0 帧</span>
+      </div>
+      <div class="strip-wrap">
+        <div id="stripScroll" class="strip-scroll">
+          <div id="stripInner" class="strip-inner"></div>
+        </div>
+      </div>
+      <div class="panel-head tight">
+        <h2>裁框轨迹</h2>
+        <div class="legend">
+          <span class="lg x">x</span><span class="lg y">y</span>
+        </div>
+      </div>
+      <canvas id="pathCanvas" class="path-canvas" height="150"></canvas>
+    </section>
+
+    <!-- ---------------- centre : viewer ---------------- -->
+    <section class="panel center">
+      <div class="viewer-head">
+        <div class="frame-nav">
+          <button id="btnPrev" class="icon-btn" title="上一帧 (←)">‹</button>
+          <div class="frame-badge">
+            <span id="curFrame">—</span>
+            <small>帧</small>
+          </div>
+          <button id="btnNext" class="icon-btn" title="下一帧 (→)">›</button>
+        </div>
+        <div class="frame-meta" id="frameMeta"></div>
+        <div class="spacer"></div>
+        <div class="toggles" id="toggles">
+          <button class="chip on" data-ov="must">必拍</button>
+          <button class="chip on" data-ov="soft">可选</button>
+          <button class="chip on" data-ov="cand">候选</button>
+          <button class="chip on" data-ov="crop">裁框</button>
+          <button class="chip on" data-ov="ghost">相邻</button>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="canvas-frame" id="srcFrame">
+          <canvas id="viewCanvas"></canvas>
+          <div class="canvas-hint" id="canvasHint">载入素材后在此预览</div>
+        </div>
+      </div>
+
+      <div class="crop-strip">
+        <div class="crop-head">
+          <span>实际裁图</span>
+          <span id="cropDims" class="mono"></span>
+        </div>
+        <div class="crop-frame">
+          <canvas id="cropCanvas"></canvas>
+        </div>
+        <div class="crop-actions">
+          <button id="btnLockHere" class="btn small">锁定此裁框</button>
+          <button id="btnClearLock" class="btn small ghost">解除本帧锁定</button>
+          <span id="lockHereState" class="lock-state"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- right : inspector ---------------- -->
+    <section class="panel right">
+      <div class="panel-head">
+        <h2>本帧标注</h2>
+        <span id="lockBadge" class="pill lock hidden">锁定</span>
+      </div>
+
+      <div class="inspector">
+        <dl class="kv">
+          <div><dt>帧号</dt><dd id="iFrame" class="mono">—</dd></div>
+          <div><dt>镜头</dt><dd id="iShot">—</dd></div>
+          <div><dt>候选</dt><dd id="iCand" class="mono">—</dd></div>
+          <div><dt>裁框</dt><dd id="iCrop" class="mono">—</dd></div>
+          <div><dt>本帧得分</dt><dd id="iScore" class="mono">—</dd></div>
+        </dl>
+
+        <div class="block">
+          <h3>必拍框 <span id="mustCount" class="count">0</span></h3>
+          <ul id="mustList" class="taglist"></ul>
+        </div>
+
+        <div class="block">
+          <h3>可选项 <span id="softCount" class="count">0</span></h3>
+          <ul id="softList" class="softlist"></ul>
+        </div>
+
+        <div class="block">
+          <h3>候选裁框 <span id="candCount" class="count">0</span></h3>
+          <ul id="candList" class="candlist"></ul>
+        </div>
+
+        <div class="block">
+          <h3>构图锁 <span id="allLockCount" class="count">0</span></h3>
+          <ul id="lockList" class="locklist"></ul>
+        </div>
+
+        <div class="block">
+          <h3>运动约束</h3>
+          <dl class="kv compact">
+            <div><dt>位移上限</dt><dd id="iSpeed" class="mono">—</dd></div>
+            <div><dt>二阶差上限</dt><dd id="iAccel" class="mono">—</dd></div>
+            <div><dt>本帧二阶差</dt><dd id="iTriple" class="mono">—</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="export">
+        <div class="panel-head tight">
+          <h2>导出</h2>
+          <span id="selCount" class="pill">0 帧</span>
+        </div>
+        <div class="sel-row">
+          <label>起 <input id="selStart" type="number" min="1" class="num"></label>
+          <label>止 <input id="selEnd" type="number" min="1" class="num"></label>
+          <button id="btnSelHere" class="btn small ghost">当前帧</button>
+        </div>
+        <div class="export-actions">
+          <button id="btnExportSeq" class="btn primary">导出所选区间</button>
+          <button id="btnExportTable" class="btn ghost">全片裁框表</button>
+        </div>
+        <p id="exportHint" class="hint">每批至多 120 帧；PNG 按原图整数裁切，不缩放。</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast" role="alert"></div>
+<div id="dropVeil" class="drop-veil"><div>松开以载入 zip 素材包</div></div>
+
+<script src="src/solver.js"></script>
+<script src="src/zip.js"></script>
+<script src="src/image.js"></script>
+<script src="src/sources.js"></script>
+<script src="src/sample-data.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

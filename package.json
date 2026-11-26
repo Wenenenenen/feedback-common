@@ -1,0 +1,11 @@
+{
+  "name": "velocity-crop-conformer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "竖屏重构裁框规划器 — 访谈短片两人交谈的全局最优裁框轨迹求解与预览导出",
+  "scripts": {
+    "serve": "node serve.js 8080",
+    "test": "node tools/fuzz.js 4000 1 && node tools/fuzz.js 4000 2 && node tools/fuzz.js 4000 3",
+    "bench": "node tools/bench.js"
+  }
+}
