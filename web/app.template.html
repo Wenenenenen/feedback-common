@@ -1,0 +1,359 @@
+<title>多底图直通反推工作台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* ---------- design tokens: 实验室仪器风格，冷灰石板 + 青绿读数色 ---------- */
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef1f4;
+    --ink: #18222c;
+    --ink-soft: #54636f;
+    --line: #d3dae0;
+    --accent: #0e7c86;
+    --accent-soft: #d9eef0;
+    --ok: #1e8e63;
+    --bad: #c5465a;
+    --warn: #b08422;
+    --checker-a: #e6e8eb;
+    --checker-b: #cfd4d9;
+    --shadow: 0 1px 2px rgba(24, 34, 44, .06), 0 4px 14px rgba(24, 34, 44, .07);
+    --mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, "Noto Sans SC", monospace;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --display: "Space Grotesk", "Inter", "Noto Sans SC", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12181f; --surface: #1a222b; --surface-2: #222c37;
+      --ink: #e6ebef; --ink-soft: #98a7b3; --line: #31404d;
+      --accent: #45b6c0; --accent-soft: #16333a;
+      --ok: #4cc593; --bad: #e8798a; --warn: #d9ac55;
+      --checker-a: #232d38; --checker-b: #2c3844;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12181f; --surface: #1a222b; --surface-2: #222c37;
+    --ink: #e6ebef; --ink-soft: #98a7b3; --line: #31404d;
+    --accent: #45b6c0; --accent-soft: #16333a;
+    --ok: #4cc593; --bad: #e8798a; --warn: #d9ac55;
+    --checker-a: #232d38; --checker-b: #2c3844;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+  code, .mono, td, th, .kv, .badge { font-family: var(--mono); }
+  button, input, select { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .app-header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding-block: 18px 14px;
+  }
+  .app-header h1 { font-size: 20px; letter-spacing: .2px; }
+  .app-header .sub { color: var(--ink-soft); font-size: 12.5px; }
+  .theme-toggle {
+    margin-left: auto; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(240px, 290px) minmax(0, 1fr) minmax(290px, 360px);
+    gap: 14px;
+    padding-bottom: 28px;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+  .panel h2 {
+    font-size: 12.5px; text-transform: uppercase; letter-spacing: .9px;
+    color: var(--ink-soft); margin-bottom: 10px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+
+  /* ---------- left: inputs & controls ---------- */
+  .drop-zone {
+    border: 1.5px dashed var(--line); border-radius: 10px;
+    padding: 16px 12px; text-align: center; color: var(--ink-soft);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .drop-zone.dragging { border-color: var(--accent); background: var(--accent-soft); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    border: 1px solid var(--line); background: var(--surface-2);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  button.primary:hover:not(:disabled) { color: #fff; filter: brightness(1.07); }
+  .file-label { position: relative; overflow: hidden; display: inline-block; }
+  .file-label input[type="file"] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+  }
+  .file-label input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .group-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 4px; border-bottom: 1px solid var(--line);
+  }
+  .group-row:last-child { border-bottom: 0; }
+  .group-label { font-family: var(--mono); font-size: 12.5px; }
+
+  .tol-wrap { display: flex; align-items: center; gap: 10px; }
+  .tol-wrap input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .tol-wrap input[type="number"] {
+    width: 58px; padding: 5px 7px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--surface-2); font-family: var(--mono);
+  }
+  .hint { color: var(--ink-soft); font-size: 12px; margin: 6px 0 0; }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .stat {
+    background: var(--surface-2); border-radius: 9px; padding: 9px 10px;
+    min-width: 0;
+  }
+  .stat .k { display: block; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .6px; }
+  .stat .v { font-family: var(--mono); font-size: 17px; font-variant-numeric: tabular-nums; }
+  .stat .v.ok { color: var(--ok); } .stat .v.bad { color: var(--bad); } .stat .v.warn { color: var(--warn); }
+
+  /* ---------- center: preview ---------- */
+  .preview-panel { display: flex; flex-direction: column; gap: 12px; }
+  .view-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+  .view-switch label {
+    border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+    cursor: pointer; font-size: 12.5px; background: var(--surface-2);
+  }
+  .view-switch input { accent-color: var(--accent); margin-right: 5px; }
+  .canvas-frame {
+    display: flex; align-items: center; justify-content: center;
+    background:
+      conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%, var(--checker-b) 0 75%, var(--checker-a) 0)
+      0 0 / 16px 16px;
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; min-height: 260px; overflow: auto;
+  }
+  #canvas {
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    max-width: 100%; height: auto;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.18);
+    cursor: crosshair;
+    width: min(100%, 460px);
+  }
+  .recomp-controls { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .recomp-controls .cluster { display: flex; gap: 8px; align-items: center; }
+  select, input[type="color"] {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2);
+    padding: 5px 8px;
+  }
+  input[type="color"] { width: 44px; height: 32px; padding: 2px; }
+
+  .progress { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .15s linear; }
+  .alert {
+    border-radius: 9px; padding: 9px 12px; font-size: 12.5px;
+  }
+  .alert.error { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); }
+  .alert.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+  .alert.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); }
+
+  /* ---------- right: inspector ---------- */
+  .inspector { max-height: 72vh; overflow: auto; }
+  .muted { color: var(--ink-soft); }
+  .insp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .badge {
+    --bc: var(--accent);
+    border: 1px solid var(--bc); color: var(--bc);
+    border-radius: 999px; padding: 2px 10px; font-size: 11.5px;
+  }
+  .solution-tile {
+    border: 1px solid var(--accent); background: var(--accent-soft);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+    font-size: 12.5px;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  .kv { margin-top: 6px; }
+  .kv th, .kv td { text-align: left; padding: 2px 6px; font-size: 13px; }
+  .feasible-head {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--ink-soft); margin-bottom: 6px;
+  }
+  .feasible-list { display: flex; flex-direction: column; gap: 6px; }
+  details.a-row {
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+    background: var(--surface-2);
+  }
+  details.a-row.picked { border-color: var(--accent); }
+  details.a-row summary { cursor: pointer; font-family: var(--mono); font-size: 12.5px; }
+  .per-group { margin-top: 8px; font-size: 11.5px; }
+  .per-group th, .per-group td {
+    padding: 4px 6px; border: 1px solid var(--line); text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  .per-group thead th { background: var(--surface); }
+  tr.excluded td { font-style: italic; }
+  .err-zero { color: var(--ok); }
+  .err-ok { color: var(--ink-soft); }
+  .err-bad { color: var(--bad); font-weight: 700; }
+
+  .export-row { display: flex; flex-direction: column; gap: 8px; }
+  .export-row button { width: 100%; }
+
+  body.stale .panel { opacity: .78; }
+  .formula {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft);
+    background: var(--surface-2); border-radius: 8px; padding: 8px 10px;
+    overflow-x: auto;
+  }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); }
+  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <h1>多底图直通反推工作台</h1>
+  <span class="sub">整数码值域 · 无颜色空间转换 · 2–8 组底图 · 每边 ≤384</span>
+  <button class="theme-toggle" id="theme-toggle" type="button">切换主题</button>
+</header>
+
+<div class="layout">
+  <!-- left column -->
+  <div class="stack">
+    <section class="panel">
+      <h2>数据载入</h2>
+      <div class="drop-zone" id="drop-zone">
+        <div>拖入数据集文件夹，或选择文件 / 文件夹</div>
+        <div class="btn-row" style="justify-content:center">
+          <label class="file-label btn-like"><button type="button" tabindex="-1">选文件夹</button>
+            <input type="file" id="file-folder" webkitdirectory directory multiple></label>
+          <label class="file-label btn-like"><button type="button" tabindex="-1">多选文件</button>
+            <input type="file" id="file-multi" accept=".ppm,.pgm,.json" multiple></label>
+          <button type="button" id="btn-demo" class="primary">载入内置样片</button>
+        </div>
+        <p class="hint">需要 groups.json，或按 bg{i}.ppm / obs{i}.ppm / valid{i}.pgm 命名自动识别。</p>
+      </div>
+      <div class="alert error" id="error" hidden></div>
+    </section>
+
+    <section class="panel">
+      <h2>参与求解的观测组</h2>
+      <div id="groups"></div>
+    </section>
+
+    <section class="panel">
+      <h2>容差（0–8 码值）</h2>
+      <div class="tol-wrap">
+        <input type="range" id="tol-range" min="0" max="8" step="1" value="0">
+        <input type="number" id="tol-num" min="0" max="8" step="1" value="0">
+      </div>
+      <p class="hint">每个未排除的观测通道都必须单独落在容差内；改动后全图重新求解，检查器、预览与导出共用同一次结果。</p>
+      <div class="progress" id="progress" hidden><div id="progress-bar"></div></div>
+      <div class="alert warn" id="stale-note" hidden>参数已变更，正在重新求解；当前面板内容即将整体刷新。</div>
+    </section>
+
+    <section class="panel">
+      <h2>状态统计</h2>
+      <div class="stat-grid">
+        <div class="stat"><span class="k">尺寸</span><span class="v" id="stat-size">—</span></div>
+        <div class="stat"><span class="k">启用组</span><span class="v" id="stat-groups">—</span></div>
+        <div class="stat"><span class="k">容差</span><span class="v" id="stat-tol">—</span></div>
+        <div class="stat"><span class="k">可行</span><span class="v ok" id="stat-feasible">—</span></div>
+        <div class="stat"><span class="k">无解</span><span class="v bad" id="stat-nosol">—</span></div>
+        <div class="stat"><span class="k">未测</span><span class="v warn" id="stat-unmeas">—</span></div>
+      </div>
+      <p class="hint">可行占比 <span class="mono" id="stat-feasible-pct">—</span></p>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--ok)"></span>可行（状态码 1）</span>
+        <span><span class="dot" style="background:var(--bad)"></span>无解（2）</span>
+        <span><span class="dot" style="background:var(--warn)"></span>未测（0）</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>导出（同一次求解结果）</h2>
+      <div class="export-row">
+        <button type="button" id="btn-export-rgba" disabled>导出直通 RGBA PNG</button>
+        <button type="button" id="btn-export-status" disabled>导出状态 PNG（灰度 0/1/2）</button>
+        <button type="button" id="btn-export-recomp" disabled>导出当前重合成 PNG</button>
+      </div>
+      <div class="alert ok" id="self-check" hidden>RGBA 字节自检通过：导出 PNG 与求解结果逐字节一致。</div>
+      <p class="hint">未测与无解像素在 RGBA 中一律写透明黑 (0,0,0,0)。</p>
+    </section>
+  </div>
+
+  <!-- center column -->
+  <div class="stack">
+    <section class="panel preview-panel">
+      <h2>预览</h2>
+      <div class="view-switch">
+        <label><input type="radio" name="view" value="rgba" checked>直通 RGBA</label>
+        <label><input type="radio" name="view" value="status">状态图</label>
+        <label><input type="radio" name="view" value="recomp">重合成</label>
+      </div>
+      <div class="canvas-frame"><canvas id="canvas" width="1" height="1"></canvas></div>
+      <div class="recomp-controls">
+        <div class="cluster">
+          <label><input type="radio" name="recomp-source" value="backdrop" checked>用输入底图</label>
+          <select id="recomp-group-select"></select>
+          <span id="recomp-group-pick"></span>
+        </div>
+        <div class="cluster">
+          <label><input type="radio" name="recomp-source" value="custom">自选纯色</label>
+          <input type="color" id="recomp-color" value="#0080c8" hidden>
+        </div>
+      </div>
+      <p class="hint">点击画面像素送入右侧检查器。重合成使用与反推相同的整数公式。</p>
+    </section>
+    <section class="panel">
+      <h2>约定公式</h2>
+      <div class="formula">O = floor((A·F + (255−A)·B + 127) / 255)　｜　误差 = 预测 − 观测　｜　交片：最小 A，再按 R、G、B 依次最小</div>
+    </section>
+  </div>
+
+  <!-- right column -->
+  <div class="stack">
+    <section class="panel">
+      <h2>像素检查器</h2>
+      <div class="inspector" id="inspector">
+        <p class="muted">载入数据后，在预览图上点选像素。</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/*__MODULES_EXEC__*/
+/*__MODULE_STRING__*/
+/*__WORKER_STRING__*/
+/*__DEMO__*/
+/*__MAIN__*/
+</script>
+</body>

@@ -1,0 +1,1510 @@
+<title>多底图直通反推工作台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* ---------- design tokens: 实验室仪器风格，冷灰石板 + 青绿读数色 ---------- */
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef1f4;
+    --ink: #18222c;
+    --ink-soft: #54636f;
+    --line: #d3dae0;
+    --accent: #0e7c86;
+    --accent-soft: #d9eef0;
+    --ok: #1e8e63;
+    --bad: #c5465a;
+    --warn: #b08422;
+    --checker-a: #e6e8eb;
+    --checker-b: #cfd4d9;
+    --shadow: 0 1px 2px rgba(24, 34, 44, .06), 0 4px 14px rgba(24, 34, 44, .07);
+    --mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, "Noto Sans SC", monospace;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --display: "Space Grotesk", "Inter", "Noto Sans SC", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12181f; --surface: #1a222b; --surface-2: #222c37;
+      --ink: #e6ebef; --ink-soft: #98a7b3; --line: #31404d;
+      --accent: #45b6c0; --accent-soft: #16333a;
+      --ok: #4cc593; --bad: #e8798a; --warn: #d9ac55;
+      --checker-a: #232d38; --checker-b: #2c3844;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12181f; --surface: #1a222b; --surface-2: #222c37;
+    --ink: #e6ebef; --ink-soft: #98a7b3; --line: #31404d;
+    --accent: #45b6c0; --accent-soft: #16333a;
+    --ok: #4cc593; --bad: #e8798a; --warn: #d9ac55;
+    --checker-a: #232d38; --checker-b: #2c3844;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; }
+  code, .mono, td, th, .kv, .badge { font-family: var(--mono); }
+  button, input, select { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .app-header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding-block: 18px 14px;
+  }
+  .app-header h1 { font-size: 20px; letter-spacing: .2px; }
+  .app-header .sub { color: var(--ink-soft); font-size: 12.5px; }
+  .theme-toggle {
+    margin-left: auto; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 999px; padding: 5px 12px; cursor: pointer;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(240px, 290px) minmax(0, 1fr) minmax(290px, 360px);
+    gap: 14px;
+    padding-bottom: 28px;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+  .panel h2 {
+    font-size: 12.5px; text-transform: uppercase; letter-spacing: .9px;
+    color: var(--ink-soft); margin-bottom: 10px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+
+  /* ---------- left: inputs & controls ---------- */
+  .drop-zone {
+    border: 1.5px dashed var(--line); border-radius: 10px;
+    padding: 16px 12px; text-align: center; color: var(--ink-soft);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .drop-zone.dragging { border-color: var(--accent); background: var(--accent-soft); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    border: 1px solid var(--line); background: var(--surface-2);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  button.primary:hover:not(:disabled) { color: #fff; filter: brightness(1.07); }
+  .file-label { position: relative; overflow: hidden; display: inline-block; }
+  .file-label input[type="file"] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+  }
+  .file-label input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  .group-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 4px; border-bottom: 1px solid var(--line);
+  }
+  .group-row:last-child { border-bottom: 0; }
+  .group-label { font-family: var(--mono); font-size: 12.5px; }
+
+  .tol-wrap { display: flex; align-items: center; gap: 10px; }
+  .tol-wrap input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .tol-wrap input[type="number"] {
+    width: 58px; padding: 5px 7px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--surface-2); font-family: var(--mono);
+  }
+  .hint { color: var(--ink-soft); font-size: 12px; margin: 6px 0 0; }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .stat {
+    background: var(--surface-2); border-radius: 9px; padding: 9px 10px;
+    min-width: 0;
+  }
+  .stat .k { display: block; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .6px; }
+  .stat .v { font-family: var(--mono); font-size: 17px; font-variant-numeric: tabular-nums; }
+  .stat .v.ok { color: var(--ok); } .stat .v.bad { color: var(--bad); } .stat .v.warn { color: var(--warn); }
+
+  /* ---------- center: preview ---------- */
+  .preview-panel { display: flex; flex-direction: column; gap: 12px; }
+  .view-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+  .view-switch label {
+    border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+    cursor: pointer; font-size: 12.5px; background: var(--surface-2);
+  }
+  .view-switch input { accent-color: var(--accent); margin-right: 5px; }
+  .canvas-frame {
+    display: flex; align-items: center; justify-content: center;
+    background:
+      conic-gradient(var(--checker-b) 0 25%, var(--checker-a) 0 50%, var(--checker-b) 0 75%, var(--checker-a) 0)
+      0 0 / 16px 16px;
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; min-height: 260px; overflow: auto;
+  }
+  #canvas {
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    max-width: 100%; height: auto;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.18);
+    cursor: crosshair;
+    width: min(100%, 460px);
+  }
+  .recomp-controls { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .recomp-controls .cluster { display: flex; gap: 8px; align-items: center; }
+  select, input[type="color"] {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2);
+    padding: 5px 8px;
+  }
+  input[type="color"] { width: 44px; height: 32px; padding: 2px; }
+
+  .progress { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .15s linear; }
+  .alert {
+    border-radius: 9px; padding: 9px 12px; font-size: 12.5px;
+  }
+  .alert.error { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); }
+  .alert.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+  .alert.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); }
+
+  /* ---------- right: inspector ---------- */
+  .inspector { max-height: 72vh; overflow: auto; }
+  .muted { color: var(--ink-soft); }
+  .insp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .badge {
+    --bc: var(--accent);
+    border: 1px solid var(--bc); color: var(--bc);
+    border-radius: 999px; padding: 2px 10px; font-size: 11.5px;
+  }
+  .solution-tile {
+    border: 1px solid var(--accent); background: var(--accent-soft);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+    font-size: 12.5px;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  .kv { margin-top: 6px; }
+  .kv th, .kv td { text-align: left; padding: 2px 6px; font-size: 13px; }
+  .feasible-head {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--ink-soft); margin-bottom: 6px;
+  }
+  .feasible-list { display: flex; flex-direction: column; gap: 6px; }
+  details.a-row {
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+    background: var(--surface-2);
+  }
+  details.a-row.picked { border-color: var(--accent); }
+  details.a-row summary { cursor: pointer; font-family: var(--mono); font-size: 12.5px; }
+  .per-group { margin-top: 8px; font-size: 11.5px; }
+  .per-group th, .per-group td {
+    padding: 4px 6px; border: 1px solid var(--line); text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  .per-group thead th { background: var(--surface); }
+  tr.excluded td { font-style: italic; }
+  .err-zero { color: var(--ok); }
+  .err-ok { color: var(--ink-soft); }
+  .err-bad { color: var(--bad); font-weight: 700; }
+
+  .export-row { display: flex; flex-direction: column; gap: 8px; }
+  .export-row button { width: 100%; }
+
+  body.stale .panel { opacity: .78; }
+  .formula {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft);
+    background: var(--surface-2); border-radius: 8px; padding: 8px 10px;
+    overflow-x: auto;
+  }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); }
+  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <h1>多底图直通反推工作台</h1>
+  <span class="sub">整数码值域 · 无颜色空间转换 · 2–8 组底图 · 每边 ≤384</span>
+  <button class="theme-toggle" id="theme-toggle" type="button">切换主题</button>
+</header>
+
+<div class="layout">
+  <!-- left column -->
+  <div class="stack">
+    <section class="panel">
+      <h2>数据载入</h2>
+      <div class="drop-zone" id="drop-zone">
+        <div>拖入数据集文件夹，或选择文件 / 文件夹</div>
+        <div class="btn-row" style="justify-content:center">
+          <label class="file-label btn-like"><button type="button" tabindex="-1">选文件夹</button>
+            <input type="file" id="file-folder" webkitdirectory directory multiple></label>
+          <label class="file-label btn-like"><button type="button" tabindex="-1">多选文件</button>
+            <input type="file" id="file-multi" accept=".ppm,.pgm,.json" multiple></label>
+          <button type="button" id="btn-demo" class="primary">载入内置样片</button>
+        </div>
+        <p class="hint">需要 groups.json，或按 bg{i}.ppm / obs{i}.ppm / valid{i}.pgm 命名自动识别。</p>
+      </div>
+      <div class="alert error" id="error" hidden></div>
+    </section>
+
+    <section class="panel">
+      <h2>参与求解的观测组</h2>
+      <div id="groups"></div>
+    </section>
+
+    <section class="panel">
+      <h2>容差（0–8 码值）</h2>
+      <div class="tol-wrap">
+        <input type="range" id="tol-range" min="0" max="8" step="1" value="0">
+        <input type="number" id="tol-num" min="0" max="8" step="1" value="0">
+      </div>
+      <p class="hint">每个未排除的观测通道都必须单独落在容差内；改动后全图重新求解，检查器、预览与导出共用同一次结果。</p>
+      <div class="progress" id="progress" hidden><div id="progress-bar"></div></div>
+      <div class="alert warn" id="stale-note" hidden>参数已变更，正在重新求解；当前面板内容即将整体刷新。</div>
+    </section>
+
+    <section class="panel">
+      <h2>状态统计</h2>
+      <div class="stat-grid">
+        <div class="stat"><span class="k">尺寸</span><span class="v" id="stat-size">—</span></div>
+        <div class="stat"><span class="k">启用组</span><span class="v" id="stat-groups">—</span></div>
+        <div class="stat"><span class="k">容差</span><span class="v" id="stat-tol">—</span></div>
+        <div class="stat"><span class="k">可行</span><span class="v ok" id="stat-feasible">—</span></div>
+        <div class="stat"><span class="k">无解</span><span class="v bad" id="stat-nosol">—</span></div>
+        <div class="stat"><span class="k">未测</span><span class="v warn" id="stat-unmeas">—</span></div>
+      </div>
+      <p class="hint">可行占比 <span class="mono" id="stat-feasible-pct">—</span></p>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--ok)"></span>可行（状态码 1）</span>
+        <span><span class="dot" style="background:var(--bad)"></span>无解（2）</span>
+        <span><span class="dot" style="background:var(--warn)"></span>未测（0）</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>导出（同一次求解结果）</h2>
+      <div class="export-row">
+        <button type="button" id="btn-export-rgba" disabled>导出直通 RGBA PNG</button>
+        <button type="button" id="btn-export-status" disabled>导出状态 PNG（灰度 0/1/2）</button>
+        <button type="button" id="btn-export-recomp" disabled>导出当前重合成 PNG</button>
+      </div>
+      <div class="alert ok" id="self-check" hidden>RGBA 字节自检通过：导出 PNG 与求解结果逐字节一致。</div>
+      <p class="hint">未测与无解像素在 RGBA 中一律写透明黑 (0,0,0,0)。</p>
+    </section>
+  </div>
+
+  <!-- center column -->
+  <div class="stack">
+    <section class="panel preview-panel">
+      <h2>预览</h2>
+      <div class="view-switch">
+        <label><input type="radio" name="view" value="rgba" checked>直通 RGBA</label>
+        <label><input type="radio" name="view" value="status">状态图</label>
+        <label><input type="radio" name="view" value="recomp">重合成</label>
+      </div>
+      <div class="canvas-frame"><canvas id="canvas" width="1" height="1"></canvas></div>
+      <div class="recomp-controls">
+        <div class="cluster">
+          <label><input type="radio" name="recomp-source" value="backdrop" checked>用输入底图</label>
+          <select id="recomp-group-select"></select>
+          <span id="recomp-group-pick"></span>
+        </div>
+        <div class="cluster">
+          <label><input type="radio" name="recomp-source" value="custom">自选纯色</label>
+          <input type="color" id="recomp-color" value="#0080c8" hidden>
+        </div>
+      </div>
+      <p class="hint">点击画面像素送入右侧检查器。重合成使用与反推相同的整数公式。</p>
+    </section>
+    <section class="panel">
+      <h2>约定公式</h2>
+      <div class="formula">O = floor((A·F + (255−A)·B + 127) / 255)　｜　误差 = 预测 − 观测　｜　交片：最小 A，再按 R、G、B 依次最小</div>
+    </section>
+  </div>
+
+  <!-- right column -->
+  <div class="stack">
+    <section class="panel">
+      <h2>像素检查器</h2>
+      <div class="inspector" id="inspector">
+        <p class="muted">载入数据后，在预览图上点选像素。</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+// ===== inlined from tools/src/pnm.js =====
+// P5/P6 (8-bit, maxval 255) parser. Pure ESM, no DOM, no Node APIs.
+// Inputs are untrusted: every field is validated, no typed-array view of
+// unvalidated bytes is handed out before the length check passes.
+
+class PnmError extends Error {}
+
+function parseHeader(view) {
+  const dec = new TextDecoder("ascii");
+  let pos = 0;
+  const len = view.byteLength;
+
+  function isWs(ch) {
+    return ch === 32 || ch === 9 || ch === 10 || ch === 13;
+  }
+
+  // Skip any run of whitespace and '#' comments (comment runs to end of line).
+  function skipSep() {
+    while (pos < len) {
+      const ch = view.getUint8(pos);
+      if (ch === 35) {
+        while (pos < len && view.getUint8(pos) !== 10 && view.getUint8(pos) !== 13) pos++;
+      } else if (isWs(ch)) {
+        pos++;
+      } else {
+        break;
+      }
+    }
+  }
+
+  function readToken() {
+    skipSep();
+    const start = pos;
+    while (pos < len && !isWs(view.getUint8(pos))) pos++;
+    if (pos === start) throw new PnmError("文件头意外结束");
+    return dec.decode(new Uint8Array(view.buffer, view.byteOffset + start, pos - start));
+  }
+
+  const magic = readToken();
+  if (magic !== "P5" && magic !== "P6") throw new PnmError("只支持 P5/P6 格式，收到 " + magic);
+  const width = Number(readToken());
+  const height = Number(readToken());
+  const maxval = Number(readToken());
+  // readToken stopped on the single whitespace separating header from raster;
+  // netpbm: raster begins immediately after that one whitespace byte.
+  const rasterStart = pos + 1;
+  return { magic, width, height, maxval, rasterStart };
+}
+
+function parsePnm(buffer) {
+  if (!(buffer instanceof ArrayBuffer)) throw new PnmError("需要 ArrayBuffer 输入");
+  let view;
+  try {
+    view = new DataView(buffer);
+  } catch (e) {
+    throw new PnmError("无法读取文件字节");
+  }
+  const { magic, width, height, maxval, rasterStart } = parseHeader(view);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new PnmError("宽高必须为正整数");
+  }
+  if (width > 384 || height > 384) throw new PnmError("每边最大 384，收到 " + width + "x" + height);
+  if (maxval !== 255) throw new PnmError("只支持 8 位（maxval=255），收到 maxval=" + maxval);
+  const channels = magic === "P6" ? 3 : 1;
+  const need = width * height * channels;
+  const available = buffer.byteLength - rasterStart;
+  if (available < need) throw new PnmError("栅格数据不完整：需要 " + need + " 字节，实际 " + available);
+  const data = new Uint8Array(buffer, rasterStart, need);
+  return { magic, width, height, channels, data };
+}
+
+
+// ===== inlined from tools/src/solver.js =====
+// Multi-backdrop straight-alpha recovery with exact integer interval math.
+//
+// 合成约定（整数域，无颜色空间转换）：
+//   O = floor((A*F + (255-A)*B + 127) / 255)
+// 容差 t 下，某观测通道允许 O-t <= predict <= O+t（码值夹到 0..255）。
+// 对每个 A in 0..255，求每个未排除观测通道的可行 F 区间，再按通道取交。
+// 交片解：可行 A 中取最小 A，F 逐通道取区间下界（即 R、G、B 依次最小）。
+
+const STATUS_UNMEASURED = 0;
+const STATUS_FEASIBLE = 1;
+const STATUS_NO_SOLUTION = 2;
+
+function composite(a, f, b) {
+  return ((a * f + (255 - a) * b + 127) / 255) | 0;
+}
+
+function floorDiv(x, y) {
+  // y > 0
+  return x >= 0 ? ((x / y) | 0) : -((( -x + y - 1) / y) | 0);
+}
+
+function ceilDiv(x, y) {
+  // y > 0
+  return x >= 0 ? (((x + y - 1) / y) | 0) : -(((-x) / y) | 0);
+}
+
+// 单通道 F 区间：满足 |composite(a,F,b)-o| <= t 的全部整数 F in 0..255。
+// 返回 [lo, hi] 或 null。
+function channelInterval(a, b, o, t) {
+  const loBound = o - t > 0 ? o - t : 0;
+  const hiBound = o + t < 255 ? o + t : 255;
+  if (a === 0) {
+    // 此时预测恒等于 floor(((255)*b + 127)/255)
+    const p = composite(0, 0, b);
+    return p >= loBound && p <= hiBound ? [0, 255] : null;
+  }
+  const k = (255 - a) * b;
+  // 255*loBound - k - 127 <= a*F
+  const numLo = 255 * loBound - k - 127;
+  // a*F <= 255*(hiBound+1) - 1 - k - 127
+  const numHi = 255 * (hiBound + 1) - 1 - k - 127;
+  let lo = ceilDiv(numLo, a);
+  let hi = floorDiv(numHi, a);
+  if (lo < 0) lo = 0;
+  if (hi > 255) hi = 255;
+  return lo <= hi ? [lo, hi] : null;
+}
+
+// 解一个像素。
+// active: 数组，每组为 {b:[r,g,b], o:[r,g,b]}，仅含未排除的组；空数组表示未测。
+// 返回 {status, solution:[a,r,g,b]|null, feasible:[{a,lo:[...],hi:[...]}...]}
+function solvePixel(active, tol) {
+  if (active.length === 0) {
+    return { status: STATUS_UNMEASURED, solution: null, feasible: [] };
+  }
+  const feasible = [];
+  let solution = null;
+  for (let a = 0; a <= 255; a++) {
+    const lo = [0, 0, 0];
+    const hi = [255, 255, 255];
+    let ok = true;
+    for (let g = 0; g < active.length; g++) {
+      const grp = active[g];
+      for (let c = 0; c < 3; c++) {
+        const iv = channelInterval(a, grp.b[c], grp.o[c], tol);
+        if (iv === null) { ok = false; break; }
+        if (iv[0] > lo[c]) lo[c] = iv[0];
+        if (iv[1] < hi[c]) hi[c] = iv[1];
+        if (lo[c] > hi[c]) { ok = false; break; }
+      }
+      if (!ok) break;
+    }
+    if (ok) {
+      const entry = { a, lo: [lo[0], lo[1], lo[2]], hi: [hi[0], hi[1], hi[2]] };
+      feasible.push(entry);
+      if (solution === null) {
+        // 最小 A（a 递增），F 取下界 => R、G、B 依次最小
+        solution = [a, lo[0], lo[1], lo[2]];
+      }
+    }
+  }
+  if (solution === null) return { status: STATUS_NO_SOLUTION, solution: null, feasible: [] };
+  return { status: STATUS_FEASIBLE, solution, feasible };
+}
+
+// 全图求解。groups: [{bg:Uint8Array(3n), obs:Uint8Array(3n), mask:Uint8Array(n)|null, enabled:boolean}]
+// 返回 {status:Uint8Array(n), rgba:Uint8Array(4n), feasibleA:Uint8Array(n) 计数,
+//        width,height,tol,counts}
+// onProgress(rowFrac=>void) 可选。
+function solveImage(width, height, groups, tol, onProgress = null) {
+  const n = width * height;
+  const status = new Uint8Array(n);
+  const rgba = new Uint8Array(4 * n); // 默认全 0 => 未测/无解都是透明黑
+  const feasibleCount = new Uint16Array(n);
+  const counts = { feasible: 0, noSolution: 0, unmeasured: 0 };
+  const activeGroups = groups.filter((g) => g.enabled);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const active = [];
+      for (let gi = 0; gi < activeGroups.length; gi++) {
+        const g = activeGroups[gi];
+        if (g.mask !== null && g.mask[p] === 0) continue;
+      active.push({
+          b: [g.bg[3 * p], g.bg[3 * p + 1], g.bg[3 * p + 2]],
+          o: [g.obs[3 * p], g.obs[3 * p + 1], g.obs[3 * p + 2]],
+        });
+      }
+      const res = solvePixel(active, tol);
+      status[p] = res.status;
+      if (res.status === STATUS_FEASIBLE) {
+        const [a, r, gg, b] = res.solution;
+        rgba[4 * p] = r;
+        rgba[4 * p + 1] = gg;
+        rgba[4 * p + 2] = b;
+        rgba[4 * p + 3] = a;
+        feasibleCount[p] = res.feasible.length;
+        counts.feasible++;
+      } else if (res.status === STATUS_NO_SOLUTION) {
+        counts.noSolution++;
+      } else {
+        counts.unmeasured++;
+      }
+    }
+    if (onProgress && (y & 15) === 15) onProgress((y + 1) / height);
+  }
+  if (onProgress) onProgress(1);
+  return { width, height, tol, status, rgba, feasibleCount, counts };
+}
+
+// 检查器：某像素在某次求解下的完整信息（全部可行 A + 逐组预测误差）。
+function inspectPixel(width, groups, tol, x, y) {
+  const p = y * width + x;
+  const perGroup = groups.map((g) => {
+    const excludedByMask = g.mask !== null && g.mask[p] === 0;
+    const used = g.enabled && !excludedByMask;
+    return {
+      enabled: g.enabled,
+      excludedByMask,
+      used,
+      b: [g.bg[3 * p], g.bg[3 * p + 1], g.bg[3 * p + 2]],
+      o: [g.obs[3 * p], g.obs[3 * p + 1], g.obs[3 * p + 2]],
+    };
+  });
+  const active = perGroup.filter((g) => g.used).map((g) => ({ b: g.b, o: g.o }));
+  const res = solvePixel(active, tol);
+  // 逐组、逐通道预测与误差（误差 = 预测 - 观测），基于交片解
+  let predictions = null;
+  if (res.status === STATUS_FEASIBLE) {
+    const [a, r, gg, b] = res.solution;
+    const f = [r, gg, b];
+    predictions = perGroup.map((g) => {
+      const pred = [0, 0, 0];
+      const err = [0, 0, 0];
+      for (let c = 0; c < 3; c++) {
+        pred[c] = composite(a, f[c], g.b[c]);
+        err[c] = pred[c] - g.o[c];
+      }
+      return { pred, err };
+    });
+  }
+  return {
+    x, y,
+    status: res.status,
+    solution: res.solution,
+    feasible: res.feasible,
+    perGroup,
+    predictions,
+  };
+}
+
+
+// ===== inlined from tools/src/png.js =====
+// Minimal PNG encoder: RGBA (color type 6) and grayscale 8-bit (color type 0).
+// Zero dependencies. Prefers CompressionStream('deflate') (raw zlib wrapper);
+// falls back to hand-written stored deflate blocks so export works anywhere.
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function adler32(bytes) {
+  let a = 1, b = 0;
+  const MOD = 65521;
+  for (let i = 0; i < bytes.length; i++) {
+    a = (a + bytes[i]) % MOD;
+    b = (b + a) % MOD;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+function chunk(type, data) {
+  const len = data.length;
+  const out = new Uint8Array(12 + len);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, len);
+  out.set(type, 4);
+  out.set(data, 8);
+  dv.setUint32(8 + len, crc32(out.subarray(4, 8 + len)));
+  return out;
+}
+
+function concat(parts) {
+  const total = parts.reduce((s, p) => s + p.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+// Stored deflate blocks wrapped in zlib (CMF/FLG + adler32). Always valid.
+function storedZlib(data) {
+  const blocks = [];
+  let pos = 0;
+  do {
+    const chunk = data.subarray(pos, Math.min(pos + 65535, data.length));
+    const last = pos + chunk.length >= data.length;
+    const head = new Uint8Array(5);
+    head[0] = last ? 1 : 0;
+    head[1] = chunk.length & 0xff;
+    head[2] = (chunk.length >> 8) & 0xff;
+    head[3] = (~chunk.length) & 0xff;
+    head[4] = ((~chunk.length) >> 8) & 0xff;
+    blocks.push(head, chunk);
+    pos += chunk.length;
+  } while (pos < data.length);
+  const body = concat(blocks);
+  const head = new Uint8Array([0x78, 0x01]);
+  const tail = new Uint8Array(4);
+  new DataView(tail.buffer).setUint32(0, adler32(data));
+  return concat([head, body, tail]);
+}
+
+async function zlibWrap(data) {
+  if (typeof CompressionStream !== "undefined") {
+    try {
+      const stream = new Blob([data]).stream().pipeThrough(new CompressionStream("deflate"));
+      const buf = await new Response(stream).arrayBuffer();
+      return new Uint8Array(buf);
+    } catch (e) {
+      // fall through
+    }
+  }
+  return storedZlib(data);
+}
+
+function rawWithFilter(width, height, channels, pixels) {
+  const stride = width * channels;
+  const raw = new Uint8Array((stride + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (stride + 1)] = 0; // filter type none
+    raw.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+  }
+  return raw;
+}
+
+async function encodePng(width, height, colorType, bitDepth, pixels) {
+  const channels = colorType === 6 ? 4 : 1;
+  const ihdr = new Uint8Array(13);
+  const dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, width);
+  dv.setUint32(4, height);
+  ihdr[8] = bitDepth;
+  ihdr[9] = colorType;
+  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const raw = rawWithFilter(width, height, channels, pixels);
+  const idat = await zlibWrap(raw);
+  const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  return concat([
+    signature,
+    chunk(new Uint8Array([73, 72, 68, 82]), ihdr),
+    chunk(new Uint8Array([73, 68, 65, 84]), idat),
+    chunk(new Uint8Array([73, 69, 78, 68]), new Uint8Array(0)),
+  ]);
+}
+
+function encodeRgbaPng(width, height, rgba) {
+  return encodePng(width, height, 6, 8, rgba);
+}
+
+// status: Uint8Array with codes 0/1/2
+function encodeStatusPng(width, height, status) {
+  const gray = new Uint8Array(width * height);
+  gray.set(status);
+  return encodePng(width, height, 0, 8, gray);
+}
+
+
+// ===== inlined from tools/src/recomposite.js =====
+// Re-composite the delivered straight RGBA over a chosen backdrop.
+// Uses the exact package integer formula. Non-feasible/unmeasured pixels keep
+// transparent-black bytes; the caller decides whether to show the checkerboard.
+
+
+// backdrop: Uint8Array(3n) or uniform {r,g,b}
+function recomposite(width, height, rgba, backdrop) {
+  const n = width * height;
+  const out = new Uint8Array(4 * n);
+  const uniform = !(backdrop instanceof Uint8Array);
+  for (let p = 0; p < n; p++) {
+    const a = rgba[4 * p + 3];
+    for (let c = 0; c < 3; c++) {
+      const b = uniform ? backdrop[["r", "g", "b"][c]] : backdrop[3 * p + c];
+      out[4 * p + c] = composite(a, rgba[4 * p + c], b);
+    }
+    out[4 * p + 3] = 255;
+  }
+  return out;
+}
+
+const MODULE_SOURCES = "// ===== inlined from tools/src/pnm.js =====\n// P5/P6 (8-bit, maxval 255) parser. Pure ESM, no DOM, no Node APIs.\n// Inputs are untrusted: every field is validated, no typed-array view of\n// unvalidated bytes is handed out before the length check passes.\n\nclass PnmError extends Error {}\n\nfunction parseHeader(view) {\n  const dec = new TextDecoder(\"ascii\");\n  let pos = 0;\n  const len = view.byteLength;\n\n  function isWs(ch) {\n    return ch === 32 || ch === 9 || ch === 10 || ch === 13;\n  }\n\n  // Skip any run of whitespace and '#' comments (comment runs to end of line).\n  function skipSep() {\n    while (pos < len) {\n      const ch = view.getUint8(pos);\n      if (ch === 35) {\n        while (pos < len && view.getUint8(pos) !== 10 && view.getUint8(pos) !== 13) pos++;\n      } else if (isWs(ch)) {\n        pos++;\n      } else {\n        break;\n      }\n    }\n  }\n\n  function readToken() {\n    skipSep();\n    const start = pos;\n    while (pos < len && !isWs(view.getUint8(pos))) pos++;\n    if (pos === start) throw new PnmError(\"文件头意外结束\");\n    return dec.decode(new Uint8Array(view.buffer, view.byteOffset + start, pos - start));\n  }\n\n  const magic = readToken();\n  if (magic !== \"P5\" && magic !== \"P6\") throw new PnmError(\"只支持 P5/P6 格式，收到 \" + magic);\n  const width = Number(readToken());\n  const height = Number(readToken());\n  const maxval = Number(readToken());\n  // readToken stopped on the single whitespace separating header from raster;\n  // netpbm: raster begins immediately after that one whitespace byte.\n  const rasterStart = pos + 1;\n  return { magic, width, height, maxval, rasterStart };\n}\n\nfunction parsePnm(buffer) {\n  if (!(buffer instanceof ArrayBuffer)) throw new PnmError(\"需要 ArrayBuffer 输入\");\n  let view;\n  try {\n    view = new DataView(buffer);\n  } catch (e) {\n    throw new PnmError(\"无法读取文件字节\");\n  }\n  const { magic, width, height, maxval, rasterStart } = parseHeader(view);\n  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {\n    throw new PnmError(\"宽高必须为正整数\");\n  }\n  if (width > 384 || height > 384) throw new PnmError(\"每边最大 384，收到 \" + width + \"x\" + height);\n  if (maxval !== 255) throw new PnmError(\"只支持 8 位（maxval=255），收到 maxval=\" + maxval);\n  const channels = magic === \"P6\" ? 3 : 1;\n  const need = width * height * channels;\n  const available = buffer.byteLength - rasterStart;\n  if (available < need) throw new PnmError(\"栅格数据不完整：需要 \" + need + \" 字节，实际 \" + available);\n  const data = new Uint8Array(buffer, rasterStart, need);\n  return { magic, width, height, channels, data };\n}\n\n\n// ===== inlined from tools/src/solver.js =====\n// Multi-backdrop straight-alpha recovery with exact integer interval math.\n//\n// 合成约定（整数域，无颜色空间转换）：\n//   O = floor((A*F + (255-A)*B + 127) / 255)\n// 容差 t 下，某观测通道允许 O-t <= predict <= O+t（码值夹到 0..255）。\n// 对每个 A in 0..255，求每个未排除观测通道的可行 F 区间，再按通道取交。\n// 交片解：可行 A 中取最小 A，F 逐通道取区间下界（即 R、G、B 依次最小）。\n\nconst STATUS_UNMEASURED = 0;\nconst STATUS_FEASIBLE = 1;\nconst STATUS_NO_SOLUTION = 2;\n\nfunction composite(a, f, b) {\n  return ((a * f + (255 - a) * b + 127) / 255) | 0;\n}\n\nfunction floorDiv(x, y) {\n  // y > 0\n  return x >= 0 ? ((x / y) | 0) : -((( -x + y - 1) / y) | 0);\n}\n\nfunction ceilDiv(x, y) {\n  // y > 0\n  return x >= 0 ? (((x + y - 1) / y) | 0) : -(((-x) / y) | 0);\n}\n\n// 单通道 F 区间：满足 |composite(a,F,b)-o| <= t 的全部整数 F in 0..255。\n// 返回 [lo, hi] 或 null。\nfunction channelInterval(a, b, o, t) {\n  const loBound = o - t > 0 ? o - t : 0;\n  const hiBound = o + t < 255 ? o + t : 255;\n  if (a === 0) {\n    // 此时预测恒等于 floor(((255)*b + 127)/255)\n    const p = composite(0, 0, b);\n    return p >= loBound && p <= hiBound ? [0, 255] : null;\n  }\n  const k = (255 - a) * b;\n  // 255*loBound - k - 127 <= a*F\n  const numLo = 255 * loBound - k - 127;\n  // a*F <= 255*(hiBound+1) - 1 - k - 127\n  const numHi = 255 * (hiBound + 1) - 1 - k - 127;\n  let lo = ceilDiv(numLo, a);\n  let hi = floorDiv(numHi, a);\n  if (lo < 0) lo = 0;\n  if (hi > 255) hi = 255;\n  return lo <= hi ? [lo, hi] : null;\n}\n\n// 解一个像素。\n// active: 数组，每组为 {b:[r,g,b], o:[r,g,b]}，仅含未排除的组；空数组表示未测。\n// 返回 {status, solution:[a,r,g,b]|null, feasible:[{a,lo:[...],hi:[...]}...]}\nfunction solvePixel(active, tol) {\n  if (active.length === 0) {\n    return { status: STATUS_UNMEASURED, solution: null, feasible: [] };\n  }\n  const feasible = [];\n  let solution = null;\n  for (let a = 0; a <= 255; a++) {\n    const lo = [0, 0, 0];\n    const hi = [255, 255, 255];\n    let ok = true;\n    for (let g = 0; g < active.length; g++) {\n      const grp = active[g];\n      for (let c = 0; c < 3; c++) {\n        const iv = channelInterval(a, grp.b[c], grp.o[c], tol);\n        if (iv === null) { ok = false; break; }\n        if (iv[0] > lo[c]) lo[c] = iv[0];\n        if (iv[1] < hi[c]) hi[c] = iv[1];\n        if (lo[c] > hi[c]) { ok = false; break; }\n      }\n      if (!ok) break;\n    }\n    if (ok) {\n      const entry = { a, lo: [lo[0], lo[1], lo[2]], hi: [hi[0], hi[1], hi[2]] };\n      feasible.push(entry);\n      if (solution === null) {\n        // 最小 A（a 递增），F 取下界 => R、G、B 依次最小\n        solution = [a, lo[0], lo[1], lo[2]];\n      }\n    }\n  }\n  if (solution === null) return { status: STATUS_NO_SOLUTION, solution: null, feasible: [] };\n  return { status: STATUS_FEASIBLE, solution, feasible };\n}\n\n// 全图求解。groups: [{bg:Uint8Array(3n), obs:Uint8Array(3n), mask:Uint8Array(n)|null, enabled:boolean}]\n// 返回 {status:Uint8Array(n), rgba:Uint8Array(4n), feasibleA:Uint8Array(n) 计数,\n//        width,height,tol,counts}\n// onProgress(rowFrac=>void) 可选。\nfunction solveImage(width, height, groups, tol, onProgress = null) {\n  const n = width * height;\n  const status = new Uint8Array(n);\n  const rgba = new Uint8Array(4 * n); // 默认全 0 => 未测/无解都是透明黑\n  const feasibleCount = new Uint16Array(n);\n  const counts = { feasible: 0, noSolution: 0, unmeasured: 0 };\n  const activeGroups = groups.filter((g) => g.enabled);\n\n  for (let y = 0; y < height; y++) {\n    for (let x = 0; x < width; x++) {\n      const p = y * width + x;\n      const active = [];\n      for (let gi = 0; gi < activeGroups.length; gi++) {\n        const g = activeGroups[gi];\n        if (g.mask !== null && g.mask[p] === 0) continue;\n      active.push({\n          b: [g.bg[3 * p], g.bg[3 * p + 1], g.bg[3 * p + 2]],\n          o: [g.obs[3 * p], g.obs[3 * p + 1], g.obs[3 * p + 2]],\n        });\n      }\n      const res = solvePixel(active, tol);\n      status[p] = res.status;\n      if (res.status === STATUS_FEASIBLE) {\n        const [a, r, gg, b] = res.solution;\n        rgba[4 * p] = r;\n        rgba[4 * p + 1] = gg;\n        rgba[4 * p + 2] = b;\n        rgba[4 * p + 3] = a;\n        feasibleCount[p] = res.feasible.length;\n        counts.feasible++;\n      } else if (res.status === STATUS_NO_SOLUTION) {\n        counts.noSolution++;\n      } else {\n        counts.unmeasured++;\n      }\n    }\n    if (onProgress && (y & 15) === 15) onProgress((y + 1) / height);\n  }\n  if (onProgress) onProgress(1);\n  return { width, height, tol, status, rgba, feasibleCount, counts };\n}\n\n// 检查器：某像素在某次求解下的完整信息（全部可行 A + 逐组预测误差）。\nfunction inspectPixel(width, groups, tol, x, y) {\n  const p = y * width + x;\n  const perGroup = groups.map((g) => {\n    const excludedByMask = g.mask !== null && g.mask[p] === 0;\n    const used = g.enabled && !excludedByMask;\n    return {\n      enabled: g.enabled,\n      excludedByMask,\n      used,\n      b: [g.bg[3 * p], g.bg[3 * p + 1], g.bg[3 * p + 2]],\n      o: [g.obs[3 * p], g.obs[3 * p + 1], g.obs[3 * p + 2]],\n    };\n  });\n  const active = perGroup.filter((g) => g.used).map((g) => ({ b: g.b, o: g.o }));\n  const res = solvePixel(active, tol);\n  // 逐组、逐通道预测与误差（误差 = 预测 - 观测），基于交片解\n  let predictions = null;\n  if (res.status === STATUS_FEASIBLE) {\n    const [a, r, gg, b] = res.solution;\n    const f = [r, gg, b];\n    predictions = perGroup.map((g) => {\n      const pred = [0, 0, 0];\n      const err = [0, 0, 0];\n      for (let c = 0; c < 3; c++) {\n        pred[c] = composite(a, f[c], g.b[c]);\n        err[c] = pred[c] - g.o[c];\n      }\n      return { pred, err };\n    });\n  }\n  return {\n    x, y,\n    status: res.status,\n    solution: res.solution,\n    feasible: res.feasible,\n    perGroup,\n    predictions,\n  };\n}\n\n\n// ===== inlined from tools/src/png.js =====\n// Minimal PNG encoder: RGBA (color type 6) and grayscale 8-bit (color type 0).\n// Zero dependencies. Prefers CompressionStream('deflate') (raw zlib wrapper);\n// falls back to hand-written stored deflate blocks so export works anywhere.\n\nconst CRC_TABLE = (() => {\n  const t = new Uint32Array(256);\n  for (let n = 0; n < 256; n++) {\n    let c = n;\n    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;\n    t[n] = c >>> 0;\n  }\n  return t;\n})();\n\nfunction crc32(bytes) {\n  let c = 0xffffffff;\n  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);\n  return (c ^ 0xffffffff) >>> 0;\n}\n\nfunction adler32(bytes) {\n  let a = 1, b = 0;\n  const MOD = 65521;\n  for (let i = 0; i < bytes.length; i++) {\n    a = (a + bytes[i]) % MOD;\n    b = (b + a) % MOD;\n  }\n  return ((b << 16) | a) >>> 0;\n}\n\nfunction chunk(type, data) {\n  const len = data.length;\n  const out = new Uint8Array(12 + len);\n  const dv = new DataView(out.buffer);\n  dv.setUint32(0, len);\n  out.set(type, 4);\n  out.set(data, 8);\n  dv.setUint32(8 + len, crc32(out.subarray(4, 8 + len)));\n  return out;\n}\n\nfunction concat(parts) {\n  const total = parts.reduce((s, p) => s + p.length, 0);\n  const out = new Uint8Array(total);\n  let off = 0;\n  for (const p of parts) { out.set(p, off); off += p.length; }\n  return out;\n}\n\n// Stored deflate blocks wrapped in zlib (CMF/FLG + adler32). Always valid.\nfunction storedZlib(data) {\n  const blocks = [];\n  let pos = 0;\n  do {\n    const chunk = data.subarray(pos, Math.min(pos + 65535, data.length));\n    const last = pos + chunk.length >= data.length;\n    const head = new Uint8Array(5);\n    head[0] = last ? 1 : 0;\n    head[1] = chunk.length & 0xff;\n    head[2] = (chunk.length >> 8) & 0xff;\n    head[3] = (~chunk.length) & 0xff;\n    head[4] = ((~chunk.length) >> 8) & 0xff;\n    blocks.push(head, chunk);\n    pos += chunk.length;\n  } while (pos < data.length);\n  const body = concat(blocks);\n  const head = new Uint8Array([0x78, 0x01]);\n  const tail = new Uint8Array(4);\n  new DataView(tail.buffer).setUint32(0, adler32(data));\n  return concat([head, body, tail]);\n}\n\nasync function zlibWrap(data) {\n  if (typeof CompressionStream !== \"undefined\") {\n    try {\n      const stream = new Blob([data]).stream().pipeThrough(new CompressionStream(\"deflate\"));\n      const buf = await new Response(stream).arrayBuffer();\n      return new Uint8Array(buf);\n    } catch (e) {\n      // fall through\n    }\n  }\n  return storedZlib(data);\n}\n\nfunction rawWithFilter(width, height, channels, pixels) {\n  const stride = width * channels;\n  const raw = new Uint8Array((stride + 1) * height);\n  for (let y = 0; y < height; y++) {\n    raw[y * (stride + 1)] = 0; // filter type none\n    raw.set(pixels.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);\n  }\n  return raw;\n}\n\nasync function encodePng(width, height, colorType, bitDepth, pixels) {\n  const channels = colorType === 6 ? 4 : 1;\n  const ihdr = new Uint8Array(13);\n  const dv = new DataView(ihdr.buffer);\n  dv.setUint32(0, width);\n  dv.setUint32(4, height);\n  ihdr[8] = bitDepth;\n  ihdr[9] = colorType;\n  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;\n  const raw = rawWithFilter(width, height, channels, pixels);\n  const idat = await zlibWrap(raw);\n  const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);\n  return concat([\n    signature,\n    chunk(new Uint8Array([73, 72, 68, 82]), ihdr),\n    chunk(new Uint8Array([73, 68, 65, 84]), idat),\n    chunk(new Uint8Array([73, 69, 78, 68]), new Uint8Array(0)),\n  ]);\n}\n\nfunction encodeRgbaPng(width, height, rgba) {\n  return encodePng(width, height, 6, 8, rgba);\n}\n\n// status: Uint8Array with codes 0/1/2\nfunction encodeStatusPng(width, height, status) {\n  const gray = new Uint8Array(width * height);\n  gray.set(status);\n  return encodePng(width, height, 0, 8, gray);\n}\n\n\n// ===== inlined from tools/src/recomposite.js =====\n// Re-composite the delivered straight RGBA over a chosen backdrop.\n// Uses the exact package integer formula. Non-feasible/unmeasured pixels keep\n// transparent-black bytes; the caller decides whether to show the checkerboard.\n\n\n// backdrop: Uint8Array(3n) or uniform {r,g,b}\nfunction recomposite(width, height, rgba, backdrop) {\n  const n = width * height;\n  const out = new Uint8Array(4 * n);\n  const uniform = !(backdrop instanceof Uint8Array);\n  for (let p = 0; p < n; p++) {\n    const a = rgba[4 * p + 3];\n    for (let c = 0; c < 3; c++) {\n      const b = uniform ? backdrop[[\"r\", \"g\", \"b\"][c]] : backdrop[3 * p + c];\n      out[4 * p + c] = composite(a, rgba[4 * p + c], b);\n    }\n    out[4 * p + 3] = 255;\n  }\n  return out;\n}\n";
+const WORKER_SOURCE = "// Web Worker body: inlined inside app.html and wrapped in a Blob.\n// It has access to the inlined solver functions (solveImage, inspectPixel,\n// encodeRgbaPng, encodeStatusPng, recomposite) via closure of the Blob scope.\nself.onmessage = function (ev) {\n  const msg = ev.data;\n  try {\n    if (msg.type === \"solve\") {\n      const { width, height, groups, tol, solveId } = msg;\n      const result = solveImage(width, height, groups, tol, (frac) => {\n        self.postMessage({ type: \"progress\", solveId, frac });\n      });\n      // Transfer the big buffers; keep structured copies small.\n      self.postMessage({\n        type: \"solved\",\n        solveId,\n        width,\n        height,\n        tol,\n        counts: result.counts,\n        status: result.status,\n        rgba: result.rgba,\n        feasibleCount: result.feasibleCount,\n      }, [result.status.buffer, result.rgba.buffer, result.feasibleCount.buffer]);\n      return;\n    }\n    if (msg.type === \"inspect\") {\n      const { width, groups, tol, x, y, seq } = msg;\n      const info = inspectPixel(width, groups, tol, x, y);\n      self.postMessage({ type: \"inspected\", seq, x, y, info });\n      return;\n    }\n    if (msg.type === \"encode\") {\n      const { kind, width, height, data, nonce } = msg;\n      const promise = kind === \"rgba\"\n        ? encodeRgbaPng(width, height, data)\n        : encodeStatusPng(width, height, data);\n      promise.then((bytes) => {\n        self.postMessage({ type: \"encoded\", kind, nonce, bytes }, [bytes.buffer]);\n      });\n      return;\n    }\n    if (msg.type === \"recomposite\") {\n      const { width, height, rgba, backdrop, nonce } = msg;\n      const out = recomposite(width, height, rgba, backdrop);\n      self.postMessage({ type: \"recomposited\", nonce, out }, [out.buffer]);\n      return;\n    }\n    self.postMessage({ type: \"error\", message: \"未知的 worker 消息: \" + msg.type });\n  } catch (e) {\n    self.postMessage({ type: \"error\", message: String(e && e.message || e) });\n  }\n};\n";
+// Built-in demo: exact bytes of samples/alpha-backdrops.zip.
+// Regenerate with: python3 -I tools/make_demo.py samples/extracted
+window.DEMO_FILES = {
+"bg0.ppm": "UDYKMyAyCjI1NQoIFCAIFCAIFCAIFCAIFCAIFCA=",
+"bg1.ppm": "UDYKMyAyCjI1NQrw69zw69zw69zw69zw69zw69w=",
+"bg2.ppm": "UDYKMyAyCjI1NQoeqlAeqlAeqlAeqlAeqlAeqlA=",
+"groups.json": "eyJncm91cHMiOiBbeyJiYWNrZ3JvdW5kIjogImJnMC5wcG0iLCAib2JzZXJ2ZWQiOiAib2JzMC5wcG0iLCAidmFsaWQiOiAidmFsaWQwLnBnbSJ9LCB7ImJhY2tncm91bmQiOiAiYmcxLnBwbSIsICJvYnNlcnZlZCI6ICJvYnMxLnBwbSIsICJ2YWxpZCI6ICJ2YWxpZDEucGdtIn0sIHsiYmFja2dyb3VuZCI6ICJiZzIucHBtIiwgIm9ic2VydmVkIjogIm9iczIucHBtIiwgInZhbGlkIjogInZhbGlkMi5wZ20ifV19",
+"obs0.ppm": "UDYKMyAyCjI1NQoIFCAzIDxsL2G/RpdBJEVkLVw=",
+"obs1.ppm": "UDYKMyAyCjI1NQrw69zkxMzVkLa/Rpfht8bXmLk=",
+"obs2.ppm": "UDYKMyAyCjI1NQoeqlBEkmF2c3e/RpdRi2ZveHQ=",
+"valid0.pgm": "UDUKMyAyCjI1NQr///////8=",
+"valid1.pgm": "UDUKMyAyCjI1NQr///////8=",
+"valid2.pgm": "UDUKMyAyCjI1NQr//////wA=",
+"格式.txt": "5q+P6YCa6YGT55qE5ZCI5oiQ56CB5YC85pivIGZsb29yKChBw5dGKygyNTXiiJJBKcOXQisxMjcpLzI1NSnvvIzovpPlhaXovpPlh7rlnYflnKjmlbTmlbDnoIHlgLzln5/vvIzkuI3lgZrpopzoibLnqbrpl7TovazmjaLjgIJ2YWxpZCDpnZ7pm7bmiY3kvb/nlKjor6Xnu4Top4LmtYvvvIznvLrnnIHnu4TmjqnohpzooajnpLrlhajmnInmlYjjgILnirbmgIEgUE5HIOeBsOW6pueggeWAvOS4uiAwIOacqua1i+OAgTEg5Y+v6KGM44CBMiDml6Dop6PjgILor6/lt67mjInpooTmtYvlh4/op4LmtYvorrDjgII="
+};
+
+// Main application logic. Inlined into app.html; expects the inlined module
+// functions (parsePnm, solveImage, inspectPixel, composite, ...), the worker
+// source string WORKER_SOURCE, and window.DEMO_FILES to exist in scope.
+
+(function () {
+  "use strict";
+
+  // ---------- application state ----------
+  const state = {
+    width: 0,
+    height: 0,
+    groups: [],            // {name, bg:Uint8Array, obs:Uint8Array, mask:Uint8Array|null, enabled, hasMask}
+    datasetName: "",
+    tol: 0,
+    solveId: 0,            // increments on every requested solve
+    appliedSolveId: -1,    // solve whose results currently feed every panel
+    result: null,          // {status, rgba, feasibleCount, counts, tol}
+    inspect: null,         // latest inspector payload
+    inspectXY: null,
+    selectedPixel: null,   // {x,y}
+    view: "rgba",          // rgba | status | recomp
+    recompMode: "backdrop",// backdrop | custom
+    recompGroup: 0,
+    recompColor: { r: 0, g: 128, b: 200 },
+    recompBytes: null,     // cached recomposite for current solve+settings
+    busy: false,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const els = {};
+  const saveMemory = (key, value) => {
+    try { localStorage.setItem("ab." + key, JSON.stringify(value)); } catch (e) { /* private mode */ }
+  };
+  const loadMemory = (key, fallback) => {
+    try {
+      const raw = localStorage.getItem("ab." + key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch (e) { return fallback; }
+  };
+
+  // ---------- worker lifecycle ----------
+  let worker = null;
+  let workerUrl = null;
+  const pending = new Map(); // nonce/solveId -> resolver
+
+  function startWorker() {
+    if (worker) return;
+    const blob = new Blob([MODULE_SOURCES + "\n" + WORKER_SOURCE], { type: "text/javascript" });
+    workerUrl = URL.createObjectURL(blob);
+    worker = new Worker(workerUrl);
+    worker.onmessage = (ev) => handleWorkerMessage(ev.data);
+    worker.onerror = (ev) => {
+      setError("求解线程错误：" + ev.message);
+    };
+  }
+
+  function postTransferable(msg, transfer) {
+    startWorker();
+    worker.postMessage(msg, transfer || []);
+  }
+
+  let inspectSeq = 0;
+  let lastInspectSeq = -1;
+
+  function handleWorkerMessage(msg) {
+    if (msg.type === "progress") {
+      if (msg.solveId === state.solveId) setProgress(msg.frac);
+      return;
+    }
+    if (msg.type === "solved") {
+      if (msg.solveId !== state.solveId) return; // stale
+      state.busy = false;
+      state.appliedSolveId = msg.solveId;
+      state.result = {
+        status: msg.status,
+        rgba: msg.rgba,
+        feasibleCount: msg.feasibleCount,
+        counts: msg.counts,
+        tol: msg.tol,
+      };
+      state.recompBytes = null;
+      hideProgress();
+      renderAll();
+      // Re-arm the inspector for the selected pixel against the fresh solve.
+      if (state.selectedPixel) {
+        requestInspect(state.selectedPixel.x, state.selectedPixel.y);
+      }
+      return;
+    }
+    if (msg.type === "inspected") {
+      if (msg.seq !== lastInspectSeq) return; // a newer inspect superseded this one
+      state.inspect = msg.info;
+      state.inspectXY = { x: msg.x, y: msg.y };
+      renderInspector();
+      return;
+    }
+    if (msg.type === "encoded") {
+      const r = pending.get(msg.nonce);
+      if (r) { pending.delete(msg.nonce); r.resolve(msg.bytes); }
+      return;
+    }
+    if (msg.type === "recomposited") {
+      const r = pending.get(msg.nonce);
+      if (r) { pending.delete(msg.nonce); r.resolve(msg.out); }
+      return;
+    }
+    if (msg.type === "error") {
+      state.busy = false;
+      hideProgress();
+      setError(msg.message);
+    }
+  }
+
+  let nonceSeq = 1;
+  function workerRoundtrip(msg, transfer) {
+    const nonce = nonceSeq++;
+    msg.nonce = nonce;
+    return new Promise((resolve, reject) => {
+      pending.set(nonce, { resolve, reject });
+      postTransferable(msg, transfer);
+    });
+  }
+
+  // ---------- dataset loading ----------
+  // Files arrive as a name -> ArrayBuffer map (from input, drop, or demo).
+  async function loadDataset(fileMap, name) {
+    clearError();
+    try {
+      const jsonName = Object.keys(fileMap).find((n) => n.toLowerCase().endsWith("groups.json"));
+      let spec;
+      if (jsonName) {
+        const text = new TextDecoder("utf-8").decode(fileMap[jsonName]);
+        spec = JSON.parse(text);
+      } else {
+        spec = { groups: inferGroupsFromNames(Object.keys(fileMap)) };
+      }
+      if (!spec || !Array.isArray(spec.groups) || spec.groups.length < 2 || spec.groups.length > 8) {
+        throw new Error("groups.json 需要 2 到 8 组观测");
+      }
+      const base = jsonName ? jsonName.slice(0, jsonName.lastIndexOf("/") + 1) : "";
+      const groups = [];
+      let width = 0, height = 0;
+      for (let i = 0; i < spec.groups.length; i++) {
+        const g = spec.groups[i];
+        const bgName = requireFile(fileMap, base + (g.background || ""), "background", i);
+        const obsName = requireFile(fileMap, base + (g.observed || ""), "observed", i);
+        const bg = parsePnm(fileMap[bgName]);
+        const ob = parsePnm(fileMap[obsName]);
+        if (bg.channels !== 3 || ob.channels !== 3) throw new Error("底图和合成图必须是 P6（RGB）");
+        if (width === 0) { width = bg.width; height = bg.height; }
+        if (bg.width !== width || bg.height !== height || ob.width !== width || ob.height !== height) {
+          throw new Error("第 " + i + " 组尺寸与其他组不一致");
+        }
+        let mask = null, hasMask = false;
+        if (g.valid) {
+          const mName = resolveOptional(fileMap, base + g.valid);
+          if (mName) {
+            const m = parsePnm(fileMap[mName]);
+            if (m.channels !== 1 || m.width !== width || m.height !== height) {
+              throw new Error("第 " + i + " 组掩膜必须是同尺寸 P5");
+            }
+            mask = m.data; hasMask = true;
+          }
+        }
+        groups.push({
+          name: "组 " + i,
+          bg: bg.data, obs: ob.data, mask, hasMask,
+          enabled: true,
+        });
+      }
+      state.width = width; state.height = height;
+      state.groups = groups;
+      state.datasetName = name;
+      state.selectedPixel = null; state.inspect = null; state.result = null;
+      state.recompBytes = null; state.appliedSolveId = -1;
+      renderGroupPanel();
+      requestSolve();
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  }
+
+  function requireFile(map, name, kind, i) {
+    if (map[name]) return name;
+    const hit = resolveOptional(map, name);
+    if (!hit) throw new Error("第 " + i + " 组缺少 " + kind + " 文件：" + name);
+    return hit;
+  }
+
+  function resolveOptional(map, name) {
+    if (map[name]) return name;
+    const base = name.includes("/") ? name.slice(name.lastIndexOf("/") + 1) : name;
+    const hit = Object.keys(map).find((n) => (n.includes("/") ? n.slice(n.lastIndexOf("/") + 1) : n) === base);
+    return hit || null;
+  }
+
+  function inferGroupsFromNames(names) {
+    const groups = [];
+    for (let i = 0; i < 8; i++) {
+      const bg = names.find((n) => new RegExp("bg" + i + "\\.ppm$", "i").test(n));
+      const ob = names.find((n) => new RegExp("obs" + i + "\\.ppm$", "i").test(n));
+      if (bg && ob) {
+        const valid = names.find((n) => new RegExp("valid" + i + "\\.pgm$", "i").test(n));
+        groups.push({ background: bg, observed: ob, valid: valid || undefined });
+      }
+    }
+    return groups;
+  }
+
+  async function readInputsToMap(fileList) {
+    const map = {};
+    const files = Array.from(fileList);
+    await Promise.all(files.map((f) => f.arrayBuffer().then((ab) => {
+      // webkitRelativePath gives folder/name; fall back to plain name.
+      const rel = f.webkitRelativePath && f.webkitRelativePath.includes("/")
+        ? f.webkitRelativePath.slice(f.webkitRelativePath.indexOf("/") + 1)
+        : f.name;
+      map[rel] = ab;
+    })));
+    return map;
+  }
+
+  async function loadDemo() {
+    const map = {};
+    for (const [name, b64] of Object.entries(window.DEMO_FILES)) {
+      if (name.endsWith(".txt")) continue;
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      map[name] = u8.buffer.slice(0);
+    }
+    await loadDataset(map, "内置演示样片 3×2");
+  }
+
+  // ---------- solving ----------
+  function requestSolve() {
+    if (!state.groups.length) return;
+    clearError();
+    state.solveId++;
+    state.busy = true;
+    setProgress(0);
+    // Send copies: the worker takes ownership of transferred buffers.
+    const groups = state.groups.map((g) => ({
+      bg: g.bg.slice(), obs: g.obs.slice(),
+      mask: g.mask ? g.mask.slice() : null,
+      enabled: g.enabled,
+    }));
+    postTransferable({
+      type: "solve",
+      solveId: state.solveId,
+      width: state.width, height: state.height,
+      tol: state.tol, groups,
+    }, groups.flatMap((g) => [g.bg.buffer, g.obs.buffer, ...(g.mask ? [g.mask.buffer] : [])]));
+    markStale();
+  }
+
+  function requestInspect(x, y) {
+    if (!state.result) return;
+    const seq = ++inspectSeq;
+    lastInspectSeq = seq;
+    const groups = state.groups.map((g) => ({
+      bg: g.bg.slice(), obs: g.obs.slice(),
+      mask: g.mask ? g.mask.slice() : null,
+      enabled: g.enabled,
+    }));
+    postTransferable({
+      type: "inspect",
+      seq,
+      solveId: state.appliedSolveId,
+      width: state.width, tol: state.tol, x, y, groups,
+    }, groups.flatMap((g) => [g.bg.buffer, g.obs.buffer, ...(g.mask ? [g.mask.buffer] : [])]));
+  }
+
+  // ---------- rendering ----------
+  function renderAll() {
+    renderStats();
+    renderCanvas();
+    renderInspector();
+    clearStale();
+    updateExportState();
+    if (state.view === "recomp") refreshRecomp();
+  }
+
+  function markStale() {
+    document.body.classList.add("stale");
+    els.staleNote.hidden = false;
+  }
+  function clearStale() {
+    document.body.classList.remove("stale");
+    els.staleNote.hidden = true;
+  }
+
+  function renderStats() {
+    const r = state.result;
+    if (!r) return;
+    const n = state.width * state.height;
+    els.statSize.textContent = state.width + " × " + state.height;
+    els.statGroups.textContent = String(state.groups.filter((g) => g.enabled).length) + " / " + state.groups.length;
+    els.statTol.textContent = String(r.tol);
+    els.statFeasible.textContent = String(r.counts.feasible);
+    els.statNoSol.textContent = String(r.counts.noSolution);
+    els.statUnmeas.textContent = String(r.counts.unmeasured);
+    els.statFeasiblePct.textContent = (100 * r.counts.feasible / n).toFixed(1) + "%";
+  }
+
+  function statusColor(code) {
+    if (code === 1) return "var(--ok)";
+    if (code === 2) return "var(--bad)";
+    return "var(--warn)";
+  }
+
+  function renderCanvas() {
+    const r = state.result;
+    const canvas = els.canvas;
+    canvas.width = state.width; canvas.height = state.height;
+    const ctx = canvas.getContext("2d");
+    const img = ctx.createImageData(state.width, state.height);
+    if (!r) { ctx.putImageData(img, 0, 0); return; }
+
+    if (state.view === "rgba") {
+      img.data.set(r.rgba);
+    } else if (state.view === "status") {
+      for (let p = 0; p < r.status.length; p++) {
+        const code = r.status[p];
+        // semantic colors only for display; the exported PNG keeps codes 0/1/2
+        const rgb = code === 1 ? [38, 166, 123] : code === 2 ? [214, 78, 91] : [196, 153, 59];
+        img.data[4 * p] = rgb[0]; img.data[4 * p + 1] = rgb[1]; img.data[4 * p + 2] = rgb[2];
+        img.data[4 * p + 3] = 255;
+      }
+    } else if (state.view === "recomp") {
+      const bytes = state.recompBytes;
+      if (bytes) img.data.set(bytes);
+      else { // while recomputing, show checker placeholder
+        drawChecker(img);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    drawMarker(ctx);
+  }
+
+  function drawChecker(img) {
+    for (let y = 0; y < state.height; y++) {
+      for (let x = 0; x < state.width; x++) {
+        const p = y * state.width + x;
+        const v = ((x >> 1) + (y >> 1)) % 2 ? 204 : 238;
+        img.data[4 * p] = v; img.data[4 * p + 1] = v; img.data[4 * p + 2] = v;
+        img.data[4 * p + 3] = 255;
+      }
+    }
+  }
+
+  function drawMarker(ctx) {
+    if (!state.selectedPixel) return;
+    const { x, y } = state.selectedPixel;
+    ctx.save();
+    ctx.strokeStyle = "var(--accent)";
+    ctx.lineWidth = Math.max(1, Math.floor(Math.min(state.width, state.height) / 64));
+    ctx.strokeRect(x + 0.5, y + 0.5, 1, 1);
+    ctx.restore();
+  }
+
+  function renderGroupPanel() {
+    const panel = els.groups;
+    panel.innerHTML = "";
+    const select = $("recomp-group-select");
+    select.innerHTML = "";
+    state.groups.forEach((g, i) => {
+      const row = document.createElement("label");
+      row.className = "group-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = g.enabled;
+      cb.addEventListener("change", () => {
+        g.enabled = cb.checked;
+        requestSolve();
+      });
+      const label = document.createElement("span");
+      label.className = "group-label";
+      label.textContent = "组 " + i + (g.hasMask ? " · 含掩膜" : " · 全有效");
+      row.append(cb, label);
+      panel.append(row);
+
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = "底图 " + i;
+      select.append(opt);
+    });
+    select.value = String(Math.min(state.recompGroup, Math.max(0, state.groups.length - 1)));
+  }
+
+  function renderInspector() {
+    const box = els.inspector;
+    if (!state.result) {
+      box.innerHTML = '<p class="muted">载入数据后，在预览图上点选像素。</p>';
+      return;
+    }
+    if (!state.inspect) {
+      box.innerHTML = '<p class="muted">点选预览图中的像素，查看全部可行 A 值与逐组预测误差。</p>';
+      return;
+    }
+    const info = state.inspect;
+    const parts = [];
+    parts.push('<div class="insp-head"><span>像素 (' + info.x + ", " + info.y + ")</span>" +
+      '<span class="badge" style="--bc:' + statusColor(info.status) + '">' +
+      statusText(info.status) + "</span></div>");
+
+    if (info.status === 0) {
+      parts.push('<p class="muted">该像素在所有组都被掩膜排除（未测）。交片写透明黑 (0,0,0,0)。</p>');
+    } else if (info.status === 2) {
+      parts.push('<p class="muted">容差 ' + state.tol + " 下没有任何 A 能同时满足全部未排除观测通道。交片写透明黑。</p>");
+    } else {
+      const [a, r, g, b] = info.solution;
+      parts.push('<div class="solution-tile">交片解（最小 A，再按 R/G/B 取最小）' +
+        '<table class="kv"><tbody>' +
+        "<tr><th>A</th><td>" + a + "</td></tr>" +
+        "<tr><th>R</th><td>" + r + "</td></tr>" +
+        "<tr><th>G</th><td>" + g + "</td></tr>" +
+        "<tr><th>B</th><td>" + b + "</td></tr>" +
+        "</tbody></table></div>");
+      parts.push('<div class="feasible-head">可行 A 值（共 ' + info.feasible.length + " 个）</div>");
+      parts.push('<div class="feasible-list">' + info.feasible.map((f) => {
+        const isPick = f.a === a;
+        return '<details class="a-row' + (isPick ? " picked" : "") + '">' +
+          "<summary>A=" + f.a + (isPick ? " · 交片" : "") +
+          ' <span class="muted">F区间 R[' + f.lo[0] + "–" + f.hi[0] + "] G[" +
+          f.lo[1] + "–" + f.hi[1] + "] B[" + f.lo[2] + "–" + f.hi[2] + "]</span></summary>" +
+          perGroupTable(info, f) + "</details>";
+      }).join("") + "</div>");
+    }
+    box.innerHTML = parts.join("");
+  }
+
+  function perGroupTable(info, fEntry) {
+    const rows = ['<table class="per-group"><thead><tr><th>组</th><th>底图 B</th><th>观测 O</th><th>预测 P</th><th>误差 P−O</th></tr></thead><tbody>'];
+    info.perGroup.forEach((g, i) => {
+      if (!g.used) {
+        rows.push('<tr class="excluded"><td>' + i + "</td><td colspan=4 class=muted>已排除（" +
+          (g.excludedByMask ? "掩膜为 0" : "组被关闭") + "）</td></tr>");
+        return;
+      }
+      const pred = info.predictions[i];
+      rows.push("<tr><td>" + i + "</td><td>" + g.b.join(", ") + "</td><td>" + g.o.join(", ") +
+        "</td><td>" + pred.pred.join(", ") + "</td><td>" +
+        pred.err.map((e) => fmtErr(e)).join(", ") + "</td></tr>");
+    });
+    rows.push("</tbody></table>");
+    return rows.join("");
+  }
+
+  function fmtErr(e) {
+    const cls = e === 0 ? "err-zero" : (Math.abs(e) <= state.tol ? "err-ok" : "err-bad");
+    return '<span class="' + cls + '">' + (e > 0 ? "+" : "") + e + "</span>";
+  }
+
+  function statusText(s) {
+    return s === 1 ? "可行" : s === 2 ? "无解" : "未测";
+  }
+
+  // ---------- recomposite ----------
+  async function refreshRecomp() {
+    if (state.view !== "recomp" || !state.result) return;
+    let backdrop;
+    const transfer = [];
+    if (state.recompMode === "backdrop") {
+      const g = state.groups[state.recompGroup];
+      const bgCopy = g ? g.bg.slice() : new Uint8Array(state.width * state.height * 3);
+      backdrop = bgCopy;
+      transfer.push(bgCopy.buffer);
+    } else {
+      const { r, g, b } = state.recompColor;
+      backdrop = { r, g, b };
+    }
+    const rgbaCopy = state.result.rgba.slice();
+    transfer.push(rgbaCopy.buffer);
+    const out = await workerRoundtrip({
+      type: "recomposite",
+      width: state.width, height: state.height,
+      rgba: rgbaCopy,
+      backdrop,
+    }, transfer);
+    state.recompBytes = out;
+    if (state.view === "recomp") renderCanvas();
+  }
+
+  // ---------- export ----------
+  async function exportRgba() {
+    if (!state.result) return;
+    const bytes = await workerRoundtrip({
+      type: "encode", kind: "rgba",
+      width: state.width, height: state.height,
+      data: state.result.rgba.slice(),
+    });
+    verifyRgbaBytes(bytes);
+    download(bytes, baseName() + "_rgba_tol" + state.result.tol + ".png", "image/png");
+  }
+
+  function verifyRgbaBytes(pngBytes) {
+    // Byte-level structural verification without any 2D-canvas round trip:
+    // drawing straight RGBA onto a canvas premultiplies alpha and can round
+    // low-alpha RGB by one code value on readback, so canvas cannot be used as
+    // the oracle here. We parse the PNG we just produced (IHDR + IDAT), inflate
+    // it, strip the per-scanline filter byte and compare against solver bytes.
+    try {
+      const blob = new Blob([pngBytes.slice(8)]); // skip 8-byte signature
+      const reader = new Response(blob).arrayBuffer().then((ab) => {
+        const view = new DataView(ab);
+        let pos = 0, width = 0, height = 0, colorType = -1;
+        const idat = [];
+        while (pos < ab.byteLength) {
+          const len = view.getUint32(pos);
+          const type = String.fromCharCode(view.getUint8(pos + 4), view.getUint8(pos + 5),
+            view.getUint8(pos + 6), view.getUint8(pos + 7));
+          if (type === "IHDR") {
+            width = view.getUint32(pos + 8);
+            height = view.getUint32(pos + 12);
+            colorType = view.getUint8(pos + 8 + 9);
+          } else if (type === "IDAT") {
+            idat.push(new Uint8Array(ab, pos + 8, len));
+          }
+          pos += 12 + len;
+        }
+        if (width !== state.width || height !== state.height || colorType !== 6) {
+          throw new Error("PNG 头不匹配：" + width + "x" + height + " type=" + colorType);
+        }
+        return inflate(concatBytes(idat));
+      }).then((raw) => {
+        const stride = state.width * 4;
+        let mismatch = 0;
+        const detail = [];
+        for (let y = 0; y < state.height; y++) {
+          const filter = raw[y * (stride + 1)];
+          if (filter !== 0) throw new Error("期望 filter 0，收到 " + filter);
+          for (let x = 0; x < stride; x++) {
+            const got = raw[y * (stride + 1) + 1 + x];
+            const want = state.result.rgba[y * stride + x];
+            if (got !== want) {
+              mismatch++;
+              if (detail.length < 8) detail.push({ i: y * stride + x, got, want });
+            }
+          }
+        }
+        if (mismatch) {
+          console.error("RGBA self-check detail", JSON.stringify(detail));
+          setError("导出自检发现 " + mismatch + " 个字节不一致，已阻止下载");
+        } else flashSelfCheck();
+      }).catch((e) => setError("PNG 自检失败：" + e.message));
+      return reader;
+    } catch (e) {
+      setError("PNG 自检失败：" + e.message);
+    }
+  }
+
+  function concatBytes(parts) {
+    const total = parts.reduce((s, p) => s + p.length, 0);
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const p of parts) { out.set(p, off); off += p.length; }
+    return out;
+  }
+
+  async function inflate(bytes) {
+    if (typeof DecompressionStream !== "undefined") {
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+    throw new Error("当前浏览器不支持 DecompressionStream，无法完成自检");
+  }
+
+  async function exportStatus() {
+    if (!state.result) return;
+    const bytes = await workerRoundtrip({
+      type: "encode", kind: "status",
+      width: state.width, height: state.height,
+      data: state.result.status.slice(),
+    });
+    download(bytes, baseName() + "_status_tol" + state.result.tol + ".png", "image/png");
+  }
+
+  async function exportRecomp() {
+    if (!state.result || !state.recompBytes) return;
+    // recompBytes is RGBA opaque; encode as an RGBA PNG through the same encoder.
+    const bytes = await workerRoundtrip({
+      type: "encode", kind: "rgba",
+      width: state.width, height: state.height,
+      data: state.recompBytes.slice(),
+    });
+    download(bytes, baseName() + "_recomp_tol" + state.result.tol + ".png", "image/png");
+  }
+
+  function download(bytes, filename, mime) {
+    const blob = new Blob([bytes], { type: mime });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  function baseName() {
+    return (state.datasetName || "dataset").replace(/[^\w一-龥-]+/g, "_");
+  }
+
+  // ---------- small UI helpers ----------
+  function setError(msg) {
+    els.error.textContent = msg;
+    els.error.hidden = false;
+  }
+  function clearError() { els.error.hidden = true; els.error.textContent = ""; }
+  function setProgress(frac) {
+    els.progress.hidden = false;
+    els.progressBar.style.width = Math.round(frac * 100) + "%";
+  }
+  function hideProgress() { els.progress.hidden = true; }
+  function flashSelfCheck() {
+    els.selfCheck.hidden = false;
+    clearTimeout(flashSelfCheck._t);
+    flashSelfCheck._t = setTimeout(() => { els.selfCheck.hidden = true; }, 2600);
+  }
+  function updateExportState() {
+    const on = !!state.result && !state.busy;
+    [els.btnExportRgba, els.btnExportStatus, els.btnExportRecomp].forEach((b) => { b.disabled = !on; });
+  }
+
+  // ---------- events ----------
+  function bind() {
+    Object.assign(els, {
+      groups: $("groups"), inspector: $("inspector"), canvas: $("canvas"),
+      statSize: $("stat-size"), statGroups: $("stat-groups"), statTol: $("stat-tol"),
+      statFeasible: $("stat-feasible"), statNoSol: $("stat-nosol"), statUnmeas: $("stat-unmeas"),
+      statFeasiblePct: $("stat-feasible-pct"),
+      error: $("error"), progress: $("progress"), progressBar: $("progress-bar"),
+      staleNote: $("stale-note"), selfCheck: $("self-check"),
+      btnExportRgba: $("btn-export-rgba"), btnExportStatus: $("btn-export-status"),
+      btnExportRecomp: $("btn-export-recomp"),
+    });
+
+    $("btn-demo").addEventListener("click", loadDemo);
+    $("file-folder").addEventListener("change", async (ev) => {
+      const map = await readInputsToMap(ev.target.files);
+      const folder = ev.target.files[0] && ev.target.files[0].webkitRelativePath;
+      await loadDataset(map, folder ? folder.split("/")[0] : "上传数据集");
+    });
+    $("file-multi").addEventListener("change", async (ev) => {
+      const map = await readInputsToMap(ev.target.files);
+      await loadDataset(map, "上传数据集");
+    });
+    const drop = $("drop-zone");
+    drop.addEventListener("dragover", (ev) => { ev.preventDefault(); drop.classList.add("dragging"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("dragging"));
+    drop.addEventListener("drop", async (ev) => {
+      ev.preventDefault(); drop.classList.remove("dragging");
+      const map = await readInputsToMap(ev.dataTransfer.files);
+      await loadDataset(map, "拖入数据集");
+    });
+
+    const tolRange = $("tol-range"), tolNum = $("tol-num");
+    let tolDebounce = null;
+    tolRange.addEventListener("input", () => {
+      state.tol = Number(tolRange.value);
+      tolNum.value = state.tol;
+      saveMemory("tol", state.tol);
+      clearTimeout(tolDebounce);
+      tolDebounce = setTimeout(requestSolve, 120);
+    });
+    tolNum.addEventListener("change", () => {
+      let v = Math.max(0, Math.min(8, Number(tolNum.value) || 0));
+      state.tol = v; tolRange.value = v; tolNum.value = v;
+      saveMemory("tol", v);
+      clearTimeout(tolDebounce);
+      requestSolve();
+    });
+
+    document.querySelectorAll('input[name="view"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        state.view = radio.value;
+        saveMemory("view", state.view);
+        renderCanvas();
+        if (state.view === "recomp") refreshRecomp();
+      });
+    });
+    document.querySelectorAll('input[name="recomp-source"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        state.recompMode = radio.value;
+        $("recomp-color").hidden = state.recompMode !== "custom";
+        refreshRecomp();
+      });
+    });
+    $("recomp-group-select").addEventListener("change", (ev) => {
+      state.recompGroup = Number(ev.target.value);
+      refreshRecomp();
+    });
+    $("recomp-color").addEventListener("input", (ev) => {
+      const hex = ev.target.value;
+      state.recompColor = {
+        r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16),
+      };
+      refreshRecomp();
+    });
+
+    els.canvas.addEventListener("click", (ev) => {
+      if (!state.result) return;
+      const rect = els.canvas.getBoundingClientRect();
+      const x = Math.floor((ev.clientX - rect.left) / rect.width * state.width);
+      const y = Math.floor((ev.clientY - rect.top) / rect.height * state.height);
+      if (x < 0 || y < 0 || x >= state.width || y >= state.height) return;
+      state.selectedPixel = { x, y };
+      renderCanvas();
+      requestInspect(x, y);
+    });
+
+    els.btnExportRgba.addEventListener("click", exportRgba);
+    els.btnExportStatus.addEventListener("click", exportStatus);
+    els.btnExportRecomp.addEventListener("click", exportRecomp);
+
+    $("theme-toggle").addEventListener("click", () => {
+      const dark = document.documentElement.getAttribute("data-theme") === "dark";
+      const next = dark ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      saveMemory("theme", next);
+    });
+  }
+
+  function init() {
+    bind();
+    const savedTheme = loadMemory("theme", null);
+    if (savedTheme === "dark" || savedTheme === "light") {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+    const savedTol = loadMemory("tol", 0);
+    state.tol = Math.max(0, Math.min(8, Number(savedTol) || 0));
+    $("tol-range").value = state.tol;
+    $("tol-num").value = state.tol;
+    const savedView = loadMemory("view", "rgba");
+    const radio = document.querySelector('input[name="view"][value="' + savedView + '"]');
+    if (radio) { radio.checked = true; state.view = savedView; }
+    loadDemo();
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+
+</script>
+</body>

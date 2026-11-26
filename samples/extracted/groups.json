@@ -1,0 +1,1 @@
+{"groups": [{"background": "bg0.ppm", "observed": "obs0.ppm", "valid": "valid0.pgm"}, {"background": "bg1.ppm", "observed": "obs1.ppm", "valid": "valid1.pgm"}, {"background": "bg2.ppm", "observed": "obs2.ppm", "valid": "valid2.pgm"}]}
