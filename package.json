@@ -1,0 +1,11 @@
+{
+  "name": "vertex-stream-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "顶点取数抓帧回放网页：缓冲写入/拷贝/索引绘制回放与角点探针",
+  "scripts": {
+    "test": "node --test tests/engine.test.js",
+    "test:e2e": "node tests/e2e.js"
+  },
+  "license": "MIT"
+}

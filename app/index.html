@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>顶点取数回放台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* ---- 设计令牌：调试器深色工程风，浅深双主题 ---- */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --border: #d6dbe2;
+  --fg: #1b2330;
+  --fg-dim: #5b6675;
+  --fg-mute: #8a94a3;
+  --accent: #0e7490;
+  --accent-soft: #cff2f8;
+  --ok: #15803d;
+  --ok-soft: #dcf6e3;
+  --err: #c0392b;
+  --err-soft: #fbe3e0;
+  --warn: #b7791f;
+  --warn-soft: #fbf0d9;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --shadow: 0 1px 3px rgba(16, 24, 40, .08), 0 1px 2px rgba(16, 24, 40, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d121c;
+    --surface: #141b28;
+    --surface-2: #1b2434;
+    --border: #28344a;
+    --fg: #e3e9f2;
+    --fg-dim: #9aa7ba;
+    --fg-mute: #67748a;
+    --accent: #38bdf8;
+    --accent-soft: #0c3346;
+    --ok: #4ade80;
+    --ok-soft: #0f2e1c;
+    --err: #f87171;
+    --err-soft: #3a1d1c;
+    --warn: #fbbf24;
+    --warn-soft: #33280c;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d121c; --surface: #141b28; --surface-2: #1b2434; --border: #28344a;
+  --fg: #e3e9f2; --fg-dim: #9aa7ba; --fg-mute: #67748a;
+  --accent: #38bdf8; --accent-soft: #0c3346;
+  --ok: #4ade80; --ok-soft: #0f2e1c; --err: #f87171; --err-soft: #3a1d1c;
+  --warn: #fbbf24; --warn-soft: #33280c; --shadow: 0 1px 3px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button, input, select { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); }
+[hidden] { display: none !important; }
+
+/* ---- 顶栏 ---- */
+header.app {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+}
+.app-title { font-size: 16px; font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
+.app-title .dot { width: 10px; height: 10px; border-radius: 2px; background: var(--accent); transform: rotate(45deg); }
+.spacer { flex: 1; }
+.btn {
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--fg);
+  border-radius: 7px; padding: 6px 12px; cursor: pointer; font-weight: 500;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #04141c; }
+:root[data-theme="dark"] .btn.primary { color: #04141c; }
+.btn.ghost { background: transparent; }
+.icon-btn { padding: 6px 9px; }
+.theme-toggle { font-size: 13px; }
+
+/* ---- 主网格 ---- */
+main { max-width: 1440px; margin: 0 auto; padding-block: 16px; display: grid; gap: 14px; }
+.grid-main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 380px; gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .grid-main { grid-template-columns: 1fr 1fr; } .col-detail { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .grid-main { grid-template-columns: 1fr; } }
+.grid-main > * { min-width: 0; }
+#workspace { min-width: 0; }
+.card-b { min-width: 0; width: 100%; }
+pre, table, .cmd-list, .table-scroll { max-width: 100%; }
+.table-scroll, pre.json-out { min-width: 0; width: 100%; }
+.statbar { min-width: 0; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.card > .card-h {
+  padding: 9px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px;
+  display: flex; align-items: center; gap: 8px; background: var(--surface-2);
+}
+.card > .card-b { padding: 12px 14px; min-width: 0; }
+.card-h .count { font-weight: 500; color: var(--fg-mute); font-family: var(--mono); font-size: 12px; }
+
+/* ---- 拖放空态 ---- */
+.dropzone {
+  border: 1.5px dashed var(--border); border-radius: 12px; padding: 40px 24px;
+  text-align: center; color: var(--fg-dim); background: var(--surface);
+}
+.dropzone.drag { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone h2 { margin: 0 0 6px; font-size: 17px; color: var(--fg); }
+.dropzone p { margin: 4px 0; font-size: 13px; }
+body.drag-over #workspace { display: none; }
+
+/* ---- 状态条 ---- */
+.statbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.stat {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; color: var(--fg-dim);
+}
+.stat b { color: var(--fg); font-family: var(--mono); font-weight: 600; }
+.banner {
+  border-radius: 8px; padding: 10px 12px; font-size: 13px; border: 1px solid;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.banner.err { background: var(--err-soft); border-color: var(--err); color: var(--err); }
+.banner.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+.banner.ok { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.banner code { font-size: 12px; word-break: break-all; }
+.banner button { margin-left: auto; }
+
+/* ---- 命令时间线 ---- */
+.timeline-controls { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.timeline-controls input[type="number"] { width: 78px; }
+input, select {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
+  padding: 6px 8px; min-width: 0;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.cmd-list { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.cmd-row {
+  display: grid; grid-template-columns: 46px 52px minmax(0, 1fr); gap: 8px; align-items: baseline;
+  padding: 4px 10px; font-size: 12.5px; border-bottom: 1px solid var(--border); cursor: pointer; min-width: 0;
+}
+.cmd-row:last-child { border-bottom: 0; }
+.cmd-row:hover { background: var(--surface-2); }
+.cmd-row.active { background: var(--accent-soft); }
+.cmd-row .ci { font-family: var(--mono); color: var(--fg-mute); }
+.cmd-row .op { font-family: var(--mono); font-weight: 600; }
+.op-draw { color: var(--accent); }
+.op-write { color: var(--warn); }
+.op-copy { color: var(--ok); }
+.cmd-row .detail { min-width: 0; color: var(--fg-dim); font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scrub { width: 100%; margin: 8px 0 4px; accent-color: var(--accent); }
+
+/* ---- 画布 ---- */
+.canvas-wrap { position: relative; width: 100%; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+canvas#view { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.canvas-hint { position: absolute; left: 10px; top: 8px; font-size: 11.5px; color: var(--fg-mute); font-family: var(--mono); pointer-events: none; background: color-mix(in srgb, var(--surface-2) 78%, transparent); padding: 2px 7px; border-radius: 6px; }
+.view-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.view-controls label { font-size: 12.5px; color: var(--fg-dim); display: flex; align-items: center; gap: 5px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; border-radius: 999px;
+  padding: 2px 9px; font-size: 12px; font-weight: 600; border: 1px solid var(--border);
+}
+.pill.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.pill.err { color: var(--err); background: var(--err-soft); border-color: transparent; }
+.pill.mute { color: var(--fg-dim); background: var(--surface-2); }
+
+/* ---- 实例选择 ---- */
+select, input[type="number"] { font-family: var(--mono); }
+.instance-row { display: flex; align-items: center; gap: 8px; }
+.instance-row select { flex: 1; }
+
+/* ---- 角详情 ---- */
+.corner-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.field-block { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.field-block.bad { border-color: var(--err); }
+.field-h {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--surface-2);
+  font-size: 12.5px; flex-wrap: wrap;
+}
+.field-h .fname { font-weight: 700; font-family: var(--mono); }
+.field-h .ftype { color: var(--fg-mute); font-family: var(--mono); font-size: 11.5px; }
+.field-h .ferr { color: var(--err); font-weight: 600; font-size: 12px; }
+.field-b { padding: 8px 10px; font-size: 12.5px; }
+.kv { display: grid; grid-template-columns: 76px 1fr; gap: 3px 10px; margin-bottom: 8px; }
+.kv .k { color: var(--fg-mute); }
+.kv .v { font-family: var(--mono); word-break: break-all; min-width: 0; }
+.bytegrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; margin-top: 6px; }
+.bytecell {
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px;
+  font-family: var(--mono); font-size: 11px; background: var(--surface);
+}
+.bytecell .ba { color: var(--fg-mute); display: flex; justify-content: space-between; }
+.bytecell .bv { font-weight: 600; font-size: 12.5px; }
+.bytecell .bw { font-size: 10.5px; color: var(--accent); }
+.bytecell .bw.init { color: var(--fg-mute); }
+.values { display: flex; flex-wrap: wrap; gap: 5px; }
+.scalar { background: var(--accent-soft); border-radius: 6px; padding: 2px 7px; font-family: var(--mono); font-size: 12px; }
+.scalar.null { background: var(--err-soft); color: var(--err); }
+.swatch { display: inline-block; width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border); vertical-align: -2px; margin-right: 5px; }
+
+/* ---- 探针 ---- */
+.probe-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+table.probes { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.probes th, table.probes th td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+table.probes th { color: var(--fg-mute); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; }
+table.probes td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+table.probes tr.clickable { cursor: pointer; }
+table.probes tr.clickable:hover { background: var(--surface-2); }
+.table-scroll { overflow-x: auto; max-height: 320px; overflow-y: auto; width: 100%; min-width: 0; }
+table.probes { min-width: 340px; }
+pre.json-out {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; font-family: var(--mono); font-size: 11.5px; max-height: 280px;
+  overflow: auto; white-space: pre; margin: 0;
+}
+.muted { color: var(--fg-mute); }
+.small { font-size: 12px; }
+.section-gap { margin-top: 14px; }
+.toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 8px;
+  font-size: 13px; z-index: 50; box-shadow: var(--shadow);
+}
+.kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; background: var(--surface-2); }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="app-title"><span class="dot"></span>顶点取数回放台</div>
+  <div class="spacer"></div>
+  <input type="file" id="fileCapture" accept=".json,application/json" hidden>
+  <input type="file" id="fileProbes" accept=".json,application/json" hidden>
+  <button class="btn primary" id="btnLoadCapture">导入 capture.json</button>
+  <button class="btn" id="btnLoadSample">载入样例</button>
+  <button class="btn" id="btnLoadProbes" disabled>导入探针</button>
+  <button class="btn ghost theme-toggle" id="btnTheme" title="切换主题">◐ 主题</button>
+</header>
+
+<main>
+  <!-- 空态 / 拖放区 -->
+  <div class="dropzone" id="dropzone">
+    <h2>把 capture.json 拖到这里</h2>
+    <p>或点击右上角「导入 capture.json」。支持初始缓冲合计 16 MiB、5 万条命令、累计改写 64 MiB。</p>
+    <p>导入后可再拖入 probes.json 批量查询角点探针（最多 256 条）。</p>
+    <p class="small muted">所有解析与回放均在本页本地完成，不上传任何数据。</p>
+  </div>
+
+  <div id="workspace" hidden>
+    <div class="statbar" id="statbar"></div>
+    <div id="loadError" class="banner err section-gap" hidden></div>
+
+    <div class="grid-main section-gap">
+      <!-- 左：命令时间线 -->
+      <section class="card col-timeline">
+        <div class="card-h">命令时间线 <span class="count" id="cmdCount"></span></div>
+        <div class="card-b">
+          <div class="timeline-controls">
+            <button class="btn icon-btn" id="btnPrevDraw" title="上一条 draw">‹</button>
+            <input type="number" id="cmdJump" min="0" step="1" title="跳到命令号">
+            <button class="btn icon-btn" id="btnNextDraw" title="下一条 draw">›</button>
+          </div>
+          <input type="range" class="scrub" id="cmdScrub" min="0" step="1" value="0">
+          <div class="cmd-list" id="cmdList"></div>
+        </div>
+      </section>
+
+      <!-- 中：线框预览 -->
+      <section class="card col-view">
+        <div class="card-h">
+          线框预览
+          <span class="pill mute" id="drawLabel"></span>
+          <span class="spacer" style="flex:1"></span>
+          <span class="pill ok" id="triOk">跳过 0</span>
+          <span class="pill err" id="triBad">跳过 0</span>
+        </div>
+        <div class="card-b">
+          <div class="instance-row">
+            <span class="small muted">实例</span>
+            <button class="btn icon-btn" id="btnPrevInst">‹</button>
+            <select id="instSelect"></select>
+            <button class="btn icon-btn" id="btnNextInst">›</button>
+          </div>
+          <div class="canvas-wrap section-gap">
+            <canvas id="view"></canvas>
+            <div class="canvas-hint">NDC −1..1 · 点选角点查看取数详情 · 框外已裁剪</div>
+          </div>
+          <div class="view-controls">
+            <label><input type="checkbox" id="chkOthers"> 淡显其他实例</label>
+            <label><input type="checkbox" id="chkLabels" checked> 角编号</label>
+            <button class="btn" id="btnProbeHere">把当前角加入探针</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右：角详情 -->
+      <section class="card col-detail">
+        <div class="card-h">角点取数详情 <span class="count" id="cornerLabel">未选择</span></div>
+        <div class="card-b" id="cornerDetail">
+          <p class="muted small">在左侧线框中点选一个角点，查看每个字段的原始字节、地址、解码值，以及各字节最后一次写入或拷贝的命令号。</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- 探针 -->
+    <section class="card section-gap">
+      <div class="card-h">角点探针 <span class="count" id="probeCount">0 条</span></div>
+      <div class="card-b">
+        <div class="probe-toolbar">
+          <button class="btn" id="btnRunProbes" disabled>运行探针</button>
+          <button class="btn" id="btnExport" disabled>导出 JSON</button>
+          <button class="btn ghost" id="btnCopyJson" disabled>复制 JSON</button>
+          <button class="btn ghost" id="btnClearProbes" disabled>清空</button>
+          <span class="small muted" id="probeHint"></span>
+        </div>
+        <div id="probeError" class="banner err" hidden></div>
+        <div class="table-scroll">
+          <table class="probes" id="probeTable">
+            <thead><tr>
+              <th>#</th><th>draw</th><th>instance</th><th>corner</th><th>vertex</th><th>三角形</th><th>错误字段</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <pre class="json-out section-gap" id="jsonOut" hidden></pre>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="engine.js"></script>
+<script src="sample.js"></script>
+<script>
+'use strict';
+/* ============================== 全局状态 ============================== */
+const state = {
+  cap: null,            // parseCapture 结果
+  replayer: null,
+  drawIds: [],
+  drawPos: -1,          // drawIds 下标
+  instance: 0,
+  selectedCorner: null, // {tri, k}
+  triCache: null,       // 当前 draw+instance 的 evalTriangle 结果
+  probes: [],           // 输入探针
+  probeResults: null,   // 导出结果
+  fileName: ''
+};
+
+const $ = (id) => document.getElementById(id);
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { t.hidden = true; }, 2200);
+}
+
+function fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KiB';
+  return (n / 1048576).toFixed(2) + ' MiB';
+}
+function fmtNum(v) {
+  if (v === null || v === undefined) return 'null';
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return String(v);
+    if (!Number.isFinite(v)) return String(v);
+    return Math.abs(v) < 1e-4 && v !== 0 ? v.toExponential(3) : Number(v.toFixed(5)).toString();
+  }
+  return String(v);
+}
+function fmtValue(value, type) {
+  if (value === null || value === undefined) return '<span class="scalar null">null</span>';
+  if (Array.isArray(value)) {
+    return '<span class="values">' + value.map((x, i) => {
+      let inner = fmtNum(x);
+      if (type === 'unorm8x4' || type === 'rgb10a2unorm') {
+        const rgb = value.slice(0, 3).map(c => Math.round(c * 255));
+        const a = value.length === 4 ? value[3] : 1;
+        const swatch = i === 0 ? `<span class="swatch" style="background:rgba(${rgb.join(',')},${a})"></span>` : '';
+        inner = swatch + fmtNum(x);
+      }
+      return `<span class="scalar">${inner}</span>`;
+    }).join('') + '</span>';
+  }
+  return `<span class="scalar">${fmtNum(value)}</span>`;
+}
+function cmdBrief(i) {
+  const c = state.cap.commands[i];
+  if (c.op === 'write') return `write →${c.b}[${c.at}..${c.at + c.hex.length / 2})`;
+  if (c.op === 'copy') return `copy ${c.src}[${c.from}..) → ${c.dst}[${c.at}..) ×${c.size}`;
+  return `draw count=${c.count} inst=${c.instances} baseV=${c.baseVertex} firstI=${c.firstInstance}`;
+}
+function writerTag(w) {
+  if (w === -1) return '<span class="bw init" title="初始字节，未被任何命令改写">初始</span>';
+  const c = state.cap.commands[w];
+  return `<span class="bw" title="#${w} ${c.op}">命令#${w}</span>`;
+}
+
+/* ============================== 抓帧加载 ============================== */
+function loadCaptureText(text, name) {
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    showLoadError('JSON 解析失败：' + e.message, null);
+    return;
+  }
+  let cap;
+  try {
+    cap = VSR.parseCapture(json);
+  } catch (e) {
+    if (e.name === 'CaptureError') {
+      showLoadError(e.message, e.ref);
+    } else {
+      showLoadError(e.message, null);
+    }
+    return; // 保留上一份抓帧
+  }
+  // 加载成功才替换状态
+  state.cap = cap;
+  state.replayer = new VSR.Replayer(cap);
+  state.fileName = name || 'capture.json';
+  state.drawIds = cap.commands.map((c, i) => c.op === 'draw' ? i : -1).filter(i => i >= 0);
+  state.probes = [];
+  state.probeResults = null;
+  state.selectedCorner = null;
+  $('loadError').hidden = true;
+  $('dropzone').hidden = true;
+  $('workspace').hidden = false;
+  $('btnLoadProbes').disabled = false;
+  buildStatbar();
+  buildTimeline();
+  selectDraw(0);
+  toast('抓帧已加载：' + state.fileName);
+}
+
+function showLoadError(msg, ref) {
+  const el = $('loadError');
+  let where = '';
+  if (ref) {
+    where = ref.kind === 'command'
+      ? `命令 #${ref.index}`
+      : ref.kind === 'buffer' ? `缓冲 "${ref.index}"` : `探针 #${ref.index}`;
+  }
+  el.innerHTML = `<div>⚠ 抓帧被拒绝${where ? '（' + where + '）' : ''}：<code>${escapeHtml(msg)}</code><br>
+    <span class="small">已保留当前正在查看的上一份抓帧。</span></div>`;
+  el.hidden = false;
+  if (!state.cap) $('workspace').hidden = true;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+function buildStatbar() {
+  const cap = state.cap;
+  const names = Object.keys(cap.buffers);
+  const total = names.reduce((s, n) => s + cap.buffers[n].length, 0);
+  const draws = cap.commands.filter(c => c.op === 'draw').length;
+  const writes = cap.commands.filter(c => c.op === 'write').length;
+  const copies = cap.commands.filter(c => c.op === 'copy').length;
+  const rewrite = cap.commands.reduce((s, c) =>
+    s + (c.op === 'write' ? c.hex.length / 2 : c.op === 'copy' ? c.size : 0), 0);
+  $('statbar').innerHTML = [
+    `<span class="stat">缓冲 <b>${names.length}</b></span>`,
+    `<span class="stat">初始字节 <b>${fmtBytes(total)}</b> / 16 MiB</span>`,
+    `<span class="stat">命令 <b>${cap.commands.length}</b> / 50000</span>`,
+    `<span class="stat">draw <b>${draws}</b></span>`,
+    `<span class="stat">write <b>${writes}</b></span>`,
+    `<span class="stat">copy <b>${copies}</b></span>`,
+    `<span class="stat">累计改写 <b>${fmtBytes(rewrite)}</b> / 64 MiB</span>`,
+    `<span class="stat">文件 <b>${escapeHtml(state.fileName)}</b></span>`
+  ].join('');
+}
+
+/* ============================== 时间线 ============================== */
+function buildTimeline() {
+  const n = state.cap.commands.length;
+  const scrub = $('cmdScrub');
+  scrub.max = Math.max(0, n - 1);
+  $('cmdJump').max = Math.max(0, n - 1);
+  renderCmdList();
+}
+
+function currentCmdIndex() {
+  return state.drawPos >= 0 ? state.drawIds[state.drawPos] : 0;
+}
+
+function renderCmdList() {
+  const list = $('cmdList');
+  const n = state.cap.commands.length;
+  const cur = currentCmdIndex();
+  const win = 40;
+  const start = Math.max(0, cur - win / 2);
+  const end = Math.min(n, start + win);
+  let html = '';
+  for (let i = start; i < end; i++) {
+    const c = state.cap.commands[i];
+    html += `<div class="cmd-row ${i === cur ? 'active' : ''}" data-ci="${i}">
+      <span class="ci">#${i}</span>
+      <span class="op op-${c.op}">${c.op}</span>
+      <span class="detail">${escapeHtml(cmdBrief(i))}</span>
+    </div>`;
+  }
+  list.innerHTML = html;
+  list.querySelectorAll('.cmd-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const ci = Number(row.dataset.ci);
+      const c = state.cap.commands[ci];
+      if (c.op === 'draw') {
+        selectDraw(state.drawIds.indexOf(ci));
+      } else {
+        $('cmdJump').value = ci;
+        toast('#' + ci + ' 是 ' + c.op + '，已在时间线定位；选择一条 draw 查看线框');
+      }
+    });
+  });
+  const active = list.querySelector('.cmd-row.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+  $('cmdScrub').value = cur;
+  $('cmdJump').value = cur;
+  $('cmdCount').textContent = n + ' 条';
+}
+
+function selectDraw(pos) {
+  if (pos < 0 || pos >= state.drawIds.length) return;
+  state.drawPos = pos;
+  state.instance = 0;
+  state.selectedCorner = null;
+  const ci = state.drawIds[pos];
+  state.replayer.seek(ci); // draw 执行时的缓冲状态
+  state.triCache = null;
+  const cmd = state.cap.commands[ci];
+  $('drawLabel').textContent = `draw #${ci} · ${cmd.count} 角 × ${cmd.instances} 实例`;
+  buildInstanceSelect();
+  renderCmdList();
+  refreshView();
+}
+
+/* ============================== 实例与三角形评估 ============================== */
+function currentDrawCmd() {
+  return state.cap.commands[state.drawIds[state.drawPos]];
+}
+function ensureTriangles() {
+  if (state.triCache) return state.triCache;
+  const cmd = currentDrawCmd();
+  const ci = state.drawIds[state.drawPos];
+  const tris = [];
+  for (let t = 0; t < cmd.count / 3; t++) {
+    tris.push(state.replayer.evalTriangle(cmd, ci, state.instance, t));
+  }
+  state.triCache = tris;
+  return tris;
+}
+
+function buildInstanceSelect() {
+  const cmd = currentDrawCmd();
+  const sel = $('instSelect');
+  sel.innerHTML = '';
+  for (let j = 0; j < cmd.instances; j++) {
+    const o = document.createElement('option');
+    o.value = j;
+    o.textContent = '实例 ' + j + ' / ' + (cmd.instances - 1);
+    sel.appendChild(o);
+  }
+  sel.value = state.instance;
+}
+
+function setInstance(j) {
+  const cmd = currentDrawCmd();
+  j = Math.max(0, Math.min(cmd.instances - 1, j));
+  if (j === state.instance) return;
+  state.instance = j;
+  state.selectedCorner = null;
+  state.triCache = null;
+  $('instSelect').value = j;
+  refreshView();
+}
+
+/* ============================== 画布 ============================== */
+const canvas = $('view');
+const ctx = canvas.getContext('2d');
+let boxRect = null; // NDC 框像素
+let cornerHits = []; // 当前可点角点像素位置
+
+function ndcToPx(x, y) {
+  const s = boxRect.size / 2;
+  return [boxRect.x + s + x * s, boxRect.y + s - y * s];
+}
+function pxToNdc(px, py) {
+  const s = boxRect.size / 2;
+  return [(px - (boxRect.x + s)) / s, -((py - (boxRect.y + s)) / s)];
+}
+
+function rgbaCss(v, alpha) {
+  const rgb = v.slice(0, 3).map(c => Math.round(c * 255));
+  return `rgba(${rgb.join(',')},${alpha === undefined ? (v[3] === undefined ? 1 : v[3]) : alpha})`;
+}
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function render() {
+  resizeCanvas();
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  ctx.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const col = (name) => css.getPropertyValue(name).trim();
+  const pad = 26;
+  const size = Math.min(w, h) - pad * 2;
+  const bx = (w - size) / 2, by = (h - size) / 2;
+  boxRect = { x: bx, y: by, size };
+
+  // 网格
+  ctx.strokeStyle = col('--border');
+  ctx.lineWidth = 1;
+  ctx.font = '10px ' + css.getPropertyValue('--mono');
+  ctx.fillStyle = col('--fg-mute');
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i++) {
+    const g = bx + (size / 4) * i;
+    ctx.moveTo(g, by); ctx.lineTo(g, by + size);
+    ctx.moveTo(bx, g); ctx.lineTo(bx + size, g);
+  }
+  ctx.stroke();
+  // NDC 框
+  ctx.strokeStyle = col('--fg-mute');
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx, by, size, size);
+  ctx.fillText('+1', bx - 16, by + 4);
+  ctx.fillText('−1', bx - 16, by + size);
+  ctx.fillText('−1', bx - 2, by + size + 14);
+  ctx.fillText('+1', bx + size - 10, by + size + 14);
+
+  // 裁剪到 NDC 框
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx, by, size, size);
+  ctx.clip();
+
+  const tris = ensureTriangles();
+  cornerHits = [];
+  let okCount = 0, badCount = 0;
+
+  // 可选：淡显其他实例（只画 position+offset 线框，封顶 1200 三角形）
+  if ($('chkOthers').checked) {
+    const cmd = currentDrawCmd();
+    const ci = state.drawIds[state.drawPos];
+    let budget = 1200;
+    for (let j = 0; j < cmd.instances && budget > 0; j++) {
+      if (j === state.instance) continue;
+      for (let t = 0; t < cmd.count / 3 && budget > 0; t++, budget--) {
+        const tr = state.replayer.evalTriangle(cmd, ci, j, t);
+        drawTriangle(tr, true, col);
+      }
+    }
+  }
+
+  tris.forEach((tr, ti) => {
+    if (tr.skipped) badCount++; else okCount++;
+    drawTriangle(tr, false, col, ti);
+  });
+
+  ctx.restore();
+
+  // 选中角高亮（画在裁剪外也允许环显示）
+  if (state.selectedCorner) {
+    const hit = cornerHits.find(h => h.tri === state.selectedCorner.tri && h.k === state.selectedCorner.k);
+    if (hit) {
+      ctx.beginPath();
+      ctx.arc(hit.px, hit.py, 8, 0, Math.PI * 2);
+      ctx.strokeStyle = col('--accent');
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  $('triOk').textContent = '正常 ' + okCount;
+  $('triOk').className = 'pill ok';
+  $('triBad').textContent = '跳过 ' + badCount;
+  $('triBad').className = badCount ? 'pill err' : 'pill mute';
+}
+
+function drawTriangle(tr, faint, col, ti) {
+  const pts = tr.corners.map(c => VSR.cornerPoint(c));
+  const pxpts = pts.map(p => p ? ndcToPx(p[0], p[1]) : null);
+  const alpha = faint ? 0.18 : 0.9;
+
+  if (tr.skipped) {
+    // 坏三角形：红色虚线，能画几点画几点
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = col('--err');
+    ctx.lineWidth = faint ? 1 : 1.6;
+    ctx.beginPath();
+    let started = false;
+    pxpts.forEach((p, k) => {
+      if (!p) { started = false; return; }
+      if (!started) { ctx.moveTo(p[0], p[1]); started = true; }
+      else ctx.lineTo(p[0], p[1]);
+    });
+    if (pxpts.every(Boolean)) ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    // 正常：用角颜色均值
+    const cols = tr.corners.map(c => c.fields.color && c.fields.color.value);
+    let stroke = col('--accent');
+    if (cols.every(Boolean)) {
+      const avg = [0, 1, 2, 3].map(i => cols.reduce((s, c) => s + (c[i] === undefined ? 1 : c[i]), 0) / cols.length);
+      stroke = rgbaCss(avg, faint ? 0.25 : 0.85);
+    }
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = faint ? 1 : 1.8;
+    ctx.beginPath();
+    pxpts.forEach((p, k) => k === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // 角点
+  tr.corners.forEach((corner, k) => {
+    const p = pxpts[k];
+    const cornerIndex = ti * 3 + k;
+    if (p) {
+      cornerHits.push({ px: p[0], py: p[1], tri: ti, k, corner: cornerIndex });
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], faint ? 2 : 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = tr.skipped ? col('--err') : (faint ? col('--fg-mute') : col('--accent'));
+      ctx.fill();
+      if (!faint && $('chkLabels').checked) {
+        ctx.fillStyle = col('--fg-dim');
+        ctx.font = '10px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+        ctx.fillText(String(cornerIndex), p[0] + 6, p[1] - 5);
+      }
+    } else if (!faint) {
+      // 无法定位的坏角：在三角形质心附近放警告记号（取其它角均值或框中心）
+      const valid = pxpts.filter(Boolean);
+      const c = valid.length
+        ? [valid.reduce((s, p) => s + p[0], 0) / valid.length, valid.reduce((s, p) => s + p[1], 0) / valid.length]
+        : [boxRect.x + boxRect.size / 2, boxRect.y + boxRect.size / 2];
+      cornerHits.push({ px: c[0] + k * 9, py: c[1], tri: ti, k, corner: cornerIndex, bad: true });
+      ctx.fillStyle = col('--err');
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('⚠', c[0] + k * 9 - 5, c[1] + 4);
+    }
+  });
+}
+
+function refreshView() {
+  render();
+  renderCornerDetail();
+}
+
+canvas.addEventListener('click', (e) => {
+  if (!boxRect || !cornerHits.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  let best = null, bestD = 14;
+  for (const h of cornerHits) {
+    const d = Math.hypot(h.px - x, h.py - y);
+    if (d < bestD) { bestD = d; best = h; }
+  }
+  if (best) {
+    state.selectedCorner = { tri: best.tri, k: best.k };
+    render();
+    renderCornerDetail();
+  }
+});
+
+/* ============================== 角详情 ============================== */
+function renderCornerDetail() {
+  const root = $('cornerDetail');
+  $('cornerLabel').textContent = '未选择';
+  if (!state.selectedCorner) {
+    root.innerHTML = '<p class="muted small">在左侧线框中点选一个角点，查看每个字段的原始字节、地址、解码值，以及各字节最后一次写入或拷贝的命令号。</p>';
+    return;
+  }
+  const { tri, k } = state.selectedCorner;
+  const tris = ensureTriangles();
+  const tr = tris[tri];
+  const corner = tr.corners[k];
+  const cornerIndex = tri * 3 + k;
+  $('cornerLabel').textContent = `角 ${cornerIndex} · 三角形 ${tri}`;
+
+  let html = `<div class="corner-head">
+    <span class="pill ${tr.skipped ? 'err' : 'ok'}">${tr.skipped ? '三角形跳过' : '三角形正常'}</span>
+    <span class="pill mute">顶点槽号 <b>${corner.vertex === null ? 'null' : corner.vertex}</b></span>
+  </div>`;
+
+  const names = Object.keys(corner.fields);
+  const order = ['index', 'position', 'color', 'offset'].filter(n => names.includes(n));
+  for (const name of order) {
+    html += renderField(name, corner.fields[name]);
+  }
+  root.innerHTML = html;
+}
+
+function renderField(name, f) {
+  const bad = !!f.error;
+  const cmd = currentDrawCmd();
+  let typeLabel = name === 'index' ? cmd.index.type : cmd.attrs[name].type;
+  let h = `<div class="field-block ${bad ? 'bad' : ''}">
+    <div class="field-h">
+      <span class="fname">${name}</span>
+      <span class="ftype">${typeLabel}</span>
+      ${bad ? `<span class="ferr">⚠ ${escapeHtml(f.error)}</span>` : '<span class="pill ok" style="margin-left:auto">正常</span>'}
+    </div>
+    <div class="field-b">
+      <div class="kv">
+        <span class="k">缓冲</span><span class="v">${escapeHtml(f.buffer)}</span>
+        <span class="k">地址</span><span class="v">${f.address}${f.hex === null ? '（区间超出缓冲长度）' : ''}</span>
+      </div>`;
+  if (f.hex === null) {
+    h += `<p class="small" style="color:var(--err)">hex / value / writers 均为 null：字段读取越界，未取到任何字节。</p>`;
+  } else {
+    const bytes = f.hex.match(/.{2}/g);
+    h += `<div class="kv"><span class="k">解码值</span><span class="v">${fmtValue(f.value, typeLabel)}</span></div>`;
+    h += `<div class="small muted" style="margin:6px 0 2px">原始字节（每字节附最后改写命令号，−1 为初始字节）</div><div class="bytegrid">`;
+    bytes.forEach((b, i) => {
+      h += `<div class="bytecell">
+        <div class="ba"><span>+${i}</span><span>#${f.address + i}</span></div>
+        <div class="bv">${b}</div>
+        <div>${writerTag(f.writers[i])}</div>
+      </div>`;
+    });
+    h += '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+/* ============================== 探针 ============================== */
+function loadProbesText(text) {
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    showProbeError('探针 JSON 解析失败：' + e.message);
+    return;
+  }
+  try {
+    const probes = VSR.parseProbes(json, state.cap); // 全量校验，任一非法即拒绝
+    state.probes = probes;
+    state.probeResults = null;
+    $('probeError').hidden = true;
+    $('probeHint').textContent = probes.length + ' 条待运行';
+    $('btnRunProbes').disabled = probes.length === 0;
+    $('btnClearProbes').disabled = probes.length === 0;
+    toast(probes.length + ' 条探针校验通过');
+  } catch (e) {
+    showProbeError(e.message, e.ref);
+  }
+}
+function showProbeError(msg, ref) {
+  const el = $('probeError');
+  const where = ref ? `探针 #${ref.index}：` : '';
+  el.innerHTML = `⚠ ${where}${escapeHtml(msg)}<br><span class="small">整批未导入，已有探针结果保留。</span>`;
+  el.hidden = false;
+}
+
+function runProbes() {
+  const t0 = performance.now();
+  // 新回放器，单遍单调扫完，互不影响交互状态
+  const r = new VSR.Replayer(state.cap);
+  state.probeResults = r.runProbes(state.probes);
+  const ms = (performance.now() - t0).toFixed(1);
+  renderProbeTable();
+  $('probeCount').textContent = state.probeResults.length + ' 条';
+  $('probeHint').textContent = `完成，耗时 ${ms} ms`;
+  $('btnExport').disabled = false;
+  $('btnCopyJson').disabled = false;
+  toast('探针完成（' + ms + ' ms）');
+}
+
+function renderProbeTable() {
+  const tb = $('probeTable').querySelector('tbody');
+  tb.innerHTML = '';
+  state.probeResults.forEach((r, i) => {
+    const errs = Object.keys(r.fields).filter(n => r.fields[n].error);
+    const tri = Math.floor(r.corner / 3);
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.innerHTML = `<td>${i}</td><td>${r.draw}</td><td>${r.instance}</td><td>${r.corner}</td>
+      <td>${r.vertex === null ? '<span style="color:var(--err)">null</span>' : r.vertex}</td>
+      <td><span class="pill ${r.skipped ? 'err' : 'ok'}">${r.skipped ? '跳过' : '正常'} · T${tri}</span></td>
+      <td style="color:${errs.length ? 'var(--err)' : 'var(--fg-mute)'}">${errs.join(', ') || '—'}</td>`;
+    tr.addEventListener('click', () => {
+      const pos = state.drawIds.indexOf(r.draw);
+      if (pos < 0) return;
+      selectDraw(pos);
+      setInstance(r.instance);
+      state.selectedCorner = { tri, k: r.corner - tri * 3 };
+      refreshView();
+      document.querySelector('.col-view').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    tb.appendChild(tr);
+  });
+}
+
+function probeJson() {
+  return JSON.stringify(state.probeResults, null, 2);
+}
+function exportProbes() {
+  const blob = new Blob([probeJson()], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'probe-results.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const out = $('jsonOut');
+  out.hidden = false;
+  out.textContent = probeJson();
+}
+async function copyProbes() {
+  const text = probeJson();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('JSON 已复制到剪贴板');
+  } catch (e) {
+    const out = $('jsonOut');
+    out.hidden = false;
+    out.textContent = text;
+    const range = document.createRange();
+    range.selectNodeContents(out);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    toast('剪贴板不可用，已选中文本，请手动复制');
+  }
+}
+
+/* ============================== 事件绑定 ============================== */
+$('btnLoadCapture').addEventListener('click', () => $('fileCapture').click());
+$('fileCapture').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (f) f.text().then(t => loadCaptureText(t, f.name));
+  e.target.value = '';
+});
+$('btnLoadProbes').addEventListener('click', () => $('fileProbes').click());
+$('fileProbes').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (f) f.text().then(loadProbesText);
+  e.target.value = '';
+});
+$('btnLoadSample').addEventListener('click', () => {
+  loadCaptureText(JSON.stringify(window.VSR_SAMPLE.capture), '样例 capture.json');
+  loadProbesText(JSON.stringify(window.VSR_SAMPLE.probes));
+});
+$('btnPrevDraw').addEventListener('click', () => selectDraw(state.drawPos - 1));
+$('btnNextDraw').addEventListener('click', () => selectDraw(state.drawPos + 1));
+$('cmdScrub').addEventListener('input', (e) => {
+  const ci = Number(e.target.value);
+  const c = state.cap.commands[ci];
+  if (c.op === 'draw') selectDraw(state.drawIds.indexOf(ci));
+  else { $('cmdJump').value = ci; renderCmdList(); }
+});
+$('cmdJump').addEventListener('change', (e) => {
+  const ci = Number(e.target.value);
+  if (!Number.isInteger(ci) || ci < 0 || ci >= state.cap.commands.length) { toast('命令号越界'); return; }
+  const c = state.cap.commands[ci];
+  if (c.op === 'draw') selectDraw(state.drawIds.indexOf(ci));
+  else renderCmdList();
+});
+$('instSelect').addEventListener('change', (e) => setInstance(Number(e.target.value)));
+$('btnPrevInst').addEventListener('click', () => setInstance(state.instance - 1));
+$('btnNextInst').addEventListener('click', () => setInstance(state.instance + 1));
+$('chkOthers').addEventListener('change', render);
+$('chkLabels').addEventListener('change', render);
+$('btnRunProbes').addEventListener('click', runProbes);
+$('btnExport').addEventListener('click', exportProbes);
+$('btnCopyJson').addEventListener('click', copyProbes);
+$('btnClearProbes').addEventListener('click', () => {
+  state.probes = []; state.probeResults = null;
+  $('probeTable').querySelector('tbody').innerHTML = '';
+  $('jsonOut').hidden = true;
+  $('probeCount').textContent = '0 条';
+  $('probeHint').textContent = '';
+  $('btnRunProbes').disabled = $('btnExport').disabled = $('btnCopyJson').disabled = $('btnClearProbes').disabled = true;
+});
+$('btnProbeHere').addEventListener('click', () => {
+  if (!state.selectedCorner) { toast('请先点选一个角点'); return; }
+  const ci = state.drawIds[state.drawPos];
+  state.probes.push({
+    draw: ci, instance: state.instance,
+    corner: state.selectedCorner.tri * 3 + state.selectedCorner.k
+  });
+  $('probeHint').textContent = state.probes.length + ' 条待运行';
+  $('btnRunProbes').disabled = false;
+  $('btnClearProbes').disabled = false;
+  toast('已加入探针（共 ' + state.probes.length + ' 条）');
+});
+
+// 主题
+(function initTheme() {
+  const saved = (() => { try { return localStorage.getItem('vsr-theme'); } catch (e) { return null; } })();
+  if (saved) document.documentElement.dataset.theme = saved;
+  $('btnTheme').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme;
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('vsr-theme', next); } catch (e) {}
+    if (state.cap) render();
+  });
+})();
+
+// 拖放
+let dragDepth = 0;
+window.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragDepth++;
+  document.body.classList.add('drag-over');
+  $('dropzone').classList.add('drag');
+});
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('dragleave', () => {
+  dragDepth--;
+  if (dragDepth <= 0) {
+    dragDepth = 0;
+    document.body.classList.remove('drag-over');
+    $('dropzone').classList.remove('drag');
+  }
+});
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('drag-over');
+  $('dropzone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  file.text().then((t) => {
+    // 含 commands 视为抓帧，否则当探针
+    if (/"commands"\s*:/.test(t)) loadCaptureText(t, file.name);
+    else if (state.cap) loadProbesText(t);
+    else showLoadError('请先导入 capture.json，再导入探针文件', null);
+  });
+});
+
+window.addEventListener('resize', () => { if (state.cap) render(); });
+</script>
+</body>
+</html>
