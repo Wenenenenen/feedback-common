@@ -130,11 +130,12 @@ node test/run.js
 python3 -I tools/gen_fixtures.py
 
 # 3) 真实 Chromium 端到端：上传/点击/下载并解析 WAV+JSON、截断定位、
-#    时间线点击、逐帧自检、满额 ≤20s 计时（需全局 playwright）
+#    时间线点击、逐帧自检；若已用 `node test/perf.js` 生成 tmp/full-d64.pdq
+#    则额外执行满额 ≤20s 计时，否则自动跳过这 2 项（不影响其余用例）
 NODE_PATH="$(npm root -g)" node test/browser-e2e.js
 ```
 
-当前结果：`node test/run.js` 约 **5872 条断言全过**；`browser-e2e.js` **23 项全过**（含选区 WAV 与整轨切片字节一致、holes D64 的 PCM/区间与参考完全一致、截断 offset=296/record=5、满额 10.1s）。
+当前结果（在本工作区，满额文件已生成）：`node test/run.js` 约 **5875 条断言全过**；`browser-e2e.js` **23 项全过**（含选区 WAV 与整轨切片字节一致、holes D64 的 PCM/区间与参考完全一致、截断 offset=296/record=5、满额 wall≈7.8–10 s）。全新克隆没有 64 MiB 的 `tmp/full-d64.pdq`（已 gitignore），此时 e2e 为 **21 项通过 + 满额 2 项跳过**；先跑 `node test/perf.js` 即补齐。
 
 `tools/pdq_reference.py` 是只依据 `约定.txt` 写的**独立 Python 对照实现**（字面三级 boxcar + 暴力依赖扫描），可单独使用：
 
