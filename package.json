@@ -1,0 +1,11 @@
+{
+  "name": "fiber-director-cuts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "材料纤维方向图定向：平面 Ising 全局最优翻向、锚点与违反边追踪",
+  "scripts": {
+    "test": "node test/validate.mjs",
+    "serve": "python3 -m http.server 8123"
+  }
+}

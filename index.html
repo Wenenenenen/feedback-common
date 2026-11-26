@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563c9'/%3E%3Cline x1='7' y1='24' x2='16' y2='8' stroke='white' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M11 9 L17 6 L18 12' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='17' y1='25' x2='25' y2='12' stroke='%23ffb4b3' stroke-width='2.4' stroke-dasharray='3 2' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <title>纤维方向图定向 · Fiber Director Cuts</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="30" height="30">
+          <defs><marker id="bm" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/></marker></defs>
+          <line x1="4" y1="26" x2="14" y2="6" stroke="currentColor" stroke-width="2.4" marker-end="url(#bm)"/>
+          <line x1="14" y1="26" x2="24" y2="6" stroke="currentColor" stroke-width="2.4" marker-end="url(#bm)" opacity=".55"/>
+          <line x1="24" y1="26" x2="30" y2="14" stroke="#d43d3a" stroke-width="2.4" stroke-dasharray="3 2"/>
+        </svg>
+      </div>
+      <div>
+        <h1>材料纤维方向图定向</h1>
+        <p class="subtitle">轴向向量 · 四邻点积偏好 · 全局违反代价最小 · 锚点与断线追踪</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-load-sample" class="btn" data-testid="load-sample">载入样例</button>
+      <button id="btn-import" class="btn btn-primary" data-testid="import-json">导入 JSON…</button>
+      <input type="file" id="file-input" accept=".json,application/json" hidden />
+      <div class="export-menu">
+        <button id="btn-export-menu" class="btn" aria-haspopup="true" aria-expanded="false">导出 ▾</button>
+        <div class="menu" id="export-menu" hidden>
+          <button data-export="bundle">完整结果 JSON（符号图+分量+违反边）</button>
+          <button data-export="svg">符号图 SVG</button>
+          <button data-export="txt">符号网格 TXT</button>
+          <button data-export="signcsv">正负号图 CSV</button>
+          <button data-export="components">分量 CSV</button>
+          <button data-export="violated">被违反边 CSV</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ================= 左：画布 ================= -->
+    <section class="canvas-card" aria-label="方向图">
+      <div class="canvas-toolbar">
+        <div class="segmented" role="tablist" aria-label="工具">
+          <button class="seg active" data-tool="inspect" data-testid="tool-inspect">🔍 检查 / 点边</button>
+          <button class="seg" data-tool="anchor:1" data-testid="tool-anchor-keep">⚓ 锚点 · 保持 +1</button>
+          <button class="seg" data-tool="anchor:-1" data-testid="tool-anchor-flip">⚓ 锚点 · 翻转 −1</button>
+        </div>
+        <div class="zoom-group">
+          <button id="zoom-out" class="icon-btn" title="缩小" aria-label="缩小">−</button>
+          <span id="zoom-label" class="zoom-label">适应</span>
+          <button id="zoom-in" class="icon-btn" title="放大" aria-label="放大">+</button>
+          <button id="zoom-fit" class="btn-mini" title="适应窗口">适应</button>
+        </div>
+      </div>
+
+      <div class="layer-toggles">
+        <label><input type="checkbox" id="layer-edges" checked /> 偏好边</label>
+        <label><input type="checkbox" id="layer-breaks" checked /> 断线/违反边</label>
+        <label><input type="checkbox" id="layer-conf" checked /> 置信度粗细</label>
+        <label><input type="checkbox" id="layer-comp" checked /> 分量底色</label>
+        <label><input type="checkbox" id="layer-zero" /> 零代价/未连接邻格</label>
+        <label><input type="checkbox" id="layer-coords" /> 坐标</label>
+        <span class="hint-drag">滚轮缩放 · 拖拽平移 · 单击格/边查看</span>
+      </div>
+
+      <div id="canvas-wrap" class="canvas-wrap">
+        <canvas id="view" data-testid="view-canvas"></canvas>
+        <div id="tooltip" class="tooltip" hidden></div>
+        <div id="drop-hint" class="drop-hint" hidden>松开以导入 fiber-directors JSON</div>
+        <div id="canvas-empty" class="canvas-empty">
+          <p>尚未载入数据</p>
+          <button class="btn btn-primary" id="empty-load-sample">载入 samples/fiber-directors.json</button>
+          <p class="muted">也可把 JSON 文件拖到此处，或用右上角“导入 JSON”。支持最多 96×96。</p>
+        </div>
+      </div>
+
+      <div class="legend" data-testid="legend">
+        <span class="lg"><i class="sw arrow"></i>定向后箭头（透明度/粗细=置信度）</span>
+        <span class="lg"><i class="sw edge-ok"></i>满足偏好的邻接</span>
+        <span class="lg"><i class="sw edge-bad"></i>被违反边 = 断线（计代价）</span>
+        <span class="lg"><i class="sw anchor"></i>指定锚点</span>
+        <span class="lg"><i class="sw root"></i>默认：分量行列最小格不翻</span>
+        <span class="lg"><i class="sw space"></i>空格/缺测孔（不连接）</span>
+      </div>
+    </section>
+
+    <!-- ================= 右：面板 ================= -->
+    <aside class="sidebar">
+      <section class="card overview" data-testid="overview">
+        <h2>总览</h2>
+        <div id="load-status" class="load-status">尚未载入</div>
+        <div class="stats">
+          <div class="stat hero">
+            <div class="stat-label">违反总代价（全局最小）</div>
+            <div class="stat-value" id="stat-cost" data-testid="stat-cost">–</div>
+          </div>
+          <div class="stat"><div class="stat-label">被违反边 / 断线</div><div class="stat-value" id="stat-violated">–</div></div>
+          <div class="stat"><div class="stat-label">连通分量</div><div class="stat-value" id="stat-comps">–</div></div>
+          <div class="stat"><div class="stat-label">有效格 / 空格</div><div class="stat-value" id="stat-cells">–</div></div>
+          <div class="stat"><div class="stat-label">连接边</div><div class="stat-value" id="stat-edges">–</div></div>
+          <div class="stat"><div class="stat-label">求解引擎 / 耗时</div><div class="stat-value small" id="stat-engine">–</div></div>
+        </div>
+        <details class="paste-box">
+          <summary>粘贴 JSON 导入</summary>
+          <textarea id="paste-area" rows="6" placeholder='{"width":...,"height":...,"rows":[...]}'></textarea>
+          <button class="btn btn-small" id="btn-parse-paste">解析粘贴内容</button>
+        </details>
+        <div id="import-errors" class="import-errors" hidden></div>
+      </section>
+
+      <section class="card anchor-card" data-testid="anchor-panel">
+        <h2>锚点与冲突</h2>
+        <p class="muted small">每个分量可指定一个箭头朝向（+1 保持 / −1 翻转）。未指定时，固定该分量行列最小格不翻。锚点只决定分量整体朝向，不改变最小代价。</p>
+        <div id="anchor-list" class="anchor-list"></div>
+        <div id="conflict-list" class="conflict-list" data-testid="conflict-list"></div>
+      </section>
+
+      <section class="card tabs-card">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="inspect">检查器</button>
+          <button class="tab" data-tab="components">分量 <span id="tab-comp-count" class="badge"></span></button>
+          <button class="tab" data-tab="violated">被违反边 <span id="tab-bad-count" class="badge bad"></span></button>
+        </div>
+
+        <div class="tab-panel active" data-panel="inspect">
+          <div id="cell-detail" class="detail-block" data-testid="cell-detail">
+            <h3>格检查</h3>
+            <p class="muted small">在“检查”工具下单击任意格；用锚点工具单击格可指定朝向。</p>
+          </div>
+          <div id="edge-detail" class="detail-block edge-detail" data-testid="edge-detail">
+            <h3>边跟踪</h3>
+            <p class="muted small">单击任意相邻格之间的边（或下方列表/格详情中的邻边按钮），查看原点积、偏好、实际翻向与代价。</p>
+          </div>
+          <div class="edge-query">
+            <h3>按坐标跟踪边</h3>
+            <div class="coord-row">
+              <label>A x<input id="eq-ax" type="number" value="0" min="0"/></label>
+              <label>y<input id="eq-ay" type="number" value="0" min="0"/></label>
+              <span>—</span>
+              <label>B x<input id="eq-bx" type="number" value="1" min="0"/></label>
+              <label>y<input id="eq-by" type="number" value="0" min="0"/></label>
+              <button class="btn btn-small" id="eq-go">跟踪</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="components">
+          <div id="component-list" class="entity-list" data-testid="component-list"></div>
+        </div>
+
+        <div class="tab-panel" data-panel="violated">
+          <div id="violated-list" class="entity-list" data-testid="violated-list"></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
