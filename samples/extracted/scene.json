@@ -1,0 +1,1 @@
+{"frames": 24000, "ears": [{"t": 0, "left": [0, -3, 0], "right": [0, 3, 0]}, {"t": 24000, "left": [0, 1, 0], "right": [0, 7, 0]}], "tracks": [{"wav": "bell.wav", "segments": [{"start": 0, "end": 22000, "offset": 0, "p0": [220, -60, 0], "p1": [120, 60, 0]}]}]}
