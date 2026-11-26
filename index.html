@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>栅格测区矩量台</title>
+<style>
+  /* layout: two-column workbench — canvas left, inspector/results right,
+     stacking to one column at phone width. */
+  :root {
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --ink: #16202b;
+    --muted: #5c6b7a;
+    --line: #d7dee6;
+    --accent: #1d5fd1;
+    --accent-soft: #e3ecfb;
+    --warn: #b42318;
+    --warn-soft: #fdeceb;
+    --heat: #3882f6;
+    --radius: 12px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1620; --panel: #17212e; --ink: #e6ecf3; --muted: #93a3b3;
+      --line: #2a3848; --accent: #6ea2ff; --accent-soft: #1d2c44;
+      --warn: #ff8a7f; --warn-soft: #3a1d1a; --heat: #5b97ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1620; --panel: #17212e; --ink: #e6ecf3; --muted: #93a3b3;
+    --line: #2a3848; --accent: #6ea2ff; --accent-soft: #1d2c44;
+    --warn: #ff8a7f; --warn-soft: #3a1d1a; --heat: #5b97ff;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .workbench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .workbench { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px; min-width: 0;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  #dropZone {
+    border: 1.5px dashed var(--line); border-radius: var(--radius);
+    padding: 18px; text-align: center; color: var(--muted); cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #dropZone.over { border-color: var(--accent); background: var(--accent-soft); }
+  #dropZone input { display: block; margin: 8px auto 0; }
+  .canvas-wrap { display: flex; justify-content: center; margin-top: 12px; overflow: auto; }
+  canvas { image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px; touch-action: none; cursor: crosshair; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  td { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+  .frac { color: var(--muted); font-size: 11px; }
+  .null { color: var(--warn); font-family: var(--sans); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  select, input, textarea, button {
+    font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; min-width: 0;
+  }
+  textarea { width: 100%; font-family: var(--mono); font-size: 12px; resize: vertical; min-height: 96px; }
+  button { cursor: pointer; background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  button:hover { border-color: var(--accent); }
+  button.ghost { background: transparent; }
+  label.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  label.field input { width: 96px; }
+  #errors {
+    background: var(--warn-soft); border: 1px solid var(--warn); color: var(--warn);
+    border-radius: 8px; padding: 9px 12px; margin-top: 12px; font-size: 12.5px;
+  }
+  #errors[hidden] { display: none; }
+  #status { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  #cellInfo { margin-top: 12px; }
+  #cellInfo table { margin-top: 6px; }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .pill { display: inline-block; background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 2px 9px; font-size: 11.5px; font-weight: 600; }
+  .theme-toggle { float: right; }
+</style>
+</head>
+<body>
+  <div>
+    <button class="ghost theme-toggle" id="themeToggle" type="button">切换主题</button>
+    <h1>栅格测区矩量台</h1>
+    <p class="sub">斜边切像素的精确面积积分 · BigInt 有理数 · 无中心取样/超采样 · 坐标单位 1/16 像素</p>
+  </div>
+
+  <div class="workbench">
+    <div class="stack">
+      <section class="card">
+        <h2>载入</h2>
+        <div id="dropZone">
+          拖入 raster-moments.zip，或分别选择 16 位 P5（.pgm）与测区 JSON
+          <input type="file" id="fileInput" multiple accept=".zip,.pgm,.json">
+        </div>
+        <div id="errors" hidden></div>
+        <div id="status">等待载入…</div>
+        <div class="canvas-wrap"><canvas id="canvas" width="560" height="560"></canvas></div>
+      </section>
+
+      <section class="card">
+        <h2>点格检查</h2>
+        <div id="cellInfo">把鼠标移到预览格上，或点击某格，查看交叠分数与六个分量贡献。</div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <h2>测区编辑</h2>
+        <div class="row">
+          <label class="field">环
+            <select id="ringSelect"></select>
+          </label>
+          <label class="field">顶点
+            <select id="vertexSelect"></select>
+          </label>
+          <label class="field">x（1/16 px）<input id="coordX" inputmode="numeric"></label>
+          <label class="field">y（1/16 px）<input id="coordY" inputmode="numeric"></label>
+          <button id="applyCoord" type="button">应用坐标</button>
+        </div>
+        <div class="row">
+          <button id="addVertex" type="button">插入顶点</button>
+          <button id="deleteVertex" class="ghost" type="button">删除顶点</button>
+          <button id="addHole" class="ghost" type="button">新增孔</button>
+        </div>
+        <p class="sub" style="margin:10px 0 4px">环顶点（每行 x, y；可整段粘贴编辑，自动闭合不重复末点）</p>
+        <textarea id="ringText" spellcheck="false"></textarea>
+        <div class="row"><button id="applyRingText" type="button">应用整环</button></div>
+        <p class="sub" style="margin-bottom:0">可直接在预览上拖点。交叉、触边、孔越界等非法修改会被定位并拒绝，保留上一个合法测区。</p>
+      </section>
+
+      <section class="card">
+        <h2>灰度矩（零到二阶）</h2>
+        <span class="pill" id="meta"></span>
+        <table id="moments" style="margin-top:8px"></table>
+        <h2 style="margin-top:16px">重心</h2>
+        <table id="centroid"></table>
+        <h2 style="margin-top:16px">二维协方差（M00 归一化中心矩）</h2>
+        <table id="covariance"></table>
+        <div class="row">
+          <button id="exportBtn" type="button">导出约分分数 JSON</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script type="module" src="src/app.js"></script>
+<script>
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark';
+    if (dark) root.setAttribute('data-theme', 'light');
+    else root.setAttribute('data-theme', 'dark');
+  });
+</script>
+</body>
+</html>

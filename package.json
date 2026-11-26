@@ -1,0 +1,12 @@
+{
+  "name": "clipped-raster-moments",
+  "version": "1.0.0",
+  "description": "Exact clipped raster grayscale moments (subpixel polygon integration)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "gen-cases": "python3 -I tools/gen_cases.py",
+    "pretest": "python3 -I tools/gen_cases.py",
+    "test": "node tests/run-tests.mjs && node tests/cross-check.mjs"
+  }
+}
