@@ -15,3 +15,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 本地虚拟环境与测试产物
+.venv/
+_untrusted/
+e2e/shots/

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双面纸稿去透印 · 联合拟合工作台</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">透</span>
+    <div>
+      <h1>双面纸稿去透印</h1>
+      <p class="subtitle">两面联合有界最小二乘 · 自实现卷积/伴随/投影牛顿-CG · 无现成去透印工具</p>
+    </div>
+  </div>
+  <div class="status-pill" id="statusPill" data-state="idle">
+    <span class="dot"></span><span id="statusText">未导入</span>
+  </div>
+</header>
+
+<main>
+  <!-- 导入区 -->
+  <section class="card import-card">
+    <h2>1 · 导入数据</h2>
+    <p class="hint">同尺寸大端 16 位 P5 密度图（每边 ≤ 384），掩膜非零即有效、可缺省；核 JSON 含 front/back，宽高 1–9、系数非负且和 ≤ 0.75。背面观测与掩膜在服务端仅做左右镜像。</p>
+    <form id="uploadForm" class="upload-grid" novalidate>
+      <label class="file-slot">
+        <input type="file" name="front" accept=".pgm" required>
+        <span class="slot-title">正面 PGM</span>
+        <span class="slot-detail" data-slot="front">必选 · P5 16-bit</span>
+      </label>
+      <label class="file-slot">
+        <input type="file" name="back" accept=".pgm" required>
+        <span class="slot-title">背面 PGM</span>
+        <span class="slot-detail" data-slot="back">必选 · 原朝向</span>
+      </label>
+      <label class="file-slot">
+        <input type="file" name="mask_front" accept=".pgm">
+        <span class="slot-title">正面掩膜</span>
+        <span class="slot-detail" data-slot="mask_front">可选</span>
+      </label>
+      <label class="file-slot">
+        <input type="file" name="mask_back" accept=".pgm">
+        <span class="slot-title">背面掩膜</span>
+        <span class="slot-detail" data-slot="mask_back">可选</span>
+      </label>
+      <label class="file-slot">
+        <input type="file" name="kernels" accept=".json,application/json" required>
+        <span class="slot-title">散射核 JSON</span>
+        <span class="slot-detail" data-slot="kernels">必选 · 两份已标定核</span>
+      </label>
+      <div class="actions-slot">
+        <label class="toggle">
+          <input type="checkbox" name="cross_check" value="true">
+          <span>同时跑 L-BFGS-B 独立交叉校验（更慢）</span>
+        </label>
+        <button type="submit" class="primary-btn" id="solveBtn">
+          <span class="btn-label">开始联合拟合</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+    </form>
+    <div class="error-banner" id="errorBanner" hidden></div>
+  </section>
+
+  <!-- 诊断区 -->
+  <section class="card" id="diagCard" hidden>
+    <h2>2 · 拟合诊断</h2>
+    <div class="diag-grid" id="diagGrid"></div>
+    <div class="kernel-strip" id="kernelStrip"></div>
+  </section>
+
+  <!-- 查看区 -->
+  <section class="card viewer-card" id="viewerCard" hidden>
+    <h2>3 · 图层查看与像素检查</h2>
+    <div class="viewer-toolbar">
+      <div class="seg" role="group" aria-label="选择图层">
+        <button type="button" class="seg-btn active" data-layer="estimate">本面估计</button>
+        <button type="button" class="seg-btn" data-layer="observed">观测</button>
+        <button type="button" class="seg-btn" data-layer="bleed">对面透印量</button>
+        <button type="button" class="seg-btn" data-layer="residual">观测残差</button>
+        <button type="button" class="seg-btn" data-layer="mask">有效掩膜</button>
+      </div>
+      <div class="range-control">
+        <label for="scaleRange">显示缩放</label>
+        <input type="range" id="scaleRange" min="1" max="24" value="8">
+        <span id="scaleVal">8×</span>
+      </div>
+    </div>
+
+    <div class="panels">
+      <figure class="panel">
+        <figcaption>正面（正面坐标）</figcaption>
+        <div class="canvas-wrap" id="frontWrap">
+          <canvas id="frontCanvas"></canvas>
+          <div class="crosshair" id="frontCross"></div>
+        </div>
+      </figure>
+      <figure class="panel">
+        <figcaption>背面（恢复原朝向）</figcaption>
+        <div class="canvas-wrap" id="backWrap">
+          <canvas id="backCanvas"></canvas>
+          <div class="crosshair" id="backCross"></div>
+        </div>
+      </figure>
+    </div>
+
+    <div class="colorbar" id="colorbar">
+      <div class="ramp" id="ramp"></div>
+      <div class="ramp-labels"><span id="rampMin">0.000</span><span id="rampMid"></span><span id="rampMax">1.000</span></div>
+    </div>
+
+    <div class="inspector" id="inspector">
+      <p class="inspector-empty">点击任一图像中的像素查看：本面估计、对面透印量、观测残差（缺测处显示 null）。</p>
+      <div class="inspector-body" hidden></div>
+    </div>
+  </section>
+
+  <!-- 导出区 -->
+  <section class="card" id="exportCard" hidden>
+    <h2>4 · 导出</h2>
+    <div class="export-grid">
+      <button type="button" class="export-btn" data-export="front_pgm">
+        <span class="export-name">front-corrected.pgm</span>
+        <span class="export-meta">16 位 P5 · floor(65535v+0.5) 大端 · 正面朝向</span>
+      </button>
+      <button type="button" class="export-btn" data-export="back_pgm">
+        <span class="export-name">back-corrected.pgm</span>
+        <span class="export-meta">16 位 P5 · 恢复背面原朝向</span>
+      </button>
+      <button type="button" class="export-btn" data-export="fit_json">
+        <span class="export-name">fit-values.json</span>
+        <span class="export-meta">未量化拟合数值 · 正面坐标 X/Y · 含残差与诊断</span>
+      </button>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>模型：min ΣMf(X+KfY−A)² + ΣMb(Y+KbX−B)² + (1/64)Σ(X²+Y²)，X,Y∈[0,1]；KKT 投影梯度分量误差 ≤ 1e-6。</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
