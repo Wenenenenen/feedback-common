@@ -1,0 +1,14 @@
+{
+  "name": "pilot-cycle-restorer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "磁带转录导频校速台：整圈候选展开、全段最小折变 DP、锚点、精确重采样与逐码一致选区导出",
+  "scripts": {
+    "test": "node --test tests/solver.test.cjs tests/audio.test.cjs",
+    "start": "./scripts/start.sh",
+    "check": "node --check solver.js && node --check audio.js && node --check zipio.js && node --check app.js && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

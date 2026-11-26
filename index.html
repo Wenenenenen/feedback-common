@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='6' width='20' height='13' rx='2' fill='%23257de0'/%3E%3Ccircle cx='8' cy='12.5' r='2.2' fill='white'/%3E%3Ccircle cx='16' cy='12.5' r='2.2' fill='white'/%3E%3C/svg%3E" />
+  <title>磁带导频校速台 · Pilot Cycle Restorer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="6" width="20" height="13" rx="2"></rect>
+          <circle cx="8" cy="12.5" r="2.2"></circle>
+          <circle cx="16" cy="12.5" r="2.2"></circle>
+          <path d="M10.2 12.5h3.6M8 14.7V17m8-2.3V17"></path>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1>磁带导频校速台</h1>
+        <span class="brand-sub">Pilot Cycle Restorer · 整圈展开 / 最小折变 DP / 同源重采样</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="loadSampleBtn" class="btn ghost" type="button">载入内置样例</button>
+      <label class="btn primary" for="fileInput" data-testid="import-label">
+        导入 cases ZIP
+        <input id="fileInput" data-testid="fileInput" type="file"
+               accept=".zip,.json,.wav,.txt" multiple hidden />
+      </label>
+      <!-- 兼容 kebab 命名测试钩子：同样的导入处理 -->
+      <input id="file-input" data-testid="file-input" type="file"
+             accept=".zip,.json,.wav,.txt" multiple hidden aria-hidden="true" />
+    </div>
+  </header>
+
+  <div id="status" class="statusbar" role="status" aria-live="polite">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span id="status-text">等待导入：选择 samples/pilot-cycle-cases.zip（也可多选 project.json 与 tape.wav）。</span>
+  </div>
+
+  <main class="layout" id="appMain" aria-busy="false">
+    <aside class="rail">
+      <section class="card" id="caseCard" data-testid="case-card">
+        <h2 class="card-title">素材与速度区间</h2>
+        <dl class="meta-grid" id="caseMeta">
+          <div><dt>状态</dt><dd id="metaEmpty">尚未导入案例</dd></div>
+        </dl>
+      </section>
+
+      <section class="card" id="anchorCard" data-testid="anchor-card">
+        <div class="card-title-row">
+          <h2 class="card-title">手工锚点</h2>
+          <span class="pill" id="anchorCount" data-testid="anchor-count">0</span>
+        </div>
+        <ul class="anchor-list" id="anchorList" data-testid="anchor-list"></ul>
+        <form id="anchorForm" class="anchor-form" data-testid="anchor-form">
+          <div class="form-row">
+            <label for="anchorIndex">读数 #</label>
+            <input id="anchorIndex" data-testid="anchor-index" type="number" min="1" step="1" placeholder="中间读数编号" />
+          </div>
+          <div class="form-row grow">
+            <label for="anchorValue">锚定展开相位（候选）</label>
+            <select id="anchorValue" data-testid="anchor-value"><option value="">先选择读数</option></select>
+          </div>
+          <button id="addAnchorBtn" class="btn primary block" type="submit" data-testid="add-anchor">添加 / 覆盖锚点并重新求解</button>
+        </form>
+        <div class="anchor-quick">
+          <button id="pickFromDetailBtn" class="btn subtle block" type="button" disabled>把下方明细中选中的候选设为锚点</button>
+        </div>
+      </section>
+
+      <section class="card" id="listenCard" data-testid="listen-card">
+        <h2 class="card-title">对照试听</h2>
+        <div class="ab-row" role="group" aria-label="原带与校速对照">
+          <button id="listenOriginal" class="btn ab" type="button" data-testid="listen-original">听原带</button>
+          <button id="listenCorrected" class="btn ab active" type="button" data-testid="listen-corrected" aria-pressed="true">听校速</button>
+        </div>
+        <audio id="compareAudio" data-testid="compare-audio" controls preload="auto"></audio>
+        <p class="hint" id="abHint">切换 A/B 时会按整条展开曲线映射到同一声音位置。</p>
+      </section>
+
+      <section class="card" id="exportCard" data-testid="export-card">
+        <h2 class="card-title">导出 WAV（48 kHz / 立体声 / PCM16）</h2>
+        <button id="exportBtn" class="btn primary block" type="button" disabled data-testid="export-full">导出整段校正 WAV</button>
+        <div class="selection-box">
+          <div class="sel-title">选区导出（样本码与整段 WAV 完全一致）</div>
+          <div class="sel-grid">
+            <label>起点 s
+              <input id="selStartSec" data-testid="sel-start-sec" type="number" min="0" step="0.001" value="0" />
+            </label>
+            <label>终点 s
+              <input id="selEndSec" data-testid="sel-end-sec" type="number" min="0" step="0.001" value="0" />
+            </label>
+            <label>起帧
+              <input id="selStartFrame" data-testid="sel-start-frame" type="number" min="0" step="1" value="0" />
+            </label>
+            <label>止帧
+              <input id="selEndFrame" data-testid="sel-end-frame" type="number" min="0" step="1" value="0" />
+            </label>
+          </div>
+          <div class="sel-actions">
+            <button id="selFullBtn" class="btn subtle" type="button">全选</button>
+            <button id="exportSelectionBtn" class="btn primary" type="button" disabled data-testid="export-selection">导出选区 WAV</button>
+          </div>
+        </div>
+        <div id="exportStatus" class="hint" data-testid="export-status"></div>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <div id="errorBox" class="banner error" hidden role="alert" data-testid="error-box">
+        <div class="banner-title">
+          <strong>无法得到全段相位路径</strong>
+          <span id="firstBadPill" class="pill critical" data-testid="first-bad-pill">第一处无法延续：#<span id="firstBadIndex">–</span></span>
+        </div>
+        <div id="errorDetail" class="banner-detail"></div>
+        <div class="banner-actions">
+          <button id="jumpBadBtn" class="btn danger" type="button" data-testid="jump-bad">定位该读数</button>
+          <button id="revertAnchorBtn" class="btn ghost" type="button" data-testid="revert-anchor">还原到上一条可用锚点</button>
+        </div>
+      </div>
+
+      <div id="lastGoodBadge" class="banner warn" hidden data-testid="last-good-badge">
+        <span>本次锚点修改无解；图表与试听/导出仍保留并标记为<strong>上一条可用校速结果</strong>。</span>
+      </div>
+
+      <section class="card chart-card" data-testid="chart-card">
+        <div class="chart-head">
+          <h2 class="card-title">展开相位候选与最优路径</h2>
+          <div class="legend">
+            <span class="lg"><i class="dot candidate"></i>整圈候选</span>
+            <span class="lg"><i class="line selected"></i>最小折变路径</span>
+            <span class="lg"><i class="dot anchor"></i>锚点</span>
+            <span class="lg"><i class="dot bad"></i>无法延续</span>
+          </div>
+        </div>
+        <div class="chart-wrap" id="phaseWrap">
+          <canvas id="phaseCanvas" data-testid="phase-canvas"></canvas>
+          <canvas id="phaseHover" class="hover-canvas"></canvas>
+          <div id="phaseTooltip" class="chart-tooltip" hidden></div>
+        </div>
+        <div class="chart-head second">
+          <h2 class="card-title">相邻段速度 dz/dx（阴影为允许区间）</h2>
+        </div>
+        <div class="chart-wrap speed" id="speedWrap">
+          <canvas id="speedCanvas" data-testid="speed-canvas"></canvas>
+          <canvas id="speedHover" class="hover-canvas"></canvas>
+        </div>
+      </section>
+
+      <section class="card detail-card" id="detailCard" data-testid="detail-card">
+        <div class="detail-head">
+          <h2 class="card-title">读数明细 <span id="detailIndex" class="pill">未选择</span></h2>
+          <div id="detailBody" class="detail-body">点击下方任意读数，查看全部整圈候选并可将某个候选设为锚点。</div>
+        </div>
+      </section>
+
+      <section class="card table-card" data-testid="table-card">
+        <div class="table-head">
+          <h2 class="card-title">读数候选与最终选值 <span class="pill" id="tableSummary"></span></h2>
+          <div class="table-tools">
+            <label class="jump">跳转 #
+              <input id="rowJump" data-testid="row-jump" type="number" min="0" step="1" placeholder="编号" />
+            </label>
+            <button id="rowJumpBtn" class="btn subtle" type="button">定位</button>
+            <label class="filter-toggle"><input type="checkbox" id="onlyAnchorBad" /> 只看锚点/异常</label>
+          </div>
+        </div>
+        <div class="table-scroll" id="markScroll" data-testid="mark-scroll">
+          <table id="markTable" data-testid="mark-table">
+            <thead>
+              <tr>
+                <th class="c-idx">#</th>
+                <th class="c-x">源帧 x</th>
+                <th class="c-t">源时间 s</th>
+                <th class="c-p">p</th>
+                <th class="c-k">整圈候选 k（范围 / 数量）</th>
+                <th class="c-z">候选展开 z</th>
+                <th class="c-sel">最终选值</th>
+                <th class="c-slope">入段斜率</th>
+                <th class="c-st">状态</th>
+              </tr>
+            </thead>
+            <tbody id="markTbody" data-testid="mark-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>全部计算在浏览器本地完成 · 整数 DP / BigInt 精确代价 · 线性反查重采样 · PCM16 正中取偶</span>
+  </footer>
+
+  <script src="solver.js"></script>
+  <script src="audio.js"></script>
+  <script src="zipio.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
