@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>偏振照片 Stokes 复原工作台</title>
+<style>
+  :root {
+    --bg: #0f141b;
+    --panel: #171e28;
+    --panel-2: #1e2733;
+    --line: #2b3645;
+    --ink: #e6edf5;
+    --ink-dim: #9fb0c2;
+    --ink-faint: #6b7c8f;
+    --accent: #5aa6e8;
+    --accent-strong: #3b8bd4;
+    --good: #5fbf8f;
+    --warn: #e0b24e;
+    --bad: #e0686f;
+    --magenta: #d600cc;
+    --radius: 10px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f6f9;
+      --panel: #ffffff;
+      --panel-2: #f0f3f7;
+      --line: #d8dfe8;
+      --ink: #1a2330;
+      --ink-dim: #4a5868;
+      --ink-faint: #7c8a99;
+      --accent: #2770c4;
+      --accent-strong: #1b5aa8;
+      --good: #2f8f5e;
+      --warn: #b58120;
+      --bad: #c13a42;
+      --magenta: #b800b0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    background: var(--panel);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--ink-faint); font-size: 12.5px; }
+  main { padding: 18px 22px; max-width: 1280px; margin: 0 auto; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .card h2 { font-size: 13px; font-weight: 650; margin: 0 0 10px; color: var(--ink-dim); letter-spacing: .02em; }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button, .file-btn {
+    font: inherit; color: var(--ink);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover, .file-btn:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input[type=file] { display: none; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    font-size: 12.5px; color: var(--ink-dim);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-faint); }
+  .dot.busy { background: var(--warn); animation: pulse 1s infinite; }
+  .dot.ok { background: var(--good); }
+  .dot.err { background: var(--bad); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  .progress {
+    height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden;
+    min-width: 160px; flex: 1; max-width: 320px; border: 1px solid var(--line);
+  }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .12s linear; }
+  .error-box {
+    display: none; margin-top: 12px;
+    background: color-mix(in srgb, var(--bad) 12%, var(--panel));
+    border: 1px solid var(--bad);
+    color: var(--ink);
+    border-radius: 8px; padding: 10px 14px;
+  }
+  .error-box.show { display: block; }
+  .error-box .tag { color: var(--bad); font-weight: 650; margin-right: 8px; }
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; margin-top: 16px; align-items: start; }
+  @media (max-width: 920px) { .layout { grid-template-columns: 1fr; } }
+  .frame-list { display: flex; flex-direction: column; gap: 8px; }
+  .frame-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel-2);
+  }
+  .frame-item.off { opacity: .5; }
+  .frame-item .meta { flex: 1; min-width: 0; }
+  .frame-item .dir { font-family: var(--mono); font-size: 12.5px; }
+  .frame-item .cal { color: var(--ink-faint); font-size: 11.5px; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: 999px;
+    background: var(--line); transition: background .15s; cursor: pointer;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; transition: transform .15s;
+  }
+  .switch input:checked + .track { background: var(--accent-strong); }
+  .switch input:checked + .track::after { transform: translateX(16px); }
+  .view-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .view-tabs button { padding: 7px 13px; font-size: 13px; }
+  .view-tabs button.active { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+  .canvas-wrap {
+    display: flex; justify-content: center; align-items: center;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; min-height: 260px; position: relative;
+  }
+  canvas#view { image-rendering: pixelated; cursor: crosshair; max-width: 100%; }
+  .legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--ink-dim); }
+  .legend .bar { height: 12px; width: 180px; border-radius: 3px; border: 1px solid var(--line); }
+  .legend .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; vertical-align: -2px; margin-right: 5px; }
+  .cursor-info { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); min-height: 18px; margin-top: 8px; }
+  table.detail { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.detail th, table.detail td {
+    padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+  }
+  table.detail th { color: var(--ink-faint); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  table.detail td.left, table.detail th.left { text-align: left; }
+  table.detail tr.excluded { opacity: .45; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; white-space: nowrap; }
+  .badge.normal { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+  .badge.upper { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+  .badge.lower { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+  .badge.masked, .badge.disabled { background: color-mix(in srgb, var(--ink-faint) 22%, transparent); color: var(--ink-faint); }
+  .stokes-box {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0;
+  }
+  .stokes-box .cell { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .stokes-box .k { color: var(--ink-faint); font-size: 11.5px; }
+  .stokes-box .v { font-family: var(--mono); font-size: 15px; }
+  .muted { color: var(--ink-faint); }
+  .nowrap { white-space: nowrap; }
+  .scroll { max-height: 360px; overflow: auto; }
+  .empty { color: var(--ink-faint); padding: 30px 10px; text-align: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 920px) { .grid2 { grid-template-columns: 1fr; } }
+  .hint { color: var(--ink-faint); font-size: 12px; margin-top: 6px; }
+  .mode-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .mode-toggle button { border: 0; border-radius: 0; padding: 7px 12px; }
+  .mode-toggle button.active { background: var(--accent-strong); color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>偏振照片 Stokes 复原工作台</h1>
+    <div class="sub">16 位灰度 · 4–12 帧 · 单边饱和罚 · 锥约束加权最小二乘（纯手写求解）</div>
+  </div>
+  <div class="controls" style="margin-left:auto">
+    <label class="file-btn" for="file-input">导入 ZIP</label>
+    <input type="file" id="file-input" accept=".zip">
+    <button id="export-btn" class="primary" disabled>导出结果 JSON</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="controls">
+      <span class="pill"><span class="dot" id="status-dot"></span><span id="status-text">尚未导入项目</span></span>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <span class="pill" id="project-info">无项目</span>
+      <div class="mode-toggle" id="color-mode" style="margin-left:auto">
+        <button data-mode="color" class="active">伪彩</button>
+        <button data-mode="gray">灰度</button>
+      </div>
+    </div>
+    <div class="error-box" id="error-box"><span class="tag">导入失败</span><span id="error-text"></span></div>
+    <div class="hint">坏输入会指出具体文件或字段，并保留当前已加载的项目与结果。</div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h2>帧开关（切换后自动重算）</h2>
+      <div class="frame-list" id="frame-list"><div class="empty">导入后显示帧清单</div></div>
+    </div>
+
+    <div class="card">
+      <h2>结果图</h2>
+      <div class="view-tabs" id="view-tabs">
+        <button data-view="intensity" class="active">强度 s₀</button>
+        <button data-view="dolp">线偏振度 DoLP</button>
+        <button data-view="angle">偏振角度</button>
+      </div>
+      <div class="canvas-wrap"><canvas id="view"></canvas></div>
+      <div class="legend" id="legend"></div>
+      <div class="cursor-info" id="cursor-info">点击图像查看像素明细</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>像素明细</h2>
+    <div id="detail"><div class="empty">在上方图像点击任意像素</div></div>
+  </div>
+</main>
+
+<script src="src/zip.js"></script>
+<script src="src/io.js"></script>
+<script src="src/solver.js"></script>
+<script src="src/render.js"></script>
+<script src="src/app.js"></script>
+<script src="src/ui.js"></script>
+</body>
+</html>
