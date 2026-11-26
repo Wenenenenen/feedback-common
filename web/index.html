@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>定点均衡头间规划台</title>
+<link rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* layout: stacked instrument panels, full-bleed bands, gutter on inner wrap */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --surface-2: #f6f8fa;
+  --ink: #16202b;
+  --ink-soft: #4a5866;
+  --line: #d3dae1;
+  --accent: #0e7c86;
+  --accent-soft: #e0f1f2;
+  --good: #1d7a4d;
+  --warn: #9a6200;
+  --crit: #b4232a;
+  --crit-soft: #fbe6e7;
+  --warn-soft: #f7efdd;
+  --good-soft: #e2f3ea;
+  --shadow: 0 1px 2px rgba(16, 24, 32, .06), 0 4px 14px rgba(16, 24, 32, .05);
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11161c;
+    --surface: #1a212a;
+    --surface-2: #222b35;
+    --ink: #e6ecf2;
+    --ink-soft: #9aabb9;
+    --line: #33404d;
+    --accent: #4fc3cc;
+    --accent-soft: #14343a;
+    --good: #5fc993;
+    --warn: #e0b15e;
+    --crit: #f07a80;
+    --crit-soft: #3a1d20;
+    --warn-soft: #382e1b;
+    --good-soft: #173025;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11161c;
+  --surface: #1a212a;
+  --surface-2: #222b35;
+  --ink: #e6ecf2;
+  --ink-soft: #9aabb9;
+  --line: #33404d;
+  --accent: #4fc3cc;
+  --accent-soft: #14343a;
+  --good: #5fc993;
+  --warn: #e0b15e;
+  --crit: #f07a80;
+  --crit-soft: #3a1d20;
+  --warn-soft: #382e1b;
+  --good-soft: #173025;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .25);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(40px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+
+header.masthead {
+  padding: 26px 0 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: .2px;
+}
+.sub {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font: 500 12px var(--font-mono);
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--accent); }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.panel h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .9px;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel h2 .idx {
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 760px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.drop {
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  background: var(--surface-2);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drop strong { display: block; margin-bottom: 4px; }
+.drop .hint { color: var(--ink-soft); font-size: 12px; font-family: var(--font-mono); }
+.drop input { display: none; }
+.fname {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}
+.drop .hint { display: block; }
+
+button.act {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  padding: 10px 18px;
+  font: 600 14px var(--font-body);
+  cursor: pointer;
+}
+button.act:hover { filter: brightness(1.08); }
+button.act:disabled {
+  background: var(--line);
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 9px 14px;
+  font: 500 13px var(--font-body);
+  cursor: pointer;
+}
+button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+button.ghost:disabled { opacity: .45; cursor: not-allowed; }
+.row-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+.msg {
+  border-radius: 9px;
+  padding: 10px 13px;
+  font-size: 13px;
+  margin-top: 12px;
+  display: none;
+}
+.msg.show { display: block; }
+.msg.err { background: var(--crit-soft); color: var(--crit); border: 1px solid var(--crit); }
+.msg.ok { background: var(--good-soft); color: var(--good); border: 1px solid var(--good); }
+.msg.info { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+.msg ul { margin: 6px 0 0; padding-left: 18px; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+.tile {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.tile .k {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .7px;
+  color: var(--ink-soft);
+}
+.tile .v {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.tile .v small { font-size: 12px; color: var(--ink-soft); font-weight: 400; }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink-soft);
+  position: sticky;
+  top: 0;
+}
+tbody tr:last-child td { border-bottom: none; }
+td.mono, th.mono { font-family: var(--font-mono); }
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.pill.sh0 { background: var(--good-soft); color: var(--good); }
+.pill.shN { background: var(--warn-soft); color: var(--warn); }
+.clip-zero { color: var(--good); font-weight: 600; }
+.clip-nonzero { color: var(--crit); font-weight: 600; }
+.margin-zero { color: var(--warn); font-weight: 600; }
+
+.progress {
+  height: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 12px;
+  display: none;
+}
+.progress.show { display: block; }
+.progress > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width .12s linear;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.range-row label { font-family: var(--font-mono); font-size: 12.5px; }
+input[type="number"] {
+  width: 110px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 8px 10px;
+  font: 500 13px var(--font-mono);
+}
+input[type="number"]:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.range-meta { color: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; }
+
+audio { width: 100%; margin-top: 12px; }
+.empty {
+  color: var(--ink-soft);
+  font-size: 13px;
+  padding: 14px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+.badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+footer.foot {
+  margin-top: 26px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <div>
+    <h1>定点均衡头间规划台</h1>
+    <div class="sub">16-bit Q14 双二阶 · 段顺序 / 前置右移求解 · 逐级账本余量与削顶审计</div>
+  </div>
+  <button class="theme-toggle" id="themeBtn" type="button">切换深浅色</button>
+</header>
+
+<!-- 1. inputs -->
+<section class="panel">
+  <h2><span class="idx">01</span> 输入：账本方案与录音</h2>
+  <div class="grid-2">
+    <label class="drop" id="planDrop">
+      <input type="file" id="planFile" accept=".json,application/json">
+      <strong>选择 / 拖入 plan.json</strong>
+      <span class="hint">bands 1–32 点 · sections 1–14 段 · Q14 系数 · gain/limit ∈ ±8192</span>
+      <span class="fname" id="planName"></span>
+    </label>
+    <label class="drop" id="wavDrop">
+      <input type="file" id="wavFile" accept=".wav,audio/wav,audio/wave">
+      <strong>选择 / 拖入录音 WAV（可选）</strong>
+      <span class="hint">48kHz · 单/双声道 · 16-bit PCM · 最长 120 秒</span>
+      <span class="fname" id="wavName"></span>
+    </label>
+  </div>
+  <div class="row-actions">
+    <button class="act" id="solveBtn" type="button" disabled>求解最优方案</button>
+    <button class="ghost" id="demoBtn" type="button">载入内置示例</button>
+  </div>
+  <div class="msg" id="planMsg"></div>
+</section>
+
+<!-- 2. solution summary -->
+<section class="panel" id="solPanel" hidden>
+  <h2><span class="idx">02</span> 求解结果</h2>
+  <div class="tiles">
+    <div class="tile"><div class="k">总右移</div>
+      <div class="v" id="tTotal">–</div></div>
+    <div class="tile"><div class="k">逐级累计移位之和</div>
+      <div class="v" id="tPsum">–</div></div>
+    <div class="tile"><div class="k">段数</div>
+      <div class="v" id="tStages">–</div></div>
+    <div class="tile"><div class="k">求解耗时</div>
+      <div class="v" id="tMs">–</div></div>
+  </div>
+  <div class="msg" id="solMsg"></div>
+  <div class="row-actions">
+    <button class="ghost" id="dlPlan" type="button">下载方案 JSON</button>
+  </div>
+</section>
+
+<!-- 3. stage table -->
+<section class="panel" id="stagePanel" hidden>
+  <h2><span class="idx">03</span> 逐级方案与测频余量
+    <span class="badge">单位 1/256 log2 幅度</span></h2>
+  <div class="table-scroll">
+    <table id="stageTable">
+      <thead><tr id="stageHead"></tr></thead>
+      <tbody id="stageBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 4. simulation -->
+<section class="panel" id="simPanel" hidden>
+  <h2><span class="idx">04</span> 定点逐样本仿真与削顶统计</h2>
+  <div class="row-actions" style="margin-top:0">
+    <button class="act" id="simBtn" type="button">对整轨录音运行仿真</button>
+    <span class="range-meta" id="wavMeta"></span>
+  </div>
+  <div class="progress" id="simProg"><i></i></div>
+  <div class="msg" id="simMsg"></div>
+
+  <div id="simResult" hidden>
+    <div class="table-scroll" style="margin-top:14px">
+      <table id="clipTable">
+        <thead><tr id="clipHead"></tr></thead>
+        <tbody id="clipBody"></tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:20px"><span class="idx">05</span> 试听与半开帧区间导出</h2>
+    <div class="range-row">
+      <label>起始帧 <input type="number" id="rangeLo" min="0" value="0"></label>
+      <label>结束帧（不含）<input type="number" id="rangeHi" min="0" value="0"></label>
+      <span class="range-meta" id="rangeMeta"></span>
+    </div>
+    <div class="range-row">
+      <button class="ghost" id="playRange" type="button">试听该区间</button>
+      <button class="ghost" id="playFull" type="button">试听整轨</button>
+      <button class="ghost" id="dlRange" type="button">导出区间 WAV</button>
+      <button class="ghost" id="dlFull" type="button">导出整轨 WAV</button>
+      <button class="ghost" id="dlClips" type="button">下载削顶统计 JSON</button>
+    </div>
+    <audio id="player" controls hidden></audio>
+  </div>
+</section>
+
+<footer class="foot">
+  运算约定：每级输入先按 2^shift 就近取偶（半整数取偶）；宽累加器求
+  b0·x+b1·x1+b2·x2−a1·y1−a2·y2，整项 /16384 就近取偶后夹取到
+  [−32768, 32767]；削顶后的饱和值进入该级递归历史，各声道历史独立并从零开始。<br>
+  账本约束：前 k 段账面增益 = Σgain − 256·累计移位，须 ≤ 第 k 段 limit；
+  方案排序先比总右移（≤12），再比逐级累计移位之和，最后按 (id, shift) 序列字典序最小。
+</footer>
+
+</div>
+
+<script src="headroom.js"></script>
+<script>
+'use strict';
+const H = window.HEADROOM;
+
+const state = {
+  plan: null,
+  planName: '',
+  wav: null,          // {channels, sampleRate, frames, samples:Int16Array}
+  wavName: '',
+  solution: null,
+  sim: null,          // {output:Int16Array, clips}
+  reqSeq: 0,
+};
+
+const $ = (id) => document.getElementById(id);
+let simWorker = null;
+
+function showMsg(el, kind, html) {
+  el.className = 'msg show ' + kind;
+  el.innerHTML = html;
+}
+function hideMsg(el) { el.className = 'msg'; el.innerHTML = ''; }
+
+// ---- theme ----------------------------------------------------------------
+const themeBtn = $('themeBtn');
+try {
+  const saved = localStorage.getItem('sos-theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+} catch (e) { /* storage unavailable */ }
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark'
+    ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', cur);
+  try { localStorage.setItem('sos-theme', cur); } catch (e) { /* ignore */ }
+});
+
+// ---- file inputs -----------------------------------------------------------
+function bindDrop(dropId, inputId, nameId, handler) {
+  const drop = $(dropId), input = $(inputId);
+  drop.addEventListener('dragover', (e) => {
+    e.preventDefault(); drop.classList.add('drag');
+  });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('drag');
+    if (e.dataTransfer.files.length) handler(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) handler(input.files[0]);
+  });
+}
+
+bindDrop('planDrop', 'planFile', 'planName', (file) => {
+  state.planName = file.name;
+  $('planName').textContent = file.name;
+  file.arrayBuffer().then((buf) => {
+    let plan;
+    try {
+      plan = JSON.parse(new TextDecoder().decode(buf));
+    } catch (e) {
+      showMsg($('planMsg'), 'err', 'JSON 解析失败：' + e.message);
+      return;
+    }
+    const errs = H.validatePlan(plan);
+    if (errs.length) {
+      state.plan = null;
+      showMsg($('planMsg'), 'err',
+        '方案校验未通过：<ul><li>' + errs.join('</li><li>') + '</li></ul>');
+      $('solveBtn').disabled = true;
+      return;
+    }
+    state.plan = plan;
+    hideMsg($('planMsg'));
+    $('solveBtn').disabled = false;
+    resetSolution();
+  });
+});
+
+bindDrop('wavDrop', 'wavFile', 'wavName', (file) => {
+  state.wavName = file.name;
+  $('wavName').textContent = file.name;
+  file.arrayBuffer().then((buf) => {
+    try {
+      const wav = H.parseWav(new Uint8Array(buf));
+      state.wav = wav;
+      hideMsg($('planMsg'));
+      invalidateSim();
+      if (state.solution) wireSimPanel();
+    } catch (e) {
+      state.wav = null;
+      showMsg($('planMsg'), 'err', 'WAV 读取失败：' + e.message);
+    }
+  });
+});
+
+function invalidateSim() {
+  state.sim = null;
+  if (simWorker) { simWorker.terminate(); simWorker = null; }
+  $('simResult').hidden = true;
+  $('simProg').classList.remove('show');
+  hideMsg($('simMsg'));
+  const audio = $('player');
+  if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
+  audio.removeAttribute('src');
+  audio.hidden = true;
+}
+
+// ---- planner worker --------------------------------------------------------
+const planner = new Worker('planner-worker.js');
+planner.onerror = (ev) => {
+  $('solveBtn').disabled = !state.plan;
+  showMsg($('planMsg'), 'err', '求解线程出错：' + ev.message);
+};
+planner.onmessage = (ev) => {
+  const d = ev.data;
+  if (d.reqId !== state.reqSeq) return;
+  $('solveBtn').disabled = false;
+  if (!d.ok) {
+    showMsg($('planMsg'), 'err',
+      '方案校验未通过：<ul><li>' + d.errors.join('</li><li>') + '</li></ul>');
+    return;
+  }
+  if (d.noSolution) {
+    state.solution = null;
+    $('solPanel').hidden = false;
+    $('stagePanel').hidden = true;
+    $('simPanel').hidden = true;
+    $('tTotal').textContent = '无解';
+    $('tPsum').textContent = '–';
+    $('tStages').textContent = state.plan.sections.length;
+    $('tMs').innerHTML = '<small>' + d.ms + ' ms</small>';
+    showMsg($('solMsg'), 'err',
+      '在每级 0–3 位、总右移 ≤ 12 的全部可行排列中，没有任何顺序能让每一级'
+      + '在所有测频点满足账本余量。请放宽 limit 或调整 gain 后重试。');
+    $('dlPlan').disabled = true;
+    return;
+  }
+  state.solution = d.solution;
+  renderSolution(d.ms);
+};
+
+$('solveBtn').addEventListener('click', () => {
+  if (!state.plan) return;
+  resetSolution();
+  $('solveBtn').disabled = true;
+  const reqId = ++state.reqSeq;
+  planner.postMessage({ reqId, plan: state.plan });
+});
+
+function resetSolution() {
+  state.solution = null;
+  invalidateSim();
+  $('solPanel').hidden = true;
+  $('stagePanel').hidden = true;
+  $('simPanel').hidden = true;
+  hideMsg($('solMsg'));
+}
+
+function renderSolution(ms) {
+  const sol = state.solution;
+  $('solPanel').hidden = false;
+  $('stagePanel').hidden = false;
+  $('dlPlan').disabled = false;
+  $('tTotal').textContent = sol.total;
+  $('tPsum').textContent = sol.prefixSum;
+  $('tStages').textContent = sol.order.length;
+  $('tMs').innerHTML = '<small>' + ms + ' ms</small>';
+  showMsg($('solMsg'), 'ok',
+    '已找到满足全部账本约束的最优方案（总右移 → 累计移位和 → 字典序）。');
+
+  // stage table
+  const bands = state.plan.bands;
+  const head = $('stageHead');
+  head.innerHTML = '';
+  const cols = ['级次', '段 id', '右移', '账面/余量'];
+  cols.forEach((c) => {
+    const th = document.createElement('th');
+    th.textContent = c;
+    head.appendChild(th);
+  });
+  bands.forEach((f) => {
+    const th = document.createElement('th');
+    th.className = 'mono';
+    th.textContent = f + 'Hz';
+    head.appendChild(th);
+  });
+  const body = $('stageBody');
+  body.innerHTML = '';
+  sol.order.forEach((o, k) => {
+    const tr = document.createElement('tr');
+    tr.appendChild(td(String(k), 'mono'));
+    tr.appendChild(td(String(o.id), 'mono'));
+    const shTd = document.createElement('td');
+    const pill = document.createElement('span');
+    pill.className = 'pill ' + (o.shift === 0 ? 'sh0' : 'shN');
+    pill.textContent = '>>' + o.shift;
+    shTd.appendChild(pill);
+    tr.appendChild(shTd);
+    tr.appendChild(td('余量', 'mono'));
+    sol.marginByStage[k].forEach((m) => {
+      const c = document.createElement('td');
+      c.className = 'mono' + (m === 0 ? ' margin-zero' : '');
+      c.textContent = m;
+      tr.appendChild(c);
+    });
+    body.appendChild(tr);
+    // book row directly beneath, visually quieter
+    const tr2 = document.createElement('tr');
+    tr2.appendChild(td('', 'mono'));
+    tr2.appendChild(td('', 'mono'));
+    tr2.appendChild(td('', 'mono'));
+    tr2.appendChild(td('账面', 'mono'));
+    sol.bookByStage[k].forEach((g) => {
+      const c = document.createElement('td');
+      c.className = 'mono';
+      c.style.color = 'var(--ink-soft)';
+      c.textContent = g;
+      tr2.appendChild(c);
+    });
+    body.appendChild(tr2);
+  });
+
+  if (state.wav) wireSimPanel();
+}
+function td(text, cls) {
+  const c = document.createElement('td');
+  if (cls) c.className = cls;
+  c.textContent = text;
+  return c;
+}
+
+// ---- simulation worker -----------------------------------------------------
+function wireSimPanel() {
+  $('simPanel').hidden = false;
+  const w = state.wav;
+  $('wavMeta').textContent =
+    w.sampleRate + 'Hz · ' + (w.channels === 1 ? '单声道' : '双声道')
+    + ' · ' + w.frames + ' 帧 · '
+    + (w.frames / w.sampleRate).toFixed(3) + ' 秒';
+  $('rangeLo').max = String(w.frames);
+  $('rangeHi').max = String(w.frames);
+  $('rangeLo').value = '0';
+  $('rangeHi').value = String(w.frames);
+  updateRangeMeta();
+  $('simResult').hidden = !state.sim;
+}
+
+$('simBtn').addEventListener('click', () => {
+  if (!state.solution || !state.wav) return;
+  if (simWorker) simWorker.terminate();
+  simWorker = new Worker('sim-worker.js');
+  simWorker.onerror = (ev) => {
+    $('simProg').classList.remove('show');
+    $('simBtn').disabled = false;
+    showMsg($('simMsg'), 'err', '仿真线程出错：' + ev.message);
+  };
+  const reqId = ++state.reqSeq;
+  $('simProg').classList.add('show');
+  $('simProg').firstElementChild.style.width = '0%';
+  $('simBtn').disabled = true;
+  hideMsg($('simMsg'));
+  simWorker.onmessage = (ev) => {
+    const d = ev.data;
+    if (d.reqId !== reqId) return;
+    if (d.progress !== undefined) {
+      $('simProg').firstElementChild.style.width =
+        Math.round(d.progress * 100) + '%';
+      return;
+    }
+    if (d.done) {
+      $('simProg').classList.remove('show');
+      $('simBtn').disabled = false;
+      state.sim = {
+        output: new Int16Array(d.outputBuffer),
+        clips: d.clips,
+      };
+      renderClips();
+      $('simResult').hidden = false;
+      const totalClips = d.clips.reduce(
+        (s, row) => s + row.reduce((a, b) => a + b, 0), 0);
+      showMsg($('simMsg'), totalClips ? 'info' : 'ok',
+        totalClips
+          ? '仿真完成，共记录 ' + totalClips + ' 次削顶（饱和值已进入递归历史）。'
+          : '仿真完成，全部级别均未削顶。');
+    }
+  };
+  // transfer a copy of the sample buffer
+  const bufCopy = state.wav.samples.buffer.slice(0);
+  simWorker.postMessage({
+    reqId,
+    sections: state.plan.sections,
+    order: state.solution.order,
+    wav: {
+      channels: state.wav.channels,
+      sampleRate: state.wav.sampleRate,
+      frames: state.wav.frames,
+      samplesBuffer: bufCopy,
+    },
+  }, [bufCopy]);
+});
+
+function renderClips() {
+  const ch = state.wav.channels;
+  const head = $('clipHead');
+  head.innerHTML = '';
+  ['级次', '段 id', '右移'].forEach((c) => {
+    const th = document.createElement('th');
+    th.textContent = c;
+    head.appendChild(th);
+  });
+  for (let c = 0; c < ch; c++) {
+    const th = document.createElement('th');
+    th.textContent = '声道 ' + (c + 1) + ' 削顶';
+    head.appendChild(th);
+  }
+  const body = $('clipBody');
+  body.innerHTML = '';
+  state.solution.order.forEach((o, k) => {
+    const tr = document.createElement('tr');
+    tr.appendChild(td(String(k), 'mono'));
+    tr.appendChild(td(String(o.id), 'mono'));
+    tr.appendChild(td('>>' + o.shift, 'mono'));
+    for (let c = 0; c < ch; c++) {
+      const v = state.sim.clips[k][c];
+      const cell = td(String(v), 'mono');
+      cell.className = 'mono ' + (v ? 'clip-nonzero' : 'clip-zero');
+      tr.appendChild(cell);
+    }
+    body.appendChild(tr);
+  });
+}
+
+// ---- range / playback / export ---------------------------------------------
+function updateRangeMeta() {
+  const w = state.wav;
+  if (!w) return;
+  const lo = clampInt($('rangeLo').value, 0, w.frames);
+  const hi = clampInt($('rangeHi').value, 0, w.frames);
+  $('rangeMeta').textContent =
+    '区间 [' + lo + ', ' + hi + ') · ' + Math.max(0, hi - lo) + ' 帧 · '
+    + (Math.max(0, hi - lo) / w.sampleRate).toFixed(3) + ' 秒';
+}
+function clampInt(v, lo, hi) {
+  v = Math.floor(Number(v));
+  if (!Number.isFinite(v)) v = lo;
+  return Math.max(lo, Math.min(hi, v));
+}
+['rangeLo', 'rangeHi'].forEach((id) => {
+  $(id).addEventListener('input', updateRangeMeta);
+  $(id).addEventListener('blur', () => {
+    if (!state.wav) return;
+    const clamped = clampInt($(id).value, 0, state.wav.frames);
+    $(id).value = String(clamped);
+    updateRangeMeta();
+  });
+});
+
+function sliceOutput(lo, hi) {
+  const ch = state.wav.channels;
+  const n = Math.max(0, hi - lo);
+  const out = new Int16Array(n * ch);
+  for (let f = lo; f < hi; f++) {
+    for (let c = 0; c < ch; c++) {
+      out[(f - lo) * ch + c] = state.sim.output[f * ch + c];
+    }
+  }
+  return out;
+}
+
+function playPcm(pcm) {
+  const wav = H.buildWav(pcm, state.wav.channels, state.wav.sampleRate);
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const audio = $('player');
+  audio.hidden = false;
+  if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
+  audio.src = url;
+  audio.play().catch(() => { /* user can press play manually */ });
+}
+$('playRange').addEventListener('click', () => {
+  const w = state.wav;
+  const lo = clampInt($('rangeLo').value, 0, w.frames);
+  const hi = clampInt($('rangeHi').value, 0, w.frames);
+  if (hi <= lo) { showMsg($('simMsg'), 'err', '区间为空：结束帧必须大于起始帧。'); return; }
+  playPcm(sliceOutput(lo, hi));
+});
+$('playFull').addEventListener('click', () => playPcm(state.sim.output));
+
+function download(name, bytes, mime) {
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+$('dlRange').addEventListener('click', () => {
+  const w = state.wav;
+  const lo = clampInt($('rangeLo').value, 0, w.frames);
+  const hi = clampInt($('rangeHi').value, 0, w.frames);
+  if (hi <= lo) { showMsg($('simMsg'), 'err', '区间为空：结束帧必须大于起始帧。'); return; }
+  const pcm = sliceOutput(lo, hi);
+  download('processed_' + lo + '_' + hi + '.wav',
+    H.buildWav(pcm, w.channels, w.sampleRate), 'audio/wav');
+});
+$('dlFull').addEventListener('click', () => {
+  const w = state.wav;
+  download('processed_full.wav',
+    H.buildWav(state.sim.output, w.channels, w.sampleRate), 'audio/wav');
+});
+
+$('dlClips').addEventListener('click', () => {
+  const ch = state.wav.channels;
+  const payload = {
+    source: state.wavName,
+    sampleRate: state.wav.sampleRate,
+    channels: ch,
+    frames: state.wav.frames,
+    stages: state.solution.order.map((o, k) => ({
+      stage: k,
+      id: o.id,
+      shift: o.shift,
+      clipsPerChannel: state.sim.clips[k],
+      totalClips: state.sim.clips[k].reduce((a, b) => a + b, 0),
+    })),
+    totalClips: state.sim.clips.reduce(
+      (s, row) => s + row.reduce((a, b) => a + b, 0), 0),
+  };
+  download('clip_stats.json',
+    new TextEncoder().encode(JSON.stringify(payload, null, 2)),
+    'application/json');
+});
+
+$('dlPlan').addEventListener('click', () => {
+  const sol = state.solution;
+  if (!sol) return;
+  const payload = {
+    source: state.planName || null,
+    bands: state.plan.bands,
+    totalShift: sol.total,
+    prefixShiftSum: sol.prefixSum,
+    stages: sol.order.map((o, k) => ({
+      stage: k,
+      id: o.id,
+      shift: o.shift,
+      bookGain: sol.bookByStage[k],
+      margin: sol.marginByStage[k],
+    })),
+    clips: state.sim ? state.sim.clips : null,
+  };
+  download('headroom_plan.json',
+    new TextEncoder().encode(JSON.stringify(payload, null, 2)),
+    'application/json');
+});
+
+// ---- built-in demo ----------------------------------------------------------
+$('demoBtn').addEventListener('click', () => {
+  state.plan = {
+    bands: [400, 1600],
+    sections: [
+      { id: 1, b: [16384, 2048, 0], a: [-4096, 0],
+        gain: [256, 96], limit: [128, 128] },
+      { id: 2, b: [12288, 0, 0], a: [0, 0],
+        gain: [-128, -96], limit: [0, 128] },
+      { id: 3, b: [16384, -1024, 0], a: [0, 0],
+        gain: [0, 0], limit: [128, 128] },
+    ],
+  };
+  state.planName = '内置示例 plan.json';
+  $('planName').textContent = state.planName;
+  $('solveBtn').disabled = false;
+  resetSolution();
+  showMsg($('planMsg'), 'info', '已载入内置示例，可直接求解；录音仍需自行导入。');
+});
+</script>
+</body>
+</html>
