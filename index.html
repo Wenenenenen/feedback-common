@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>移动声源耳机校音</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+</head>
+<body>
+<header>
+  <h1>移动声源耳机校音</h1>
+  <p class="sub">48 kHz 单声道 PCM16 · 时变 HRIR 插值渲染 · 选区与整轨逐码一致</p>
+</header>
+
+<main>
+  <section class="card" id="project-sec">
+    <h2>工程</h2>
+    <div class="row wrap">
+      <button id="btn-load-sample">载入示例工程</button>
+      <label class="btn">导入工程 ZIP<input type="file" id="file-zip" accept=".zip" hidden></label>
+      <label class="btn">导入工程 JSON<input type="file" id="file-json" accept=".json" hidden></label>
+      <label class="btn">补充 WAV（可多选）<input type="file" id="file-wavs" accept=".wav" multiple hidden></label>
+      <button id="btn-export-project">导出工程 JSON</button>
+      <button id="btn-clear" class="secondary">清空工程</button>
+    </div>
+    <p class="hint" id="project-hint">工程 JSON 结构：{bank:{angles,left,right,left_delay,right_delay}, sources:[{wav,track:[[帧,角度]…]}]}；角度单位百分之一度，延时单位 1/256 采样。</p>
+  </section>
+
+  <section class="card" id="bank-sec">
+    <h2>耳响应库</h2>
+    <div class="row wrap">
+      <label class="btn">导入方位库 JSON<input type="file" id="file-bank" accept=".json" hidden></label>
+      <span id="bank-info" class="mono">未加载</span>
+    </div>
+    <div id="bank-angles" class="mono small"></div>
+  </section>
+
+  <section class="card" id="sources-sec">
+    <h2>声源 <span class="hint">最多 4 条，每条 ≤30 s、轨迹 ≤20000 点</span></h2>
+    <div class="row wrap">
+      <label class="btn">添加声源 WAV<input type="file" id="file-add-src" accept=".wav" hidden></label>
+    </div>
+    <div id="source-list"></div>
+  </section>
+
+  <section class="card" id="render-sec">
+    <h2>渲染</h2>
+    <div class="row">
+      <button id="btn-render">渲染待算声源</button>
+      <button id="btn-cancel" disabled>取消</button>
+      <progress id="render-progress" value="0" max="1"></progress>
+      <span id="render-status" class="mono small"></span>
+    </div>
+  </section>
+
+  <section class="card" id="inspect-sec">
+    <h2>发声帧查看</h2>
+    <div class="row wrap">
+      <label>声源 <select id="inspect-src"></select></label>
+      <label>发声帧 <input type="number" id="inspect-frame" min="0" value="0" step="1"></label>
+    </div>
+    <div id="inspect-out" class="mono small"></div>
+  </section>
+
+  <section class="card" id="export-sec">
+    <h2>试听与导出</h2>
+    <div class="row wrap">
+      <label>对象
+        <select id="play-target"></select>
+      </label>
+      <button id="btn-play">▶ 整轨试听</button>
+      <button id="btn-play-sel">▶ 选区试听</button>
+      <button id="btn-stop">■ 停止</button>
+    </div>
+    <canvas id="wave" height="120"></canvas>
+    <div class="row wrap">
+      <label>选区起 <input type="number" id="sel-start" min="0" value="0" step="1"></label>
+      <label>选区止（不含）<input type="number" id="sel-end" min="0" value="0" step="1"></label>
+      <span id="sel-info" class="mono small"></span>
+      <button id="btn-export-wav">导出选区 WAV</button>
+    </div>
+    <p class="hint">选区左闭右开，导出结果与整轨对应区间逐码一致（同一渲染结果切片，不单独重算）。</p>
+  </section>
+
+  <div id="msg" class="msg" hidden></div>
+</main>
+
+<div id="track-editor" class="modal" hidden>
+  <div class="modal-body">
+    <h3>轨迹编辑 — <span id="te-name"></span></h3>
+    <p class="hint">拖动圆点改角度（纵）与帧号（横）；双击空白处在该处加点；首末点帧号固定。角度单位：百分之一度（可含圈数、可为负）。</p>
+    <canvas id="te-canvas" height="260"></canvas>
+    <div class="row wrap">
+      <label>帧号 <input type="number" id="te-frame" step="1"></label>
+      <label>角度 <input type="number" id="te-angle" step="1"></label>
+      <button id="te-apply">应用</button>
+      <button id="te-delete">删除该点</button>
+      <span id="te-info" class="mono small"></span>
+    </div>
+    <div class="row">
+      <span id="te-error" class="error"></span>
+      <span class="spacer"></span>
+      <button id="te-close">完成</button>
+    </div>
+  </div>
+</div>
+
+<script src="render-core.js"></script>
+<script src="app.js" defer></script>
+</body>
+</html>
