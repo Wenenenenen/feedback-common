@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>锚相分音谐波合成台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">∿</div>
+      <div>
+        <h1>锚相分音谐波合成台</h1>
+        <p>Hermite 相位轨迹 · 整圈求解 · 48 kHz / 双声道 / PCM16 WAV</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="load-sample" class="btn" type="button">导入 samples/anchored-partials.json</button>
+      <label class="btn btn-ghost" for="file-input">选择 JSON…</label>
+      <input id="file-input" type="file" accept=".json,application/json" hidden>
+      <button id="generate-quota" class="btn btn-warn" type="button">生成满额工程</button>
+    </div>
+  </header>
+
+  <section class="constraint-strip" aria-label="工程限制">
+    <span>最多 <b>128</b> 轨</span>
+    <span>最多 <b>60,000</b> 锚点</span>
+    <span>最长 <b>1,440,000</b> 帧 / 30 秒</span>
+    <span>频域 <b>20–20,000 Hz</b></span>
+    <span>幅度 <b>0–32767</b> / 声道</span>
+  </section>
+
+  <main class="layout">
+    <aside class="card track-card" aria-label="轨道">
+      <div class="card-head">
+        <h2>独立分音轨</h2>
+        <button id="add-track" class="btn btn-small" type="button">新增轨</button>
+      </div>
+      <div id="track-list" class="track-list" role="listbox" aria-label="选择轨道"></div>
+      <div class="solo-actions">
+        <button id="clear-solo" class="btn btn-small btn-primary" type="button">合听全部</button>
+        <span id="solo-status" class="muted">当前：全部合听</span>
+      </div>
+    </aside>
+
+    <section class="center-column">
+      <div id="status-banner" class="status-banner" data-state="idle" role="status" aria-live="polite">
+        <span id="status-text">正在准备…</span>
+      </div>
+      <div id="error-banner" class="error-banner" hidden role="alert"></div>
+
+      <section class="card wave-card">
+        <div class="card-head">
+          <h2>总波形与帧选区</h2>
+          <div id="wave-summary" class="muted"></div>
+        </div>
+        <canvas id="waveform" width="1200" height="210" aria-label="合成波形，可拖动选择帧区间"></canvas>
+        <div class="transport-grid">
+          <label class="field">
+            <span>开始帧（含）</span>
+            <input id="selection-start" type="number" step="1" min="0" value="0">
+          </label>
+          <label class="field">
+            <span>结束帧（不含）</span>
+            <input id="selection-end" type="number" step="1" min="1">
+          </label>
+          <div class="frame-meta">
+            <div id="selection-frames">— 帧</div>
+            <div id="selection-seconds" class="muted">— 秒</div>
+          </div>
+          <div class="transport-buttons">
+            <button id="rerender" class="btn btn-primary" type="button">重新渲染</button>
+            <button id="audition-selection" class="btn btn-primary" type="button">试听选区</button>
+            <button id="play-full" class="btn" type="button">试听整轨</button>
+            <button id="stop-play" class="btn btn-ghost" type="button">停止</button>
+          </div>
+        </div>
+        <audio id="audio-player" controls preload="auto"></audio>
+      </section>
+
+      <section class="card segment-card" id="segment-inspector" data-feasible="unknown">
+        <div class="card-head">
+          <h2>选定段：圈数与频率极值</h2>
+          <div class="segment-pager">
+            <button id="prev-segment" class="btn btn-small" type="button">上一段</button>
+            <label class="field inline">
+              <span>段 #</span>
+              <input id="segment-index" type="number" step="1" min="0" value="0">
+            </label>
+            <button id="next-segment" class="btn btn-small" type="button">下一段</button>
+          </div>
+        </div>
+        <div id="segment-details" class="segment-details"></div>
+      </section>
+
+      <section class="card anchor-card">
+        <div class="card-head">
+          <h2>锚点编辑</h2>
+          <div class="anchor-actions">
+            <button id="add-anchor" class="btn btn-small btn-primary" type="button">在选定段中点加锚点</button>
+            <div class="page-controls">
+              <button id="anchor-prev-page" class="btn btn-small" type="button">‹</button>
+              <span id="anchor-page-label">1/1</span>
+              <button id="anchor-next-page" class="btn btn-small" type="button">›</button>
+            </div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="anchor-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>输出帧 x</th>
+                <th>相位余数 p</th>
+                <th>频率 mHz</th>
+                <th>频率 Hz</th>
+                <th>左幅度</th>
+                <th>右幅度</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="anchor-tbody"></tbody>
+          </table>
+        </div>
+        <p class="hint">修改后自动重算圈数并重新合成；若新约束无可用整数圈数，会指出轨与段，并继续保留/播放/导出上一版 PCM。</p>
+      </section>
+    </section>
+
+    <aside class="card export-card" aria-label="导出">
+      <div class="card-head"><h2>导出 WAV</h2></div>
+      <div class="export-actions">
+        <button id="export-selection" class="btn btn-primary btn-block" type="button">导出帧选区 WAV</button>
+        <button id="export-full" class="btn btn-block" type="button">导出整轨 WAV</button>
+      </div>
+      <dl class="export-meta">
+        <dt>编码</dt><dd>RIFF / PCM16 little-endian</dd>
+        <dt>采样率</dt><dd>48,000 Hz</dd>
+        <dt>声道</dt><dd>2（L/R 独立幅度）</dd>
+        <dt>量化</dt><dd>全轨 Float64 叠加后，最近整数 / 正中取偶 / 削顶</dd>
+        <dt>选区一致性</dt><dd>选区数据取自整轨 PCM 的同一段 interleaved slice</dd>
+      </dl>
+      <div id="export-status" class="muted small"></div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>分音交叉不合并身份：每轨独立 Hermite 相位与左右幅度，最后才叠加。</span>
+    <span id="build-tag">anchored-partial-synth · local-first</span>
+  </footer>
+
+  <script src="sample-data.js"></script>
+  <script src="synth-core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

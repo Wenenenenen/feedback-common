@@ -1,0 +1,37 @@
+import Core from './synth-core.js';
+
+export default Core;
+
+export const {
+  SAMPLE_RATE,
+  CHANNELS,
+  BITS_PER_SAMPLE,
+  MAX_SECONDS,
+  MAX_FRAMES,
+  MAX_TRACKS,
+  MAX_ANCHORS,
+  PHASE_STEPS,
+  AMP_MAX,
+  FREQ_MIN_MHZ,
+  FREQ_MAX_MHZ,
+  SynthDataError,
+  SegmentInfeasibleError,
+  normalizeProject,
+  compileProject,
+  solveSegment,
+  frequencyExtrema,
+  frequencyPolynomial,
+  lowerFrequencyOK,
+  upperFrequencyOK,
+  renderTrackInto,
+  sinTurns,
+  renderMix,
+  finalizePcm16,
+  renderPcm16,
+  roundHalfEven,
+  clampPcm16,
+  encodeWav,
+  decodeWavPcm16,
+  renderWav,
+  generateQuotaProject,
+} = Core;

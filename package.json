@@ -1,0 +1,19 @@
+{
+  "name": "anchored-partial-synth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "锚相分音谐波轨迹重合成网页：Hermite 相位、整圈求解、48kHz 立体声 PCM16 WAV",
+  "main": "synth-core.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/synth.test.cjs",
+    "test:perf": "node --test tests/perf.test.cjs",
+    "test:browser": "node tools/browser-smoke.cjs",
+    "check": "node --check synth-core.js && node --check app.js && node --check sample-data.js && npm test",
+    "start": "bash scripts/start.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
