@@ -1,0 +1,36 @@
+{
+  "format": "pdm-decimation-reel/affected-intervals",
+  "formatVersion": 1,
+  "sampleRate": 48000,
+  "frameRate": 48000,
+  "decimation": 32,
+  "channels": 2,
+  "totalFrames": 12,
+  "anchor": 4294967280,
+  "scope": "selection",
+  "coordinateConvention": "Zero-based output frames at 48 kHz. Intervals are maximal contiguous affected-frame runs as half-open [startFrame,endFrame). Absolute decimation phase is anchored at relative ticks D-1,2D-1,... and is not restarted at a selection boundary. seconds = frame / sampleRate.",
+  "selection": {
+    "startFrame": 2,
+    "endFrame": 8
+  },
+  "intervalsByChannel": [
+    [],
+    []
+  ],
+  "intervals": [
+    [],
+    []
+  ],
+  "channelIntervals": [
+    {
+      "channel": 0,
+      "count": 0,
+      "intervals": []
+    },
+    {
+      "channel": 1,
+      "count": 0,
+      "intervals": []
+    }
+  ]
+}
