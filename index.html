@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>稀疏角标增量编码器</title>
+<style>
+  :root {
+    --bg: #14161c; --panel: #1c1f27; --panel2: #232733; --line: #2e3342;
+    --text: #e5e9f0; --dim: #8b93a5; --accent: #60a5fa; --ok: #34d399;
+    --warn: #fbbf24; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  header { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #1d3a5f; border-color: #2f5d94; }
+  button.on { background: #1d3a5f; border-color: var(--accent); color: #fff; }
+  #statusBar { padding: 6px 16px; color: var(--dim); font-size: 12.5px; border-bottom: 1px solid var(--line); min-height: 30px; }
+  #statusBar b { color: var(--text); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; padding: 12px 16px; align-items: start; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .panel h2 { font-size: 13px; margin: 0 0 8px; color: var(--dim); font-weight: 600; letter-spacing: .5px; }
+  .viewer { display: flex; flex-direction: column; gap: 10px; }
+  .canvasWrap { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; text-align: center; }
+  #view { image-rendering: pixelated; background: transparent; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .modeTabs button { border-radius: 6px 0 0 6px; }
+  .modeTabs button + button { border-radius: 0; border-left: none; }
+  .modeTabs button:last-child { border-radius: 0 6px 6px 0; }
+  input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  input[type=number] { width: 64px; background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 5px; padding: 4px 6px; }
+  .banner { border-radius: 6px; padding: 8px 10px; font-size: 12.5px; display: none; }
+  .banner.show { display: block; }
+  .banner.warn { background: #3a2f10; border: 1px solid #6b5518; color: #fcd34d; }
+  .banner.info { background: #10283a; border: 1px solid #1d4e6b; color: #7dd3fc; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 3px 6px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--dim); font-weight: 500; }
+  .scroll { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+  tr.sel { background: #24344d; }
+  tr.hl { background: #3a3312; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #262b38; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; }
+  .tag.ok { background: #10362a; color: var(--ok); }
+  .tag.bad { background: #3d1a1a; color: var(--bad); }
+  .tag.warn { background: #3a2f10; color: var(--warn); }
+  .dim { color: var(--dim); }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; }
+  .mono { font-family: ui-monospace, Consolas, monospace; }
+  .histItem { font-size: 12.5px; padding: 2px 0; }
+  .deltaUp { color: var(--bad); } .deltaDown { color: var(--ok); }
+</style>
+</head>
+<body>
+<header>
+  <h1>稀疏角标增量编码器</h1>
+  <button id="btnLoadJson">导入 JSON</button>
+  <button id="btnSample">加载示例</button>
+  <button id="btnSolve" class="primary" disabled>求解 / 重算</button>
+  <button id="btnExport" disabled>下载补丁 SOP1</button>
+  <button id="btnLoadSop1">导入 SOP1 回放</button>
+  <input type="file" id="fileJson" accept=".json,application/json" hidden>
+  <input type="file" id="fileSop1" hidden>
+</header>
+<div id="statusBar">请导入稀疏覆盖 JSON（≤240 帧、≤128×72、每帧 ≤48 个候选窗口、全片 ≤6000 个）。</div>
+<main>
+  <section class="viewer">
+    <div class="panel">
+      <div class="controls">
+        <span class="modeTabs">
+          <button data-mode="0">显示前</button><button data-mode="1" class="on">显示中</button><button data-mode="2">处置后</button>
+        </span>
+        <button id="btnPrev">‹</button>
+        <input type="range" id="frameSlider" min="1" max="1" value="1">
+        <button id="btnNext">›</button>
+        <span id="frameLabel" class="mono">—</span>
+        <button id="btnPlay">▶ 播放</button>
+        <span id="srcTabs" class="modeTabs" style="margin-left:auto; display:none">
+          <button data-src="plan" class="on">当前方案</button><button data-src="replay">导入回放</button>
+        </span>
+      </div>
+    </div>
+    <div class="canvasWrap"><canvas id="view" width="640" height="360"></canvas></div>
+    <div id="banner" class="banner info"></div>
+  </section>
+  <aside>
+    <div class="panel" id="costPanel"><h2>求解结果</h2><div id="costBody" class="dim">尚未求解。</div></div>
+    <div class="panel" id="failPanel" hidden>
+      <h2>不可达诊断</h2>
+      <div id="failBody"></div>
+    </div>
+    <div class="panel" id="planPanel" hidden>
+      <h2>当前帧方案</h2>
+      <div id="stepInfo"></div>
+      <div class="scroll" style="margin-top:8px; max-height:200px"><table id="planTable"><thead><tr><th>帧</th><th>窗口 (x0,y0,x1,y1)</th><th>处置</th><th>代价</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="panel" id="winPanel" hidden>
+      <h2>候选窗口（第 <span id="winFrameNo">1</span> 帧）</h2>
+      <div class="scroll" style="max-height:180px"><table id="winTable"><thead><tr><th>#</th><th>x0 y0 → x1 y1</th><th>面积</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="row" style="margin-top:8px">
+        <input type="number" id="inX0" placeholder="x0"><input type="number" id="inY0" placeholder="y0">
+        <input type="number" id="inX1" placeholder="x1"><input type="number" id="inY1" placeholder="y1">
+        <button id="btnAddWin">添加</button>
+        <button id="btnUpdWin" hidden>更新</button>
+        <button id="btnCancelEdit" hidden>取消</button>
+      </div>
+      <div class="dim" style="font-size:12px; margin-top:6px">修改候选窗口后点「求解 / 重算」比较前后码量。</div>
+    </div>
+    <div class="panel" id="replayPanel" hidden>
+      <h2>SOP1 回放</h2>
+      <div id="replayBody"></div>
+    </div>
+  </aside>
+</main>
+<script src="solver.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
