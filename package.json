@@ -1,0 +1,16 @@
+{
+  "name": "ordered-strip-forge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Optimal directed triangle-strip packing, decoding, comparison, and export tool.",
+  "scripts": {
+    "build": "node scripts/build-standalone.js",
+    "test": "node --test tests/engine.test.js && node tests/brute-check.js",
+    "bench": "node tests/long-chain.bench.js",
+    "start": "python3 -m http.server 8080"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,2744 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Ordered Strip Forge</title>
+    <style>
+/* Ordered Strip Forge — 工具型信息界面 */
+:root {
+  /* Color: cool graphite workbench, cyan signal, orange provoking vertex. */
+  --bg: #eef3f8;
+  --bg-grid: rgba(15, 111, 143, 0.055);
+  --surface: #ffffff;
+  --surface-2: #f3f7fb;
+  --surface-3: #e7eef6;
+  --ink: #14202c;
+  --muted: #5d6d7e;
+  --faint: #8292a3;
+  --line: #d3deea;
+  --line-strong: #b9c8d8;
+  --accent: #0b6f91;
+  --accent-strong: #08566f;
+  --accent-soft: #dff2f8;
+  --provoke: #c2410c;
+  --provoke-soft: #ffead9;
+  --good: #15803d;
+  --good-soft: #dcfce7;
+  --warn: #a16207;
+  --warn-soft: #fef3c7;
+  --bad: #b42318;
+  --bad-soft: #fee4e2;
+  --restart: #6d28d9;
+  --restart-soft: #ede9fe;
+  --shadow: 0 10px 30px rgba(20, 32, 44, 0.08);
+  --radius: 14px;
+  --radius-sm: 9px;
+
+  --font-ui: "Inter", "Avenir Next", "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Avenir Next", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", "Cascadia Mono", Consolas,
+    "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d151f;
+    --bg-grid: rgba(103, 211, 240, 0.05);
+    --surface: #14202d;
+    --surface-2: #1a2938;
+    --surface-3: #223447;
+    --ink: #e7f0fa;
+    --muted: #9db0c3;
+    --faint: #71859a;
+    --line: #2a3c4f;
+    --line-strong: #3c536b;
+    --accent: #67d3f0;
+    --accent-strong: #9be7f8;
+    --accent-soft: #123847;
+    --provoke: #fb923c;
+    --provoke-soft: #4a2410;
+    --good: #4ade80;
+    --good-soft: #123524;
+    --warn: #fbbf24;
+    --warn-soft: #3d2d08;
+    --bad: #fb7185;
+    --bad-soft: #4c1620;
+    --restart: #c4b5fd;
+    --restart-soft: #2c2150;
+    --shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d151f;
+  --bg-grid: rgba(103, 211, 240, 0.05);
+  --surface: #14202d;
+  --surface-2: #1a2938;
+  --surface-3: #223447;
+  --ink: #e7f0fa;
+  --muted: #9db0c3;
+  --faint: #71859a;
+  --line: #2a3c4f;
+  --line-strong: #3c536b;
+  --accent: #67d3f0;
+  --accent-strong: #9be7f8;
+  --accent-soft: #123847;
+  --provoke: #fb923c;
+  --provoke-soft: #4a2410;
+  --good: #4ade80;
+  --good-soft: #123524;
+  --warn: #fbbf24;
+  --warn-soft: #3d2d08;
+  --bad: #fb7185;
+  --bad-soft: #4c1620;
+  --restart: #c4b5fd;
+  --restart-soft: #2c2150;
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+    var(--bg);
+  background-size: 28px 28px, 28px 28px, auto;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: max(14px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  gap: 12px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  box-shadow: var(--shadow);
+}
+
+.brand-mark svg {
+  width: 27px;
+  height: 27px;
+}
+
+.brand h1 {
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.2vw, 25px);
+  line-height: 1.05;
+  margin: 0;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.brand p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 11px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 13px;
+  transition: transform 120ms ease, border-color 120ms ease,
+    background 120ms ease, box-shadow 120ms ease;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.btn.primary {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #061219;
+  }
+}
+
+:root[data-theme="dark"] .btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #061219;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.06);
+  background: var(--accent-strong);
+}
+
+.btn.ghost {
+  background: transparent;
+}
+
+.btn.small {
+  min-height: 29px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.stat {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.stat .label {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stat .value {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat .value.good {
+  color: var(--good);
+}
+.stat .value.warn {
+  color: var(--warn);
+}
+.stat .value.accent {
+  color: var(--accent);
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 350px) minmax(420px, 1fr) minmax(300px, 370px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
+}
+
+@media (min-width: 1181px) {
+  html,
+  body {
+    height: 100%;
+  }
+  .app {
+    height: 100dvh;
+    min-height: 700px;
+  }
+}
+
+.panel {
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-head {
+  padding: 13px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panel-head h2 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.panel-head .hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.panel-body {
+  padding: 13px 14px;
+  min-height: 0;
+}
+
+.panel-body.scroll {
+  overflow: auto;
+}
+
+.vlist {
+  position: relative;
+  flex: 1;
+  min-height: 260px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.vlist-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.vrow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+.vrow:hover {
+  background: var(--surface-2);
+}
+
+.vrow.selected {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.face-row {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  height: 58px;
+}
+
+.row-index {
+  font-family: var(--font-mono);
+  color: var(--faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vertex-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.vertex {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 7px;
+  background: var(--surface-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.vertex.last {
+  background: var(--provoke-soft);
+  color: var(--provoke);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--provoke) 35%, transparent);
+}
+
+.vertex.chosen {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+:root[data-theme="dark"] .vertex.chosen {
+  color: var(--accent);
+}
+
+.arrow {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.badge.group {
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.badge.parity-0 {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+:root[data-theme="dark"] .badge.parity-0 {
+  color: var(--accent);
+}
+
+.badge.parity-1 {
+  background: var(--restart-soft);
+  color: var(--restart);
+}
+
+.badge.good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.badge.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.badge.restart {
+  background: var(--restart-soft);
+  color: var(--restart);
+}
+
+.window-row {
+  grid-template-columns: 48px 58px minmax(0, 1.2fr) minmax(0, 1fr) 88px;
+  height: 48px;
+  font-size: 12px;
+}
+
+.window-row.degenerate {
+  opacity: 0.72;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.triple {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.triple .idx {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  font-weight: 750;
+}
+
+.triple .idx.provoke {
+  background: var(--provoke-soft);
+  color: var(--provoke);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.1fr);
+  gap: 12px;
+}
+
+.compare-card,
+.form-card,
+.export-card {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  min-width: 0;
+}
+
+.compare-card h3,
+.form-card h3,
+.export-card h3 {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.triangle-stage {
+  display: grid;
+  place-items: center;
+  min-height: 178px;
+}
+
+.triangle-svg {
+  width: min(100%, 250px);
+  height: auto;
+  overflow: visible;
+}
+
+.tri-edge {
+  stroke: var(--line-strong);
+  stroke-width: 2.2;
+  fill: none;
+  marker-end: url(#arrowHead);
+}
+
+.tri-node circle,
+.tri-node rect {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.tri-node.provoke circle,
+.tri-node.provoke rect {
+  stroke: var(--provoke);
+  fill: var(--provoke-soft);
+}
+
+.tri-node text {
+  fill: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.node-halo {
+  fill: none;
+  stroke: var(--provoke);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.formula {
+  display: grid;
+  gap: 8px;
+}
+
+.formula-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.formula-label {
+  width: 76px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.big-index {
+  font-family: var(--font-mono);
+  font-weight: 850;
+  font-size: 15px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.big-index.provoke {
+  color: var(--provoke);
+  border-color: color-mix(in srgb, var(--provoke) 45%, var(--line));
+  background: var(--provoke-soft);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 6px 9px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+}
+
+.kv dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 8px 9px;
+  min-height: 36px;
+}
+
+.field textarea {
+  min-height: 132px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.button-row {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.error-banner,
+.notice-banner {
+  border-radius: 11px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 650;
+  border: 1px solid;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.error-banner[hidden],
+.notice-banner[hidden] {
+  display: none !important;
+}
+
+.error-banner {
+  background: var(--bad-soft);
+  border-color: color-mix(in srgb, var(--bad) 35%, var(--line));
+  color: var(--bad);
+}
+
+.notice-banner {
+  background: var(--good-soft);
+  border-color: color-mix(in srgb, var(--good) 35%, var(--line));
+  color: var(--good);
+}
+
+.export-output {
+  width: 100%;
+  min-height: 150px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  padding: 9px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: pre;
+}
+
+.empty-state {
+  padding: 34px 18px;
+  text-align: center;
+  color: var(--muted);
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.empty-state .big {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.dropzone {
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.dropzone.drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.help-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12.5px;
+  display: grid;
+  gap: 5px;
+}
+
+.help-list code {
+  font-family: var(--font-mono);
+  color: var(--ink);
+  background: var(--surface-3);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink);
+  color: var(--bg);
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 750;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 15, 22, 0.52);
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+}
+
+.modal-backdrop[hidden] {
+  display: none !important;
+}
+
+.modal {
+  width: min(980px, 100%);
+  max-height: min(86dvh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.modal-hint {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 8px 0;
+}
+
+.export-modal-text {
+  width: 100%;
+  min-height: 320px;
+  flex: 1;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre;
+  overflow: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1180px) {
+  .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .workspace {
+    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-rows: minmax(420px, 58vh) auto;
+  }
+  .inspector-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .app {
+    padding-inline: 12px;
+  }
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .panel {
+    min-height: 420px;
+  }
+  .vlist {
+    flex: 0 0 auto;
+    height: 380px;
+    min-height: 0;
+  }
+  .center-panel .vlist {
+    height: 430px;
+  }
+  .center-panel {
+    min-height: 620px;
+  }
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .window-row {
+    grid-template-columns: 44px 50px minmax(0, 1fr) 70px;
+  }
+  .window-row .canonical-col {
+    display: none;
+  }
+  .brand p {
+    max-width: 420px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+    </style>
+  </head>
+  <body>
+<div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M5 23L12 9L19 23M12 9L27 9M19 23L27 9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="5" cy="23" r="2.6" fill="currentColor"/>
+              <circle cx="19" cy="23" r="2.6" fill="currentColor"/>
+              <circle cx="27" cy="9" r="2.6" fill="#fb923c"/>
+            </svg>
+          </div>
+          <div>
+            <h1>Ordered Strip Forge</h1>
+            <p>有向三角形条带最优整数流打包、解码对照与逐面映射</p>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <input id="fileInput" class="sr-only" type="file" accept=".json,application/json" />
+          <button id="importBtn" class="btn primary" type="button">导入 JSON</button>
+          <button id="sampleBtn" class="btn" type="button">载入样例</button>
+          <button id="chainBtn" class="btn" type="button">生成 10 万长链</button>
+          <button id="themeBtn" class="btn ghost small" type="button" aria-pressed="false">切换主题</button>
+        </div>
+      </header>
+
+      <section class="stats" aria-label="打包统计">
+        <div class="stat"><span class="label">实面</span><span id="statFaces" class="value">–</span></div>
+        <div class="stat"><span class="label">总索引数</span><span id="statIndices" class="value accent">–</span></div>
+        <div class="stat"><span class="label">重启索引</span><span id="statRestarts" class="value">–</span></div>
+        <div class="stat"><span class="label">退化窗口</span><span id="statDegenerate" class="value warn">–</span></div>
+        <div class="stat"><span class="label">绘制组</span><span id="statGroups" class="value">–</span></div>
+        <div class="stat"><span class="label">打包 / 校验</span><span id="statTime" class="value good">–</span></div>
+      </section>
+
+      <main class="workspace">
+        <section class="panel face-panel" aria-label="原面列表">
+          <div class="panel-head">
+            <div>
+              <h2>原面顺序</h2>
+              <span class="hint">点击任意面定位对应滑窗</span>
+            </div>
+            <span id="faceCountBadge" class="badge group">0</span>
+          </div>
+          <div id="dropzone" class="dropzone" style="margin:10px 12px 0;">
+            可拖入 ordered-strips.json；最多 100,000 面
+          </div>
+          <div id="faceList" class="vlist" tabindex="0" aria-label="原面虚拟列表"></div>
+        </section>
+
+        <section class="panel center-panel" aria-label="面对照与解码窗口">
+          <div class="panel-head">
+            <div>
+              <h2>原面 / 解码条带对照</h2>
+              <span id="verifyBadge" class="badge good">尚未打包</span>
+            </div>
+            <div class="button-row">
+              <button id="prevFaceBtn" class="btn small" type="button">上一面</button>
+              <button id="nextFaceBtn" class="btn small" type="button">下一面</button>
+            </div>
+          </div>
+
+          <div class="panel-body scroll" style="flex:0 1 auto; max-height:47%;">
+            <div id="errorBanner" class="error-banner" hidden></div>
+            <div id="noticeBanner" class="notice-banner" hidden></div>
+
+            <div class="detail-grid" style="margin-top:10px;">
+              <article class="compare-card">
+                <h3>指定有向面</h3>
+                <div class="triangle-stage" id="originalTriangle"></div>
+                <dl class="kv" id="originalMeta"></dl>
+              </article>
+
+              <article class="compare-card">
+                <h3>解码滑窗与奇偶</h3>
+                <div class="formula" id="windowFormula"></div>
+                <dl class="kv" id="windowMeta" class="kv"></dl>
+              </article>
+            </div>
+          </div>
+
+          <div class="panel-head" style="border-top:1px solid var(--line);">
+            <div>
+              <h2>全流窗口</h2>
+              <span class="hint">含退化窗；奇窗交换前两点，末索引触发平面着色</span>
+            </div>
+            <span id="windowCountBadge" class="badge group">0 windows</span>
+          </div>
+          <div id="windowList" class="vlist" tabindex="0" aria-label="解码窗口虚拟列表"></div>
+        </section>
+
+        <aside class="panel inspector-panel" aria-label="检查器与导出">
+          <div class="panel-body scroll" style="flex:1;">
+            <form id="editForm" class="form-card">
+              <h3>修改分组 / 最后顶点</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="faceIndexInput">当前面</label>
+                  <input id="faceIndexInput" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="groupInput">绘制组 group</label>
+                  <input id="groupInput" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="groupScope">分组修改范围</label>
+                  <select id="groupScope">
+                    <option value="face" selected>仅当前面</option>
+                    <option value="suffix">从此面到本组末尾（拆出后缀）</option>
+                    <option value="run">整个连续组（重编号）</option>
+                  </select>
+                </div>
+                <div class="button-row">
+                  <button id="splitBtn" class="btn small" type="button">在此面前拆组</button>
+                  <button id="mergeBtn" class="btn small" type="button">并入前一组</button>
+                </div>
+                <div class="field">
+                  <label for="lastSelect">平面着色最后顶点 last</label>
+                  <select id="lastSelect"></select>
+                </div>
+                <button class="btn primary" type="submit">应用并重新打包</button>
+                <span class="hint" style="color:var(--muted);font-size:12px;">
+                  非法改动不会替换当前结果，表单会恢复到上一版。
+                </span>
+              </div>
+            </form>
+
+            <div class="form-card" style="margin-top:12px;">
+              <h3>逐面映射</h3>
+              <dl class="kv" id="mappingMeta"></dl>
+            </div>
+
+            <div class="export-card" style="margin-top:12px;">
+              <h3>导出整数流和映射</h3>
+              <div class="button-row">
+                <button id="exportAllBtn" class="btn primary small" type="button">导出 JSON</button>
+                <button id="exportIndicesBtn" class="btn small" type="button">仅 indices</button>
+                <button id="exportCsvBtn" class="btn small" type="button">映射 CSV</button>
+                <button id="copyBtn" class="btn small" type="button">复制 JSON</button>
+              </div>
+              <label class="field" style="margin-top:10px;">
+                <span class="sr-only">导出预览</span>
+                <textarea id="exportPreview" readonly spellcheck="false"></textarea>
+              </label>
+            </div>
+
+            <div class="compare-card" style="margin-top:12px;">
+              <h3>编码约定</h3>
+              <ul class="help-list">
+                <li>同长度时比较整个整数流的字典序，<code>-1</code> 小于所有顶点 ID。</li>
+                <li>组号变化必须写一个重启索引；同组两实面之间可重启，或放 <code>0..3</code> 个退化窗。</li>
+                <li>无重启连接索引只能取追加前末两索引与下一面三顶点的并集。</li>
+                <li>退化窗不出面，但每个追加索引都推进窗口编号和奇偶。</li>
+                <li>循环移位保绕序；交换任意两点会反向，优化器不会用翻面换取索引。</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <div id="exportModal" class="modal-backdrop" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+        <div class="modal-head">
+          <h3 id="exportModalTitle">导出内容</h3>
+          <button id="exportModalClose" class="btn small" type="button">关闭</button>
+        </div>
+        <p id="exportModalHint" class="modal-hint">
+          已尝试下载文件；若下载未出现，可直接全选复制以下内容。
+        </p>
+        <textarea id="exportModalText" class="export-modal-text" readonly spellcheck="false"></textarea>
+        <div class="button-row" style="margin-top:10px;">
+          <button id="exportModalCopy" class="btn primary small" type="button">复制全部</button>
+          <button id="exportModalSelect" class="btn small" type="button">全选文本</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <input id="dummyDownloadAnchor" hidden />
+<script>
+/*
+ * ordered-strip-forge
+ *
+ * 自研的有向三角形条带编码器/解码器。不使用任何现成 triangle-strip 生成器。
+ * 同时支持浏览器经典脚本和 Node CommonJS。
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.StripForge = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const INF = Number.POSITIVE_INFINITY;
+  const MAX_FACES = 100000;
+  const MAX_VERTEX = 2147483647;
+  const RESTART = -1;
+
+  class PackError extends Error {
+    constructor(message, details) {
+      super(message);
+      this.name = 'PackError';
+      this.details = details || {};
+    }
+  }
+
+  function isIntInRange(x, min, max) {
+    return typeof x === 'number' && Number.isInteger(x) && x >= min && x <= max;
+  }
+
+  function uniqSorted(values) {
+    return Array.from(new Set(values)).sort((a, b) => a - b);
+  }
+
+  /*
+   * 校验并规范化输入。分组号一旦离开某个组，该组号不能在后面再次出现：
+   * 格式约定要求每个 group 是连续同组号区间。
+   */
+  function validateDocument(doc) {
+    if (typeof doc === 'string') {
+      try {
+        doc = JSON.parse(doc);
+      } catch (e) {
+        throw new PackError('JSON 解析失败：' + e.message);
+      }
+    }
+    if (Array.isArray(doc)) doc = { faces: doc };
+    if (!doc || typeof doc !== 'object' || !Array.isArray(doc.faces)) {
+      throw new PackError('文件必须包含 faces 数组');
+    }
+    if (doc.faces.length === 0) return [];
+    if (doc.faces.length > MAX_FACES) {
+      throw new PackError('最多支持 ' + MAX_FACES + ' 个三角形，当前有 ' + doc.faces.length + ' 个');
+    }
+
+    const faces = new Array(doc.faces.length);
+    const seenGroups = new Set();
+    let currentGroup = null;
+
+    for (let i = 0; i < doc.faces.length; i++) {
+      const f = doc.faces[i];
+      const where = '第 ' + (i + 1) + ' 个面';
+      if (!f || typeof f !== 'object') {
+        throw new PackError(where + ' 必须是对象', { faceIndex: i });
+      }
+      if (!Array.isArray(f.v) || f.v.length !== 3) {
+        throw new PackError(where + ' 的 v 必须是三个整数', { faceIndex: i });
+      }
+      const v = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        if (!isIntInRange(f.v[k], 0, MAX_VERTEX)) {
+          throw new PackError(where + ' 的 v[' + k + '] 必须是 0..2147483647 的整数', {
+            faceIndex: i,
+            vertexIndex: k
+          });
+        }
+        v[k] = f.v[k];
+      }
+      if (v[0] === v[1] || v[0] === v[2] || v[1] === v[2]) {
+        throw new PackError(where + ' 的三个顶点必须互异', { faceIndex: i });
+      }
+
+      if (!isIntInRange(f.group, 0, Number.MAX_SAFE_INTEGER)) {
+        throw new PackError(where + ' 的 group 必须是非负整数', { faceIndex: i });
+      }
+      const group = f.group;
+      if (group !== currentGroup) {
+        if (seenGroups.has(group)) {
+          throw new PackError('分组 ' + group + ' 不是连续区间；每个绘制组必须连续', {
+            faceIndex: i,
+            group
+          });
+        }
+        seenGroups.add(group);
+        currentGroup = group;
+      }
+
+      let last = f.last === undefined ? null : f.last;
+      if (last !== null) {
+        if (!isIntInRange(last, 0, MAX_VERTEX) || v.indexOf(last) < 0) {
+          throw new PackError(where + ' 的 last 必须为 null 或该面顶点之一', {
+            faceIndex: i
+          });
+        }
+      }
+
+      faces[i] = { v, group, last };
+    }
+    return faces;
+  }
+
+  function cyclicRotations(v) {
+    return [
+      [v[0], v[1], v[2]],
+      [v[1], v[2], v[0]],
+      [v[2], v[0], v[1]]
+    ];
+  }
+
+  /*
+   * 一个“面后状态”记录当前实面窗口之后的原始末两索引，以及下一个滑窗奇偶。
+   *
+   * 规范窗口 C：
+   *   parity=0: C = raw
+   *   parity=1: C = [raw[1], raw[0], raw[2]]
+   *
+   * 因此：
+   *   p=0 时 raw=C，末两索引为 C[1],C[2]
+   *   p=1 时 raw=[C[1],C[0],C[2]]，末两索引为 C[0],C[2]
+   */
+  function buildStates(face) {
+    const out = [];
+    const rotations = cyclicRotations(face.v);
+    for (let r = 0; r < rotations.length; r++) {
+      const c = rotations[r];
+      if (face.last !== null && c[2] !== face.last) continue;
+      for (let p = 0; p < 2; p++) {
+        let x, y;
+        if (p === 0) {
+          x = c[1];
+          y = c[2];
+        } else {
+          x = c[0];
+          y = c[2];
+        }
+        out.push({
+          idx: out.length,
+          c,
+          rotation: r,
+          p,
+          x,
+          y,
+          q: p ^ 1
+        });
+      }
+    }
+    return out;
+  }
+
+  function findStateIndex(states, x, y, q) {
+    for (let i = 0; i < states.length; i++) {
+      const s = states[i];
+      if (s.x === x && s.y === y && s.q === q) return i;
+    }
+    return -1;
+  }
+
+  function canonicalMatchesFace(face, c) {
+    const v = face.v;
+    if (c[0] === v[0]) return c[1] === v[1] && c[2] === v[2];
+    if (c[0] === v[1]) return c[1] === v[2] && c[2] === v[0];
+    if (c[0] === v[2]) return c[1] === v[0] && c[2] === v[1];
+    return false;
+  }
+
+  function createPlanner(faces, statesByFace, rem) {
+    function headChoices(plan) {
+      const j = plan.j;
+      const k = plan.prefix.length;
+      const prefix = plan.prefix;
+      const byToken = new Map();
+
+      for (const s of statesByFace[j]) {
+        if (s.p !== 0) continue;
+        let ok = true;
+        for (let i = 0; i < k; i++) {
+          if (s.c[i] !== prefix[i]) {
+            ok = false;
+            break;
+          }
+        }
+        if (!ok) continue;
+
+        const token = s.c[k];
+        if (byToken.has(token)) continue;
+
+        let next;
+        if (k === 2) {
+          next = { kind: 'boundary', i: j, s: s.idx };
+        } else {
+          const np = prefix.slice();
+          np.push(token);
+          next = { kind: 'head', j, prefix: np };
+        }
+        byToken.set(token, { token, next });
+      }
+
+      return Array.from(byToken.values()).sort((a, b) => a.token - b.token);
+    }
+
+    function continuationChoices(plan) {
+      const face = faces[plan.j];
+      const out = [];
+
+      for (const token of plan.allowed) {
+        const nx = plan.y;
+        const ny = token;
+        const nq = plan.q ^ 1;
+        const duplicate =
+          plan.x === plan.y || plan.x === token || plan.y === token;
+
+        if (duplicate) {
+          // 最多三个退化窗口；当前 d 是已经经过的退化窗数。
+          if (plan.d >= 3) continue;
+          out.push({
+            token,
+            next: {
+              kind: 'cont',
+              j: plan.j,
+              x: nx,
+              y: ny,
+              q: nq,
+              d: plan.d + 1,
+              allowed: plan.allowed
+            }
+          });
+          continue;
+        }
+
+        const raw = [plan.x, plan.y, token];
+        const canonical =
+          plan.q === 0 ? raw : [raw[1], raw[0], raw[2]];
+
+        if (!canonicalMatchesFace(face, canonical)) continue;
+        if (face.last !== null && token !== face.last) continue;
+
+        const sidx = findStateIndex(statesByFace[plan.j], nx, ny, nq);
+        if (sidx < 0) continue;
+
+        out.push({
+          token,
+          next: { kind: 'boundary', i: plan.j, s: sidx }
+        });
+      }
+
+      return out;
+    }
+
+    function bridgeChoices(plan) {
+      const target = faces[plan.j];
+      const out = [];
+
+      // 跨组必须重启。同组也允许选择重启；-1 在字典序中小于所有顶点 ID。
+      if (!plan.forced) {
+        const src = statesByFace[plan.i][plan.s];
+        const allowed = uniqSorted([src.x, src.y, target.v[0], target.v[1], target.v[2]]);
+        const preliminary = {
+          kind: 'cont',
+          j: plan.j,
+          x: src.x,
+          y: src.y,
+          q: src.q,
+          d: 0,
+          allowed
+        };
+        for (const ch of continuationChoices(preliminary)) {
+          out.push(ch);
+        }
+      }
+
+      out.push({ token: RESTART, next: { kind: 'head', j: plan.j, prefix: [] } });
+      out.sort((a, b) => a.token - b.token);
+      return out;
+    }
+
+    function choices(plan) {
+      if (plan.kind === 'head') return headChoices(plan);
+      if (plan.kind === 'cont') return continuationChoices(plan);
+      if (plan.kind === 'bridge') return bridgeChoices(plan);
+      return [];
+    }
+
+    function headCost(j, prefix) {
+      const k = prefix.length;
+      let best = INF;
+      for (const s of statesByFace[j]) {
+        if (s.p !== 0) continue;
+        let ok = true;
+        for (let i = 0; i < k; i++) {
+          if (s.c[i] !== prefix[i]) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          const value = (3 - k) + rem[j][s.idx];
+          if (value < best) best = value;
+        }
+      }
+      return best;
+    }
+
+    function continuationCost(j, x, y, q, d, allowed) {
+      let best = INF;
+
+      for (const token of allowed) {
+        const duplicate = x === y || x === token || y === token;
+        if (duplicate) {
+          if (d < 3) {
+            const value = 1 + continuationCost(j, y, token, q ^ 1, d + 1, allowed);
+            if (value < best) best = value;
+          }
+          continue;
+        }
+
+        const raw = [x, y, token];
+        const canonical = q === 0 ? raw : [raw[1], raw[0], raw[2]];
+        const face = faces[j];
+        if (!canonicalMatchesFace(face, canonical)) continue;
+        if (face.last !== null && token !== face.last) continue;
+
+        const sidx = findStateIndex(statesByFace[j], y, token, q ^ 1);
+        if (sidx >= 0) {
+          const value = 1 + rem[j][sidx];
+          if (value < best) best = value;
+        }
+      }
+
+      return best;
+    }
+
+    function allowedForBridge(plan) {
+      const src = statesByFace[plan.i][plan.s];
+      const target = faces[plan.j];
+      // 不用 Set/排序热路径；最多五个值，手工去重。
+      const rawAllowed = [src.x, src.y, target.v[0], target.v[1], target.v[2]];
+      const allowed = [];
+      for (const t of rawAllowed) {
+        if (allowed.indexOf(t) < 0) allowed.push(t);
+      }
+      return allowed;
+    }
+
+    function shortest(plan) {
+      if (plan.kind === 'boundary') {
+        return rem[plan.i][plan.s];
+      }
+      if (plan.kind === 'head') {
+        return headCost(plan.j, plan.prefix);
+      }
+      if (plan.kind === 'cont') {
+        return continuationCost(
+          plan.j,
+          plan.x,
+          plan.y,
+          plan.q,
+          plan.d,
+          plan.allowed
+        );
+      }
+      if (plan.kind === 'bridge') {
+        // -1 本身一个索引，之后还需目标面的三个起始索引/后缀 DP。
+        let best = 1 + headCost(plan.j, []);
+        if (!plan.forced) {
+          const src = statesByFace[plan.i][plan.s];
+          const value = continuationCost(
+            plan.j,
+            src.x,
+            src.y,
+            src.q,
+            0,
+            allowedForBridge(plan)
+          );
+          if (value < best) best = value;
+        }
+        return best;
+      }
+      return INF;
+    }
+
+    return { choices, shortest, headCost, continuationCost };
+  }
+
+  function decodeIndices(indices) {
+    const windows = [];
+    const segments = [];
+    let segment = -1;
+    let raw = [];
+    let positions = [];
+
+    function startSegment(markerPosition) {
+      segment += 1;
+      segments.push({
+        index: segment,
+        marker: markerPosition,
+        start: markerPosition < 0 ? 0 : markerPosition + 1,
+        windows: 0,
+        solid: 0,
+        degenerate: 0
+      });
+      raw = [];
+      positions = [];
+    }
+
+    startSegment(-1);
+
+    for (let pos = 0; pos < indices.length; pos++) {
+      const value = indices[pos];
+      if (value === RESTART) {
+        startSegment(pos);
+        continue;
+      }
+
+      raw.push(value);
+      positions.push(pos);
+
+      if (raw.length < 3) continue;
+
+      const windowIndex = raw.length - 3;
+      const start = positions[windowIndex];
+      const w0 = raw[windowIndex];
+      const w1 = raw[windowIndex + 1];
+      const w2 = raw[windowIndex + 2];
+      const rawTriple = [w0, w1, w2];
+      const parity = windowIndex & 1;
+      const canonical = parity === 0 ? [w0, w1, w2] : [w1, w0, w2];
+      const degenerate = w0 === w1 || w0 === w2 || w1 === w2;
+
+      const record = {
+        index: windows.length,
+        segment,
+        windowIndex,
+        start,
+        end: start + 2,
+        parity,
+        raw: rawTriple,
+        canonical,
+        last: w2,
+        degenerate
+      };
+      windows.push(record);
+      const seg = segments[segment];
+      seg.windows += 1;
+      if (degenerate) seg.degenerate += 1;
+      else seg.solid += 1;
+    }
+
+    return { windows, segments };
+  }
+
+  function packDocument(doc) {
+    const started = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now()
+      : Date.now();
+
+    const faces = validateDocument(doc);
+    const n = faces.length;
+    const statesByFace = faces.map(buildStates);
+    const remByFace = new Array(n);
+
+    if (n > 0) {
+      remByFace[n - 1] = new Array(statesByFace[n - 1].length).fill(0);
+    }
+
+    const planner = createPlanner(faces, statesByFace, remByFace);
+
+    for (let i = n - 2; i >= 0; i--) {
+      const states = statesByFace[i];
+      remByFace[i] = new Array(states.length).fill(INF);
+      const forced = faces[i].group !== faces[i + 1].group;
+
+      for (let s = 0; s < states.length; s++) {
+        remByFace[i][s] = planner.shortest({
+          kind: 'bridge',
+          i,
+          j: i + 1,
+          s,
+          forced
+        });
+      }
+    }
+
+    const indices = [];
+    if (n > 0) {
+      let plan = { kind: 'head', j: 0, prefix: [] };
+
+      while (true) {
+        if (plan.kind === 'boundary') {
+          if (plan.i === n - 1) break;
+          plan = {
+            kind: 'bridge',
+            i: plan.i,
+            j: plan.i + 1,
+            s: plan.s,
+            forced: faces[plan.i].group !== faces[plan.i + 1].group
+          };
+          continue;
+        }
+
+        const target = planner.shortest(plan);
+        if (!Number.isFinite(target)) {
+          throw new PackError('找不到合法条带编码', { plan });
+        }
+        const choices = planner.choices(plan);
+        let selected = null;
+        for (const ch of choices) {
+          if (1 + planner.shortest(ch.next) === target) {
+            selected = ch;
+            break; // choices 已按 token 升序，第一个可行项即字典序最小。
+          }
+        }
+        if (!selected) throw new PackError('字典序重建失败', { plan });
+
+        indices.push(selected.token);
+        plan = selected.next;
+      }
+    }
+
+    const decoded = decodeIndices(indices);
+    const solidWindows = decoded.windows.filter((w) => !w.degenerate);
+
+    if (solidWindows.length !== n) {
+      throw new PackError('内部校验失败：实面窗口数量不为 ' + n, {
+        solid: solidWindows.length
+      });
+    }
+
+    const mapping = solidWindows.map((w, i) => {
+      const f = faces[i];
+      w.faceIndex = i;
+      if (!canonicalMatchesFace(f, w.canonical)) {
+        throw new PackError('内部校验失败：解码绕序与原面不一致', { faceIndex: i });
+      }
+      if (f.last !== null && w.last !== f.last) {
+        throw new PackError('内部校验失败：平面着色末顶点不一致', { faceIndex: i });
+      }
+      return {
+        originalIndex: i,
+        face: i,
+        group: f.group,
+        last: f.last,
+        windowRecord: w.index,
+        windowStart: w.start,
+        windowIndex: w.windowIndex,
+        parity: w.parity,
+        segment: w.segment,
+        raw: w.raw.slice(),
+        canonical: w.canonical.slice()
+      };
+    });
+
+    // 补充组内条带编号。
+    let lastGroup = null;
+    let groupStripOrdinal = -1;
+    let lastSegment = -1;
+    for (const m of mapping) {
+      if (m.group !== lastGroup) {
+        lastGroup = m.group;
+        groupStripOrdinal = 0;
+        lastSegment = m.segment;
+      } else if (m.segment !== lastSegment) {
+        groupStripOrdinal += 1;
+        lastSegment = m.segment;
+      }
+      m.stripInGroup = groupStripOrdinal;
+    }
+
+    const finished = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now()
+      : Date.now();
+
+    const restartCount = indices.reduce((acc, x) => acc + (x === RESTART ? 1 : 0), 0);
+    const degenerateCount = decoded.windows.reduce((acc, w) => acc + (w.degenerate ? 1 : 0), 0);
+
+    return {
+      ok: true,
+      indices,
+      length: indices.length,
+      faces,
+      mapping,
+      windows: decoded.windows,
+      segments: decoded.segments,
+      stats: {
+        faceCount: n,
+        indexCount: indices.length,
+        restartCount,
+        degenerateWindowCount: degenerateCount,
+        solidWindowCount: solidWindows.length,
+        windowCount: decoded.windows.length,
+        packMs: finished - started
+      }
+    };
+  }
+
+  /*
+   * 对外部结果做一次面向约定的完整校验。packDocument 自身已用同一套状态规则，
+   * 这里额外从整数流独立扫描并检查组间重启、退化窗数量和连接索引集合。
+   */
+  function verifyResult(doc, result) {
+    const faces = validateDocument(doc);
+    const errors = [];
+    const indices = result && result.indices;
+    if (!Array.isArray(indices)) return { ok: false, errors: ['结果缺少 indices'] };
+
+    const decoded = decodeIndices(indices);
+    const solid = decoded.windows.filter((w) => !w.degenerate);
+    if (solid.length !== faces.length) {
+      errors.push('实面窗口数 ' + solid.length + ' != 原面数 ' + faces.length);
+    }
+
+    for (let i = 0; i < Math.min(solid.length, faces.length); i++) {
+      const w = solid[i];
+      const f = faces[i];
+      if (!canonicalMatchesFace(f, w.canonical)) {
+        errors.push('面 #' + i + ' 的还原绕序不一致');
+      }
+      if (f.last !== null && w.last !== f.last) {
+        errors.push('面 #' + i + ' 的指定末顶点不一致');
+      }
+    }
+
+    if (faces.length > 0) {
+      if (!result.mapping || result.mapping[0].windowStart !== 0 || indices[0] === RESTART) {
+        errors.push('首面必须从全流偏移 0 的三个索引开始，不能有前导重启或退化窗');
+      }
+      const lastMapping = result.mapping && result.mapping[faces.length - 1];
+      if (lastMapping && lastMapping.windowStart + 2 !== indices.length - 1) {
+        errors.push('最后一个实面窗口必须正好结束于整数流末尾，不能有尾部索引');
+      }
+    }
+
+    // 按流位置检查相邻实面间结构。
+    for (let i = 1; i < faces.length; i++) {
+      const a = result.mapping && result.mapping[i - 1];
+      const b = result.mapping && result.mapping[i];
+      if (!a || !b) continue;
+
+      const bridgeTokens = indices.slice(a.windowStart + 3, b.windowStart + 3);
+      const groupChanged = faces[i - 1].group !== faces[i].group;
+      const hasRestart = bridgeTokens.indexOf(RESTART) >= 0;
+
+      if (groupChanged) {
+        if (bridgeTokens.length !== 4 || bridgeTokens[0] !== RESTART) {
+          errors.push('面 #' + i + ' 跨组必须正好有一个 -1 和下一面三个起始索引');
+        }
+      } else if (hasRestart) {
+        if (bridgeTokens.length !== 4 || bridgeTokens[0] !== RESTART) {
+          errors.push('面 #' + i + ' 同组重启段只能为 -1 加下一面三个索引');
+        }
+      } else {
+        // d 个退化窗 + 一个实面窗 => d+1 个新索引，d<=3。
+        const appended = bridgeTokens;
+        const d = appended.length - 1;
+        if (d < 0 || d > 3) {
+          errors.push('面 #' + i + ' 间连接索引数量越界: ' + appended.length);
+        }
+
+        const allowed = new Set([a.raw[1], a.raw[2], ...faces[i].v]);
+        for (const t of appended) {
+          if (!allowed.has(t)) errors.push('面 #' + i + ' 使用了约定集合外的连接索引 ' + t);
+        }
+      }
+    }
+
+    return { ok: errors.length === 0, errors, decoded };
+  }
+
+  return {
+    PackError,
+    RESTART,
+    MAX_FACES,
+    validateDocument,
+    packDocument,
+    decodeIndices,
+    verifyResult,
+    // 导出内部辅助便于单元测试/穷举对照。
+    _internal: {
+      buildStates,
+      canonicalMatchesFace,
+      createPlanner,
+      cyclicRotations
+    }
+  };
+});
+
+</script>
+<script>
+/* Ordered Strip Forge 浏览器界面；打包核心在 strip-forge.js。 */
+(function () {
+  'use strict';
+
+  const SF = window.StripForge;
+  const $ = (id) => document.getElementById(id);
+
+  const EMBEDDED_SAMPLE = {
+    format:
+      'faces每条为{v:[a,b,c],group:非负整数,last:整数或null}，v为互异的0至2147483647。',
+    faces: [
+      { v: [0, 1, 2], group: 0, last: null },
+      { v: [2, 1, 3], group: 0, last: null },
+      { v: [9, 10, 11], group: 1, last: 11 }
+    ]
+  };
+
+  const state = {
+    faces: null,
+    result: null,
+    selectedFace: 0,
+    detailWindow: 0,
+    busy: false
+  };
+
+  let faceList = null;
+  let windowList = null;
+  let toastTimer = 0;
+
+  function nextFrame() {
+    return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
+  function showToast(message) {
+    const el = $('toast');
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  function showError(err) {
+    const banner = $('errorBanner');
+    const message = err && err.message ? err.message : String(err);
+    const details = err && err.details && err.details.faceIndex;
+    banner.hidden = false;
+    banner.textContent =
+      '打包未应用，仍显示上一版结果：' +
+      message +
+      (typeof details === 'number' ? `（面 #${details}）` : '');
+  }
+
+  function hideError() {
+    $('errorBanner').hidden = true;
+    $('errorBanner').textContent = '';
+  }
+
+  function setBadge(id, text, kind) {
+    const el = $(id);
+    el.textContent = text;
+    el.className = 'badge ' + (kind || 'group');
+  }
+
+  function formatNumber(n) {
+    return new Intl.NumberFormat('zh-CN').format(n);
+  }
+
+  function downloadText(filename, text, mime) {
+    const blob = new Blob([text], { type: mime || 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('已复制到剪贴板');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  let lastExportText = '';
+
+  function openExportModal(filename, text) {
+    lastExportText = text;
+    $('exportModalTitle').textContent = filename;
+    $('exportModalText').value = text;
+    $('exportModal').hidden = false;
+  }
+
+  function closeExportModal() {
+    $('exportModal').hidden = true;
+  }
+
+  async function copyExportModal() {
+    const ok = await copyText(lastExportText);
+    if (!ok) {
+      const ta = $('exportModalText');
+      ta.focus();
+      ta.select();
+      const execOk = document.execCommand('copy');
+      showToast(execOk ? '已复制选中文本' : '请按 Ctrl/Cmd+C 复制');
+    }
+  }
+
+  /* ---------------- 虚拟列表 ---------------- */
+
+  function createVirtualList(el, rowHeight, renderRow, onActivate) {
+    const spacer = document.createElement('div');
+    spacer.className = 'vlist-spacer';
+    el.innerHTML = '';
+    el.appendChild(spacer);
+
+    let count = 0;
+    let selected = -1;
+    let raf = 0;
+
+    function render() {
+      raf = 0;
+      const viewHeight = el.clientHeight || 480;
+      const overscan = 8;
+      const start = Math.max(0, Math.floor(el.scrollTop / rowHeight) - overscan);
+      const visible = Math.ceil(viewHeight / rowHeight);
+      const end = Math.min(count, start + visible + overscan * 2);
+
+      spacer.style.height = count * rowHeight + 'px';
+      let html = '';
+      for (let i = start; i < end; i++) html += renderRow(i, i === selected);
+      spacer.innerHTML = html;
+      Array.prototype.forEach.call(spacer.children, (rowEl, offset) => {
+        rowEl.style.top = (start + offset) * rowHeight + 'px';
+      });
+    }
+
+    function scheduleRender() {
+      if (!raf) raf = requestAnimationFrame(render);
+    }
+
+    el.addEventListener(
+      'scroll',
+      () => {
+        if (!raf) raf = requestAnimationFrame(render);
+      },
+      { passive: true }
+    );
+
+    el.addEventListener('click', (event) => {
+      const row = event.target.closest('[data-index]');
+      if (!row || !el.contains(row)) return;
+      onActivate(Number(row.dataset.index));
+    });
+
+    el.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      const delta = event.key === 'ArrowDown' ? 1 : -1;
+      const next = Math.max(0, Math.min(count - 1, selected + delta));
+      if (Number.isFinite(next)) {
+        onActivate(next);
+        requestAnimationFrame(() => {
+          const nextRow = el.querySelector(`[data-index="${next}"]`);
+          if (nextRow && typeof nextRow.focus === 'function') nextRow.focus();
+        });
+      }
+    });
+
+    return {
+      setCount(value) {
+        count = value;
+        render();
+      },
+      setSelected(index, shouldScroll) {
+        selected = index;
+        render();
+        if (shouldScroll && index >= 0) this.scrollToIndex(index);
+      },
+      getSelected() {
+        return selected;
+      },
+      scrollToIndex(index) {
+        const target = Math.max(
+          0,
+          index * rowHeight - el.clientHeight / 2 + rowHeight / 2
+        );
+        el.scrollTop = target;
+        scheduleRender();
+      },
+      refresh: render
+    };
+  }
+
+  function vertexChips(triple, provoke, lockedLast) {
+    return triple
+      .map((value) => {
+        const cls =
+          'idx' +
+          (value === provoke ? ' provoke' : '') +
+          (lockedLast !== null && value === lockedLast ? ' locked' : '');
+        return `<span class="${cls}" title="${
+          value === provoke ? '实际末索引 / 平面着色触发点' : '顶点索引'
+        }">${value}</span>`;
+      })
+      .join('');
+  }
+
+  function renderFaceRow(i, selected) {
+    const f = state.faces[i];
+    const m = state.result.mapping[i];
+    const vertices = f.v
+      .map((v) => {
+        const locked = f.last !== null && v === f.last;
+        const chosen = f.last === null && m && m.raw[2] === v;
+        return `<span class="vertex${locked ? ' last' : chosen ? ' chosen' : ''}">${v}${
+          locked ? ' ●' : ''
+        }</span>`;
+      })
+      .join('<span class="arrow">→</span>');
+
+    return `
+      <button type="button" class="vrow face-row${selected ? ' selected' : ''}" data-index="${i}"
+        aria-label="原面 ${i}，分组 ${f.group}">
+        <span class="row-index">#${i}</span>
+        <span class="vertex-line">${vertices}</span>
+        <span class="badge group">g${f.group}</span>
+      </button>`;
+  }
+
+  function renderWindowRow(i, selected) {
+    const w = state.result.windows[i];
+    const status = w.degenerate
+      ? '<span class="badge warn">退化</span>'
+      : `<span class="badge good">面 #${w.faceIndex}</span>`;
+    return `
+      <button type="button" class="vrow window-row${w.degenerate ? ' degenerate' : ''}${
+      selected ? ' selected' : ''
+    }" data-index="${i}" aria-label="窗口记录 ${i}">
+        <span class="row-index">#${w.index}</span>
+        <span class="mono" style="color:var(--muted);font-size:11px;">@${w.start}</span>
+        <span class="triple">${vertexChips(w.raw, w.raw[2], null)}</span>
+        <span class="triple canonical-col">${vertexChips(w.canonical, w.canonical[2], null)}</span>
+        <span style="display:grid;gap:2px;justify-items:end;">
+          <span class="badge parity-${w.parity}">${w.parity ? '奇窗' : '偶窗'}</span>
+          ${status}
+        </span>
+      </button>`;
+  }
+
+  /* ---------------- SVG 面对照 ---------------- */
+
+  function triangleSVG(v, highlight) {
+    const pts = [
+      [130, 38],
+      [42, 166],
+      [218, 166]
+    ];
+
+    let edges = '';
+    for (let k = 0; k < 3; k++) {
+      const a = pts[k];
+      const b = pts[(k + 1) % 3];
+      const mx = (a[0] + b[0]) / 2;
+      const my = (a[1] + b[1]) / 2;
+      const angle = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+      edges += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"
+        stroke="var(--line-strong)" stroke-width="2.4" stroke-linecap="round"/>
+        <g transform="translate(${mx.toFixed(1)} ${my.toFixed(1)}) rotate(${angle.toFixed(1)})">
+          <path d="M-7,-5 L4,0 L-7,5" fill="none" stroke="var(--accent)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+        </g>`;
+    }
+
+    const nodes = v
+      .map((value, k) => {
+        const [x, y] = pts[k];
+        const label = String(value);
+        const width = Math.max(42, label.length * 7.6 + 20);
+        const cls =
+          'tri-node' +
+          (highlight !== null && value === highlight ? ' provoke' : '');
+        return `
+          <g class="${cls}">
+            ${
+              highlight !== null && value === highlight
+                ? `<rect x="${x - width / 2 - 4}" y="${y - 19}" width="${width + 8}" height="38" rx="13" class="node-halo"/>`
+                : ''
+            }
+            <rect x="${x - width / 2}" y="${y - 16}" width="${width}" height="32" rx="10"></rect>
+            <text x="${x}" y="${y + 1}">${label}</text>
+          </g>`;
+      })
+      .join('');
+
+    return `
+      <svg class="triangle-svg" viewBox="0 0 260 204" role="img"
+        aria-label="有向三角形 ${v.join(' 到 ')}">
+        ${edges}
+        ${nodes}
+      </svg>`;
+  }
+
+  /* ---------------- 渲染 ---------------- */
+
+  function renderStats(verification) {
+    const r = state.result;
+    const groupCount = new Set(state.faces.map((f) => f.group)).size;
+    $('statFaces').textContent = formatNumber(r.stats.faceCount);
+    $('statIndices').textContent = formatNumber(r.stats.indexCount);
+    $('statRestarts').textContent = formatNumber(r.stats.restartCount);
+    $('statDegenerate').textContent = formatNumber(r.stats.degenerateWindowCount);
+    $('statGroups').textContent = formatNumber(groupCount);
+    $('statTime').textContent =
+      r.stats.packMs.toFixed(0) + ' ms' + (verification && verification.ok ? ' ✓' : '');
+    $('faceCountBadge').textContent = formatNumber(state.faces.length) + ' faces';
+    $('windowCountBadge').textContent = formatNumber(r.windows.length) + ' windows';
+    setBadge(
+      'verifyBadge',
+      verification && verification.ok
+        ? `校验通过 · 最小长度 ${r.length}`
+        : '校验失败',
+      verification && verification.ok ? 'good' : 'bad'
+    );
+  }
+
+  function renderOriginalDetail() {
+    const i = state.selectedFace;
+    if (i < 0 || !state.faces[i]) {
+      $('originalTriangle').innerHTML =
+        '<div class="empty-state"><span class="big">没有三角形</span><span>请导入包含 faces 的 JSON。</span></div>';
+      $('originalMeta').innerHTML = '';
+      return;
+    }
+    const f = state.faces[i];
+    const m = state.result.mapping[i];
+    $('originalTriangle').innerHTML = triangleSVG(f.v, f.last);
+    $('originalMeta').innerHTML = `
+      <dt>原序号</dt><dd class="mono">#${i}</dd>
+      <dt>group</dt><dd class="mono">${f.group}</dd>
+      <dt>指定 last</dt><dd class="mono">${f.last === null ? 'null（允许优化器选择）' : f.last}</dd>
+      <dt>实际末顶点</dt><dd class="mono" style="color:var(--provoke);font-weight:800;">${m.raw[2]}</dd>
+      <dt>输入绕序</dt><dd class="mono">[${f.v.join(', ')}]</dd>`;
+  }
+
+  function renderWindowFormula() {
+    const w = state.result.windows[state.detailWindow];
+    if (!w) {
+      $('windowFormula').innerHTML = '<span class="hint">没有解码窗口。</span>';
+      $('windowMeta').innerHTML = '';
+      return;
+    }
+    const oddSwap =
+      w.parity === 1
+        ? `<div class="formula-line">
+             <span class="formula-label">奇窗交换</span>
+             <span class="big-index">${w.raw[0]}</span>
+             <span class="big-index">${w.raw[1]}</span>
+             <span class="big-index provoke">${w.raw[2]}</span>
+             <span class="arrow">→</span>
+             <span class="big-index">${w.canonical[0]}</span>
+             <span class="big-index">${w.canonical[1]}</span>
+             <span class="big-index provoke">${w.canonical[2]}</span>
+           </div>`
+        : `<div class="formula-line"><span class="formula-label">偶窗</span><span>不交换前两点，规范面等于 raw。</span></div>`;
+
+    const status = w.degenerate
+      ? '<span class="badge warn">重复索引：不出面，仍推进奇偶</span>'
+      : `<span class="badge good">对应实面 #${w.faceIndex}</span>`;
+
+    $('windowFormula').innerHTML = `
+      <div class="formula-line">
+        <span class="formula-label">raw 窗口</span>
+        <span class="big-index">${w.raw[0]}</span>
+        <span class="big-index">${w.raw[1]}</span>
+        <span class="big-index provoke">${w.raw[2]}</span>
+        ${status}
+      </div>
+      ${oddSwap}
+      <div class="formula-line">
+        <span class="formula-label">规范绕序</span>
+        <span class="big-index">${w.canonical[0]}</span>
+        <span class="big-index">${w.canonical[1]}</span>
+        <span class="big-index provoke">${w.canonical[2]}</span>
+      </div>`;
+
+    const linkedFace = w.degenerate ? null : w.faceIndex;
+    $('windowMeta').innerHTML = `
+      <dt>全流偏移</dt><dd class="mono">start=${w.start}, end=${w.start + 2}</dd>
+      <dt>条带窗号</dt><dd class="mono">windowIndex=${w.windowIndex}</dd>
+      <dt>奇偶</dt><dd><span class="badge parity-${w.parity}">${w.parity} · ${w.parity ? 'odd' : 'even'}</span></dd>
+      <dt>segment</dt><dd class="mono">#${w.segment}</dd>
+      <dt>关联原面</dt><dd class="mono">${linkedFace === null ? '无（退化窗）' : '#' + linkedFace}</dd>`;
+  }
+
+  function renderMappingMeta() {
+    const m = state.result.mapping[state.selectedFace];
+    if (!m) {
+      $('mappingMeta').innerHTML = '<dt>mapping</dt><dd>暂无逐面映射。</dd>';
+      return;
+    }
+    $('mappingMeta').innerHTML = `
+      <dt>originalIndex</dt><dd class="mono">${m.originalIndex}</dd>
+      <dt>windowStart</dt><dd class="mono">${m.windowStart}</dd>
+      <dt>windowIndex</dt><dd class="mono">${m.windowIndex}</dd>
+      <dt>parity</dt><dd class="mono">${m.parity}</dd>
+      <dt>group</dt><dd class="mono">${m.group}</dd>
+      <dt>条带内序号</dt><dd class="mono">strip ${m.stripInGroup} / segment ${m.segment}</dd>
+      <dt>raw</dt><dd class="mono">[${m.raw.join(', ')}]</dd>
+      <dt>canonical</dt><dd class="mono">[${m.canonical.join(', ')}]</dd>`;
+  }
+
+  function renderEditForm() {
+    const i = state.selectedFace;
+    if (i < 0 || !state.faces || !state.faces[i]) {
+      $('faceIndexInput').value = '';
+      $('groupInput').value = '';
+      $('lastSelect').innerHTML = '';
+      return;
+    }
+    const f = state.faces[i];
+    $('faceIndexInput').value = i;
+    $('faceIndexInput').max = state.faces.length - 1;
+    $('groupInput').value = f.group;
+    const select = $('lastSelect');
+    select.innerHTML =
+      '<option value="">null — 不锁定，允许选择末顶点</option>' +
+      f.v
+        .map(
+          (v) =>
+            `<option value="${v}"${f.last === v ? ' selected' : ''}>last = ${v}</option>`
+        )
+        .join('');
+    select.value = f.last === null ? '' : String(f.last);
+  }
+
+  function buildExportObject() {
+    return {
+      format: 'ordered-strip-forge/export-v1',
+      indices: state.result.indices,
+      mapping: state.result.mapping.map((m) => ({
+        originalIndex: m.originalIndex,
+        face: m.face,
+        faceIndex: m.originalIndex,
+        group: m.group,
+        stripInGroup: m.stripInGroup,
+        segment: m.segment,
+        windowStart: m.windowStart,
+        windowFirstOffset: m.windowStart,
+        offset: m.windowStart,
+        windowIndex: m.windowIndex,
+        parity: m.parity,
+        parityInStrip: m.parity,
+        provokingVertex: m.raw[2],
+        specifiedLast: m.last,
+        raw: m.raw,
+        canonical: m.canonical
+      }))
+    };
+  }
+
+  function renderExportPreview() {
+    const full = JSON.stringify(buildExportObject(), null, 2);
+    const limit = 6000;
+    $('exportPreview').value =
+      full.length > limit
+        ? full.slice(0, limit) +
+          `\n\n… 预览已截断；完整 ${formatNumber(full.length)} 字符，请使用“导出 JSON”。`
+        : full;
+  }
+
+  function renderAll(verification) {
+    if (!state.result) return;
+    const verify = verification || SF.verifyResult({ faces: state.faces }, state.result);
+    renderStats(verify);
+    faceList.setCount(state.faces.length);
+    faceList.setSelected(state.selectedFace, false);
+    windowList.setCount(state.result.windows.length);
+    windowList.setSelected(state.detailWindow, false);
+    renderOriginalDetail();
+    renderWindowFormula();
+    renderMappingMeta();
+    renderEditForm();
+    renderExportPreview();
+  }
+
+  /* ---------------- 选择 ---------------- */
+
+  function selectFace(i, scrollFace = false, scrollWindow = scrollFace) {
+    if (!state.result || !state.faces.length) return;
+    state.selectedFace = Math.max(0, Math.min(state.faces.length - 1, i));
+    const m = state.result.mapping[state.selectedFace];
+    state.detailWindow = m.windowRecord;
+
+    faceList.setSelected(state.selectedFace, scrollFace);
+    windowList.setSelected(state.detailWindow, scrollWindow);
+    renderOriginalDetail();
+    renderWindowFormula();
+    renderMappingMeta();
+    renderEditForm();
+  }
+
+  function selectWindow(i) {
+    state.detailWindow = i;
+    const w = state.result.windows[i];
+    windowList.setSelected(i, false);
+    if (!w.degenerate && Number.isInteger(w.faceIndex)) {
+      state.selectedFace = w.faceIndex;
+      faceList.setSelected(state.selectedFace, true);
+      renderOriginalDetail();
+      renderMappingMeta();
+      renderEditForm();
+    }
+    renderWindowFormula();
+  }
+
+  /* ---------------- 打包与修改 ---------------- */
+
+  async function repack(nextFaces) {
+    if (state.busy) return false;
+    state.busy = true;
+    setBadge('verifyBadge', '打包中…', 'warn');
+    await nextFrame();
+
+    try {
+      const doc = { faces: nextFaces };
+      const result = SF.packDocument(doc);
+      const verification = SF.verifyResult(doc, result);
+      if (!verification.ok) throw new Error(verification.errors.join('；'));
+
+      state.faces = result.faces;
+      state.result = result;
+      if (state.faces.length > 0) {
+        state.selectedFace = Math.max(
+          0,
+          Math.min(state.faces.length - 1, state.selectedFace)
+        );
+        state.detailWindow = state.result.mapping[state.selectedFace].windowRecord;
+      } else {
+        state.selectedFace = -1;
+        state.detailWindow = -1;
+      }
+      hideError();
+      renderAll(verification);
+      return true;
+    } catch (err) {
+      showError(err);
+      showToast('改动无效，已保留上一版结果');
+      setBadge('verifyBadge', '非法改动 · 保留上一版', 'bad');
+      renderEditForm();
+      return false;
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  async function loadDocument(doc, name) {
+    try {
+      // 先由引擎严格校验/规范化；repack 内部还会再做一次完整打包。
+      const faces = SF.validateDocument(doc);
+      state.selectedFace = 0;
+      state.detailWindow = 0;
+      const ok = await repack(faces);
+      if (ok) showToast(`已载入 ${name || 'JSON'}`);
+      return ok;
+    } catch (err) {
+      showError(err);
+      setBadge(
+        'verifyBadge',
+        state.result ? '输入无效 · 保留上一版' : '输入无效',
+        'bad'
+      );
+      return false;
+    }
+  }
+
+  async function loadSample() {
+    try {
+      const res = await fetch('samples/ordered-strips.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      await loadDocument(json, 'samples/ordered-strips.json');
+    } catch (e) {
+      await loadDocument(EMBEDDED_SAMPLE, '内置样例');
+    }
+  }
+
+  function makeLongChain() {
+    const faces = new Array(100000);
+    for (let i = 0; i < 100000; i++) {
+      faces[i] = {
+        v: i % 2 === 0 ? [i, i + 1, i + 2] : [i + 1, i, i + 2],
+        group: 0,
+        last: null
+      };
+    }
+    return { faces };
+  }
+
+  function cloneFaces() {
+    return state.faces.map((f) => ({ v: f.v.slice(), group: f.group, last: f.last }));
+  }
+
+  function runBounds(faces, index) {
+    const g = faces[index].group;
+    let start = index;
+    let end = index;
+    while (start > 0 && faces[start - 1].group === g) start--;
+    while (end < faces.length - 1 && faces[end + 1].group === g) end++;
+    return { g, start, end };
+  }
+
+  async function applyFormEdit(event) {
+    event.preventDefault();
+    if (!state.result || !state.faces.length) return;
+
+    const target = Number($('faceIndexInput').value);
+    if (Number.isInteger(target) && target >= 0 && target < state.faces.length) {
+      state.selectedFace = target;
+    }
+
+    const nextFaces = cloneFaces();
+    const i = state.selectedFace;
+    const group = Number($('groupInput').value);
+    if (!Number.isInteger(group) || group < 0 || group > Number.MAX_SAFE_INTEGER) {
+      showError(new Error('group 必须是非负整数'));
+      renderEditForm();
+      setBadge('verifyBadge', '非法改动 · 保留上一版', 'bad');
+      return;
+    }
+
+    // group 输入可只改当前面、后缀或整个连续运行；最终仍由严格校验裁决。
+    const scope = $('groupScope') ? $('groupScope').value : 'face';
+    const bounds = runBounds(nextFaces, i);
+    if (scope === 'run') {
+      for (let k = bounds.start; k <= bounds.end; k++) nextFaces[k].group = group;
+    } else if (scope === 'suffix') {
+      for (let k = i; k <= bounds.end; k++) nextFaces[k].group = group;
+    } else {
+      nextFaces[i].group = group;
+    }
+
+    const lastValue = $('lastSelect').value;
+    nextFaces[i].last = lastValue === '' ? null : Number(lastValue);
+
+    const ok = await repack(nextFaces);
+    if (ok) showToast('已重新打包为字典序最小最短流');
+  }
+
+  async function splitGroup() {
+    if (!state.result || !state.faces.length) return;
+    const i = state.selectedFace;
+    if (i === 0) {
+      showToast('第一面之前不能再拆组');
+      return;
+    }
+    const bounds = runBounds(state.faces, i);
+    if (bounds.start === i) {
+      showToast('此面已经是组首');
+      return;
+    }
+    let maxGroup = 0;
+    for (const f of state.faces) maxGroup = Math.max(maxGroup, f.group);
+    const newGroup = maxGroup + 1;
+    const nextFaces = cloneFaces();
+    for (let k = i; k <= bounds.end; k++) nextFaces[k].group = newGroup;
+    const ok = await repack(nextFaces);
+    if (ok) showToast(`已从 #${i} 拆出新组 g${newGroup}`);
+  }
+
+  async function mergePreviousGroup() {
+    if (!state.result || !state.faces.length) return;
+    const i = state.selectedFace;
+    const bounds = runBounds(state.faces, i);
+    if (bounds.start === 0) {
+      showToast('这已经是第一个组');
+      return;
+    }
+    const previousGroup = state.faces[bounds.start - 1].group;
+    const nextFaces = cloneFaces();
+    for (let k = bounds.start; k <= bounds.end; k++) {
+      nextFaces[k].group = previousGroup;
+    }
+    const ok = await repack(nextFaces);
+    if (ok) showToast(`已并入 g${previousGroup}`);
+  }
+
+  /* ---------------- 导入/导出 ---------------- */
+
+  function readImportedFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const json = JSON.parse(String(reader.result));
+        const ok = await loadDocument(json, file.name);
+        if (!ok) showToast('导入无效，当前结果未改动');
+      } catch (e) {
+        showError(e);
+        setBadge('verifyBadge', 'JSON 解析失败', 'bad');
+        showToast('JSON 解析失败，当前结果未改动');
+      }
+    };
+    reader.onerror = () => showError(new Error('文件读取失败'));
+    reader.readAsText(file);
+  }
+
+  function mappingCsv() {
+    const header = [
+      'originalIndex',
+      'group',
+      'stripInGroup',
+      'segment',
+      'windowStart',
+      'windowIndex',
+      'parity',
+      'provokingVertex',
+      'specifiedLast'
+    ];
+    const rows = state.result.mapping.map((m) =>
+      [
+        m.originalIndex,
+        m.group,
+        m.stripInGroup,
+        m.segment,
+        m.windowStart,
+        m.windowIndex,
+        m.parity,
+        m.raw[2],
+        m.last === null ? '' : m.last
+      ].join(',')
+    );
+    return [header.join(','), ...rows].join('\n');
+  }
+
+  function bindEvents() {
+    faceList = createVirtualList($('faceList'), 58, renderFaceRow, (i) =>
+      selectFace(i, false, true)
+    );
+    windowList = createVirtualList($('windowList'), 48, renderWindowRow, selectWindow);
+
+    $('importBtn').addEventListener('click', () => $('fileInput').click());
+    $('fileInput').addEventListener('change', (e) => {
+      readImportedFile(e.target.files[0]);
+      e.target.value = '';
+    });
+
+    $('sampleBtn').addEventListener('click', loadSample);
+    $('chainBtn').addEventListener('click', async () => {
+      state.selectedFace = 0;
+      const t0 = performance.now();
+      const ok = await repack(makeLongChain().faces);
+      if (ok) {
+        showToast(`10 万长链完成，引擎耗时 ${state.result.stats.packMs.toFixed(0)} ms`);
+        selectFace(0, true);
+      }
+      console.info('long chain wall ms', performance.now() - t0);
+    });
+
+    $('prevFaceBtn').addEventListener('click', () => selectFace(state.selectedFace - 1, true));
+    $('nextFaceBtn').addEventListener('click', () => selectFace(state.selectedFace + 1, true));
+
+    $('editForm').addEventListener('submit', applyFormEdit);
+    $('splitBtn').addEventListener('click', splitGroup);
+    $('mergeBtn').addEventListener('click', mergePreviousGroup);
+    $('faceIndexInput').addEventListener('change', () => {
+      const v = Number($('faceIndexInput').value);
+      if (Number.isInteger(v)) selectFace(v, true);
+    });
+
+    $('exportAllBtn').addEventListener('click', () => {
+      const text = JSON.stringify(buildExportObject(), null, 2);
+      downloadText('ordered-strip-export.json', text);
+      openExportModal('ordered-strip-export.json', text);
+      showToast('完整 JSON 已生成');
+    });
+    $('exportIndicesBtn').addEventListener('click', () => {
+      const text = JSON.stringify({ indices: state.result.indices }, null, 2);
+      downloadText('indices.json', text);
+      openExportModal('indices.json', text);
+      showToast('indices 整数流已生成');
+    });
+    $('exportCsvBtn').addEventListener('click', () => {
+      const text = mappingCsv();
+      downloadText('face-mapping.csv', text, 'text/csv;charset=utf-8');
+      openExportModal('face-mapping.csv', text);
+      showToast('逐面映射 CSV 已生成');
+    });
+    $('copyBtn').addEventListener('click', async () => {
+      const text = JSON.stringify(buildExportObject(), null, 2);
+      const ok = await copyText(text);
+      if (!ok) openExportModal('ordered-strip-export.json', text);
+    });
+
+    $('exportModalClose').addEventListener('click', closeExportModal);
+    $('exportModalCopy').addEventListener('click', copyExportModal);
+    $('exportModalSelect').addEventListener('click', () => {
+      const ta = $('exportModalText');
+      ta.focus();
+      ta.select();
+    });
+    $('exportModal').addEventListener('click', (e) => {
+      if (e.target === $('exportModal')) closeExportModal();
+    });
+
+    const drop = $('dropzone');
+    ['dragenter', 'dragover'].forEach((type) =>
+      drop.addEventListener(type, (e) => {
+        e.preventDefault();
+        drop.classList.add('drag');
+      })
+    );
+    ['dragleave', 'drop'].forEach((type) =>
+      drop.addEventListener(type, (e) => {
+        e.preventDefault();
+        drop.classList.remove('drag');
+      })
+    );
+    drop.addEventListener('drop', (e) => readImportedFile(e.dataTransfer.files[0]));
+
+    $('themeBtn').addEventListener('click', () => {
+      const root = document.documentElement;
+      const dark = root.dataset.theme === 'dark';
+      if (dark) root.dataset.theme = 'light';
+      else root.dataset.theme = 'dark';
+      try {
+        localStorage.setItem('strip-forge-theme', root.dataset.theme);
+      } catch (e) {}
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('exportModal').hidden) {
+        closeExportModal();
+        return;
+      }
+      if (e.target.matches('input, select, textarea')) return;
+      if (e.key === 'ArrowLeft') selectFace(state.selectedFace - 1, true);
+      if (e.key === 'ArrowRight') selectFace(state.selectedFace + 1, true);
+    });
+  }
+
+  function initTheme() {
+    let theme = null;
+    try {
+      theme = localStorage.getItem('strip-forge-theme');
+    } catch (e) {}
+    if (theme === 'light' || theme === 'dark') {
+      document.documentElement.dataset.theme = theme;
+    }
+  }
+
+  async function boot() {
+    if (!SF) {
+      $('verifyBadge').textContent = 'strip-forge.js 加载失败';
+      return;
+    }
+    initTheme();
+    bindEvents();
+    await loadSample();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+})();
+
+</script>
+  </body>
+</html>

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Ordered Strip Forge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M5 23L12 9L19 23M12 9L27 9M19 23L27 9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="5" cy="23" r="2.6" fill="currentColor"/>
+              <circle cx="19" cy="23" r="2.6" fill="currentColor"/>
+              <circle cx="27" cy="9" r="2.6" fill="#fb923c"/>
+            </svg>
+          </div>
+          <div>
+            <h1>Ordered Strip Forge</h1>
+            <p>有向三角形条带最优整数流打包、解码对照与逐面映射</p>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <input id="fileInput" class="sr-only" type="file" accept=".json,application/json" />
+          <button id="importBtn" class="btn primary" type="button">导入 JSON</button>
+          <button id="sampleBtn" class="btn" type="button">载入样例</button>
+          <button id="chainBtn" class="btn" type="button">生成 10 万长链</button>
+          <button id="themeBtn" class="btn ghost small" type="button" aria-pressed="false">切换主题</button>
+        </div>
+      </header>
+
+      <section class="stats" aria-label="打包统计">
+        <div class="stat"><span class="label">实面</span><span id="statFaces" class="value">–</span></div>
+        <div class="stat"><span class="label">总索引数</span><span id="statIndices" class="value accent">–</span></div>
+        <div class="stat"><span class="label">重启索引</span><span id="statRestarts" class="value">–</span></div>
+        <div class="stat"><span class="label">退化窗口</span><span id="statDegenerate" class="value warn">–</span></div>
+        <div class="stat"><span class="label">绘制组</span><span id="statGroups" class="value">–</span></div>
+        <div class="stat"><span class="label">打包 / 校验</span><span id="statTime" class="value good">–</span></div>
+      </section>
+
+      <main class="workspace">
+        <section class="panel face-panel" aria-label="原面列表">
+          <div class="panel-head">
+            <div>
+              <h2>原面顺序</h2>
+              <span class="hint">点击任意面定位对应滑窗</span>
+            </div>
+            <span id="faceCountBadge" class="badge group">0</span>
+          </div>
+          <div id="dropzone" class="dropzone" style="margin:10px 12px 0;">
+            可拖入 ordered-strips.json；最多 100,000 面
+          </div>
+          <div id="faceList" class="vlist" tabindex="0" aria-label="原面虚拟列表"></div>
+        </section>
+
+        <section class="panel center-panel" aria-label="面对照与解码窗口">
+          <div class="panel-head">
+            <div>
+              <h2>原面 / 解码条带对照</h2>
+              <span id="verifyBadge" class="badge good">尚未打包</span>
+            </div>
+            <div class="button-row">
+              <button id="prevFaceBtn" class="btn small" type="button">上一面</button>
+              <button id="nextFaceBtn" class="btn small" type="button">下一面</button>
+            </div>
+          </div>
+
+          <div class="panel-body scroll" style="flex:0 1 auto; max-height:47%;">
+            <div id="errorBanner" class="error-banner" hidden></div>
+            <div id="noticeBanner" class="notice-banner" hidden></div>
+
+            <div class="detail-grid" style="margin-top:10px;">
+              <article class="compare-card">
+                <h3>指定有向面</h3>
+                <div class="triangle-stage" id="originalTriangle"></div>
+                <dl class="kv" id="originalMeta"></dl>
+              </article>
+
+              <article class="compare-card">
+                <h3>解码滑窗与奇偶</h3>
+                <div class="formula" id="windowFormula"></div>
+                <dl class="kv" id="windowMeta" class="kv"></dl>
+              </article>
+            </div>
+          </div>
+
+          <div class="panel-head" style="border-top:1px solid var(--line);">
+            <div>
+              <h2>全流窗口</h2>
+              <span class="hint">含退化窗；奇窗交换前两点，末索引触发平面着色</span>
+            </div>
+            <span id="windowCountBadge" class="badge group">0 windows</span>
+          </div>
+          <div id="windowList" class="vlist" tabindex="0" aria-label="解码窗口虚拟列表"></div>
+        </section>
+
+        <aside class="panel inspector-panel" aria-label="检查器与导出">
+          <div class="panel-body scroll" style="flex:1;">
+            <form id="editForm" class="form-card">
+              <h3>修改分组 / 最后顶点</h3>
+              <div class="form-grid">
+                <div class="field">
+                  <label for="faceIndexInput">当前面</label>
+                  <input id="faceIndexInput" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="groupInput">绘制组 group</label>
+                  <input id="groupInput" type="number" min="0" step="1" />
+                </div>
+                <div class="field">
+                  <label for="groupScope">分组修改范围</label>
+                  <select id="groupScope">
+                    <option value="face" selected>仅当前面</option>
+                    <option value="suffix">从此面到本组末尾（拆出后缀）</option>
+                    <option value="run">整个连续组（重编号）</option>
+                  </select>
+                </div>
+                <div class="button-row">
+                  <button id="splitBtn" class="btn small" type="button">在此面前拆组</button>
+                  <button id="mergeBtn" class="btn small" type="button">并入前一组</button>
+                </div>
+                <div class="field">
+                  <label for="lastSelect">平面着色最后顶点 last</label>
+                  <select id="lastSelect"></select>
+                </div>
+                <button class="btn primary" type="submit">应用并重新打包</button>
+                <span class="hint" style="color:var(--muted);font-size:12px;">
+                  非法改动不会替换当前结果，表单会恢复到上一版。
+                </span>
+              </div>
+            </form>
+
+            <div class="form-card" style="margin-top:12px;">
+              <h3>逐面映射</h3>
+              <dl class="kv" id="mappingMeta"></dl>
+            </div>
+
+            <div class="export-card" style="margin-top:12px;">
+              <h3>导出整数流和映射</h3>
+              <div class="button-row">
+                <button id="exportAllBtn" class="btn primary small" type="button">导出 JSON</button>
+                <button id="exportIndicesBtn" class="btn small" type="button">仅 indices</button>
+                <button id="exportCsvBtn" class="btn small" type="button">映射 CSV</button>
+                <button id="copyBtn" class="btn small" type="button">复制 JSON</button>
+              </div>
+              <label class="field" style="margin-top:10px;">
+                <span class="sr-only">导出预览</span>
+                <textarea id="exportPreview" readonly spellcheck="false"></textarea>
+              </label>
+            </div>
+
+            <div class="compare-card" style="margin-top:12px;">
+              <h3>编码约定</h3>
+              <ul class="help-list">
+                <li>同长度时比较整个整数流的字典序，<code>-1</code> 小于所有顶点 ID。</li>
+                <li>组号变化必须写一个重启索引；同组两实面之间可重启，或放 <code>0..3</code> 个退化窗。</li>
+                <li>无重启连接索引只能取追加前末两索引与下一面三顶点的并集。</li>
+                <li>退化窗不出面，但每个追加索引都推进窗口编号和奇偶。</li>
+                <li>循环移位保绕序；交换任意两点会反向，优化器不会用翻面换取索引。</li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <div id="exportModal" class="modal-backdrop" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+        <div class="modal-head">
+          <h3 id="exportModalTitle">导出内容</h3>
+          <button id="exportModalClose" class="btn small" type="button">关闭</button>
+        </div>
+        <p id="exportModalHint" class="modal-hint">
+          已尝试下载文件；若下载未出现，可直接全选复制以下内容。
+        </p>
+        <textarea id="exportModalText" class="export-modal-text" readonly spellcheck="false"></textarea>
+        <div class="button-row" style="margin-top:10px;">
+          <button id="exportModalCopy" class="btn primary small" type="button">复制全部</button>
+          <button id="exportModalSelect" class="btn small" type="button">全选文本</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <input id="dummyDownloadAnchor" hidden />
+
+    <script src="strip-forge.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
