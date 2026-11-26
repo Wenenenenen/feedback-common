@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>采样格谱校音台</title>
+<style>
+/* 设计计划：深色工程控制台。令牌见 :root；布局为顶栏 + 三栏（编辑/检视/采样导出），窄屏堆叠 */
+:root {
+  --bg: #12151b;
+  --panel: #1a1f28;
+  --panel-2: #212733;
+  --line: #2c3442;
+  --fg: #e6eaf1;
+  --fg-dim: #9aa5b5;
+  --fg-faint: #67717f;
+  --accent: #4fd6c8;
+  --accent-dim: #2a8b82;
+  --warn: #e8b04b;
+  --bad: #ef6a6a;
+  --good: #7fc77a;
+  --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f9; --panel: #ffffff; --panel-2: #f0f3f7; --line: #d8dee7;
+  --fg: #1c232d; --fg-dim: #54606f; --fg-faint: #85909e;
+  --accent: #0c8a7e; --accent-dim: #9ad8d1; --warn: #a86a12; --bad: #c43f3f; --good: #3d8a39;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 0; margin-bottom: 14px;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+body::before { content:""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top,0px); z-index: 21; background: var(--bg); }
+h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+h1 .tick { color: var(--accent); }
+.spacer { flex: 1; }
+.layout { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr) minmax(0,.9fr); gap: 14px; padding-bottom: 40px; }
+@media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .9px; color: var(--fg-faint); margin: 0 0 10px; font-weight: 600; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row + .row { margin-top: 8px; }
+label.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--fg-dim); }
+input, select, textarea, button {
+  font-family: var(--sans); font-size: 13px; color: var(--fg);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px;
+}
+input.mono, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-dim); outline-offset: 0; border-color: var(--accent-dim); }
+button { cursor: pointer; font-weight: 550; }
+button.primary { background: var(--accent); color: #08231f; border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button.ghost { background: transparent; }
+button.ghost:hover { border-color: var(--accent-dim); color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.danger { color: var(--bad); }
+.pill { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-dim); white-space: nowrap; }
+.pill.good { color: var(--good); border-color: var(--good); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--bad); border-color: var(--bad); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--fg-faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; position: sticky; top: 0; background: var(--panel-2); }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+tr:last-child td { border-bottom: none; }
+.scroll { max-height: 340px; overflow: auto; }
+.scroll.tall { max-height: 520px; }
+.events { display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: 11.5px; }
+.ev { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 5px; background: var(--panel-2); }
+.ev .ch { color: var(--accent); min-width: 34px; }
+.ev.note { border-left: 3px solid var(--good); }
+.ev.retrig { border-left: 3px solid var(--warn); }
+.ev.none { border-left: 3px solid var(--line); color: var(--fg-dim); }
+.ev.off { border-left: 3px solid transparent; color: var(--fg-faint); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-family: var(--mono); font-size: 12px; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+.alert { border-radius: 8px; padding: 10px 12px; font-size: 12.5px; border: 1px solid; margin-bottom: 10px; }
+.alert.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--fg); }
+.alert.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.alert.good { border-color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.alert code { font-family: var(--mono); color: var(--warn); }
+.errlist { max-height: 180px; overflow: auto; margin: 6px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 11.5px; }
+.errlist li { margin-bottom: 3px; }
+.errlist .path { color: var(--bad); }
+.mini { font-size: 11.5px; color: var(--fg-faint); }
+.voicedetail { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 8px; background: var(--panel-2); }
+.voicedetail .vrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+.voicedetail .vrow:last-child { border-bottom: none; }
+canvas { width: 100%; height: 90px; display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; }
+.rangeinputs { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.hint { font-size: 11.5px; color: var(--fg-faint); margin-top: 6px; }
+a { color: var(--accent); }
+.hidden { display: none !important; }
+.tick-jump { font-family: var(--mono); font-size: 11px; color: var(--warn); margin-top: 6px; }
+.dropzone { border: 1.5px dashed var(--line); border-radius: 9px; padding: 16px; text-align: center; color: var(--fg-dim); cursor: pointer; }
+.dropzone.drag { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.stat .n { font-family: var(--mono); font-size: 17px; font-weight: 650; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 10.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+@media (max-width: 480px) { .statgrid { grid-template-columns: repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>采样格谱<span class="tick">校音台</span></h1>
+  <span class="pill" id="statusPill">未加载</span>
+  <div class="spacer"></div>
+  <div class="dropzone" id="dropzone" style="padding:7px 12px">
+    载入 tracker-ticks.zip
+    <input type="file" id="fileInput" accept=".zip,application/zip" hidden>
+  </div>
+  <button class="ghost" id="themeBtn" type="button">切换主题</button>
+</header>
+
+<div id="alertHost"></div>
+
+<div class="layout">
+  <!-- 左：格谱编辑 -->
+  <section class="panel">
+    <h2>格谱编辑</h2>
+    <div class="statgrid">
+      <div class="stat"><div class="n" id="stChannels">–</div><div class="l">声道</div></div>
+      <div class="stat"><div class="n" id="stBpm">–</div><div class="l">初始 BPM</div></div>
+      <div class="stat"><div class="n" id="stSpeed">–</div><div class="l">初始 speed</div></div>
+      <div class="stat"><div class="n" id="stOrder">–</div><div class="l">编排位置</div></div>
+    </div>
+
+    <div class="row">
+      <label class="field">花样
+        <select id="patternSelect"></select>
+      </label>
+      <label class="field">行号
+        <select id="rowSelect"></select>
+      </label>
+      <button class="ghost" id="undoBtn" type="button" disabled>撤销 (Ctrl+Z)</button>
+    </div>
+
+    <div class="voicedetail">
+      <div class="row" style="justify-content:space-between">
+        <strong style="font-size:12.5px">行参数</strong>
+        <span class="mini" id="rowPath"></span>
+      </div>
+      <div class="vrow">
+        <label class="field" style="flex:1">bpm（留空沿用）<input class="mono" id="edBpm" type="number" min="32" max="384" placeholder="沿用"></label>
+        <label class="field" style="flex:1">speed（留空沿用）<input class="mono" id="edSpeed" type="number" min="1" max="32" placeholder="沿用"></label>
+      </div>
+      <div class="vrow">
+        <label class="field" style="flex:1">back 目标行<input class="mono" id="edBackTo" type="number" min="0" placeholder="无"></label>
+        <label class="field" style="flex:1">额外回跳次数<input class="mono" id="edBackN" type="number" min="1" max="64" placeholder="无"></label>
+        <label class="field" style="flex:1">break 入行<input class="mono" id="edBreak" type="number" min="0" placeholder="无"></label>
+      </div>
+    </div>
+
+    <div class="voicedetail">
+      <div class="row" style="justify-content:space-between">
+        <strong style="font-size:12.5px">声部 voices</strong>
+        <span class="mini">ch 在本行不可重复</span>
+      </div>
+      <div id="voiceEditor"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="addVoiceBtn" type="button">+ 添加声部</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="applyBtn" type="button">应用编辑并渲染</button>
+      <button class="ghost" id="resetRowBtn" type="button">还原本行</button>
+    </div>
+    <p class="hint">非法或超限编辑会被拒绝并指出位置，当前已生成版本保持不变。</p>
+  </section>
+
+  <!-- 中：逐 tick 检视 -->
+  <section class="panel">
+    <h2>逐 tick 调度检视</h2>
+    <div class="row">
+      <label class="field">跳转 tick
+        <input class="mono" id="tickJump" type="number" min="0" placeholder="0">
+      </label>
+      <button class="ghost" id="tickGoBtn" type="button">转到</button>
+      <button class="ghost" id="prevTickBtn" type="button">‹ 上一 tick</button>
+      <button class="ghost" id="nextTickBtn" type="button">下一 tick ›</button>
+    </div>
+
+    <dl class="kv" style="margin:12px 0">
+      <dt>绝对 tick</dt><dd id="tkAbs">–</dd>
+      <dt>编排位置/花样/行</dt><dd id="tkLoc">–</dd>
+      <dt>行内 tick</dt><dd id="tkRowTick">–</dd>
+      <dt>采样帧区间</dt><dd id="tkFrames">–</dd>
+      <dt>生效 bpm/speed</dt><dd id="tkBpm">–</dd>
+    </dl>
+    <div class="tick-jump" id="tkJump"></div>
+
+    <div class="mini" style="margin:10px 0 4px">调度后、首帧前的各声部状态（新音/重触发/无触发/未发声，相位与步长）</div>
+    <div class="events scroll tall" id="eventList"></div>
+
+    <h2 style="margin-top:16px">全部 tick 表</h2>
+    <div class="tablewrap scroll tall">
+      <table id="tickTable">
+        <thead><tr><th>tick</th><th>位置</th><th>花样</th><th>行</th><th class="num">帧起</th><th class="num">帧止</th><th>bpm</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 右：采样、区间试听、导出 -->
+  <section class="panel">
+    <h2>采样与区间</h2>
+    <canvas id="waveCanvas" width="600" height="180"></canvas>
+    <div class="rangeinputs" style="margin-top:10px">
+      <label class="field">区间起（帧）<input class="mono" id="rangeStart" type="number" min="0" value="0"></label>
+      <label class="field">区间止（帧，半开）<input class="mono" id="rangeEnd" type="number" min="0" value="0"></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="playRangeBtn" type="button">试听区间</button>
+      <button class="ghost" id="playFullBtn" type="button">试听全曲</button>
+      <button class="ghost" id="stopBtn" type="button">停止</button>
+    </div>
+    <p class="hint" id="rangeInfo"></p>
+
+    <h2 style="margin-top:18px">导出</h2>
+    <div class="row">
+      <button class="primary" id="exportWavBtn" type="button">导出区间 WAV</button>
+      <button class="ghost" id="exportFullWavBtn" type="button">导出全曲 WAV</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="exportLogBtn" type="button">导出区间调度日志</button>
+      <button class="ghost" id="exportFullLogBtn" type="button">导出全曲日志</button>
+    </div>
+    <p class="hint">WAV 为 48kHz PCM16 单声道；区间音频逐样本等于全曲截取，日志保留绝对 tick 与采样帧。</p>
+
+    <h2 style="margin-top:18px">原始 JSON</h2>
+    <div class="tablewrap scroll" style="max-height:160px">
+      <table id="sampleTable">
+        <thead><tr><th>#</th class="num">PCM 长度</th><th>loop [lo,hi)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="engine.js"></script>
+<script src="io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

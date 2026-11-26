@@ -1,0 +1,12 @@
+{
+  "name": "tracker-pattern-renderer",
+  "version": "1.0.0",
+  "description": "采样格谱网页校音台：自实现调度与 PCM 混音，无现成格谱引擎",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node tests/engine.test.js && node tests/app.smoke.js",
+    "perf": "node tests/perf.test.js"
+  },
+  "engines": { "node": ">=18" }
+}

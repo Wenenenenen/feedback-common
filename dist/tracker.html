@@ -1,0 +1,1461 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>采样格谱校音台</title>
+<style>
+/* 设计计划：深色工程控制台。令牌见 :root；布局为顶栏 + 三栏（编辑/检视/采样导出），窄屏堆叠 */
+:root {
+  --bg: #12151b;
+  --panel: #1a1f28;
+  --panel-2: #212733;
+  --line: #2c3442;
+  --fg: #e6eaf1;
+  --fg-dim: #9aa5b5;
+  --fg-faint: #67717f;
+  --accent: #4fd6c8;
+  --accent-dim: #2a8b82;
+  --warn: #e8b04b;
+  --bad: #ef6a6a;
+  --good: #7fc77a;
+  --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #f4f6f9; --panel: #ffffff; --panel-2: #f0f3f7; --line: #d8dee7;
+  --fg: #1c232d; --fg-dim: #54606f; --fg-faint: #85909e;
+  --accent: #0c8a7e; --accent-dim: #9ad8d1; --warn: #a86a12; --bad: #c43f3f; --good: #3d8a39;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 0; margin-bottom: 14px;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+body::before { content:""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top,0px); z-index: 21; background: var(--bg); }
+h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+h1 .tick { color: var(--accent); }
+.spacer { flex: 1; }
+.layout { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr) minmax(0,.9fr); gap: 14px; padding-bottom: 40px; }
+@media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .9px; color: var(--fg-faint); margin: 0 0 10px; font-weight: 600; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row + .row { margin-top: 8px; }
+label.field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--fg-dim); }
+input, select, textarea, button {
+  font-family: var(--sans); font-size: 13px; color: var(--fg);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px;
+}
+input.mono, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-dim); outline-offset: 0; border-color: var(--accent-dim); }
+button { cursor: pointer; font-weight: 550; }
+button.primary { background: var(--accent); color: #08231f; border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button.ghost { background: transparent; }
+button.ghost:hover { border-color: var(--accent-dim); color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.danger { color: var(--bad); }
+.pill { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-dim); white-space: nowrap; }
+.pill.good { color: var(--good); border-color: var(--good); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--bad); border-color: var(--bad); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--fg-faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; position: sticky; top: 0; background: var(--panel-2); }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.sel td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+tr:last-child td { border-bottom: none; }
+.scroll { max-height: 340px; overflow: auto; }
+.scroll.tall { max-height: 520px; }
+.events { display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: 11.5px; }
+.ev { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 5px; background: var(--panel-2); }
+.ev .ch { color: var(--accent); min-width: 34px; }
+.ev.note { border-left: 3px solid var(--good); }
+.ev.retrig { border-left: 3px solid var(--warn); }
+.ev.none { border-left: 3px solid var(--line); color: var(--fg-dim); }
+.ev.off { border-left: 3px solid transparent; color: var(--fg-faint); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-family: var(--mono); font-size: 12px; }
+.kv dt { color: var(--fg-faint); }
+.kv dd { margin: 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+.alert { border-radius: 8px; padding: 10px 12px; font-size: 12.5px; border: 1px solid; margin-bottom: 10px; }
+.alert.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--fg); }
+.alert.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.alert.good { border-color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.alert code { font-family: var(--mono); color: var(--warn); }
+.errlist { max-height: 180px; overflow: auto; margin: 6px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 11.5px; }
+.errlist li { margin-bottom: 3px; }
+.errlist .path { color: var(--bad); }
+.mini { font-size: 11.5px; color: var(--fg-faint); }
+.voicedetail { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 8px; background: var(--panel-2); }
+.voicedetail .vrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+.voicedetail .vrow:last-child { border-bottom: none; }
+canvas { width: 100%; height: 90px; display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; }
+.rangeinputs { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.hint { font-size: 11.5px; color: var(--fg-faint); margin-top: 6px; }
+a { color: var(--accent); }
+.hidden { display: none !important; }
+.tick-jump { font-family: var(--mono); font-size: 11px; color: var(--warn); margin-top: 6px; }
+.dropzone { border: 1.5px dashed var(--line); border-radius: 9px; padding: 16px; text-align: center; color: var(--fg-dim); cursor: pointer; }
+.dropzone.drag { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.stat .n { font-family: var(--mono); font-size: 17px; font-weight: 650; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 10.5px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+@media (max-width: 480px) { .statgrid { grid-template-columns: repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <h1>采样格谱<span class="tick">校音台</span></h1>
+  <span class="pill" id="statusPill">未加载</span>
+  <div class="spacer"></div>
+  <div class="dropzone" id="dropzone" style="padding:7px 12px">
+    载入 tracker-ticks.zip
+    <input type="file" id="fileInput" accept=".zip,application/zip" hidden>
+  </div>
+  <button class="ghost" id="themeBtn" type="button">切换主题</button>
+</header>
+
+<div id="alertHost"></div>
+
+<div class="layout">
+  <!-- 左：格谱编辑 -->
+  <section class="panel">
+    <h2>格谱编辑</h2>
+    <div class="statgrid">
+      <div class="stat"><div class="n" id="stChannels">–</div><div class="l">声道</div></div>
+      <div class="stat"><div class="n" id="stBpm">–</div><div class="l">初始 BPM</div></div>
+      <div class="stat"><div class="n" id="stSpeed">–</div><div class="l">初始 speed</div></div>
+      <div class="stat"><div class="n" id="stOrder">–</div><div class="l">编排位置</div></div>
+    </div>
+
+    <div class="row">
+      <label class="field">花样
+        <select id="patternSelect"></select>
+      </label>
+      <label class="field">行号
+        <select id="rowSelect"></select>
+      </label>
+      <button class="ghost" id="undoBtn" type="button" disabled>撤销 (Ctrl+Z)</button>
+    </div>
+
+    <div class="voicedetail">
+      <div class="row" style="justify-content:space-between">
+        <strong style="font-size:12.5px">行参数</strong>
+        <span class="mini" id="rowPath"></span>
+      </div>
+      <div class="vrow">
+        <label class="field" style="flex:1">bpm（留空沿用）<input class="mono" id="edBpm" type="number" min="32" max="384" placeholder="沿用"></label>
+        <label class="field" style="flex:1">speed（留空沿用）<input class="mono" id="edSpeed" type="number" min="1" max="32" placeholder="沿用"></label>
+      </div>
+      <div class="vrow">
+        <label class="field" style="flex:1">back 目标行<input class="mono" id="edBackTo" type="number" min="0" placeholder="无"></label>
+        <label class="field" style="flex:1">额外回跳次数<input class="mono" id="edBackN" type="number" min="1" max="64" placeholder="无"></label>
+        <label class="field" style="flex:1">break 入行<input class="mono" id="edBreak" type="number" min="0" placeholder="无"></label>
+      </div>
+    </div>
+
+    <div class="voicedetail">
+      <div class="row" style="justify-content:space-between">
+        <strong style="font-size:12.5px">声部 voices</strong>
+        <span class="mini">ch 在本行不可重复</span>
+      </div>
+      <div id="voiceEditor"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="addVoiceBtn" type="button">+ 添加声部</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="applyBtn" type="button">应用编辑并渲染</button>
+      <button class="ghost" id="resetRowBtn" type="button">还原本行</button>
+    </div>
+    <p class="hint">非法或超限编辑会被拒绝并指出位置，当前已生成版本保持不变。</p>
+  </section>
+
+  <!-- 中：逐 tick 检视 -->
+  <section class="panel">
+    <h2>逐 tick 调度检视</h2>
+    <div class="row">
+      <label class="field">跳转 tick
+        <input class="mono" id="tickJump" type="number" min="0" placeholder="0">
+      </label>
+      <button class="ghost" id="tickGoBtn" type="button">转到</button>
+      <button class="ghost" id="prevTickBtn" type="button">‹ 上一 tick</button>
+      <button class="ghost" id="nextTickBtn" type="button">下一 tick ›</button>
+    </div>
+
+    <dl class="kv" style="margin:12px 0">
+      <dt>绝对 tick</dt><dd id="tkAbs">–</dd>
+      <dt>编排位置/花样/行</dt><dd id="tkLoc">–</dd>
+      <dt>行内 tick</dt><dd id="tkRowTick">–</dd>
+      <dt>采样帧区间</dt><dd id="tkFrames">–</dd>
+      <dt>生效 bpm/speed</dt><dd id="tkBpm">–</dd>
+    </dl>
+    <div class="tick-jump" id="tkJump"></div>
+
+    <div class="mini" style="margin:10px 0 4px">调度后、首帧前的各声部状态（新音/重触发/无触发/未发声，相位与步长）</div>
+    <div class="events scroll tall" id="eventList"></div>
+
+    <h2 style="margin-top:16px">全部 tick 表</h2>
+    <div class="tablewrap scroll tall">
+      <table id="tickTable">
+        <thead><tr><th>tick</th><th>位置</th><th>花样</th><th>行</th><th class="num">帧起</th><th class="num">帧止</th><th>bpm</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 右：采样、区间试听、导出 -->
+  <section class="panel">
+    <h2>采样与区间</h2>
+    <canvas id="waveCanvas" width="600" height="180"></canvas>
+    <div class="rangeinputs" style="margin-top:10px">
+      <label class="field">区间起（帧）<input class="mono" id="rangeStart" type="number" min="0" value="0"></label>
+      <label class="field">区间止（帧，半开）<input class="mono" id="rangeEnd" type="number" min="0" value="0"></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="playRangeBtn" type="button">试听区间</button>
+      <button class="ghost" id="playFullBtn" type="button">试听全曲</button>
+      <button class="ghost" id="stopBtn" type="button">停止</button>
+    </div>
+    <p class="hint" id="rangeInfo"></p>
+
+    <h2 style="margin-top:18px">导出</h2>
+    <div class="row">
+      <button class="primary" id="exportWavBtn" type="button">导出区间 WAV</button>
+      <button class="ghost" id="exportFullWavBtn" type="button">导出全曲 WAV</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="exportLogBtn" type="button">导出区间调度日志</button>
+      <button class="ghost" id="exportFullLogBtn" type="button">导出全曲日志</button>
+    </div>
+    <p class="hint">WAV 为 48kHz PCM16 单声道；区间音频逐样本等于全曲截取，日志保留绝对 tick 与采样帧。</p>
+
+    <h2 style="margin-top:18px">原始 JSON</h2>
+    <div class="tablewrap scroll" style="max-height:160px">
+      <table id="sampleTable">
+        <thead><tr><th>#</th class="num">PCM 长度</th><th>loop [lo,hi)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+/*
+ * 采样格谱调度与 PCM 渲染引擎（无 DOM 依赖，可在浏览器与 Node 中运行）
+ *
+ * 语义严格按包内 format.txt 实现：
+ *  - 每个 tick 时长 120000/bpm 个输出帧，精确起点/终点用 BigInt 分数累计，各自向下取整
+ *  - 回跳计数按「编排位置 + 命令所在行」独立保存，回跳优先于 break
+ *  - 滑音记忆按声部保存，换音不清零；零 slide 取记忆值
+ *  - 同 tick 顺序：延迟触发新音 -> 重触发 -> 滑音
+ *  - Q16 相位线性插值；循环点在 hi-1 -> lo 之间插值，越界按循环长度取余
+ *  - 各声部精确累加后只做一次最近整数舍入（半格远离零）与一次限幅
+ */
+(function (global) {
+  'use strict';
+
+  const SR = 48000;
+  const Q = 65536;
+  const Q_BI = 65536n;
+  const P_BI = 120000n; // 每个 tick 的「帧 * bpm」分子：tick 时长 = 120000/bpm 个输出帧（约定原文）
+  const MAX_TICKS = 20000;
+  const MAX_FRAMES = 8640000; // 180 秒 * 48000
+  const STEP_MIN = 1;
+  const STEP_MAX = 1048576;
+
+  const LIMITS = {
+    channels: 32,
+    samples: 32,
+    pcm: 48000,
+    patterns: 256,
+    rows: 64,
+    order: 512,
+    backExtra: 64,
+    retrig: 32,
+    speed: 32,
+    bpmMin: 32,
+    bpmMax: 384,
+  };
+
+  class TrackerError extends Error {
+    constructor(message, extra) {
+      super(message);
+      this.name = 'TrackerError';
+      Object.assign(this, extra || {});
+    }
+  }
+
+  function isInt(v) {
+    return typeof v === 'number' && Number.isInteger(v);
+  }
+
+  function clampStep(v) {
+    return v < STEP_MIN ? STEP_MIN : v > STEP_MAX ? STEP_MAX : v;
+  }
+
+  function bgcd(a, b) {
+    if (a < 0n) a = -a;
+    if (b < 0n) b = -b;
+    while (b) {
+      const t = a % b;
+      a = b;
+      b = t;
+    }
+    return a;
+  }
+
+  /* ---------------- 静态校验：收集全部非法点，路径精确到字段 ---------------- */
+
+  function validateSong(song) {
+    const e = [];
+    const push = (path, message) => e.push({ path, message });
+
+    if (!song || typeof song !== 'object' || Array.isArray(song)) {
+      push('$', '根必须是 JSON 对象');
+      return e;
+    }
+    if (!isInt(song.channels) || song.channels < 1 || song.channels > LIMITS.channels)
+      push('channels', '必须是 1..32 的整数');
+    if (!isInt(song.bpm) || song.bpm < LIMITS.bpmMin || song.bpm > LIMITS.bpmMax)
+      push('bpm', '必须是 32..384 的整数');
+    if (!isInt(song.speed) || song.speed < 1 || song.speed > LIMITS.speed)
+      push('speed', '必须是 1..32 的整数');
+
+    if (!Array.isArray(song.samples)) {
+      push('samples', '必须是数组');
+    } else {
+      if (song.samples.length > LIMITS.samples) push('samples', '至多 32 项');
+      song.samples.forEach((smp, i) => {
+        const p = `samples[${i}]`;
+        if (!smp || typeof smp !== 'object' || Array.isArray(smp)) {
+          push(p, '必须是对象');
+          return;
+        }
+        if (!Array.isArray(smp.pcm) || smp.pcm.length < 1 || smp.pcm.length > LIMITS.pcm) {
+          push(`${p}.pcm`, '必须是长度 1..48000 的数组');
+        } else {
+          smp.pcm.forEach((v, j) => {
+            if (!isInt(v) || v < -32768 || v > 32767)
+              push(`${p}.pcm[${j}]`, '必须是 -32768..32767 的有符号 16 位整数');
+          });
+        }
+        if (smp.loop !== null && smp.loop !== undefined) {
+          if (
+            !Array.isArray(smp.loop) ||
+            smp.loop.length !== 2 ||
+            !isInt(smp.loop[0]) ||
+            !isInt(smp.loop[1])
+          ) {
+            push(`${p}.loop`, '必须是 null 或 [lo,hi]');
+          } else {
+            const n = Array.isArray(smp.pcm) ? smp.pcm.length : 0;
+            const [lo, hi] = smp.loop;
+            if (!(lo >= 0 && hi <= n && lo < hi))
+              push(`${p}.loop`, `必须是 pcm 内的半开区间（0 <= lo < hi <= ${n}）`);
+          }
+        }
+      });
+    }
+
+    if (!Array.isArray(song.patterns) || song.patterns.length < 1 || song.patterns.length > LIMITS.patterns) {
+      push('patterns', '必须是 1..256 张花样的数组');
+    } else {
+      song.patterns.forEach((pat, pi) => {
+        const p = `patterns[${pi}]`;
+        if (!Array.isArray(pat) || pat.length < 1 || pat.length > LIMITS.rows) {
+          push(p, '必须是 1..64 行的数组');
+          return;
+        }
+        pat.forEach((row, ri) => validateRow(song, row, pi, ri, push));
+      });
+    }
+
+    if (!Array.isArray(song.order) || song.order.length < 1 || song.order.length > LIMITS.order) {
+      push('order', '必须是 1..512 个花样下标');
+    } else if (Array.isArray(song.patterns)) {
+      song.order.forEach((v, i) => {
+        if (!isInt(v) || v < 0 || v >= song.patterns.length)
+          push(`order[${i}]`, `必须是 [0,${song.patterns.length}) 内的花样下标`);
+      });
+    }
+    return e;
+  }
+
+  function validateRow(song, row, pi, ri, push) {
+    const p = `patterns[${pi}][${ri}]`;
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      push(p, '行必须是对象');
+      return;
+    }
+    if (row.bpm !== undefined && (!isInt(row.bpm) || row.bpm < LIMITS.bpmMin || row.bpm > LIMITS.bpmMax))
+      push(`${p}.bpm`, '必须是 32..384 的整数');
+    if (row.speed !== undefined && (!isInt(row.speed) || row.speed < 1 || row.speed > LIMITS.speed))
+      push(`${p}.speed`, '必须是 1..32 的整数');
+
+    if (row.back !== undefined) {
+      const b = row.back;
+      if (
+        !Array.isArray(b) ||
+        b.length !== 2 ||
+        !isInt(b[0]) ||
+        !isInt(b[1]) ||
+        b[0] < 0 ||
+        b[0] >= ri ||
+        b[1] < 1 ||
+        b[1] > LIMITS.backExtra
+      ) {
+        push(`${p}.back`, `必须是 [目标行, 次数]，目标行须早于当前行（< ${ri}），次数 1..64`);
+      }
+    }
+    if (row.break !== undefined) {
+      // 越界与否取决于运行时下一编排位置的花样，这里只查类型；实际越界在渲染时报告
+      if (!isInt(row.break) || row.break < 0) {
+        push(`${p}.break`, '必须是非负行下标');
+      }
+    }
+
+    if (row.voices !== undefined) {
+      if (!Array.isArray(row.voices)) {
+        push(`${p}.voices`, '必须是列表');
+      } else {
+        const seen = new Set();
+        row.voices.forEach((vc, vi) => {
+          const vp = `${p}.voices[${vi}]`;
+          if (!vc || typeof vc !== 'object' || Array.isArray(vc)) {
+            push(vp, '必须是对象');
+            return;
+          }
+          if (!isInt(vc.ch) || vc.ch < 0 || !(isInt(song.channels) && vc.ch < song.channels))
+            push(`${vp}.ch`, `必须是 [0,${song.channels}) 内且不重复的声道号`);
+          else if (seen.has(vc.ch)) push(`${vp}.ch`, `声道 ${vc.ch} 在本行重复`);
+          else seen.add(vc.ch);
+
+          if (vc.note !== undefined) {
+            if (
+              !Array.isArray(vc.note) ||
+              vc.note.length !== 2 ||
+              !isInt(vc.note[0]) ||
+              !isInt(vc.note[1]) ||
+              !(Array.isArray(song.samples) && vc.note[0] >= 0 && vc.note[0] < song.samples.length)
+            ) {
+              push(`${vp}.note`, '必须是 [有效采样下标, 步长]');
+            } else if (vc.note[1] < STEP_MIN || vc.note[1] > STEP_MAX) {
+              push(`${vp}.note[1]`, '步长必须在 1..1048576（1/65536 源采样单位）');
+            }
+          } else if (vc.delay !== undefined) {
+            push(`${vp}.delay`, '只有带 note 的声部才可设置 delay');
+          }
+          if (vc.delay !== undefined && (!isInt(vc.delay) || vc.delay < 0))
+            push(`${vp}.delay`, '必须是非负整数，且运行时小于实际行速');
+          if (vc.retrig !== undefined && (!isInt(vc.retrig) || vc.retrig < 1 || vc.retrig > LIMITS.retrig))
+            push(`${vp}.retrig`, '必须是 1..32 的整数');
+          if (vc.slide !== undefined && (!isInt(vc.slide) || Math.abs(vc.slide) > STEP_MAX))
+            push(`${vp}.slide`, '必须是绝对值不超过 1048576 的整数');
+        });
+      }
+    }
+  }
+
+  /* ---------------- 精确混音：dyadic 走 Float64（位精确），循环边界走有理分数 ---------------- */
+
+  class Mixer {
+    constructor() {
+      this.dyadic = new Float64Array(MAX_FRAMES + 1);
+      this.exact = new Map(); // 含非 2 幂分母项的帧 -> 精确分数
+    }
+
+    addQ(frame, num) {
+      const ex = this.exact.get(frame);
+      if (ex) this.merge(frame, BigInt(num), Q_BI);
+      else this.dyadic[frame] += num / Q;
+    }
+
+    addL(frame, num, den) {
+      let ex = this.exact.get(frame);
+      if (!ex) {
+        // 该帧此前只有 dyadic 项，其 double 值位精确，无损迁移为 num/Q
+        ex = { n: BigInt(Math.round(this.dyadic[frame] * Q)), d: Q_BI };
+        this.dyadic[frame] = 0;
+        this.exact.set(frame, ex);
+      }
+      this.merge(frame, BigInt(num), BigInt(den));
+    }
+
+    merge(frame, a, b) {
+      const ex = this.exact.get(frame);
+      const g = bgcd(ex.d, b);
+      const bScale = b / g; // 旧分子乘 b/g
+      const aScale = ex.d / g; // 新分子 a 乘 ex.d/g
+      const newD = ex.d * bScale; // 最小公分母 LCM = ex.d * b/g
+      const newN = ex.n * bScale + a * aScale;
+      ex.n = newN;
+      ex.d = newD;
+      const g2 = bgcd(ex.n, ex.d);
+      if (g2 > 1n) {
+        ex.n /= g2;
+        ex.d /= g2;
+      }
+    }
+
+    finish(total) {
+      const out = new Int16Array(total);
+      for (let f = 0; f < total; f++) {
+        let v;
+        const ex = this.exact.get(f);
+        if (ex) {
+          const neg = ex.n < 0n;
+          const a = neg ? -ex.n : ex.n;
+          let q = a / ex.d;
+          const r = a % ex.d;
+          if (2n * r >= ex.d) q += 1n; // 半格远离零
+          v = Number(neg ? -q : q);
+        } else {
+          const x = this.dyadic[f]; // 纯 dyadic 求和，double 位精确
+          v = Math.floor(Math.abs(x) + 0.5) * (x < 0 ? -1 : 1);
+        }
+        out[f] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+      }
+      return out;
+    }
+  }
+
+  /* ---------------- 单声部渲染：相位 Q16，帧内线性插值 ---------------- */
+
+  function renderVoice(v, f0, f1, samples, mix) {
+    const smp = samples[v.sample];
+    const pcm = smp.pcm;
+    const N = pcm.length;
+
+    if (v.loop) {
+      const lo = v.loop[0];
+      const hi = v.loop[1];
+      const L = hi - lo;
+      const loopSpan = L * Q;
+      const boundary = (hi - 1) * Q;
+      for (let f = f0; f < f1; f++) {
+        // 先处理可能一次越过若干整圈的相位
+        let ph = v.phase;
+        if (ph >= hi * Q) ph = lo * Q + ((ph - hi * Q) % loopSpan);
+        if (ph >= boundary) {
+          // 循环最后一个采样与 lo 点插值：值 = a + (b-a)*frac/(L*Q)，分母 L*Q
+          const frac = ph - boundary;
+          mix.addL(
+            f,
+            pcm[hi - 1] * loopSpan + (pcm[lo] - pcm[hi - 1]) * frac,
+            loopSpan
+          );
+        } else {
+          const i = ph >> 16;
+          const frac = ph & (Q - 1);
+          mix.addQ(f, pcm[i] * Q + (pcm[i + 1] - pcm[i]) * frac);
+        }
+        v.phase = ph + v.step;
+      }
+      return;
+    }
+
+    // 非循环：最后一点与零插值，越尾关闭
+    let f = f0;
+    while (f < f1 && v.active) {
+      const ph = v.phase;
+      if (ph < (N - 1) * Q) {
+        const i = ph >> 16;
+        const frac = ph & (Q - 1);
+        mix.addQ(f, pcm[i] * Q + (pcm[i + 1] - pcm[i]) * frac);
+        v.phase = ph + v.step;
+        f++;
+      } else if (ph < N * Q) {
+        const frac = ph - (N - 1) * Q;
+        mix.addQ(f, pcm[N - 1] * (Q - frac)); // 另一端是零
+        v.phase = ph + v.step;
+        f++;
+        if (v.phase >= N * Q) {
+          v.active = false;
+          v.phase = 0;
+        }
+      } else {
+        v.active = false;
+        v.phase = 0;
+      }
+    }
+  }
+
+  /* ---------------- 主调度 ---------------- */
+
+  function renderSong(song) {
+    const errors = validateSong(song);
+    if (errors.length) {
+      throw new TrackerError('格谱存在非法编辑', { kind: 'validation', errors });
+    }
+
+    const { patterns, order, samples, channels } = song;
+    const voices = [];
+    for (let c = 0; c < channels; c++) {
+      voices.push({ active: false, sample: 0, phase: 0, step: 0, loop: null, slideMem: 0 });
+    }
+
+    const mix = new Mixer();
+    const log = [];
+    const backMaps = order.map(() => new Map()); // 计数按编排位置独立
+
+    let posIdx = 0;
+    let rowIdx = 0;
+    let bpm = song.bpm;
+    let speed = song.speed;
+    let tickIndex = 0;
+    let accN = 0n; // 精确累计时间（帧），分数 accN/accD
+    let accD = 1n;
+
+    const runtimeFail = (message, extra) => {
+      throw new TrackerError(message, Object.assign({
+        kind: 'runtime',
+        tick: tickIndex,
+        frame: Number(accN / accD),
+        pos: posIdx,
+        pattern: order[posIdx],
+        row: rowIdx,
+      }, extra || {}));
+    };
+
+    outer:
+    while (true) {
+      const patternIdx = order[posIdx];
+      const pattern = patterns[patternIdx];
+      const row = pattern[rowIdx];
+
+      if (row.bpm !== undefined) bpm = row.bpm;
+      if (row.speed !== undefined) speed = row.speed;
+
+      // 行开始：写入滑音记忆（零取记忆值，省略则本行无滑音）
+      const rowVoices = Array.isArray(row.voices) ? row.voices : [];
+      for (const entry of rowVoices) {
+        if (entry.slide !== undefined) {
+          const v = voices[entry.ch];
+          if (entry.slide !== 0) v.slideMem = entry.slide;
+        }
+        // delay 必须小于实际行速（speed 已在本行开头生效）
+        if (entry.note && entry.delay !== undefined && entry.delay >= speed) {
+          runtimeFail(`delay=${entry.delay} 不小于实际行速 ${speed}`, {
+            limit: 'illegal-edit', field: 'delay',
+          });
+        }
+      }
+
+      let jump = null;
+      for (let t = 0; t < speed; t++) {
+        if (tickIndex >= MAX_TICKS) {
+          runtimeFail(`实际执行超过 ${MAX_TICKS} tick 上限`, { limit: 'ticks' });
+        }
+
+        const events = new Array(channels);
+        for (let c = 0; c < channels; c++) events[c] = { ch: c, event: 'off' };
+        const triggered = new Set();
+
+        // 1) 指定延迟处触发新音，相位置 0，替换前音但保留滑音记忆
+        for (const entry of rowVoices) {
+          const delay = entry.delay || 0;
+          if (entry.note && delay === t) {
+            const v = voices[entry.ch];
+            v.active = true;
+            v.sample = entry.note[0];
+            v.phase = 0;
+            v.step = entry.note[1];
+            v.loop = samples[v.sample].loop;
+            events[entry.ch].event = 'note';
+            triggered.add(entry.ch);
+          }
+        }
+
+        // 2) 未触发新音的声部按规则重触发（仍在响才重置相位）
+        for (const entry of rowVoices) {
+          if (triggered.has(entry.ch)) continue;
+          if (entry.retrig !== undefined && t >= 1 && t % entry.retrig === 0) {
+            const v = voices[entry.ch];
+            if (v.active) {
+              v.phase = 0;
+              events[entry.ch].event = 'retrig';
+            }
+          }
+        }
+
+        // 3) 编号大于零的 tick：仍在响且本行有 slide 的声部加滑音量，步长夹取
+        if (t > 0) {
+          for (const entry of rowVoices) {
+            if (entry.slide !== undefined) {
+              const v = voices[entry.ch];
+              if (v.active) v.step = clampStep(v.step + v.slideMem);
+            }
+          }
+        }
+
+        // 调度后、首帧前的声部快照
+        for (let c = 0; c < channels; c++) {
+          const v = voices[c];
+          const ev = events[c];
+          if (v.active && ev.event === 'off') ev.event = 'none';
+          ev.sample = v.active ? v.sample : null;
+          ev.phase = v.phase;
+          ev.step = v.active ? v.step : 0;
+        }
+
+        // tick 的半开采样区间：精确累计起点/终点分别向下取整
+        const startFrame = Number(accN / accD);
+        const bpmB = BigInt(bpm);
+        const n2 = accN * bpmB + P_BI * accD;
+        const d2 = accD * bpmB;
+        const g = bgcd(n2, d2);
+        accN = n2 / g;
+        accD = d2 / g;
+        const endFrame = Number(accN / accD);
+        if (endFrame > MAX_FRAMES) {
+          runtimeFail(`向下取整后总长 ${endFrame} 帧超过 ${MAX_FRAMES}（180 秒）上限`, {
+            limit: 'frames',
+          });
+        }
+
+        // 渲染本 tick 各声部（相位随渲染推进）
+        for (let c = 0; c < channels; c++) {
+          if (voices[c].active) renderVoice(voices[c], startFrame, endFrame, samples, mix);
+        }
+
+        log.push({
+          tick: tickIndex,
+          pos: posIdx,
+          pattern: patternIdx,
+          row: rowIdx,
+          rowTick: t,
+          startFrame,
+          endFrame,
+          bpm,
+          speed,
+          events,
+        });
+        tickIndex++;
+      }
+
+      // 行末跳转：回跳优先，其次 break，否则顺序前进
+      if (row.back) {
+        const [target, extra] = row.back;
+        const key = rowIdx;
+        let remaining = backMaps[posIdx].has(key)
+          ? backMaps[posIdx].get(key)
+          : extra + 1; // 首次遇到：额外次数 + 当前这次
+        if (remaining > 0) {
+          remaining -= 1;
+          backMaps[posIdx].set(key, remaining);
+          jump = { type: 'back', toPos: posIdx, toRow: target, remaining };
+          rowIdx = target;
+        }
+      }
+
+      if (!jump && row.break !== undefined) {
+        if (posIdx + 1 < order.length) {
+          const nextPattern = patterns[order[posIdx + 1]];
+          if (row.break >= nextPattern.length) {
+            runtimeFail(`break=${row.break} 越界：下一编排位置的花样只有 ${nextPattern.length} 行`, {
+              limit: 'illegal-edit', field: 'break',
+            });
+          }
+          jump = { type: 'break', toPos: posIdx + 1, toRow: row.break, remaining: null };
+          posIdx += 1;
+          rowIdx = row.break;
+        } else {
+          jump = { type: 'end', toPos: null, toRow: null, remaining: null };
+        }
+      }
+
+      if (!jump) {
+        if (rowIdx + 1 < pattern.length) {
+          jump = { type: 'next-row', toPos: posIdx, toRow: rowIdx + 1, remaining: null };
+          rowIdx += 1;
+        } else if (posIdx + 1 < order.length) {
+          jump = { type: 'pattern-end', toPos: posIdx + 1, toRow: 0, remaining: null };
+          posIdx += 1;
+          rowIdx = 0;
+        } else {
+          jump = { type: 'end', toPos: null, toRow: null, remaining: null };
+        }
+      }
+
+      log[log.length - 1].jump = jump;
+      if (jump.type === 'end') break outer;
+    }
+
+    const totalFrames = Number(accN / accD);
+    const pcm = mix.finish(totalFrames);
+
+    return {
+      pcm,
+      log,
+      totalFrames,
+      totalTicks: tickIndex,
+      sampleRate: SR,
+      meta: {
+        channels: song.channels,
+        bpm: song.bpm,
+        speed: song.speed,
+        samples: song.samples.length,
+        patterns: song.patterns.length,
+        order: song.order.length,
+      },
+    };
+  }
+
+  /* ---------------- 调度日志文本（支持区间过滤，保留绝对 tick/帧） ---------------- */
+
+  function formatLog(result, start, end) {
+    const a = Math.max(0, start | 0);
+    const b = Math.min(result.totalFrames, end | 0);
+    const lines = [];
+    lines.push('# 采样格谱调度日志');
+    lines.push(`# 声道=${result.meta.channels} 初始BPM=${result.meta.bpm} 初始speed=${result.meta.speed} ` +
+      `采样=${result.meta.samples} 花样=${result.meta.patterns} 编排位置=${result.meta.order}`);
+    lines.push(`# 总 tick=${result.totalTicks} 总帧=${result.totalFrames} 采样率=${result.sampleRate}`);
+    lines.push(`# 所选半开区间=[${a},${b}) 时长=${((b - a) / SR).toFixed(6)}s`);
+    lines.push('');
+    for (const tk of result.log) {
+      if (tk.endFrame <= a || tk.startFrame >= b) continue;
+      lines.push(
+        `tick=${tk.tick} 位置=${tk.pos} 花样=${tk.pattern} 行=${tk.row} 行内tick=${tk.rowTick} ` +
+        `帧=[${tk.startFrame},${tk.endFrame}) bpm=${tk.bpm} speed=${tk.speed}`
+      );
+      for (const ev of tk.events) {
+        if (ev.event === 'off') {
+          lines.push(`  ch${ev.ch}: 未发声`);
+        } else {
+          const tag = ev.event === 'note' ? '新音' : ev.event === 'retrig' ? '重触发' : '无触发';
+          lines.push(
+            `  ch${ev.ch}: ${tag} 采样=${ev.sample} 相位=${ev.phase}(${(ev.phase / Q).toFixed(4)}) ` +
+            `步长=${ev.step}(${(ev.step / Q).toFixed(4)})`
+          );
+        }
+      }
+      if (tk.jump) {
+        const j = tk.jump;
+        if (j.type === 'end') {
+          lines.push('  行末: 结束');
+        } else {
+          const rem = j.type === 'back' ? ` 剩余回跳=${j.remaining}` : '';
+          lines.push(`  行末: ${j.type} -> 位置=${j.toPos} 行=${j.toRow}${rem}`);
+        }
+      }
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  const api = {
+    SR,
+    Q,
+    MAX_TICKS,
+    MAX_FRAMES,
+    LIMITS,
+    TrackerError,
+    validateSong,
+    renderSong,
+    formatLog,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else global.TrackerEngine = api;
+})(typeof self !== 'undefined' ? self : globalThis);
+
+</script>
+<script>
+/* WAV 构建与 zip 读取（无第三方依赖，浏览器/Node 通用） */
+(function (global) {
+  'use strict';
+
+  /* 48kHz PCM16 单声道 WAV，输入为 Int16Array */
+  function buildWav(pcm, sampleRate) {
+    const dataBytes = pcm.length * 2;
+    const buf = new ArrayBuffer(44 + dataBytes);
+    const dv = new DataView(buf);
+    const u8 = new Uint8Array(buf);
+    const writeStr = (off, s) => {
+      for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i));
+    };
+    writeStr(0, 'RIFF');
+    dv.setUint32(4, 36 + dataBytes, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true); // PCM
+    dv.setUint16(22, 1, true); // 单声道
+    dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate * 2, true); // 字节率
+    dv.setUint16(32, 2, true); // 块对齐
+    dv.setUint16(34, 16, true); // 位深
+    writeStr(36, 'data');
+    dv.setUint32(40, dataBytes, true);
+    const dst = new Int16Array(buf, 44, pcm.length);
+    dst.set(pcm);
+    return u8;
+  }
+
+  /*
+   * 极简 zip 读取：扫描本地文件头，支持 STORE(0) 与 deflate(8)。
+   * 仅处理数据描述符未启用或可跳过的常规包；返回 [{name, bytes}]。
+   */
+  async function readZip(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const files = [];
+    let p = 0;
+
+    const u16 = (o) => dv.getUint16(o, true);
+    const u32 = (o) => dv.getUint32(o, true);
+
+    while (p + 30 <= u8.length && u32(p) === 0x04034b50) {
+      const flags = u16(p + 6);
+      const method = u16(p + 8);
+      const compSize = u32(p + 18);
+      const nameLen = u16(p + 26);
+      const extraLen = u16(p + 28);
+      const nameStart = p + 30;
+      const nameBytes = u8.subarray(nameStart, nameStart + nameLen);
+      const name = new TextDecoder('utf-8').decode(nameBytes);
+      const dataStart = nameStart + nameLen + extraLen;
+      let size = compSize;
+      if (size === 0 && (flags & 0x08)) {
+        // 数据描述符：按方法扫描下一个签名（deflate 块不与签名冲突，按 4 字节对齐找）
+        let q = dataStart;
+        while (q + 4 <= u8.length && u32(q) !== 0x08074b50 && u32(q) !== 0x02014b50) q++;
+        size = q - dataStart;
+      }
+      const raw = u8.subarray(dataStart, dataStart + size);
+      let bytes;
+      if (method === 0) {
+        bytes = new Uint8Array(raw);
+      } else if (method === 8) {
+        bytes = await inflate(raw);
+      } else {
+        throw new Error(`zip 内 ${name} 使用了不支持的压缩方式 ${method}`);
+      }
+      if (!name.endsWith('/')) files.push({ name, bytes });
+
+      p = dataStart + size;
+      if (flags & 0x08) {
+        // 跳过数据描述符（可选签名 + 12/16 字节）
+        if (u32(p) === 0x08074b50) p += 16;
+        else p += 12;
+      }
+    }
+    if (!files.length) throw new Error('zip 中未找到任何文件');
+    return files;
+  }
+
+  async function inflate(raw) {
+    if (typeof DecompressionStream !== 'undefined') {
+      const ds = new DecompressionStream('deflate-raw');
+      const stream = new Blob([raw]).stream().pipeThrough(ds);
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+    throw new Error('当前环境不支持 DecompressionStream，无法解压 deflate 条目');
+  }
+
+  const api = { buildWav, readZip };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else global.TrackerIO = api;
+})(typeof self !== 'undefined' ? self : globalThis);
+
+</script>
+<script>
+/* 采样格谱校音台 —— 页面逻辑（无第三方依赖，依赖 TrackerEngine / TrackerIO 全局） */
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const Q = TrackerEngine.Q;
+  const SR = TrackerEngine.SR;
+
+  // 内置示例（与包内 rehearsal.json 同构的合法短曲，保证首帧即处于可用工作态）
+  const DEMO = {
+    channels: 2, bpm: 125, speed: 4,
+    samples: [
+      { pcm: [0, 327, 653, 975, 1294, 1607, 1913, 2211, 2500, 2778, 3044, 3297, 3536, 3759, 3967, 4157,
+        4330, 4484, 4619, 4735, 4830, 4904, 4957, 4989, 5000, 4989, 4957, 4904, 4830, 4735, 4619, 4484,
+        4330, 4157, 3967, 3759, 3536, 3297, 3044, 2778, 2500, 2211, 1913, 1607, 1294, 975, 653, 327, 0,
+        -327, -653, -975, -1294, -1607, -1913, -2211, -2500, -2778, -3044, -3297, -3536, -3759, -3967,
+        -4157, -4330, -4484, -4619, -4735, -4830, -4904, -4957, -4989, -5000, -4989, -4957, -4904, -4830,
+        -4735, -4619, -4484, -4330, -4157, -3967, -3759, -3536, -3297, -3044, -2778, -2500, -2211, -1913,
+        -1607, -1294, -975, -653, -327], loop: [0, 96] },
+      { pcm: [0, 1130, 2129, 2892, 3338, 3421, 3136, 2516, 1630, 577, -531, -1572, -2435, -3030, -3294,
+        -3202, -2767, -2037, -1095, -43, 1005, 1936, 2651, 3075, 3165, 2914, 2352, 1541, 573, -449, -1414,
+        -2218, -2777, -3032, -2959, -2569, -1906, -1045, -79, 887, 1748, 2414, 2814, 2908, 2689, 2182, 1446,
+        562, -374, -1262, -2005, -2525, -2769, -2714, -2367, -1769, -988, -108, 775, 1566, 2180, 2554, 2650,
+        2460, 2008, 1345, 544, -306, -1115, -1796, -2276, -2507, -2466, -2161, -1627, -924, -130, 670, 1389,
+        1950, 2296, 2392, 2229, 1829, 1238, 520, -245, -975, -1592, -2030, -2246, -2217, -1952, -1479, -854,
+        -145, 571, 1217, 1724, 2040, 2133, 1996, 1646, 1124, 489, -191, -841, -1392, -1787, -1985, -1967,
+        -1738, -1326, -778, -153, 479, 1050, 1501, 1785, 1873, 1759, 1458, 1005, 451, -143, -713, -1198,
+        -1309, -1465, -1461, -1301, -1004, -606, -150, 314, 734, 1068, 1281, 1353, 1279, 1069, 749, 355,
+        -68, -475, -823, -1075, -1206, -1206, -1077, -835, -510, -138, 241, 585, 858, 1033, 1093, 1035,
+        868, 612, 297, -41, -366, -643, -844, -949, -950, -850, -662, -408, -119, 175, 441, 652, 786,
+        833, 789, 662, 469, 233, -20, -262, -468, -616, -693, -693, -620, -483, -300, -93, 116, 303, 450,
+        542, 573, 541, 453, 321, 162, -7, -166, -298, -392, -439, -436, -387, -299, -186, -60, 63, 171,
+        253, 301, 313, 291, 240, 168, 84, 0, -75, -134, -171, -185, -177, -151, -111, -66, -21, 17, 45,
+        60, 62, 54, 40, 23, 9], loop: null },
+    ],
+    patterns: [
+      [{ voices: [{ ch: 0, note: [0, 65536] }, { ch: 1, note: [1, 65536] }] },
+      { bpm: 137, voices: [{ ch: 1, note: [1, 65536], delay: 1 }] }],
+      [{ voices: [{ ch: 0, note: [0, 98304] }] }, { voices: [{ ch: 1, note: [1, 65536] }] }],
+    ],
+    order: [0, 1, 0],
+  };
+
+  const state = {
+    song: null,          // 当前工作副本（可编辑）
+    result: null,        // 最近一次成功渲染结果
+    undoStack: [],       // 编辑前的 song 深拷贝
+    selected: { pi: 0, ri: 0, tick: 0 },
+    audioCtx: null,
+    source: null,
+  };
+
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+
+  function alert(kind, html) {
+    const host = $('alertHost');
+    const div = document.createElement('div');
+    div.className = `alert ${kind}`;
+    div.innerHTML = html;
+    host.prepend(div);
+    clearTimeout(alert._t);
+    alert._t = setTimeout(() => div.remove(), kind === 'bad' ? 9000 : 5000);
+  }
+  const clearAlerts = () => { $('alertHost').innerHTML = ''; };
+
+  /* ---------------- 渲染与错误呈现（保留已生成版本） ---------------- */
+
+  function render(showOk) {
+    let res;
+    try {
+      res = TrackerEngine.renderSong(state.song);
+    } catch (e) {
+      if (e.kind === 'validation') {
+        const items = e.errors.map((x) => `<li><span class="path">${x.path}</span> — ${x.message}</li>`).join('');
+        alert('bad', `格谱存在 ${e.errors.length} 处非法编辑，已拒绝：<ul class="errlist">${items}</ul>`);
+      } else {
+        const loc = `位置 ${e.pos}（花样 ${e.pattern}）行 ${e.row}、tick ${e.tick}、帧 ${e.frame}`;
+        alert('bad', `运行时超限/非法：${e.message}<br><span class="mini">定位：${loc}</span>`);
+      }
+      return false;
+    }
+    state.result = res;
+    $('statusPill').textContent = `已渲染 ${res.totalTicks} tick / ${res.totalFrames} 帧`;
+    $('statusPill').className = 'pill good';
+    if (showOk) alert('good', `渲染成功：${res.totalTicks} tick，${(res.totalFrames / SR).toFixed(3)} 秒`);
+    refreshAll();
+    return true;
+  }
+
+  /* ---------------- 编辑与撤销 ---------------- */
+
+  function pushUndo() {
+    state.undoStack.push(clone(state.song));
+    if (state.undoStack.length > 100) state.undoStack.shift();
+    $('undoBtn').disabled = false;
+  }
+
+  function currentRow() {
+    const { pi, ri } = state.selected;
+    return state.song.patterns[pi][ri];
+  }
+
+  function readEditorIntoRow() {
+    const row = currentRow();
+    const numOrUndef = (v) => (v === '' || v == null ? undefined : Number(v));
+    const bpm = numOrUndef($('edBpm').value);
+    const speed = numOrUndef($('edSpeed').value);
+    if (bpm === undefined) delete row.bpm; else row.bpm = bpm;
+    if (speed === undefined) delete row.speed; else row.speed = speed;
+
+    const backTo = numOrUndef($('edBackTo').value);
+    const backN = numOrUndef($('edBackN').value);
+    if (backTo === undefined || backN === undefined) delete row.back;
+    else row.back = [backTo, backN];
+
+    const brk = numOrUndef($('edBreak').value);
+    if (brk === undefined) delete row.break; else row.break = brk;
+
+    const voices = [];
+    $('voiceEditor').querySelectorAll('[data-vvoice]').forEach((node) => {
+      const get = (name) => node.querySelector(`[data-f="${name}"]`).value;
+      const ch = Number(get('ch'));
+      const v = { ch };
+      const sIdx = get('sample');
+      const step = get('step');
+      if (sIdx !== '' && step !== '') v.note = [Number(sIdx), Number(step)];
+      if (get('delay') !== '') v.delay = Number(get('delay'));
+      if (get('retrig') !== '') v.retrig = Number(get('retrig'));
+      if (get('slide') !== '') v.slide = Number(get('slide'));
+      voices.push(v);
+    });
+    if (voices.length) row.voices = voices; else delete row.voices;
+  }
+
+  function applyEdit() {
+    pushUndo();
+    readEditorIntoRow();
+    const ok = render(true);
+    if (!ok) {
+      // 保留当前已生成版本：工作副本保留编辑，但 result 不变；刷新编辑器显示工作副本
+      refreshRowEditor();
+    }
+  }
+
+  function undo() {
+    if (!state.undoStack.length) return;
+    state.song = state.undoStack.pop();
+    $('undoBtn').disabled = state.undoStack.length === 0;
+    render(false);
+    alert('good', '已撤销上一次编辑');
+  }
+
+  /* ---------------- 编辑器填充 ---------------- */
+
+  function buildVoiceRow(v, idx) {
+    const nSmp = state.song.samples.length;
+    const opt = (i) => `<option value="${i}" ${v.note && v.note[0] === i ? 'selected' : ''}>采样 ${i}</option>`;
+    const node = document.createElement('div');
+    node.className = 'vrow';
+    node.setAttribute('data-vvoice', idx);
+    node.innerHTML = `
+      <label class="field">ch<input class="mono" data-f="ch" type="number" min="0" max="${state.song.channels - 1}" value="${v.ch}" style="width:64px"></label>
+      <label class="field">采样
+        <select data-f="sample" style="min-width:84px">
+          <option value="">—</option>${Array.from({ length: nSmp }, (_, i) => opt(i)).join('')}
+        </select>
+      </label>
+      <label class="field">步长(1/65536)<input class="mono" data-f="step" type="number" min="1" max="1048576" value="${v.note ? v.note[1] : ''}" style="width:110px"></label>
+      <label class="field">delay<input class="mono" data-f="delay" type="number" min="0" value="${v.delay !== undefined ? v.delay : ''}" style="width:60px"></label>
+      <label class="field">retrig<input class="mono" data-f="retrig" type="number" min="1" max="32" value="${v.retrig !== undefined ? v.retrig : ''}" style="width:64px"></label>
+      <label class="field">slide<input class="mono" data-f="slide" type="number" min="-1048576" max="1048576" value="${v.slide !== undefined ? v.slide : ''}" style="width:96px"></label>
+      <button class="ghost danger" data-del type="button">删</button>`;
+    node.querySelector('[data-del]').addEventListener('click', () => node.remove());
+    return node;
+  }
+
+  function refreshRowEditor() {
+    const { pi, ri } = state.selected;
+    const row = state.song.patterns[pi][ri];
+    $('rowPath').textContent = `patterns[${pi}][${ri}]`;
+    $('edBpm').value = row.bpm !== undefined ? row.bpm : '';
+    $('edSpeed').value = row.speed !== undefined ? row.speed : '';
+    $('edBackTo').value = row.back ? row.back[0] : '';
+    $('edBackN').value = row.back ? row.back[1] : '';
+    $('edBreak').value = row.break !== undefined ? row.break : '';
+    const host = $('voiceEditor');
+    host.innerHTML = '';
+    (row.voices || []).forEach((v, i) => host.appendChild(buildVoiceRow(v, i)));
+  }
+
+  function refreshSelectors() {
+    const ps = $('patternSelect');
+    ps.innerHTML = state.song.patterns.map((_, i) => `<option value="${i}">花样 ${i}</option>`).join('');
+    ps.value = String(state.selected.pi);
+    const rs = $('rowSelect');
+    const nRows = state.song.patterns[state.selected.pi].length;
+    rs.innerHTML = Array.from({ length: nRows }, (_, i) => `<option value="${i}">行 ${i}</option>`).join('');
+    rs.value = String(state.selected.ri);
+  }
+
+  function refreshStats() {
+    $('stChannels').textContent = state.song.channels;
+    $('stBpm').textContent = state.song.bpm;
+    $('stSpeed').textContent = state.song.speed;
+    $('stOrder').textContent = state.song.order.length;
+    const tb = $('sampleTable').querySelector('tbody');
+    tb.innerHTML = state.song.samples.map((s, i) =>
+      `<tr><td>${i}</td><td class="num">${s.pcm.length}</td><td>${s.loop ? `[${s.loop[0]},${s.loop[1]})` : 'null'}</td></tr>`).join('');
+  }
+
+  /* ---------------- 逐 tick 检视 ---------------- */
+
+  function selectTick(t) {
+    const r = state.result;
+    if (!r) return;
+    state.selected.tick = Math.max(0, Math.min(r.totalTicks - 1, t | 0));
+    const tk = r.log[state.selected.tick];
+    $('tickJump').value = tk.tick;
+    $('tkAbs').textContent = tk.tick;
+    $('tkLoc').textContent = `${tk.pos} / 花样 ${tk.pattern} / 行 ${tk.row}`;
+    $('tkRowTick').textContent = `${tk.rowTick}（本行 speed ${tk.speed}）`;
+    $('tkFrames').textContent = `[${tk.startFrame}, ${tk.endFrame})  长 ${tk.endFrame - tk.startFrame} 帧`;
+    $('tkBpm').textContent = `${tk.bpm} / ${tk.speed}`;
+    $('tkJump').textContent = tk.jump
+      ? (tk.jump.type === 'end' ? '行末：结束'
+        : `行末跳转：${tk.jump.type} → 位置 ${tk.jump.toPos} 行 ${tk.jump.toRow}` +
+          (tk.jump.remaining !== null && tk.jump.remaining !== undefined ? `（剩余回跳 ${tk.jump.remaining}）` : ''))
+      : '';
+
+    const tag = { note: ['note', '新音'], retrig: ['retrig', '重触发'], none: ['none', '无触发'], off: ['off', '未发声'] };
+    $('eventList').innerHTML = tk.events.map((ev) => {
+      const [cls, label] = tag[ev.event];
+      if (ev.event === 'off') return `<div class="ev off"><span class="ch">ch${ev.ch}</span><span>${label}</span></div>`;
+      return `<div class="ev ${cls}"><span class="ch">ch${ev.ch}</span><span>${label}</span>
+        <span>采样${ev.sample}</span><span>相位 ${ev.phase} (${(ev.phase / Q).toFixed(4)})</span>
+        <span>步长 ${ev.step} (${(ev.step / Q).toFixed(4)})</span></div>`;
+    }).join('');
+
+    // 同步表格高亮
+    $('tickTable').querySelectorAll('tr').forEach((tr) => tr.classList.toggle('sel', Number(tr.dataset.tick) === tk.tick));
+    const sel = $('tickTable').querySelector('tr.sel');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+
+  function refreshTickTable() {
+    const r = state.result;
+    const tb = $('tickTable').querySelector('tbody');
+    tb.innerHTML = r.log.map((tk) =>
+      `<tr data-tick="${tk.tick}"><td>${tk.tick}</td><td>${tk.pos}</td><td>${tk.pattern}</td><td>${tk.row}</td>
+       <td class="num">${tk.startFrame}</td><td class="num">${tk.endFrame}</td><td>${tk.bpm}</td></tr>`).join('');
+    tb.querySelectorAll('tr').forEach((tr) => tr.addEventListener('click', () => selectTick(Number(tr.dataset.tick))));
+    selectTick(state.selected.tick);
+  }
+
+  /* ---------------- 波形与区间 ---------------- */
+
+  function drawWave() {
+    const cv = $('waveCanvas');
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    const r = state.result;
+    if (!r) return;
+    const pcm = r.pcm;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#4fd6c8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const step = Math.max(1, Math.floor(pcm.length / W));
+    for (let x = 0; x < W; x++) {
+      let mn = 32767, mx = -32768;
+      const base = x * step;
+      for (let i = 0; i < step && base + i < pcm.length; i++) {
+        const v = pcm[base + i];
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      const y1 = H / 2 - (mx / 32768) * (H / 2 - 4);
+      const y2 = H / 2 - (mn / 32768) * (H / 2 - 4);
+      ctx.moveTo(x + 0.5, y1);
+      ctx.lineTo(x + 0.5, y2);
+    }
+    ctx.stroke();
+    // 零轴
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line').trim() || '#333';
+    ctx.beginPath(); ctx.moveTo(0, H / 2 + .5); ctx.lineTo(W, H / 2 + .5); ctx.stroke();
+    // 区间高亮
+    const [a, b] = currentRange();
+    const x1 = (a / pcm.length) * W;
+    const x2 = (b / pcm.length) * W;
+    ctx.fillStyle = 'rgba(79,214,200,.16)';
+    ctx.fillRect(x1, 0, Math.max(1, x2 - x1), H);
+  }
+
+  function currentRange() {
+    const r = state.result;
+    let a = Number($('rangeStart').value) || 0;
+    let b = Number($('rangeEnd').value);
+    if (!Number.isFinite(b) || b <= 0) b = r.totalFrames;
+    a = Math.max(0, Math.min(r.totalFrames, a));
+    b = Math.max(a, Math.min(r.totalFrames, b));
+    return [a, b];
+  }
+
+  function updateRangeInfo() {
+    const [a, b] = currentRange();
+    const n = b - a;
+    $('rangeInfo').textContent = `区间 [${a},${b})：${n} 帧 = ${(n / SR).toFixed(4)} 秒；与全曲截取逐样本一致`;
+  }
+
+  /* ---------------- 试听 ---------------- */
+
+  function ensureCtx() {
+    if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+    return state.audioCtx;
+  }
+
+  function stopPlay() {
+    if (state.source) {
+      try { state.source.stop(); } catch (_) {}
+      state.source = null;
+    }
+  }
+
+  function playPcm(int16) {
+    stopPlay();
+    const ctx = ensureCtx();
+    const buf = ctx.createBuffer(1, int16.length, SR);
+    const f32 = buf.getChannelData(0);
+    for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32768;
+    const node = ctx.createBufferSource();
+    node.buffer = buf;
+    node.connect(ctx.destination);
+    node.onended = () => { if (state.source === node) state.source = null; };
+    node.start();
+    state.source = node;
+  }
+
+  /* ---------------- 导出（Blob 下载） ---------------- */
+
+  function download(bytes, name, mime) {
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function exportWav(full) {
+    const r = state.result;
+    const [a, b] = full ? [0, r.totalFrames] : currentRange();
+    const slice = r.pcm.subarray(a, b); // 同一缓冲切片，逐样本等于全曲截取
+    const wav = TrackerIO.buildWav(slice, SR);
+    download(wav, full ? 'tracker-full.wav' : `tracker-${a}-${b}.wav`, 'audio/wav');
+    alert('good', `已导出 ${full ? '全曲' : `区间 [${a},${b})`} WAV，${slice.length} 帧`);
+  }
+
+  function exportLog(full) {
+    const r = state.result;
+    const [a, b] = full ? [0, r.totalFrames] : currentRange();
+    const txt = TrackerEngine.formatLog(r, a, b);
+    download(new TextEncoder().encode(txt), full ? 'tracker-full-log.txt' : `tracker-log-${a}-${b}.txt`, 'text/plain');
+  }
+
+  /* ---------------- 总刷新 ---------------- */
+
+  function refreshAll() {
+    refreshStats();
+    refreshSelectors();
+    refreshRowEditor();
+    refreshTickTable();
+    $('rangeEnd').value = state.result.totalFrames;
+    $('rangeStart').value = 0;
+    drawWave();
+    updateRangeInfo();
+  }
+
+  /* ---------------- 载入 zip ---------------- */
+
+  async function loadZip(file) {
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const files = await TrackerIO.readZip(buf);
+      const j = files.find((f) => f.name.endsWith('.json'));
+      if (!j) throw new Error('zip 内未找到 .json 格谱');
+      const song = JSON.parse(new TextDecoder().decode(j.bytes));
+      state.song = song;
+      state.undoStack = [];
+      state.selected = { pi: 0, ri: 0, tick: 0 };
+      const ok = render(false);
+      if (ok) {
+        $('statusPill').textContent = `已载入 ${file.name}`;
+        alert('good', `已从 ${file.name} 载入格谱并渲染`);
+      } else {
+        // 超限样例（如包内完整曲）仍载入工作副本，供编辑；提示无可用渲染
+        $('statusPill').textContent = `已载入 ${file.name}（当前超限，需编辑）`;
+        $('statusPill').className = 'pill warn';
+        refreshStats(); refreshSelectors(); refreshRowEditor();
+      }
+    } catch (e) {
+      alert('bad', `载入失败：${e.message}`);
+    }
+  }
+
+  /* ---------------- 事件绑定 ---------------- */
+
+  function bind() {
+    $('patternSelect').addEventListener('change', (e) => {
+      state.selected.pi = Number(e.target.value);
+      state.selected.ri = 0;
+      refreshSelectors(); refreshRowEditor();
+    });
+    $('rowSelect').addEventListener('change', (e) => {
+      state.selected.ri = Number(e.target.value);
+      refreshRowEditor();
+    });
+    $('addVoiceBtn').addEventListener('click', () => {
+      const used = new Set([...$('voiceEditor').querySelectorAll('[data-f="ch"]')].map((n) => Number(n.value)));
+      let ch = 0;
+      while (used.has(ch)) ch++;
+      if (ch >= state.song.channels) { alert('warn', '所有声道已在本行使用'); return; }
+      $('voiceEditor').appendChild(buildVoiceRow({ ch }, $('voiceEditor').children.length));
+    });
+    $('applyBtn').addEventListener('click', applyEdit);
+    $('resetRowBtn').addEventListener('click', refreshRowEditor);
+    $('undoBtn').addEventListener('click', undo);
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+    });
+
+    $('tickGoBtn').addEventListener('click', () => selectTick(Number($('tickJump').value)));
+    $('tickJump').addEventListener('keydown', (e) => { if (e.key === 'Enter') selectTick(Number(e.target.value)); });
+    $('prevTickBtn').addEventListener('click', () => selectTick(state.selected.tick - 1));
+    $('nextTickBtn').addEventListener('click', () => selectTick(state.selected.tick + 1));
+
+    ['rangeStart', 'rangeEnd'].forEach((id) => $(id).addEventListener('input', () => { drawWave(); updateRangeInfo(); }));
+    $('playRangeBtn').addEventListener('click', () => {
+      const [a, b] = currentRange();
+      playPcm(state.result.pcm.subarray(a, b));
+    });
+    $('playFullBtn').addEventListener('click', () => playPcm(state.result.pcm));
+    $('stopBtn').addEventListener('click', stopPlay);
+
+    $('exportWavBtn').addEventListener('click', () => exportWav(false));
+    $('exportFullWavBtn').addEventListener('click', () => exportWav(true));
+    $('exportLogBtn').addEventListener('click', () => exportLog(false));
+    $('exportFullLogBtn').addEventListener('click', () => exportLog(true));
+
+    // 主题
+    const saved = (() => { try { return localStorage.getItem('tracker-theme'); } catch (_) { return null; } })();
+    if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    $('themeBtn').addEventListener('click', () => {
+      const light = document.documentElement.getAttribute('data-theme') === 'light';
+      if (light) document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', 'light');
+      try { localStorage.setItem('tracker-theme', light ? 'dark' : 'light'); } catch (_) {}
+      drawWave();
+    });
+
+    // 文件载入（点击 + 拖拽）
+    const dz = $('dropzone');
+    const fi = $('fileInput');
+    dz.addEventListener('click', () => fi.click());
+    fi.addEventListener('change', () => { if (fi.files[0]) loadZip(fi.files[0]); });
+    ['dragover', 'dragenter'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('drag'); }));
+    dz.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) loadZip(f); });
+  }
+
+  /* ---------------- 启动 ---------------- */
+
+  function start() {
+    bind();
+    state.song = clone(DEMO);
+    render(false);
+    $('statusPill').textContent = '内置示例已就绪（可载入 zip 替换）';
+    $('statusPill').className = 'pill';
+  }
+  start();
+})();
+
+</script>
+</body>
+</html>

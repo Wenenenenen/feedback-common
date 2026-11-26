@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+node_modules/
+# 解压的不可信样本数据（来自 samples/*.zip，按需重新解压）
+_extracted/
