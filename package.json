@@ -1,0 +1,12 @@
+{
+  "name": "moving-source-binaural-bench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "移动声源双耳校音台（纯浏览器、零依赖）",
+  "scripts": {
+    "start": "python3 -I src/py/server.py --port 8000",
+    "check": "bash scripts/selfcheck.sh",
+    "check:e2e": "bash scripts/selfcheck.sh --e2e"
+  }
+}

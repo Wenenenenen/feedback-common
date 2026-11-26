@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>移动声源双耳校音台</title>
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◎</span>
+    <h1>移动声源双耳校音台</h1>
+  </div>
+  <div class="status" id="status-strip">
+    <span id="status-text">等待导入轨迹</span>
+    <span class="spin" id="status-spin" hidden></span>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="panel panel-left">
+    <section class="block">
+      <h2>1 · 导入</h2>
+      <p class="hint">拖入 <code>moving-audio.zip</code>（含 scene.json 与 48 kHz 单声道 PCM16 WAV），或分别选择文件。</p>
+      <label class="dropzone" id="dropzone" tabindex="0">
+        <input type="file" id="file-zip" accept=".zip,application/zip" hidden />
+        <strong>拖入 .zip 或点击选择</strong>
+        <span>最多 8 轨 · ≤6000 段 · ≤60 秒</span>
+      </label>
+      <div class="row">
+        <button id="load-sample" class="btn ghost" type="button">载入内置样例</button>
+      </div>
+      <ul class="filelist" id="filelist" aria-live="polite"></ul>
+    </section>
+
+    <section class="block">
+      <h2>2 · 耳位 <span class="tag" id="ear-count"></span></h2>
+      <p class="hint">左耳在当前时刻的三维坐标（耳位只在现有点之间线性插值）。可编辑、可撤销。</p>
+      <div class="ear-editor">
+        <div class="row">
+          <label class="fld"><span>时刻 t（只读）</span><input id="ear-t" type="number" step="1" value="0" readonly tabindex="-1" /></label>
+          <button class="btn ghost tiny" id="ear-prev" type="button" title="上一点">◀</button>
+          <button class="btn ghost tiny" id="ear-next" type="button" title="下一点">▶</button>
+        </div>
+        <p class="hint">只允许编辑现有点的三维位置；时刻 t 固定。</p>
+        <div class="vec">
+          <label class="fld"><span>左 X</span><input id="ear-lx" type="number" step="1" value="0" /></label>
+          <label class="fld"><span>左 Y</span><input id="ear-ly" type="number" step="1" value="0" /></label>
+          <label class="fld"><span>左 Z</span><input id="ear-lz" type="number" step="1" value="0" /></label>
+        </div>
+        <div class="vec">
+          <label class="fld"><span>右 X</span><input id="ear-rx" type="number" step="1" value="0" /></label>
+          <label class="fld"><span>右 Y</span><input id="ear-ry" type="number" step="1" value="0" /></label>
+          <label class="fld"><span>右 Z</span><input id="ear-rz" type="number" step="1" value="0" /></label>
+        </div>
+        <div class="row">
+          <button class="btn" id="ear-apply" type="button">应用</button>
+          <button class="btn ghost" id="ear-undo" type="button" disabled>撤销</button>
+        </div>
+        <p class="err" id="ear-error" role="alert"></p>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>3 · 播放</h2>
+      <div class="row">
+        <button class="btn" id="play" type="button" disabled>▶ 播放</button>
+        <button class="btn ghost" id="stop" type="button" disabled>■ 停止</button>
+      </div>
+      <p class="hint">播放使用当前全轨渲染结果的切片，与导出逐样点相同。</p>
+    </section>
+  </aside>
+
+  <section class="stage">
+    <div class="timeline-head">
+      <div class="stat-row" id="stats">
+        <span class="stat"><em>帧数</em><b id="stat-frames">—</b></span>
+        <span class="stat"><em>到达</em><b id="stat-arrivals">—</b></span>
+        <span class="stat"><em>峰值 L / R</em><b id="stat-peak">—</b></span>
+        <span class="stat"><em>渲染</em><b id="stat-time">—</b></span>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="timeline" height="220"></canvas>
+      <div class="cursor-line" id="cursor-line" hidden></div>
+    </div>
+    <div class="transport">
+      <label class="fld grow"><span>定位（拖动定位到任意帧）</span><input id="seek" type="range" min="0" max="0" step="1" value="0" /></label>
+      <label class="fld"><span>帧号</span><input id="seek-num" type="number" min="0" step="1" value="0" /></label>
+    </div>
+
+    <div class="arrivals">
+      <div class="arrivals-head">
+        <h2>到达图</h2>
+        <div class="seg-toggle" role="group" aria-label="耳">
+          <button class="btn ghost on" id="side-left" type="button">左耳</button>
+          <button class="btn ghost" id="side-right" type="button">右耳</button>
+        </div>
+        <span class="hint" id="arrivals-summary"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="arrivals-table">
+          <thead>
+            <tr>
+              <th>轨</th><th>段</th><th>发射时刻 u</th><th>延迟 d</th><th>增益</th><th>q</th><th>样本值</th><th>贡献</th><th title="‖S(u)-E(t)‖ - d，应≈0">声程核对</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="hint" id="arrivals-empty">把光标移到有到达的帧上。</p>
+    </div>
+  </section>
+
+  <aside class="panel panel-right">
+    <section class="block">
+      <h2>4 · 导出</h2>
+      <p class="hint">导出当前全轨（或选区）为 48 kHz 双声道 PCM16 WAV，逐样点等于播放内容。</p>
+      <label class="chk"><input type="checkbox" id="use-selection" /> 仅导出选区</label>
+      <div class="vec">
+        <label class="fld"><span>起点</span><input id="sel-start" type="number" min="0" step="1" value="0" /></label>
+        <label class="fld"><span>终点</span><input id="sel-end" type="number" min="0" step="1" value="0" /></label>
+      </div>
+      <div class="row">
+        <button class="btn" id="export-wav" type="button" disabled>导出 WAV</button>
+        <button class="btn ghost" id="play-selection" type="button" disabled>试听选区</button>
+      </div>
+      <p class="err" id="export-error" role="alert"></p>
+    </section>
+
+    <section class="block">
+      <h2>5 · 诊断</h2>
+      <ul class="diag" id="diag"></ul>
+    </section>
+
+    <section class="block legend">
+      <h2>约定</h2>
+      <ul class="hint">
+        <li>解 <code>t-u = ‖S(u)-E(t)‖</code>，取 <code>u∈[start,end)</code> 且 <code>u≤t</code>。</li>
+        <li>q = u-start+offset，<code>floor(q)</code> 与后一样本线性插值；后一样本越过段引用末尾记 0。</li>
+        <li>每项增益 <code>8/(8+d)</code>，同耳求和后四舍五入（.5 远离零）并夹到 int16。</li>
+      </ul>
+    </section>
+  </aside>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

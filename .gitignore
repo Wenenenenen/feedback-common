@@ -15,3 +15,5 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 样例解压目录（启动时由 samples/moving-audio.zip 重新生成，按不可信数据只读处理）
+samples/extracted/
