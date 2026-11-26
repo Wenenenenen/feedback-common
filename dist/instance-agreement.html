@@ -1,0 +1,2780 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>实例匹配对照台</title>
+  <meta name="description" content="16 位 P5 实例分割真值与预测的忽略区感知、精确 IoU 和一对一最优匹配对照工具" />
+  <style>
+/* Design plan: cool blueprint-neutral instrument surface, precise mono numerals,
+   blue primary action, amber overlap evidence, and status colors reserved for state. */
+:root {
+  color-scheme: light;
+  --bg: #eef3f8;
+  --bg-grid: #e7edf4;
+  --surface: #ffffff;
+  --surface-2: #f4f7fb;
+  --surface-3: #e9eff6;
+  --ink: #142033;
+  --ink-soft: #334155;
+  --muted: #64748b;
+  --line: #d6e0eb;
+  --line-strong: #b8c7d8;
+  --accent: #1d5fd1;
+  --accent-strong: #174aa6;
+  --accent-soft: #e5efff;
+  --accent-ink: #0b3d91;
+  --intersection: #f59e0b;
+  --intersection-soft: #fef3c7;
+  --good: #15803d;
+  --good-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --bad: #dc2626;
+  --bad-soft: #fee2e2;
+  --mask-bg: #f8fafc;
+  --mask-border: #cbd5e1;
+  --shadow: 0 18px 45px rgba(15, 23, 42, 0.10), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --radius: 16px;
+  --radius-small: 10px;
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b121c;
+    --bg-grid: #101a26;
+    --surface: #121d2a;
+    --surface-2: #182536;
+    --surface-3: #203044;
+    --ink: #e8f0fa;
+    --ink-soft: #c6d4e4;
+    --muted: #8da2b8;
+    --line: #26384d;
+    --line-strong: #3a516c;
+    --accent: #75a7ff;
+    --accent-strong: #a4c2ff;
+    --accent-soft: #183052;
+    --accent-ink: #cfe0ff;
+    --intersection: #fbbf24;
+    --intersection-soft: #4a3205;
+    --good: #4ade80;
+    --good-soft: #10331f;
+    --warn: #fbbf24;
+    --warn-soft: #3b2a08;
+    --bad: #fb7185;
+    --bad-soft: #4c1620;
+    --mask-bg: #0a111a;
+    --mask-border: #2c4057;
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.38), 0 2px 10px rgba(0, 0, 0, 0.28);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b121c;
+  --bg-grid: #101a26;
+  --surface: #121d2a;
+  --surface-2: #182536;
+  --surface-3: #203044;
+  --ink: #e8f0fa;
+  --ink-soft: #c6d4e4;
+  --muted: #8da2b8;
+  --line: #26384d;
+  --line-strong: #3a516c;
+  --accent: #75a7ff;
+  --accent-strong: #a4c2ff;
+  --accent-soft: #183052;
+  --accent-ink: #cfe0ff;
+  --intersection: #fbbf24;
+  --intersection-soft: #4a3205;
+  --good: #4ade80;
+  --good-soft: #10331f;
+  --warn: #fbbf24;
+  --warn-soft: #3b2a08;
+  --bad: #fb7185;
+  --bad-soft: #4c1620;
+  --mask-bg: #0a111a;
+  --mask-border: #2c4057;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.38), 0 2px 10px rgba(0, 0, 0, 0.28);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+    var(--bg);
+  background-size: 28px 28px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea { font: inherit; }
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.shell {
+  width: min(1560px, 100%);
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.header-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-top: clamp(24px, 4vw, 44px);
+  padding-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.02em; }
+h1 { font-size: clamp(28px, 4vw, 46px); line-height: 1.04; font-weight: 800; }
+h2 { font-size: 17px; line-height: 1.25; font-weight: 750; }
+
+.lede {
+  max-width: 850px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.header-actions { display: flex; flex: 0 0 auto; gap: 10px; align-items: center; }
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 20px;
+  padding-bottom: 40px;
+}
+
+.panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.import-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(300px, 0.9fr);
+  gap: 18px 24px;
+  padding: 20px;
+}
+
+.import-copy h2 { margin-bottom: 8px; }
+.dataset-line { margin: 0 0 6px; font-weight: 650; color: var(--ink-soft); }
+.file-line { margin: 0; color: var(--muted); font-size: 13px; }
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.threshold-editor { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 16px; }
+.threshold-editor label { display: block; margin-bottom: 8px; font-weight: 650; color: var(--ink-soft); }
+.threshold-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-small);
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 11px 12px;
+  outline: none;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+textarea:focus, input:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+.hint { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 0.92em;
+}
+
+.drop-zone {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-small);
+  padding: 10px 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+  text-align: center;
+  font-size: 12.5px;
+}
+body.dragging .drop-zone, .drop-zone.drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); background: var(--surface-2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.48; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+:root[data-theme="dark"] .btn-primary { color: #07111f; font-weight: 750; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled) { background: #9bbdff; }
+.btn-soft { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); color: var(--accent-ink); }
+.btn-ghost { background: transparent; }
+.btn-small { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+.icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.banner {
+  grid-column: 1 / -1;
+  border-radius: var(--radius-small);
+  padding: 11px 13px;
+  border: 1px solid;
+  font-weight: 600;
+}
+.banner.error { color: var(--bad); background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+.banner.success { color: var(--good); background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
+.banner.info { color: var(--accent-ink); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 12px;
+}
+.panel-sub { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
+.head-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+
+.table-scroll { width: 100%; overflow-x: auto; border-top: 1px solid var(--line); }
+.data-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.data-table th, .data-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.data-table tbody tr { cursor: pointer; transition: background 100ms ease; }
+.data-table tbody tr:hover { background: var(--surface-2); }
+.data-table tbody tr.active { background: var(--accent-soft); }
+.data-table tbody tr.active td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.data-table .num, .num { text-align: right; font-family: var(--font-mono); }
+.empty-cell { padding: 28px 16px !important; text-align: center; color: var(--muted); cursor: default !important; }
+.data-table tbody tr.empty-row:hover { background: transparent; }
+
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+.viewer-toolbar-left { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.zoom-controls { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+.zoom-readout { min-width: 52px; color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+.check-label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+
+.viewers-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.viewer-card { overflow: hidden; display: flex; flex-direction: column; }
+.viewer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px;
+}
+.viewer-meta { margin: 4px 0 0; color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+.side-badge {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.truth-badge { color: #0f5132; background: #d1fae5; }
+.prediction-badge { color: #1e3a8a; background: #dbeafe; }
+:root[data-theme="dark"] .truth-badge { color: #86efac; background: #10331f; }
+:root[data-theme="dark"] .prediction-badge { color: #bfdbfe; background: #172554; }
+
+.viewport {
+  position: relative;
+  overflow: auto;
+  margin: 0 12px;
+  border: 1px solid var(--mask-border);
+  border-radius: 12px;
+  background:
+    linear-gradient(45deg, var(--surface-2) 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(-45deg, var(--surface-2) 25%, transparent 25%) 0 9px / 18px 18px,
+    linear-gradient(45deg, transparent 75%, var(--surface-2) 75%) 9px -9px / 18px 18px,
+    linear-gradient(-45deg, transparent 75%, var(--surface-2) 75%) -9px 9px / 18px 18px,
+    var(--mask-bg);
+  max-height: min(72vh, 780px);
+}
+.canvas-stack { position: relative; width: 100%; line-height: 0; }
+.canvas-stack.fit { width: 100%; }
+.canvas-stack canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.canvas-stack .overlay-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+.label-layer { position: absolute; inset: 0; pointer-events: none; }
+.mask-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mask-label:hover, .mask-label.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  z-index: 3;
+}
+.crosshair { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.cross-v { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); opacity: 0.75; box-shadow: 0 0 0 1px color-mix(in srgb, white 55%, transparent); }
+.cross-h { position: absolute; left: 0; right: 0; height: 1px; background: var(--accent); opacity: 0.75; box-shadow: 0 0 0 1px color-mix(in srgb, white 55%, transparent); }
+.viewer-foot {
+  min-height: 42px;
+  padding: 10px 16px 14px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 16px;
+  align-items: start;
+}
+.pair-scroll { max-height: 520px; overflow: auto; }
+.side-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.inspector, .unmatched-panel { padding-bottom: 16px; }
+.inspector > h2, .unmatched-panel > h2 { padding: 18px 18px 8px; }
+.inspector-body { padding: 0 18px; }
+.empty-state {
+  margin: 8px 0 4px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-small);
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.focus-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.id-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.arrow { color: var(--muted); font-family: var(--font-mono); }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.status-good { color: var(--good); background: var(--good-soft); }
+.status-warn { color: var(--warn); background: var(--warn-soft); }
+.status-bad { color: var(--bad); background: var(--bad-soft); }
+.status-accent { color: var(--accent-ink); background: var(--accent-soft); }
+
+.metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; margin: 12px 0; }
+.metric {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.metric-label { display: block; color: var(--muted); font-size: 11.5px; margin-bottom: 3px; }
+.metric-value { display: block; font-family: var(--font-mono); font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.metric-value.small { font-size: 14px; }
+.exact-line { margin: 8px 0 12px; color: var(--ink-soft); font-size: 13px; overflow-wrap: anywhere; }
+
+.candidate-title { margin: 14px 0 8px; font-size: 13px; color: var(--muted); font-weight: 700; }
+.candidate-scroll { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.candidate-table th, .candidate-table td { padding: 7px 9px; font-size: 12.5px; }
+
+.unmatched-body { padding: 0 18px; display: flex; flex-direction: column; gap: 12px; }
+.unmatched-group h3 { font-size: 13px; color: var(--ink-soft); margin-bottom: 7px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.chip:hover, .chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.all-matched { color: var(--good); font-weight: 650; margin: 0; }
+
+.page-footer { padding: 8px 4px 0; color: var(--muted); font-size: 12.5px; text-align: center; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: rgba(2, 6, 23, 0.58);
+  backdrop-filter: blur(6px);
+}
+.modal {
+  width: min(980px, 100%);
+  max-height: min(86vh, 900px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 8px; }
+.modal-sub { margin: 0; padding: 0 18px 10px; color: var(--muted); font-size: 12.5px; }
+.json-output {
+  flex: 1;
+  min-height: 280px;
+  margin: 0 18px;
+  width: calc(100% - 36px);
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 14px 18px 18px; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 80;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 15px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: var(--shadow);
+  font-weight: 650;
+}
+
+@media (max-width: 1100px) {
+  .import-panel { grid-template-columns: 1fr; }
+  .import-actions { justify-content: flex-start; }
+  .detail-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 820px) {
+  .header-inner { flex-direction: column; }
+  .header-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .viewers-grid { grid-template-columns: 1fr; }
+  .viewer-toolbar { align-items: flex-start; flex-direction: column; }
+  .zoom-controls { width: 100%; flex-wrap: wrap; }
+}
+
+@media (max-width: 560px) {
+  .shell { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .import-panel, .panel-head { padding-left: 14px; padding-right: 14px; }
+  .threshold-row { grid-template-columns: 1fr; }
+  .head-actions { width: 100%; }
+  .panel-head { flex-direction: column; }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .data-table th, .data-table td { padding: 9px 10px; }
+  .modal-actions { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+</style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <div class="title-block">
+        <p class="eyebrow">Instance mask agreement</p>
+        <h1>实例匹配对照台</h1>
+        <p class="lede">导入同尺寸 16 位 P5 真值与预测，按最多 32 档阈值重算一对一匹配；先最大化配对数，再最大化百万分 IoU 总分，最后用编号字典序消除并列。</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" id="themeToggle" type="button" aria-label="切换深浅色">切换主题</button>
+        <button class="btn btn-primary" id="zipButton" type="button">导入 ZIP</button>
+        <input type="file" id="zipInput" accept=".zip,application/zip" hidden />
+      </div>
+    </div>
+  </header>
+
+  <main class="shell workspace">
+    <section class="panel import-panel" aria-labelledby="importTitle">
+      <div class="import-copy">
+        <h2 id="importTitle">数据导入</h2>
+        <p id="datasetLine" class="dataset-line">正在载入内置样例…</p>
+        <p class="file-line" id="fileLine">支持 <code>samples/instance-agreement.zip</code> 中的 <code>truth.pgm</code> 与 <code>prediction.pgm</code>。所有计算均在本地浏览器完成。</p>
+      </div>
+      <div class="import-actions">
+        <button class="btn" id="truthButton" type="button">选择真值 PGM</button>
+        <input type="file" id="truthInput" accept=".pgm,.pnm,image/x-portable-graymap" hidden />
+        <button class="btn" id="predictionButton" type="button">选择预测 PGM</button>
+        <input type="file" id="predictionInput" accept=".pgm,.pnm,image/x-portable-graymap" hidden />
+        <button class="btn btn-soft" id="sampleButton" type="button">重载内置样例</button>
+      </div>
+      <div class="threshold-editor">
+        <label for="thresholdInput">重叠阈值（万分数，空格/逗号/换行分隔，最多 32 个）</label>
+        <div class="threshold-row">
+          <textarea id="thresholdInput" rows="2" spellcheck="false">0 2500 5000 7500</textarea>
+          <button class="btn btn-primary" id="applyThresholds" type="button">重算各档</button>
+        </div>
+        <p class="hint">例如 <code>5000</code> = IoU ≥ 0.5000。资格判断使用整数交叉相乘；即使阈值为 <code>0</code>，零交集也不会成为候选边。</p>
+      </div>
+      <div id="statusBanner" class="banner" role="status" aria-live="polite" hidden></div>
+      <div id="dropZone" class="drop-zone">也可以把 ZIP、两个 PGM 文件拖到页面任意位置。</div>
+    </section>
+
+    <section class="panel table-panel" aria-labelledby="summaryTitle">
+      <div class="panel-head">
+        <div>
+          <h2 id="summaryTitle">各档配对与计数</h2>
+          <p class="panel-sub">选择一行作为联动点选和未配对象检查的当前档位。</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="copyJsonButton" type="button" disabled>复制 JSON</button>
+          <button class="btn btn-primary" id="exportJsonButton" type="button" disabled>导出各档 JSON</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table threshold-table">
+          <thead>
+            <tr>
+              <th>阈值</th>
+              <th scope="col">资格边</th>
+              <th scope="col">配对数</th>
+              <th scope="col">未配真值</th>
+              <th scope="col">未配预测</th>
+              <th scope="col">真值匹配率</th>
+              <th scope="col">预测匹配率</th>
+              <th scope="col">百万分总分</th>
+            </tr>
+          </thead>
+          <tbody id="thresholdTableBody">
+            <tr><td colspan="8" class="empty-cell">等待数据。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="viewer-toolbar panel">
+      <div class="viewer-toolbar-left">
+        <strong>联动掩膜视图</strong>
+        <span class="hint">点击实例或编号；另一侧会定位到当前阈值下的配对。两图滚动、十字线和缩放同步。</span>
+      </div>
+      <div class="zoom-controls" aria-label="视图缩放">
+        <button class="icon-btn" id="zoomOut" type="button" aria-label="缩小">−</button>
+        <button class="btn btn-small" id="zoomFit" type="button">适应宽度</button>
+        <button class="icon-btn" id="zoomIn" type="button" aria-label="放大">+</button>
+        <span id="zoomReadout" class="zoom-readout">适应</span>
+        <label class="check-label"><input type="checkbox" id="labelToggle" checked /> 编号</label>
+      </div>
+    </section>
+
+    <section class="viewers-grid">
+      <article class="panel viewer-card">
+        <header class="viewer-head">
+          <div>
+            <h2>真值 P5</h2>
+            <p id="truthMeta" class="viewer-meta">—</p>
+          </div>
+          <span class="side-badge truth-badge">Truth</span>
+        </header>
+        <div class="viewport" id="truthViewport" data-viewport="truth">
+          <div class="canvas-stack fit" id="truthStack">
+            <canvas id="truthCanvas" data-side="truth" aria-label="真值实例掩膜"></canvas>
+            <canvas id="truthOverlay" class="overlay-canvas" data-side="truth" aria-hidden="true"></canvas>
+            <div class="label-layer" id="truthLabels"></div>
+            <div class="crosshair" id="truthCrosshair" hidden><i class="cross-v"></i><i class="cross-h"></i></div>
+          </div>
+        </div>
+        <footer class="viewer-foot" id="truthReadout">未载入</footer>
+      </article>
+
+      <article class="panel viewer-card">
+        <header class="viewer-head">
+          <div>
+            <h2>预测 P5</h2>
+            <p id="predictionMeta" class="viewer-meta">—</p>
+          </div>
+          <span class="side-badge prediction-badge">Prediction</span>
+        </header>
+        <div class="viewport" id="predictionViewport" data-viewport="prediction">
+          <div class="canvas-stack fit" id="predictionStack">
+            <canvas id="predictionCanvas" data-side="prediction" aria-label="预测实例掩膜"></canvas>
+            <canvas id="predictionOverlay" class="overlay-canvas" data-side="prediction" aria-hidden="true"></canvas>
+            <div class="label-layer" id="predictionLabels"></div>
+            <div class="crosshair" id="predictionCrosshair" hidden><i class="cross-v"></i><i class="cross-h"></i></div>
+          </div>
+        </div>
+        <footer class="viewer-foot" id="predictionReadout">未载入</footer>
+      </article>
+    </section>
+
+    <section class="detail-grid">
+      <article class="panel pair-panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="pairTitle">当前档配对明细</h2>
+            <p class="panel-sub">按真值编号递增；点击任意行在两图中联动查看。</p>
+          </div>
+        </div>
+        <div class="table-scroll pair-scroll">
+          <table class="data-table pair-table">
+            <thead>
+              <tr>
+                <th>真值</th>
+                <th>预测</th>
+                <th>交集</th>
+                <th>并集</th>
+                <th>精确 IoU</th>
+                <th>百万分向下取整</th>
+              </tr>
+            </thead>
+            <tbody id="pairTableBody"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <aside class="side-column">
+        <section class="panel inspector" id="inspectorPanel" aria-labelledby="inspectorTitle">
+          <h2 id="inspectorTitle">交并面积检查器</h2>
+          <div id="inspectorBody" class="inspector-body">
+            <p class="empty-state">点击掩膜实例、编号标签、配对行或未配编号，查看交集、并集、面积和候选重叠。</p>
+          </div>
+        </section>
+
+        <section class="panel unmatched-panel" aria-labelledby="unmatchedTitle">
+          <h2 id="unmatchedTitle">当前档未配对象</h2>
+          <div id="unmatchedBody" class="unmatched-body"></div>
+        </section>
+      </aside>
+    </section>
+
+    <footer class="page-footer">
+      <p>匹配由本页内置的 BigInt 精确指派计算完成；不使用贪心最高重叠，也不调用外部匹配服务。</p>
+    </footer>
+  </main>
+
+  <div class="modal-backdrop" id="jsonModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle">
+      <header class="modal-head">
+        <h2 id="jsonModalTitle">各档配对与计数 JSON</h2>
+        <button class="icon-btn" id="jsonClose" type="button" aria-label="关闭">×</button>
+      </header>
+      <p class="modal-sub" id="jsonMeta"></p>
+      <textarea id="jsonOutput" class="json-output" spellcheck="false" readonly></textarea>
+      <footer class="modal-actions">
+        <button class="btn" id="modalCopyButton" type="button">复制 JSON</button>
+        <button class="btn btn-primary" id="modalDownloadButton" type="button">下载 JSON</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script>
+/*
+ * Instance mask agreement core.
+ * Framework-free UMD module so the same exact arithmetic and matcher runs in
+ * the page and in Node tests.
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.AgreementCore = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const IGNORE_ID = 65535;
+  const MAX_ID = 65534;
+  const MAX_SIDE = 1024;
+  const MAX_INSTANCES_PER_SIDE = 256;
+  const MILLION = 1_000_000;
+
+  class AgreementError extends Error {
+    constructor(message, details) {
+      super(message);
+      this.name = 'AgreementError';
+      if (details) this.details = details;
+    }
+  }
+
+  function isWhitespace(byte) {
+    return byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d;
+  }
+
+  // Parses a binary P5 portable graymap. For maxval > 255, samples are
+  // big-endian unsigned 16-bit integers as required by the PGM specification.
+  function parsePgm(input, label = 'PGM') {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    if (bytes.length < 8) throw new AgreementError(`${label} 文件太短，不是完整的 P5 PGM。`);
+    if (bytes[0] !== 0x50 || bytes[1] !== 0x35) {
+      throw new AgreementError(`${label} 不是 P5 二进制 PGM（缺少 P5 标记）。`);
+    }
+
+    let pos = 2;
+
+    function skipWhitespaceAndComments() {
+      while (pos < bytes.length) {
+        const b = bytes[pos];
+        if (isWhitespace(b)) {
+          pos += 1;
+        } else if (b === 0x23 /* # */) {
+          while (pos < bytes.length && bytes[pos] !== 0x0a && bytes[pos] !== 0x0d) pos += 1;
+        } else {
+          break;
+        }
+      }
+    }
+
+    function readToken(name) {
+      skipWhitespaceAndComments();
+      if (pos >= bytes.length) throw new AgreementError(`${label} 头部缺少 ${name}。`);
+      const start = pos;
+      while (pos < bytes.length && !isWhitespace(bytes[pos])) pos += 1;
+      const token = String.fromCharCode(...bytes.subarray(start, pos));
+      if (!/^\d+$/.test(token)) {
+        throw new AgreementError(`${label} 头部的 ${name} 不是非负整数：${token || '(空)'}。`);
+      }
+      return Number.parseInt(token, 10);
+    }
+
+    const width = readToken('width');
+    const height = readToken('height');
+    const maxval = readToken('maxval');
+
+    if (pos >= bytes.length || !isWhitespace(bytes[pos])) {
+      throw new AgreementError(`${label} P5 头部与二进制栅格之间缺少分隔空白。`);
+    }
+    // PNM permits exactly one header delimiter here. Do not skip further
+    // bytes: a following 0x0a may itself be the high/low byte of pixel data.
+    pos += 1;
+    // Accept the common CRLF line ending as one logical header newline.
+    if (bytes[pos - 1] === 0x0d && bytes[pos] === 0x0a) pos += 1;
+
+    if (!Number.isSafeInteger(width) || width <= 0 || height <= 0) {
+      throw new AgreementError(`${label} 尺寸无效：${width}×${height}。`);
+    }
+    if (width > MAX_SIDE || height > MAX_SIDE) {
+      throw new AgreementError(`${label} 尺寸为 ${width}×${height}，每边最多 ${MAX_SIDE} 像素。`);
+    }
+    if (maxval <= 0 || maxval > 65535) {
+      throw new AgreementError(`${label} maxval 无效：${maxval}，应为 1..65535。`);
+    }
+
+    const bytesPerSample = maxval > 255 ? 2 : 1;
+    const pixelCount = width * height;
+    const expectedBytes = pixelCount * bytesPerSample;
+    if (bytes.length - pos < expectedBytes) {
+      throw new AgreementError(
+        `${label} 像素数据不足：需要至少 ${expectedBytes} 字节，头部后仅有 ${bytes.length - pos} 字节。`,
+      );
+    }
+
+    const data = new Uint16Array(pixelCount);
+    if (bytesPerSample === 2) {
+      for (let i = 0; i < pixelCount; i += 1) {
+        const j = pos + i * 2;
+        data[i] = (bytes[j] << 8) | bytes[j + 1];
+      }
+    } else {
+      for (let i = 0; i < pixelCount; i += 1) data[i] = bytes[pos + i];
+    }
+
+    return {
+      format: 'P5',
+      width,
+      height,
+      maxval,
+      bytesPerSample,
+      bitDepth: bytesPerSample === 2 ? 16 : 8,
+      data,
+    };
+  }
+
+  function normalizeThresholdToken(raw) {
+    let s = String(raw).trim();
+    if (!s) return null;
+    // Tolerate a trailing permyriad sign if pasted by users.
+    s = s.replace(/‱$/, '');
+    if (!/^\d+(?:\.\d+)?$/.test(s)) {
+      throw new AgreementError(`阈值“${raw}”不是非负数字；请用万分数输入，例如 5000 表示 0.50。`);
+    }
+
+    let [intPart, fracPart = ''] = s.split('.');
+    let digits = fracPart;
+    while (digits.endsWith('0')) digits = digits.slice(0, -1);
+    const decimals = digits.length;
+    const numerator = BigInt(intPart + digits || '0');
+    const scale = 10n ** BigInt(decimals);
+    if (numerator > 10000n * scale) {
+      throw new AgreementError(`阈值“${raw}”超出范围：万分数应在 0..10000 之间。`);
+    }
+
+    const canonical = decimals ? `${intPart}.${digits}` : intPart;
+    return {
+      canonical,
+      key: canonical,
+      numerator,
+      scale,
+      permyriad: Number(numerator) / Number(scale),
+      ratio: Number(numerator) / (Number(scale) * 10000),
+    };
+  }
+
+  function parseThresholds(input) {
+    const rawTokens = Array.isArray(input)
+      ? input
+      : String(input ?? '').split(/[\s,，;；、|]+/u);
+    const thresholds = [];
+    const seen = new Set();
+
+    for (const raw of rawTokens) {
+      if (!String(raw).trim()) continue;
+      const th = normalizeThresholdToken(raw);
+      if (!th || seen.has(th.key)) continue;
+      seen.add(th.key);
+      thresholds.push(th);
+    }
+
+    if (thresholds.length === 0) throw new AgreementError('请至少输入一个重叠阈值。');
+    if (thresholds.length > 32) throw new AgreementError(`最多同时比较 32 个阈值，当前有 ${thresholds.length} 个。`);
+    return thresholds;
+  }
+
+  function buildDataset(truthImage, predictionImage, options = {}) {
+    if (!truthImage || !predictionImage) throw new AgreementError('需要同时提供真值图和预测图。');
+    if (truthImage.width !== predictionImage.width || truthImage.height !== predictionImage.height) {
+      throw new AgreementError(
+        `两图尺寸必须相同：真值 ${truthImage.width}×${truthImage.height}，预测 ${predictionImage.width}×${predictionImage.height}。`,
+      );
+    }
+
+    const width = truthImage.width;
+    const height = truthImage.height;
+    const pixelCount = width * height;
+    if (width > MAX_SIDE || height > MAX_SIDE || pixelCount > MAX_SIDE * MAX_SIDE) {
+      throw new AgreementError(`图像超过 ${MAX_SIDE}×${MAX_SIDE} 限制。`);
+    }
+
+    const truth = truthImage.data;
+    const prediction = predictionImage.data;
+    if (!(truth instanceof Uint16Array) || !(prediction instanceof Uint16Array)) {
+      throw new AgreementError('解析后的栅格必须是 Uint16Array。');
+    }
+    if (truth.length !== pixelCount || prediction.length !== pixelCount) {
+      throw new AgreementError('栅格长度与头部声明的尺寸不一致。');
+    }
+
+    const truthRawCounts = new Map();
+    const predictionRawCounts = new Map();
+    const truthAreasMap = new Map();
+    const predictionAreasMap = new Map();
+    const intersectionMap = new Map();
+
+    let ignoredPixels = 0;
+    let predictionIgnoreValuePixels = 0;
+
+    for (let i = 0; i < pixelCount; i += 1) {
+      const t = truth[i];
+      const p = prediction[i];
+
+      if (t !== 0) truthRawCounts.set(t, (truthRawCounts.get(t) ?? 0) + 1);
+      if (p !== 0) predictionRawCounts.set(p, (predictionRawCounts.get(p) ?? 0) + 1);
+
+      // The supplied P5 convention reserves 65535 in predictions as well.
+      // Count it explicitly even if it lies under a truth ignore pixel.
+      if (p === IGNORE_ID) predictionIgnoreValuePixels += 1;
+
+      // Truth 65535 is the ignore mask. Pixels there are absent from both
+      // area calculations and from every intersection/union.
+      if (t === IGNORE_ID) {
+        ignoredPixels += 1;
+        continue;
+      }
+
+      if (t > 0) truthAreasMap.set(t, (truthAreasMap.get(t) ?? 0) + 1);
+      if (p > 0 && p !== IGNORE_ID) {
+        predictionAreasMap.set(p, (predictionAreasMap.get(p) ?? 0) + 1);
+      }
+      if (t > 0 && p > 0 && p !== IGNORE_ID) {
+        const key = t * 65536 + p;
+        intersectionMap.set(key, (intersectionMap.get(key) ?? 0) + 1);
+      }
+    }
+
+    if (predictionIgnoreValuePixels > 0 && options.allowPredictionIgnore !== true) {
+      throw new AgreementError(
+        `预测图含有保留值 65535（${predictionIgnoreValuePixels} 像素）；按样例格式，预测编号只能是 0..65534。`,
+      );
+    }
+
+    const truthIds = [...truthAreasMap.keys()].sort((a, b) => a - b);
+    const predictionIds = [...predictionAreasMap.keys()].sort((a, b) => a - b);
+
+    if (truthIds.length > MAX_INSTANCES_PER_SIDE) {
+      throw new AgreementError(`真值参与匹配的实例有 ${truthIds.length} 个，每边最多 ${MAX_INSTANCES_PER_SIDE} 个。`);
+    }
+    if (predictionIds.length > MAX_INSTANCES_PER_SIDE) {
+      throw new AgreementError(`预测参与匹配的实例有 ${predictionIds.length} 个，每边最多 ${MAX_INSTANCES_PER_SIDE} 个。`);
+    }
+
+    const truthIndex = new Map(truthIds.map((id, i) => [id, i]));
+    const predictionIndex = new Map(predictionIds.map((id, i) => [id, i]));
+    const nT = truthIds.length;
+    const nP = predictionIds.length;
+
+    const truthAreas = truthIds.map((id) => truthAreasMap.get(id));
+    const predictionAreas = predictionIds.map((id) => predictionAreasMap.get(id));
+    const intersections = new Int32Array(Math.max(1, nT * nP));
+
+    for (const [key, count] of intersectionMap) {
+      const tId = Math.floor(key / 65536);
+      const pId = key % 65536;
+      const ti = truthIndex.get(tId);
+      const pj = predictionIndex.get(pId);
+      if (ti === undefined || pj === undefined) continue;
+      intersections[ti * nP + pj] = count;
+    }
+
+    const truthCentroidX = new Float64Array(nT);
+    const truthCentroidY = new Float64Array(nT);
+    const predictionCentroidX = new Float64Array(nP);
+    const predictionCentroidY = new Float64Array(nP);
+
+    for (let y = 0; y < height; y += 1) {
+      const row = y * width;
+      for (let x = 0; x < width; x += 1) {
+        const i = row + x;
+        if (truth[i] === IGNORE_ID) continue;
+        const t = truth[i];
+        const p = prediction[i];
+        if (t > 0) {
+          const ti = truthIndex.get(t);
+          truthCentroidX[ti] += x;
+          truthCentroidY[ti] += y;
+        }
+        if (p > 0 && p !== IGNORE_ID) {
+          const pj = predictionIndex.get(p);
+          predictionCentroidX[pj] += x;
+          predictionCentroidY[pj] += y;
+        }
+      }
+    }
+
+    const truthObjects = truthIds.map((id, i) => ({
+      side: 'truth',
+      id,
+      index: i,
+      area: truthAreas[i],
+      centroid: { x: truthCentroidX[i] / truthAreas[i], y: truthCentroidY[i] / truthAreas[i] },
+    }));
+    const predictionObjects = predictionIds.map((id, i) => ({
+      side: 'prediction',
+      id,
+      index: i,
+      area: predictionAreas[i],
+      centroid: { x: predictionCentroidX[i] / predictionAreas[i], y: predictionCentroidY[i] / predictionAreas[i] },
+    }));
+
+    const excludedTruth = [];
+    for (const [id, rawArea] of [...truthRawCounts.entries()].sort((a, b) => a[0] - b[0])) {
+      if (id === IGNORE_ID) continue;
+      if (!truthAreasMap.has(id)) excludedTruth.push({ id, rawArea, reason: '有效区域面积为 0' });
+    }
+    const excludedPrediction = [];
+    for (const [id, rawArea] of [...predictionRawCounts.entries()].sort((a, b) => a[0] - b[0])) {
+      if (id === IGNORE_ID) continue;
+      if (!predictionAreasMap.has(id)) {
+        excludedPrediction.push({ id, rawArea, reason: '全部像素位于真值 65535 忽略区' });
+      }
+    }
+
+    return {
+      width,
+      height,
+      pixelCount,
+      truth,
+      prediction,
+      ignoreId: IGNORE_ID,
+      ignoredPixels,
+      validPixels: pixelCount - ignoredPixels,
+      truthIds,
+      predictionIds,
+      truthIndex,
+      predictionIndex,
+      truthAreas,
+      predictionAreas,
+      intersections,
+      truthObjects,
+      predictionObjects,
+      excludedTruth,
+      excludedPrediction,
+      truthImageMeta: { maxval: truthImage.maxval, bitDepth: truthImage.bitDepth },
+      predictionImageMeta: { maxval: predictionImage.maxval, bitDepth: predictionImage.bitDepth },
+    };
+  }
+
+  function getOverlap(dataset, truthIndexValue, predictionIndexValue) {
+    const nP = dataset.predictionIds.length;
+    const intersection = dataset.intersections[truthIndexValue * nP + predictionIndexValue] ?? 0;
+    const union = dataset.truthAreas[truthIndexValue] + dataset.predictionAreas[predictionIndexValue] - intersection;
+    const iouMillionFloor = union > 0 ? Math.floor((intersection * MILLION) / union) : 0;
+    return { intersection, union, iouMillionFloor };
+  }
+
+  function isEligible(dataset, ti, pj, threshold) {
+    const { intersection, union } = getOverlap(dataset, ti, pj);
+    if (intersection === 0 || union <= 0) return false;
+    // Exact comparison, no floating-point threshold test:
+    // inter / union >= numerator / (scale * 10000).
+    return (
+      BigInt(intersection) * 10000n * threshold.scale >=
+      threshold.numerator * BigInt(union)
+    );
+  }
+
+  /*
+   * Rectangular Hungarian primal-dual assignment with BigInt costs. The page
+   * does not call a third-party matcher: this optimizes the exact composite
+   * objective described in the task. Rows <= columns; a taller matrix is
+   * transposed and its assignment is mapped back to the original rows.
+   */
+  function hungarianMaxWeight(weights) {
+    const originalRows = weights.length;
+    if (originalRows === 0) return [];
+    const originalCols = weights[0].length;
+    if (originalCols === 0) return new Array(originalRows).fill(-1);
+
+    let matrix = weights;
+    let transposed = false;
+    if (originalRows > originalCols) {
+      transposed = true;
+      matrix = Array.from({ length: originalCols }, (_, col) =>
+        Array.from({ length: originalRows }, (_, row) => weights[row][col]));
+    }
+
+    const n = matrix.length;
+    const m = matrix[0].length; // n <= m
+    let maxWeight = 0n;
+    for (let i = 0; i < n; i += 1) {
+      for (let j = 0; j < m; j += 1) if (matrix[i][j] > maxWeight) maxWeight = matrix[i][j];
+    }
+    // Constant shift per edge turns maximization into minimization without
+    // changing which assignment is optimal.
+    const costs = matrix.map((row) => row.map((w) => maxWeight - w));
+    const INF = 1n << 8192n;
+
+    const u = new Array(n + 1).fill(0n);
+    const v = new Array(m + 1).fill(0n);
+    const p = new Array(m + 1).fill(0); // p[j] = row assigned to column j
+    const way = new Array(m + 1).fill(0);
+
+    for (let i = 1; i <= n; i += 1) {
+      p[0] = i;
+      let j0 = 0;
+      const minv = new Array(m + 1).fill(INF);
+      const used = new Array(m + 1).fill(false);
+
+      do {
+        used[j0] = true;
+        const i0 = p[j0];
+        let delta = INF;
+        let j1 = 0;
+
+        for (let j = 1; j <= m; j += 1) {
+          if (used[j]) continue;
+          const cur = costs[i0 - 1][j - 1] - u[i0] - v[j];
+          if (cur < minv[j]) {
+            minv[j] = cur;
+            way[j] = j0;
+          }
+          if (minv[j] < delta) {
+            delta = minv[j];
+            j1 = j;
+          }
+        }
+
+        for (let j = 0; j <= m; j += 1) {
+          if (used[j]) {
+            u[p[j]] += delta;
+            v[j] -= delta;
+          } else {
+            minv[j] -= delta;
+          }
+        }
+        j0 = j1;
+      } while (p[j0] !== 0);
+
+      do {
+        const j1 = way[j0];
+        p[j0] = p[j1];
+        j0 = j1;
+      } while (j0 !== 0);
+    }
+
+    const rowToColumn = new Array(n).fill(-1);
+    for (let j = 1; j <= m; j += 1) {
+      if (p[j] !== 0) rowToColumn[p[j] - 1] = j - 1;
+    }
+
+    if (!transposed) return rowToColumn;
+
+    // Transposed rows were original columns and transposed columns were
+    // original rows. Convert back to original-row -> original-column.
+    const originalAssignment = new Array(originalRows).fill(-1);
+    for (let transposedRow = 0; transposedRow < n; transposedRow += 1) {
+      const originalColumn = transposedRow;
+      const originalRow = rowToColumn[transposedRow];
+      if (originalRow >= 0) originalAssignment[originalRow] = originalColumn;
+    }
+    return originalAssignment;
+  }
+
+  function matchThreshold(dataset, thresholdInput) {
+    const threshold = thresholdInput?.numerator !== undefined
+      ? thresholdInput
+      : parseThresholds([thresholdInput])[0];
+
+    const nT = dataset.truthIds.length;
+    const nP = dataset.predictionIds.length;
+    const base = BigInt(nP + 1);
+    const lexSpace = base ** BigInt(nT);
+    const maxPairs = Math.min(nT, nP);
+    // One additional pair must outweigh every possible IoU/lex contribution.
+    const cardinalityUnit = (BigInt(Math.max(1, maxPairs) * MILLION) + 1n) * lexSpace;
+
+    const powers = new Array(Math.max(nT, 1)).fill(0n);
+    if (nT > 0) {
+      powers[nT - 1] = 1n;
+      for (let i = nT - 2; i >= 0; i -= 1) powers[i] = powers[i + 1] * base;
+    }
+
+    const weights = Array.from({ length: nT }, () => new Array(nP).fill(0n));
+    const eligibleEdges = [];
+
+    for (let ti = 0; ti < nT; ti += 1) {
+      for (let pj = 0; pj < nP; pj += 1) {
+        const overlap = getOverlap(dataset, ti, pj);
+        if (!isEligible(dataset, ti, pj, threshold)) continue;
+
+        const lexReward = nT > 0 ? BigInt(nP - pj) * powers[ti] : 0n;
+        weights[ti][pj] =
+          cardinalityUnit + BigInt(overlap.iouMillionFloor) * lexSpace + lexReward;
+
+        eligibleEdges.push({
+          truthIndex: ti,
+          predictionIndex: pj,
+          truthId: dataset.truthIds[ti],
+          predictionId: dataset.predictionIds[pj],
+          ...overlap,
+        });
+      }
+    }
+
+    const assignment = hungarianMaxWeight(weights);
+    const pairs = [];
+    const matchedTruth = new Set();
+    const matchedPrediction = new Set();
+    let scoreMillionTotal = 0;
+
+    for (let ti = 0; ti < nT; ti += 1) {
+      const pj = assignment[ti];
+      if (pj < 0 || pj >= nP || weights[ti][pj] === 0n) continue;
+      const overlap = getOverlap(dataset, ti, pj);
+      if (overlap.intersection === 0) continue;
+
+      const pair = {
+        truthIndex: ti,
+        predictionIndex: pj,
+        truthId: dataset.truthIds[ti],
+        predictionId: dataset.predictionIds[pj],
+        intersectionArea: overlap.intersection,
+        unionArea: overlap.union,
+        iouMillionFloor: overlap.iouMillionFloor,
+        iouExact: `${overlap.intersection}/${overlap.union}`,
+        iou: overlap.intersection / overlap.union,
+      };
+      pairs.push(pair);
+      matchedTruth.add(ti);
+      matchedPrediction.add(pj);
+      scoreMillionTotal += overlap.iouMillionFloor;
+    }
+
+    const unmatchedTruth = dataset.truthIds.filter((_, i) => !matchedTruth.has(i));
+    const unmatchedPrediction = dataset.predictionIds.filter((_, i) => !matchedPrediction.has(i));
+
+    return {
+      thresholdPermyriad: threshold.canonical,
+      thresholdRatio: threshold.ratio,
+      threshold,
+      eligibleEdgeCount: eligibleEdges.length,
+      eligibleEdges: eligibleEdges.map((e) => ({
+        truthId: e.truthId,
+        predictionId: e.predictionId,
+        intersectionArea: e.intersection,
+        unionArea: e.union,
+        iouMillionFloor: e.iouMillionFloor,
+        iouExact: `${e.intersection}/${e.union}`,
+        iou: e.intersection / e.union,
+      })),
+      pairs,
+      unmatchedTruthIds: unmatchedTruth,
+      unmatchedPredictionIds: unmatchedPrediction,
+      scoreMillionTotal,
+      counts: {
+        truthInstances: nT,
+        predictionInstances: nP,
+        eligibleEdges: eligibleEdges.length,
+        matchedPairs: pairs.length,
+        matchedTruth: pairs.length,
+        matchedPrediction: pairs.length,
+        unmatchedTruth: unmatchedTruth.length,
+        unmatchedPrediction: unmatchedPrediction.length,
+        excludedTruth: dataset.excludedTruth.length,
+        excludedPrediction: dataset.excludedPrediction.length,
+      },
+    };
+  }
+
+  function analyze(dataset, thresholdsInput) {
+    const thresholds = parseThresholds(thresholdsInput);
+    return thresholds.map((th) => matchThreshold(dataset, th));
+  }
+
+  function buildReport(dataset, results, meta = {}) {
+    return {
+      schema: 'instance-mask-agreement/v1',
+      ...meta,
+      image: {
+        width: dataset.width,
+        height: dataset.height,
+        pixels: dataset.pixelCount,
+        validPixels: dataset.validPixels,
+        ignoredPixels: dataset.ignoredPixels,
+        ignoreRule: 'truth value 65535 excludes that pixel from area and IoU for both images',
+      },
+      instances: {
+        truth: dataset.truthObjects.map((o) => ({ id: o.id, area: o.area })),
+        prediction: dataset.predictionObjects.map((o) => ({ id: o.id, area: o.area })),
+        excludedTruth: dataset.excludedTruth,
+        excludedPrediction: dataset.excludedPrediction,
+      },
+      tieBreaking: {
+        objectiveOrder: [
+          'maximize matched pair count',
+          'maximize sum of floor(IoU * 1e6) per pair',
+          'lexicographically minimize prediction IDs in ascending truth ID order; unmatched follows all numeric IDs',
+        ],
+        eligibility: 'intersection > 0 and exact intersection/union >= threshold/10000',
+      },
+      summary: results.map((r) => ({
+        thresholdPermyriad: r.thresholdPermyriad,
+        thresholdRatio: r.thresholdRatio,
+        eligibleEdges: r.eligibleEdgeCount,
+        matchedPairs: r.counts.matchedPairs,
+        truthInstances: r.counts.truthInstances,
+        predictionInstances: r.counts.predictionInstances,
+        unmatchedTruth: r.counts.unmatchedTruth,
+        unmatchedPrediction: r.counts.unmatchedPrediction,
+        truthMatchRate: r.counts.truthInstances ? r.counts.matchedPairs / r.counts.truthInstances : null,
+        predictionMatchRate: r.counts.predictionInstances
+          ? r.counts.matchedPairs / r.counts.predictionInstances
+          : null,
+        scoreMillionTotal: r.scoreMillionTotal,
+      })),
+      thresholds: results.map((r) => ({
+        thresholdPermyriad: r.thresholdPermyriad,
+        thresholdRatio: r.thresholdRatio,
+        counts: r.counts,
+        scoreMillionTotal: r.scoreMillionTotal,
+        pairs: r.pairs.map((p) => ({
+          truthId: p.truthId,
+          predictionId: p.predictionId,
+          intersectionArea: p.intersectionArea,
+          unionArea: p.unionArea,
+          iou: p.iou,
+          iouExact: p.iouExact,
+          iouMillionFloor: p.iouMillionFloor,
+        })),
+        unmatchedTruthIds: r.unmatchedTruthIds,
+        unmatchedPredictionIds: r.unmatchedPredictionIds,
+      })),
+    };
+  }
+
+  return {
+    AgreementError,
+    IGNORE_ID,
+    MAX_SIDE,
+    MAX_INSTANCES_PER_SIDE,
+    parsePgm,
+    parseThresholds,
+    buildDataset,
+    getOverlap,
+    isEligible,
+    hungarianMaxWeight,
+    matchThreshold,
+    analyze,
+    buildReport,
+  };
+});
+
+  </script>
+  <script>
+window.SAMPLE_ZIP_BASE64 =
+  'UEsDBBQAAAAIAC4Be11LVcCyHQAAACUAAAAJAAAAdHJ1dGgucGdtCzDlMlEw5jIzNTU25WJgYGAEQhBgZmD+/x9GAwBQSwMEFAAAAAgALgF7XU8KU68fAAAAJQAAAA4AAABwcmVkaWN0aW9uLnBnbQsw5TJRMOYyMzU1NuViYGDUZdQFknogyNwCYTG3AABQSwMEFAAACAgALgF7XatCd8CmAAAAtgAAAAoAAADmoLzlvI8udHh0JY7bDsEwHMZfpY9A6J7DI9UQh40m4pSQKGFbsMMFWUM3D6P/tq68go7LL9/h97UwUqyv4xLWpdoQOISK5UAEcjBu4I/wVUqhQ/WVSX6XnEh+shl9TtWS6UsANEd1B8lirMXCCluQjwnkgeQjE05BEAg95Q/Nzgc3gnj1Iu5731U3z/Kg1zYJRzUEg+zHa9q63mwtvnJpoGfR/0f10SQZPAs9P9qJL1BLAQIUAxQAAAAIAC4Be11LVcCyHQAAACUAAAAJAAAAAAAAAAAAAACAAQAAAAB0cnV0aC5wZ21QSwECFAMUAAAACAAuAXtdTwpTrx8AAAAlAAAADgAAAAAAAAAAAAAAgAFEAAAAcHJlZGljdGlvbi5wZ21QSwECFAMUAAAICAAuAXtdq0J3wKYAAAC2AAAACgAAAAAAAAAAAAAAgAGPAAAA5qC85byPLnR4dFBLBQYAAAAAAwADAKsAAABdAQAAAAA=';
+
+  </script>
+  <script>
+(() => {
+  'use strict';
+
+  const Core = window.AgreementCore;
+  const $ = (id) => document.getElementById(id);
+
+  const state = {
+    dataset: null,
+    truthImage: null,
+    predictionImage: null,
+    sourceLabel: '',
+    results: [],
+    activeThreshold: 0,
+    computeToken: 0,
+    computing: false,
+    focus: { truthId: null, predictionId: null },
+    hover: null,
+    showLabels: true,
+    cell: null,
+    colors: { truth: new Map(), prediction: new Map() },
+    lastJson: '',
+  };
+
+  function init() {
+    bindTheme();
+    bindInputs();
+    bindView();
+    bindTablesAndInspector();
+    bindModal();
+    loadBuiltInSample().catch((error) => {
+      showStatus('error', `内置样例载入失败：${error.message}`);
+    });
+  }
+
+  /* ---------- theme and feedback ---------- */
+
+  function isDark() {
+    const explicit = document.documentElement.dataset.theme;
+    if (explicit === 'dark') return true;
+    if (explicit === 'light') return false;
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+  }
+
+  function bindTheme() {
+    let saved = null;
+    try { saved = window.localStorage.getItem('ia-theme'); } catch { /* private mode */ }
+    if (saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+
+    $('themeToggle').addEventListener('click', () => {
+      const next = isDark() ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      try { window.localStorage.setItem('ia-theme', next); } catch { /* ignore */ }
+      if (state.dataset) renderCanvases();
+    });
+
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+      if (!document.documentElement.dataset.theme && state.dataset) renderCanvases();
+    });
+  }
+
+  function showStatus(kind, message) {
+    const banner = $('statusBanner');
+    banner.hidden = false;
+    banner.className = `banner ${kind}`;
+    banner.textContent = message;
+  }
+
+  function clearStatus() {
+    const banner = $('statusBanner');
+    banner.hidden = true;
+    banner.textContent = '';
+  }
+
+  let toastTimer = null;
+  function toast(message) {
+    const el = $('toast');
+    el.textContent = message;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 2200);
+  }
+
+  /* ---------- import ---------- */
+
+  function bindInputs() {
+    $('zipButton').addEventListener('click', () => $('zipInput').click());
+    $('truthButton').addEventListener('click', () => $('truthInput').click());
+    $('predictionButton').addEventListener('click', () => $('predictionInput').click());
+    $('sampleButton').addEventListener('click', () => loadBuiltInSample());
+
+    $('zipInput').addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await handleZipFile(file);
+      event.target.value = '';
+    });
+
+    $('truthInput').addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await handlePgmFile(file, 'truth');
+      event.target.value = '';
+    });
+
+    $('predictionInput').addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await handlePgmFile(file, 'prediction');
+      event.target.value = '';
+    });
+
+    $('applyThresholds').addEventListener('click', () => {
+      void runMatching();
+    });
+
+    let debounce = null;
+    $('thresholdInput').addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        void runMatching();
+      }, 350);
+    });
+
+    let dragDepth = 0;
+    window.addEventListener('dragenter', (event) => {
+      event.preventDefault();
+      dragDepth += 1;
+      document.body.classList.add('dragging');
+    });
+    window.addEventListener('dragover', (event) => event.preventDefault());
+    window.addEventListener('dragleave', (event) => {
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) document.body.classList.remove('dragging');
+    });
+    window.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      dragDepth = 0;
+      document.body.classList.remove('dragging');
+      const files = [...(event.dataTransfer?.files ?? [])];
+      await handleDroppedFiles(files);
+    });
+  }
+
+  function base64ToBytes(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  async function loadBuiltInSample() {
+    showStatus('info', '正在载入 samples/instance-agreement.zip 的内置副本…');
+    const bytes = base64ToBytes(window.SAMPLE_ZIP_BASE64);
+    const entries = await readZip(bytes.buffer);
+    const truthEntry = pickZipEntry(entries, 'truth');
+    const predictionEntry = pickZipEntry(entries, 'prediction');
+    if (!truthEntry || !predictionEntry) {
+      throw new Error('内置样例中未找到 truth.pgm / prediction.pgm。');
+    }
+    const truthImage = Core.parsePgm(truthEntry.bytes, 'truth.pgm');
+    const predictionImage = Core.parsePgm(predictionEntry.bytes, 'prediction.pgm');
+    loadImages(truthImage, predictionImage, '内置样例：instance-agreement.zip / truth.pgm + prediction.pgm');
+    showStatus('success', '已载入内置样例。可直接点选掩膜，或导入自己的 ZIP / PGM。');
+  }
+
+  async function handleZipFile(file) {
+    try {
+      showStatus('info', `正在读取 ZIP：${file.name}…`);
+      const entries = await readZip(await file.arrayBuffer());
+      const truthEntry = pickZipEntry(entries, 'truth');
+      const predictionEntry = pickZipEntry(entries, 'prediction');
+      if (!truthEntry || !predictionEntry) {
+        const pgms = entries.filter((e) => /\.pgm$/i.test(e.name));
+        throw new Error(
+          `无法在 ZIP 中自动识别真值/预测 PGM。找到：${pgms.map((e) => e.name).join(', ') || '无'}。请改用两个 PGM 按钮分别导入。`,
+        );
+      }
+      const truthImage = Core.parsePgm(truthEntry.bytes, truthEntry.name);
+      const predictionImage = Core.parsePgm(predictionEntry.bytes, predictionEntry.name);
+      loadImages(truthImage, predictionImage, `${file.name} / ${truthEntry.name} + ${predictionEntry.name}`);
+      showStatus('success', `已从 ${file.name} 导入两图并完成计算。`);
+    } catch (error) {
+      showStatus('error', `ZIP 导入失败：${error.message}`);
+    }
+  }
+
+  async function handlePgmFile(file, side) {
+    try {
+      const image = Core.parsePgm(new Uint8Array(await file.arrayBuffer()), file.name);
+      if (side === 'truth') state.truthImage = image;
+      else state.predictionImage = image;
+
+      if (!state.truthImage || !state.predictionImage) {
+        showStatus('info', `已载入${side === 'truth' ? '真值' : '预测'} ${file.name}，请再选择另一张 PGM。`);
+        return;
+      }
+      loadImages(
+        state.truthImage,
+        state.predictionImage,
+        `分别导入：${side === 'truth' ? file.name : '当前真值'} + ${side === 'prediction' ? file.name : '当前预测'}`,
+      );
+      showStatus('success', `已导入 ${file.name} 并完成计算。`);
+    } catch (error) {
+      showStatus('error', `PGM 导入失败：${error.message}`);
+    }
+  }
+
+  async function handleDroppedFiles(files) {
+    if (files.length === 0) return;
+    const zip = files.find((f) => /\.zip$/i.test(f.name) || f.type === 'application/zip');
+    if (zip) {
+      await handleZipFile(zip);
+      return;
+    }
+
+    const pgms = files.filter((f) => /\.pgm$/i.test(f.name));
+    if (pgms.length === 1) {
+      const side = looksTruth(pgms[0].name) ? 'truth' : looksPrediction(pgms[0].name) ? 'prediction' : null;
+      if (!side) {
+        showStatus('error', '无法从文件名判断这是真值还是预测；请使用对应的选择按钮。');
+        return;
+      }
+      await handlePgmFile(pgms[0], side);
+      return;
+    }
+
+    if (pgms.length >= 2) {
+      let truthFile = pgms.find((f) => looksTruth(f.name));
+      let predictionFile = pgms.find((f) => looksPrediction(f.name) && f !== truthFile);
+      if (!truthFile || !predictionFile) {
+        truthFile = pgms[0];
+        predictionFile = pgms[1];
+      }
+      try {
+        const truthImage = Core.parsePgm(new Uint8Array(await truthFile.arrayBuffer()), truthFile.name);
+        const predictionImage = Core.parsePgm(new Uint8Array(await predictionFile.arrayBuffer()), predictionFile.name);
+        loadImages(truthImage, predictionImage, `拖入文件：${truthFile.name} + ${predictionFile.name}`);
+        showStatus('success', '已导入拖入的两个 PGM。');
+      } catch (error) {
+        showStatus('error', `拖入文件解析失败：${error.message}`);
+      }
+    }
+  }
+
+  function looksTruth(name) {
+    return /truth|gt|ground|真值/i.test(name);
+  }
+  function looksPrediction(name) {
+    return /pred|predict|forecast|infer|output|预测/i.test(name);
+  }
+
+  /* ---------- minimal ZIP reader ---------- */
+
+  async function readZip(arrayBuffer) {
+    const buffer = arrayBuffer instanceof ArrayBuffer ? arrayBuffer : arrayBuffer.buffer;
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    let eocd = -1;
+    const earliest = Math.max(0, bytes.length - 65557);
+    for (let i = bytes.length - 22; i >= earliest; i -= 1) {
+      if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('找不到 ZIP 中央目录结束标记。');
+
+    let count = view.getUint16(eocd + 10, true);
+    let centralOffset = view.getUint32(eocd + 16, true);
+    if (count === 0xffff || centralOffset === 0xffffffff) {
+      throw new Error('暂不支持 ZIP64；请解压后分别选择两个 PGM。');
+    }
+
+    const decoder = new TextDecoder('utf-8');
+    const entries = [];
+    let p = centralOffset;
+
+    for (let n = 0; n < count; n += 1) {
+      if (view.getUint32(p, true) !== 0x02014b50) throw new Error('ZIP 中央目录结构无效。');
+      const flags = view.getUint16(p + 8, true);
+      const method = view.getUint16(p + 10, true);
+      const compressedSize = view.getUint32(p + 20, true);
+      const nameLength = view.getUint16(p + 28, true);
+      const extraLength = view.getUint16(p + 30, true);
+      const commentLength = view.getUint16(p + 32, true);
+      const localOffset = view.getUint32(p + 42, true);
+      const nameBytes = bytes.subarray(p + 46, p + 46 + nameLength);
+      const name = flags & 0x800 ? decoder.decode(nameBytes) : decoder.decode(nameBytes);
+
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+
+      let data;
+      if (method === 0) {
+        data = compressed;
+      } else if (method === 8) {
+        data = await inflateRaw(compressed);
+      } else {
+        throw new Error(`ZIP 条目 ${name} 使用了不支持的压缩方法 ${method}。`);
+      }
+      entries.push({ name, bytes: data });
+      p += 46 + nameLength + extraLength + commentLength;
+    }
+    return entries;
+  }
+
+  async function inflateRaw(compressed) {
+    if (!('DecompressionStream' in window)) {
+      throw new Error('当前浏览器不支持本地 Deflate 解压，请解压 ZIP 后分别导入 PGM。');
+    }
+    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  function pickZipEntry(entries, side) {
+    const pgms = entries.filter((e) => !e.name.endsWith('/') && /\.pgm$/i.test(e.name) && !/(^|\/)__MACOSX\//.test(e.name));
+    const exact = pgms.find((e) => new RegExp(`(^|[/\\\\])${side}\\.pgm$`, 'i').test(e.name));
+    if (exact) return exact;
+    const pattern = side === 'truth'
+      ? /truth|gt|ground|真值/i
+      : /pred|predict|forecast|infer|output|预测/i;
+    return pgms.find((e) => pattern.test(e.name)) ?? null;
+  }
+
+  /* ---------- dataset state ---------- */
+
+  function loadImages(truthImage, predictionImage, sourceLabel) {
+    const dataset = Core.buildDataset(truthImage, predictionImage);
+    state.truthImage = truthImage;
+    state.predictionImage = predictionImage;
+    state.dataset = dataset;
+    state.sourceLabel = sourceLabel;
+    state.activeThreshold = 0;
+    state.focus = { truthId: null, predictionId: null };
+    state.cell = null;
+    state.results = [];
+    state.colors = {
+      truth: buildColors(dataset.truthIds, 'truth'),
+      prediction: buildColors(dataset.predictionIds, 'prediction'),
+    };
+
+    renderAll();
+    void runMatching({ pickFirst: true });
+  }
+
+  function nextTick() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  async function runMatching(options = {}) {
+    if (!state.dataset) {
+      state.results = [];
+      return;
+    }
+
+    const token = ++state.computeToken;
+    state.computing = true;
+    updateComputeButton(0, 0);
+
+    let thresholds;
+    try {
+      thresholds = Core.parseThresholds($('thresholdInput').value);
+      clearStatus();
+    } catch (error) {
+      if (token !== state.computeToken) return;
+      state.results = [];
+      state.computing = false;
+      updateComputeButton(0, 0);
+      showStatus('error', error.message);
+      renderThresholdTable();
+      renderPairTable();
+      renderUnmatched();
+      renderInspector();
+      updateExportButtons();
+      return;
+    }
+
+    const results = [];
+    state.results = [];
+    renderThresholdTable();
+
+    for (let i = 0; i < thresholds.length; i += 1) {
+      // Yield between thresholds so the page can paint progress and remain
+      // interactive even for the 256×256 worst case.
+      await nextTick();
+      if (token !== state.computeToken) return;
+
+      results.push(Core.matchThreshold(state.dataset, thresholds[i]));
+      state.results = results.slice();
+      if (state.activeThreshold >= state.results.length) state.activeThreshold = 0;
+      updateComputeButton(i + 1, thresholds.length);
+      renderThresholdTable();
+    }
+
+    if (token !== state.computeToken) return;
+    state.results = results;
+    state.computing = false;
+    if (state.activeThreshold >= state.results.length) state.activeThreshold = 0;
+
+    if (options.pickFirst && state.focus.truthId === null && state.focus.predictionId === null) {
+      const firstPair = activeResult()?.pairs?.[0];
+      if (firstPair) state.focus = { truthId: firstPair.truthId, predictionId: firstPair.predictionId };
+    }
+
+    updateComputeButton(thresholds.length, thresholds.length);
+    renderAllDataViews();
+  }
+
+  function updateComputeButton(done, total) {
+    const button = $('applyThresholds');
+    if (state.computing && total > 0) button.textContent = `计算中 ${done}/${total}`;
+    else if (state.computing) button.textContent = '准备计算…';
+    else button.textContent = '重算各档';
+  }
+
+  function activeResult() {
+    return state.results[state.activeThreshold] ?? null;
+  }
+
+  function updateExportButtons() {
+    const enabled = state.dataset && state.results.length > 0;
+    $('exportJsonButton').disabled = !enabled;
+    $('copyJsonButton').disabled = !enabled;
+  }
+
+  /* ---------- rendering orchestration ---------- */
+
+  function renderAll() {
+    renderDatasetMeta();
+    renderThresholdTable();
+    renderCanvases();
+    renderPairTable();
+    renderUnmatched();
+    renderInspector();
+    applyCell();
+    updateExportButtons();
+  }
+
+  function renderAllDataViews() {
+    renderThresholdTable();
+    renderPairTable();
+    renderUnmatched();
+    renderInspector();
+    renderCanvases();
+    updateExportButtons();
+  }
+
+  function renderDatasetMeta() {
+    const ds = state.dataset;
+    if (!ds) return;
+    const excluded = ds.excludedTruth.length + ds.excludedPrediction.length;
+    $('datasetLine').textContent =
+      `${ds.width}×${ds.height} · ${ds.truthIds.length} 个有效真值 · ${ds.predictionIds.length} 个有效预测 · 忽略 ${ds.ignoredPixels.toLocaleString()} px`;
+    $('fileLine').textContent =
+      `${state.sourceLabel}；有效像素 ${ds.validPixels.toLocaleString()}，剔除后空实例 ${excluded} 个（真 ${ds.excludedTruth.length} / 预 ${ds.excludedPrediction.length}）。`;
+    $('truthMeta').textContent =
+      `P5 ${ds.truthImageMeta.bitDepth}-bit · maxval ${ds.truthImageMeta.maxval} · ${ds.truthIds.length} objects`;
+    $('predictionMeta').textContent =
+      `P5 ${ds.predictionImageMeta.bitDepth}-bit · maxval ${ds.predictionImageMeta.maxval} · ${ds.predictionIds.length} objects`;
+    $('truthReadout').textContent = '点击真值实例或编号进行点选。';
+    $('predictionReadout').textContent = '点击预测实例或编号进行点选。';
+  }
+
+  /* ---------- colors and canvases ---------- */
+
+  function hslToRgb(h, s, l) {
+    const hue2rgb = (p, q, t) => {
+      let tt = t;
+      if (tt < 0) tt += 1;
+      if (tt > 1) tt -= 1;
+      if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+      if (tt < 1 / 2) return q;
+      if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    return [
+      Math.round(hue2rgb(p, q, h / 360 + 1 / 3) * 255),
+      Math.round(hue2rgb(p, q, h / 360) * 255),
+      Math.round(hue2rgb(p, q, h / 360 - 1 / 3) * 255),
+    ];
+  }
+
+  function buildColors(ids, side) {
+    const map = new Map();
+    const lightness = isDark() ? 0.64 : 0.48;
+    ids.forEach((id, i) => {
+      const hue = (i * 137.508 + (side === 'prediction' ? 32 : 188)) % 360;
+      map.set(id, hslToRgb(hue, 0.68, lightness));
+    });
+    return map;
+  }
+
+  function ignoreRgb(x, y) {
+    const dark = isDark();
+    const stripe = ((x + y) % 10) < 4;
+    if (dark) return stripe ? [91, 112, 134] : [42, 56, 73];
+    return stripe ? [148, 163, 184] : [214, 222, 232];
+  }
+
+  function renderCanvases() {
+    if (!state.dataset) return;
+    state.colors = {
+      truth: buildColors(state.dataset.truthIds, 'truth'),
+      prediction: buildColors(state.dataset.predictionIds, 'prediction'),
+    };
+    renderBaseCanvas('truth');
+    renderBaseCanvas('prediction');
+    renderOverlayCanvas('truth');
+    renderOverlayCanvas('prediction');
+    renderLabels('truth');
+    renderLabels('prediction');
+  }
+
+  function renderBaseCanvas(side) {
+    const ds = state.dataset;
+    const canvas = $(`${side}Canvas`);
+    canvas.width = ds.width;
+    canvas.height = ds.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    const image = ctx.createImageData(ds.width, ds.height);
+    const rgba = image.data;
+    const raster = side === 'truth' ? ds.truth : ds.prediction;
+    const colors = state.colors[side];
+    const focusId = side === 'truth' ? state.focus.truthId : state.focus.predictionId;
+    const dark = isDark();
+
+    for (let i = 0; i < ds.pixelCount; i += 1) {
+      const x = i % ds.width;
+      const y = (i / ds.width) | 0;
+      const id = raster[i];
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 255;
+
+      if (side === 'truth' && id === Core.IGNORE_ID) {
+        [r, g, b] = ignoreRgb(x, y);
+      } else if (id === 0) {
+        a = 0;
+      } else {
+        [r, g, b] = colors.get(id) ?? [148, 163, 184];
+        if (focusId !== null && id !== focusId) {
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          r += (gray - r) * 0.72;
+          g += (gray - g) * 0.72;
+          b += (gray - b) * 0.72;
+          const fade = dark ? 0.48 : 0.34;
+          r += ((dark ? 16 : 244) - r) * fade;
+          g += ((dark ? 24 : 247) - g) * fade;
+          b += ((dark ? 38 : 251) - b) * fade;
+        }
+      }
+
+      const k = i * 4;
+      rgba[k] = r;
+      rgba[k + 1] = g;
+      rgba[k + 2] = b;
+      rgba[k + 3] = a;
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+
+  function renderOverlayCanvas(side) {
+    const ds = state.dataset;
+    const canvas = $(`${side}Overlay`);
+    const baseRect = $(`${side}Canvas`).getBoundingClientRect();
+    const cssWidth = baseRect.width || ds.width;
+    const cssHeight = baseRect.height || ds.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(cssWidth * dpr));
+    canvas.height = Math.max(1, Math.round(cssHeight * dpr));
+
+    const ctx = canvas.getContext('2d');
+    const pixelCanvas = document.createElement('canvas');
+    pixelCanvas.width = ds.width;
+    pixelCanvas.height = ds.height;
+    const pixelCtx = pixelCanvas.getContext('2d');
+    const image = pixelCtx.createImageData(ds.width, ds.height);
+    const rgba = image.data;
+    const raster = side === 'truth' ? ds.truth : ds.prediction;
+    const ownId = side === 'truth' ? state.focus.truthId : state.focus.predictionId;
+    const { truthId, predictionId } = state.focus;
+
+    for (let i = 0; i < ds.pixelCount; i += 1) {
+      const x = i % ds.width;
+      const y = (i / ds.width) | 0;
+      const t = ds.truth[i];
+      const p = ds.prediction[i];
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+
+      if (side === 'prediction' && t === Core.IGNORE_ID) {
+        const stripe = ((x + y) % 10) < 4;
+        r = 100; g = 116; b = 139; a = stripe ? 115 : 70;
+      }
+
+      const isIntersection =
+        truthId !== null && predictionId !== null &&
+        t === truthId && p === predictionId &&
+        t !== Core.IGNORE_ID;
+
+      if (isIntersection) {
+        r = 245; g = 158; b = 11; a = 155;
+      } else if (ownId !== null && raster[i] === ownId) {
+        r = isDark() ? 117 : 29;
+        g = isDark() ? 167 : 95;
+        b = isDark() ? 255 : 209;
+        a = 58;
+      }
+
+      const k = i * 4;
+      rgba[k] = r;
+      rgba[k + 1] = g;
+      rgba[k + 2] = b;
+      rgba[k + 3] = a;
+    }
+    pixelCtx.putImageData(image, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(pixelCanvas, 0, 0, canvas.width, canvas.height);
+
+    // Work in data-pixel coordinates. The high-DPI backing store keeps the
+    // contour stroke at a constant CSS-pixel width even for tiny PGMs.
+    ctx.setTransform(canvas.width / ds.width, 0, 0, canvas.height / ds.height, 0, 0);
+    strokeObjectContour(ctx, side, ownId, canvas);
+  }
+
+  function strokeObjectContour(ctx, side, id, canvas) {
+    if (id === null || id === 0 || !state.dataset) return;
+    const ds = state.dataset;
+    const raster = side === 'truth' ? ds.truth : ds.prediction;
+    const rect = canvas.getBoundingClientRect();
+    const cssPixelsPerDataPixel = rect.width > 0 ? rect.width / ds.width : 1;
+    const path = new Path2D();
+
+    for (let y = 0; y < ds.height; y += 1) {
+      for (let x = 0; x < ds.width; x += 1) {
+        const i = y * ds.width + x;
+        if (raster[i] !== id) continue;
+
+        if (y === 0 || raster[i - ds.width] !== id) {
+          path.moveTo(x, y);
+          path.lineTo(x + 1, y);
+        }
+        if (y === ds.height - 1 || raster[i + ds.width] !== id) {
+          path.moveTo(x, y + 1);
+          path.lineTo(x + 1, y + 1);
+        }
+        if (x === 0 || raster[i - 1] !== id) {
+          path.moveTo(x, y);
+          path.lineTo(x, y + 1);
+        }
+        if (x === ds.width - 1 || raster[i + 1] !== id) {
+          path.moveTo(x + 1, y);
+          path.lineTo(x + 1, y + 1);
+        }
+      }
+    }
+
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(2, 6, 23, 0.58)';
+    ctx.lineWidth = 5 / cssPixelsPerDataPixel;
+    ctx.stroke(path);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.1 / cssPixelsPerDataPixel;
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
+  function renderLabels(side) {
+    const ds = state.dataset;
+    const layer = $(`${side}Labels`);
+    layer.replaceChildren();
+    layer.hidden = !state.showLabels;
+    const objects = side === 'truth' ? ds.truthObjects : ds.predictionObjects;
+    const activeId = side === 'truth' ? state.focus.truthId : state.focus.predictionId;
+
+    for (const obj of objects) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `mask-label${obj.id === activeId ? ' active' : ''}`;
+      button.dataset.side = side;
+      button.dataset.id = String(obj.id);
+      button.textContent = String(obj.id);
+      button.style.left = `${((obj.centroid.x + 0.5) / ds.width) * 100}%`;
+      button.style.top = `${((obj.centroid.y + 0.5) / ds.height) * 100}%`;
+      button.title = `${side === 'truth' ? '真值' : '预测'}编号 ${obj.id}，面积 ${obj.area}`;
+      layer.appendChild(button);
+    }
+  }
+
+  /* ---------- viewport interactions ---------- */
+
+  function bindView() {
+    $('labelToggle').addEventListener('change', (event) => {
+      state.showLabels = event.target.checked;
+      $('truthLabels').hidden = !state.showLabels;
+      $('predictionLabels').hidden = !state.showLabels;
+    });
+
+    $('zoomIn').addEventListener('click', () => {
+      const cell = state.cell ?? currentFitCell();
+      state.cell = Math.min(64, cell * 1.6);
+      applyCell();
+    });
+    $('zoomOut').addEventListener('click', () => {
+      const cell = state.cell ?? currentFitCell();
+      state.cell = Math.max(0.025, cell / 1.6);
+      applyCell();
+    });
+    $('zoomFit').addEventListener('click', () => {
+      state.cell = null;
+      applyCell();
+    });
+
+    for (const side of ['truth', 'prediction']) {
+      const canvas = $(`${side}Canvas`);
+      canvas.addEventListener('click', (event) => {
+        const pos = eventPixel(canvas, event);
+        if (pos) selectAt(side, pos.x, pos.y);
+      });
+      canvas.addEventListener('pointermove', (event) => {
+        const pos = eventPixel(canvas, event);
+        if (pos) updateHover(pos);
+      });
+      canvas.addEventListener('pointerleave', clearHover);
+
+      $(`${side}Labels`).addEventListener('click', (event) => {
+        const label = event.target.closest('.mask-label');
+        if (!label) return;
+        event.stopPropagation();
+        selectAt(side, null, null, Number(label.dataset.id));
+      });
+    }
+
+    bindScrollSync();
+
+    let resizeFrame = 0;
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        if (state.dataset && state.cell === null) {
+          renderOverlayCanvas('truth');
+          renderOverlayCanvas('prediction');
+        }
+      });
+    });
+  }
+
+  function bindScrollSync() {
+    const a = $('truthViewport');
+    const b = $('predictionViewport');
+    let syncing = false;
+    const syncFrom = (source, target) => {
+      source.addEventListener('scroll', () => {
+        if (syncing) return;
+        syncing = true;
+        target.scrollLeft = source.scrollLeft;
+        target.scrollTop = source.scrollTop;
+        requestAnimationFrame(() => { syncing = false; });
+      }, { passive: true });
+    };
+    syncFrom(a, b);
+    syncFrom(b, a);
+  }
+
+  function currentFitCell() {
+    if (!state.dataset) return 1;
+    return $('truthStack').getBoundingClientRect().width / state.dataset.width;
+  }
+
+  function applyCell() {
+    if (!state.dataset) return;
+    for (const id of ['truthStack', 'predictionStack']) {
+      const stack = $(id);
+      if (state.cell === null) {
+        stack.classList.add('fit');
+        stack.style.width = '';
+      } else {
+        stack.classList.remove('fit');
+        stack.style.width = `${state.dataset.width * state.cell}px`;
+      }
+    }
+    $('zoomReadout').textContent = state.cell === null
+      ? '适应'
+      : `${state.cell >= 1 ? state.cell.toFixed(1) : state.cell.toFixed(2)} px/格`;
+
+    // Contour widths are expressed in CSS pixels, so recompute after scaling.
+    if (state.dataset) {
+      renderOverlayCanvas('truth');
+      renderOverlayCanvas('prediction');
+    }
+  }
+
+  function eventPixel(canvas, event) {
+    const ds = state.dataset;
+    if (!ds) return null;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor(((event.clientX - rect.left) / rect.width) * ds.width);
+    const y = Math.floor(((event.clientY - rect.top) / rect.height) * ds.height);
+    if (x < 0 || y < 0 || x >= ds.width || y >= ds.height) return null;
+    return { x, y };
+  }
+
+  function updateHover(pos) {
+    const ds = state.dataset;
+    state.hover = pos;
+    for (const side of ['truth', 'prediction']) {
+      const crosshair = $(`${side}Crosshair`);
+      crosshair.hidden = false;
+      crosshair.querySelector('.cross-v').style.left = `${((pos.x + 0.5) / ds.width) * 100}%`;
+      crosshair.querySelector('.cross-h').style.top = `${((pos.y + 0.5) / ds.height) * 100}%`;
+    }
+    const i = pos.y * ds.width + pos.x;
+    const t = ds.truth[i];
+    const p = ds.prediction[i];
+    const text = `x ${pos.x}, y ${pos.y} · 真值 ${formatPixelId(t, true)} · 预测 ${formatPixelId(p, false)}`;
+    $('truthReadout').textContent = text;
+    $('predictionReadout').textContent = text;
+  }
+
+  function clearHover() {
+    $('truthCrosshair').hidden = true;
+    $('predictionCrosshair').hidden = true;
+    if (state.dataset) {
+      $('truthReadout').textContent = '点击真值实例或编号进行点选。';
+      $('predictionReadout').textContent = '点击预测实例或编号进行点选。';
+    }
+  }
+
+  function formatPixelId(id, isTruth) {
+    if (id === 0) return '0/背景';
+    if (id === Core.IGNORE_ID && isTruth) return '65535/忽略';
+    return String(id);
+  }
+
+  function selectAt(side, x, y, explicitId = null) {
+    const ds = state.dataset;
+    if (!ds) return;
+
+    let id = explicitId;
+    if (id === null) {
+      const i = y * ds.width + x;
+      id = side === 'truth' ? ds.truth[i] : ds.prediction[i];
+    }
+
+    const result = activeResult();
+    if (side === 'truth') {
+      if (id === 0) {
+        state.focus = { truthId: null, predictionId: null };
+      } else if (id === Core.IGNORE_ID) {
+        state.focus = { truthId: Core.IGNORE_ID, predictionId: null };
+      } else {
+        const pair = result?.pairs.find((p) => p.truthId === id);
+        state.focus = { truthId: id, predictionId: pair ? pair.predictionId : null };
+      }
+    } else {
+      if (id === 0) {
+        state.focus = { truthId: null, predictionId: null };
+      } else {
+        const pair = result?.pairs.find((p) => p.predictionId === id);
+        state.focus = { truthId: pair ? pair.truthId : null, predictionId: id };
+      }
+    }
+    renderFocusChanges();
+  }
+
+  function renderFocusChanges() {
+    renderBaseCanvas('truth');
+    renderBaseCanvas('prediction');
+    renderOverlayCanvas('truth');
+    renderOverlayCanvas('prediction');
+    renderLabels('truth');
+    renderLabels('prediction');
+    renderPairTable();
+    renderUnmatched();
+    renderInspector();
+  }
+
+  /* ---------- threshold table ---------- */
+
+  function bindTablesAndInspector() {
+    $('thresholdTableBody').addEventListener('click', (event) => {
+      const row = event.target.closest('tr[data-index]');
+      if (!row) return;
+      state.activeThreshold = Number(row.dataset.index);
+      state.focus = { truthId: null, predictionId: null };
+      const firstPair = activeResult()?.pairs?.[0];
+      if (firstPair) state.focus = { truthId: firstPair.truthId, predictionId: firstPair.predictionId };
+      renderAllDataViews();
+    });
+
+    $('thresholdTableBody').addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const row = event.target.closest('tr[data-index]');
+      if (!row) return;
+      event.preventDefault();
+      state.activeThreshold = Number(row.dataset.index);
+      renderAllDataViews();
+    });
+
+    $('pairTableBody').addEventListener('click', (event) => {
+      const row = event.target.closest('tr[data-truth-id]');
+      if (!row) return;
+      state.focus = {
+        truthId: Number(row.dataset.truthId),
+        predictionId: Number(row.dataset.predictionId),
+      };
+      renderFocusChanges();
+    });
+
+    $('unmatchedBody').addEventListener('click', (event) => {
+      const chip = event.target.closest('.chip');
+      if (!chip) return;
+      const id = Number(chip.dataset.id);
+      if (chip.dataset.side === 'truth') {
+        const pair = activeResult()?.pairs.find((p) => p.truthId === id);
+        state.focus = { truthId: id, predictionId: pair ? pair.predictionId : null };
+      } else {
+        const pair = activeResult()?.pairs.find((p) => p.predictionId === id);
+        state.focus = { truthId: pair ? pair.truthId : null, predictionId: id };
+      }
+      renderFocusChanges();
+    });
+
+    $('inspectorBody').addEventListener('click', (event) => {
+      const row = event.target.closest('tr[data-candidate-truth-id]');
+      if (!row) return;
+      state.focus = {
+        truthId: Number(row.dataset.candidateTruthId),
+        predictionId: Number(row.dataset.candidatePredictionId),
+      };
+      renderFocusChanges();
+    });
+
+    $('exportJsonButton').addEventListener('click', () => {
+      openJsonModal();
+      downloadJson();
+    });
+    $('copyJsonButton').addEventListener('click', async () => {
+      const text = buildJson();
+      state.lastJson = text;
+      const ok = await copyToClipboard(text);
+      if (ok) toast('各档配对与计数 JSON 已复制。');
+      else openJsonModal();
+    });
+  }
+
+  function formatPercent(value) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '—';
+    return `${(value * 100).toFixed(1)}%`;
+  }
+
+  function renderThresholdTable() {
+    const body = $('thresholdTableBody');
+    if (!state.dataset) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="8" class="empty-cell">等待数据。</td></tr>';
+      return;
+    }
+    if (state.results.length === 0) {
+      const message = state.computing ? '正在计算各档匹配…' : '阈值输入无效，请按提示修正。';
+      body.innerHTML = `<tr class="empty-row"><td colspan="8" class="empty-cell">${message}</td></tr>`;
+      return;
+    }
+
+    body.replaceChildren();
+    state.results.forEach((result, index) => {
+      const tr = document.createElement('tr');
+      tr.dataset.index = String(index);
+      tr.tabIndex = 0;
+      if (index === state.activeThreshold) tr.classList.add('active');
+      const c = result.counts;
+      const truthRate = c.truthInstances ? c.matchedPairs / c.truthInstances : null;
+      const predRate = c.predictionInstances ? c.matchedPairs / c.predictionInstances : null;
+      tr.innerHTML = `
+        <td><strong>${result.thresholdPermyriad}</strong> <span class="hint">‱ · ${(result.thresholdRatio * 100).toFixed(2)}%</span></td>
+        <td class="num">${c.eligibleEdges}</td>
+        <td class="num"><strong>${c.matchedPairs}</strong></td>
+        <td class="num">${c.unmatchedTruth}</td>
+        <td class="num">${c.unmatchedPrediction}</td>
+        <td class="num">${formatPercent(truthRate)}</td>
+        <td class="num">${formatPercent(predRate)}</td>
+        <td class="num">${result.scoreMillionTotal.toLocaleString()}</td>
+      `;
+      body.appendChild(tr);
+    });
+  }
+
+  function renderPairTable() {
+    const body = $('pairTableBody');
+    const result = activeResult();
+    body.replaceChildren();
+
+    if (!result || result.pairs.length === 0) {
+      const tr = document.createElement('tr');
+      tr.className = 'empty-row';
+      tr.innerHTML = '<td colspan="6" class="empty-cell">当前档位没有配对。可降低阈值或点选未配对象查看候选重叠。</td>';
+      body.appendChild(tr);
+      return;
+    }
+
+    for (const pair of result.pairs) {
+      const tr = document.createElement('tr');
+      tr.dataset.truthId = String(pair.truthId);
+      tr.dataset.predictionId = String(pair.predictionId);
+      if (state.focus.truthId === pair.truthId && state.focus.predictionId === pair.predictionId) {
+        tr.classList.add('active');
+      }
+      tr.innerHTML = `
+        <td class="mono"><strong>${pair.truthId}</strong></td>
+        <td class="mono"><strong>${pair.predictionId}</strong></td>
+        <td class="num">${pair.intersectionArea.toLocaleString()}</td>
+        <td class="num">${pair.unionArea.toLocaleString()}</td>
+        <td class="mono">${pair.iouExact}</td>
+        <td class="num mono">${(pair.iouMillionFloor / 1_000_000).toFixed(6)}</td>
+      `;
+      body.appendChild(tr);
+    }
+  }
+
+  function renderUnmatched() {
+    const body = $('unmatchedBody');
+    const result = activeResult();
+    body.replaceChildren();
+    if (!result) {
+      body.innerHTML = '<p class="empty-state">有效阈值结果出现后，这里列出当前档未配编号。</p>';
+      return;
+    }
+
+    body.appendChild(renderChipGroup('真值', 'truth', result.unmatchedTruthIds));
+    body.appendChild(renderChipGroup('预测', 'prediction', result.unmatchedPredictionIds));
+  }
+
+  function renderChipGroup(label, side, ids) {
+    const group = document.createElement('div');
+    group.className = 'unmatched-group';
+    const activeId = side === 'truth' ? state.focus.truthId : state.focus.predictionId;
+    const chips = ids.length
+      ? `<div class="chip-row">${ids.map((id) => `
+          <button class="chip${id === activeId ? ' active' : ''}" type="button" data-side="${side}" data-id="${id}">${id}</button>
+        `).join('')}</div>`
+      : `<p class="all-matched">当前档没有未配${label}。</p>`;
+    group.innerHTML = `<h3>${label}未配 · ${ids.length}</h3>${chips}`;
+    return group;
+  }
+
+  /* ---------- inspector ---------- */
+
+  function renderInspector() {
+    const body = $('inspectorBody');
+    const ds = state.dataset;
+    if (!ds) {
+      body.innerHTML = '<p class="empty-state">导入 P5 PGM 后，这里显示精确交集、并集和候选边。</p>';
+      return;
+    }
+
+    const { truthId, predictionId } = state.focus;
+    if (truthId === null && predictionId === null) {
+      body.innerHTML = `
+        <p class="empty-state">点击掩膜实例、编号标签、配对行或未配编号，查看交集、并集、面积和候选重叠。</p>
+        <div class="metric-grid">
+          ${metric('有效像素', ds.validPixels.toLocaleString())}
+          ${metric('忽略像素', ds.ignoredPixels.toLocaleString())}
+          ${metric('有效真值', String(ds.truthIds.length))}
+          ${metric('有效预测', String(ds.predictionIds.length))}
+        </div>`;
+      return;
+    }
+
+    if (truthId === Core.IGNORE_ID) {
+      body.innerHTML = `
+        <div class="focus-title"><span class="id-pill">真值 65535</span>${statusPill('warn', '忽略区')}</div>
+        <p class="exact-line">这些像素在两图面积、交集和并集中均剔除；完全落在此区域的预测实例会变空且不参与匹配。</p>
+        <div class="metric-grid">${metric('忽略像素', ds.ignoredPixels.toLocaleString())}${metric('有效像素', ds.validPixels.toLocaleString())}</div>`;
+      return;
+    }
+
+    const truthObject = ds.truthObjects.find((o) => o.id === truthId) ?? null;
+    const predictionObject = ds.predictionObjects.find((o) => o.id === predictionId) ?? null;
+    const excludedTruth = ds.excludedTruth.find((o) => o.id === truthId);
+    const excludedPrediction = ds.excludedPrediction.find((o) => o.id === predictionId);
+    const result = activeResult();
+    const chosenPair = result?.pairs.find((p) => p.truthId === truthId && p.predictionId === predictionId) ?? null;
+    const truthPair = result?.pairs.find((p) => p.truthId === truthId) ?? null;
+    const predictionPair = result?.pairs.find((p) => p.predictionId === predictionId) ?? null;
+
+    let status = '';
+    if (excludedTruth || excludedPrediction) {
+      status = statusPill('warn', '剔除后为空，不参与匹配');
+    } else if (chosenPair) {
+      status = statusPill('good', '当前档配对');
+    } else if (truthId !== null && predictionId !== null && truthObject && predictionObject && result) {
+      const ti = ds.truthIndex.get(truthId);
+      const pj = ds.predictionIndex.get(predictionId);
+      const eligible = Core.isEligible(ds, ti, pj, result.threshold);
+      status = eligible
+        ? statusPill('warn', '有资格，但全局最优未选此边')
+        : statusPill('bad', '未达当前精确阈值');
+    } else if (truthId !== null && truthObject) {
+      status = truthPair
+        ? statusPill('accent', `本档已配预测 ${truthPair.predictionId}`)
+        : statusPill('bad', '当前档未配');
+    } else if (predictionId !== null && predictionObject) {
+      status = predictionPair
+        ? statusPill('accent', `本档已配真值 ${predictionPair.truthId}`)
+        : statusPill('bad', '当前档未配');
+    }
+
+    const title = `
+      <div class="focus-title">
+        ${truthId !== null ? `<span class="id-pill">真 ${truthId}</span>` : ''}
+        ${truthId !== null && predictionId !== null ? '<span class="arrow">↔</span>' : ''}
+        ${predictionId !== null ? `<span class="id-pill">预 ${predictionId}</span>` : ''}
+        ${status}
+      </div>`;
+
+    const excludedNote = excludedTruth
+      ? `<p class="exact-line">真值编号 ${excludedTruth.id}：原始 ${excludedTruth.rawArea} px；${excludedTruth.reason}。</p>`
+      : excludedPrediction
+        ? `<p class="exact-line">预测编号 ${excludedPrediction.id}：原始 ${excludedPrediction.rawArea} px；${excludedPrediction.reason}。</p>`
+        : '';
+
+    let overlap = null;
+    let eligible = false;
+    if (truthObject && predictionObject) {
+      const ti = truthObject.index;
+      const pj = predictionObject.index;
+      overlap = Core.getOverlap(ds, ti, pj);
+      if (result) eligible = Core.isEligible(ds, ti, pj, result.threshold);
+    }
+
+    const metrics = `
+      <div class="metric-grid">
+        ${metric('交集面积', overlap ? overlap.intersection.toLocaleString() : '—')}
+        ${metric('并集面积', overlap ? overlap.union.toLocaleString() : '—')}
+        ${metric('真值有效面积', truthObject ? truthObject.area.toLocaleString() : excludedTruth ? excludedTruth.rawArea.toLocaleString() : '—')}
+        ${metric('预测有效面积', predictionObject ? predictionObject.area.toLocaleString() : excludedPrediction ? excludedPrediction.rawArea.toLocaleString() : '—')}
+      </div>`;
+
+    const exact = overlap
+      ? `<p class="exact-line">精确 IoU：<code>${overlap.intersection}/${overlap.union}</code>
+         ≈ ${(overlap.intersection / overlap.union).toFixed(8)}；向下取整到百万分：
+         <strong class="mono">${(overlap.iouMillionFloor / 1_000_000).toFixed(6)}</strong>
+         ${result ? `；当前阈值资格：<strong>${eligible ? '满足' : '不满足'}</strong>` : ''}
+       </p>`
+      : '<p class="exact-line">选择一个真值和一个预测编号后，这里显示两者的精确交并面积。</p>';
+
+    body.innerHTML = title + excludedNote + metrics + exact + renderCandidateTable(truthObject, predictionObject);
+  }
+
+  function metric(label, value) {
+    return `<div class="metric"><span class="metric-label">${label}</span><span class="metric-value">${value}</span></div>`;
+  }
+
+  function statusPill(kind, text) {
+    const cls = {
+      good: 'status-good',
+      warn: 'status-warn',
+      bad: 'status-bad',
+      accent: 'status-accent',
+    }[kind] ?? 'status-accent';
+    return `<span class="status-pill ${cls}">${text}</span>`;
+  }
+
+  function renderCandidateTable(truthObject, predictionObject) {
+    const ds = state.dataset;
+    const result = activeResult();
+    let anchorSide = null;
+    let anchor = null;
+    if (truthObject) {
+      anchorSide = 'truth';
+      anchor = truthObject;
+    } else if (predictionObject) {
+      anchorSide = 'prediction';
+      anchor = predictionObject;
+    } else {
+      return '';
+    }
+
+    const rows = [];
+    if (anchorSide === 'truth') {
+      for (let pj = 0; pj < ds.predictionIds.length; pj += 1) {
+        const overlap = Core.getOverlap(ds, anchor.index, pj);
+        if (overlap.intersection === 0) continue;
+        const pId = ds.predictionIds[pj];
+        const eligible = result ? Core.isEligible(ds, anchor.index, pj, result.threshold) : false;
+        const chosen = result?.pairs.some((p) => p.truthId === anchor.id && p.predictionId === pId);
+        rows.push({ otherId: pId, otherIndex: pj, overlap, eligible, chosen });
+      }
+      rows.sort((a, b) => b.overlap.intersection - a.overlap.intersection || a.overlap.union - b.overlap.union);
+      return candidateTableHtml('预测候选', anchor.id, 'truth', rows, result);
+    }
+
+    for (let ti = 0; ti < ds.truthIds.length; ti += 1) {
+      const overlap = Core.getOverlap(ds, ti, anchor.index);
+      if (overlap.intersection === 0) continue;
+      const tId = ds.truthIds[ti];
+      const eligible = result ? Core.isEligible(ds, ti, anchor.index, result.threshold) : false;
+      const chosen = result?.pairs.some((p) => p.truthId === tId && p.predictionId === anchor.id);
+      rows.push({ otherId: tId, otherIndex: ti, overlap, eligible, chosen });
+    }
+    rows.sort((a, b) => b.overlap.intersection - a.overlap.intersection || a.overlap.union - b.overlap.union);
+    return candidateTableHtml('真值候选', anchor.id, 'prediction', rows, result);
+  }
+
+  function candidateTableHtml(title, anchorId, anchorSide, rows, result) {
+    if (rows.length === 0) {
+      return `<h3 class="candidate-title">${title} · 0</h3><p class="exact-line">没有任何非零交集。</p>`;
+    }
+    const headOther = anchorSide === 'truth' ? '预测编号' : '真值编号';
+    const bodyRows = rows.slice(0, 80).map((row) => {
+      const attrs = anchorSide === 'truth'
+        ? `data-candidate-truth-id="${anchorId}" data-candidate-prediction-id="${row.otherId}"`
+        : `data-candidate-truth-id="${row.otherId}" data-candidate-prediction-id="${state.focus.predictionId}"`;
+      let stateText = '低于阈值';
+      let stateClass = 'status-bad';
+      if (row.chosen) { stateText = '本档配对'; stateClass = 'status-good'; }
+      else if (row.eligible) { stateText = '有资格未选'; stateClass = 'status-warn'; }
+      return `
+        <tr ${attrs} style="cursor:pointer">
+          <td class="mono">${row.otherId}</td>
+          <td class="num">${row.overlap.intersection}</td>
+          <td class="num">${row.overlap.union}</td>
+          <td class="num mono">${(row.overlap.iouMillionFloor / 1_000_000).toFixed(6)}</td>
+          <td><span class="status-pill ${stateClass}">${stateText}</span></td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <h3 class="candidate-title">${title} · ${rows.length}${rows.length > 80 ? '（显示交集最大的 80 条）' : ''}</h3>
+      <div class="candidate-scroll table-scroll">
+        <table class="data-table candidate-table">
+          <thead><tr><th>${headOther}</th><th class="num">交</th><th class="num">并</th><th class="num">IoU↓百万</th><th>状态</th></tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  /* ---------- JSON export / modal ---------- */
+
+  function buildJson() {
+    const report = Core.buildReport(state.dataset, state.results, {
+      source: state.sourceLabel,
+      exportedAt: new Date().toISOString(),
+    });
+    return JSON.stringify(report, null, 2);
+  }
+
+  function bindModal() {
+    $('jsonClose').addEventListener('click', closeJsonModal);
+    $('jsonModal').addEventListener('click', (event) => {
+      if (event.target === $('jsonModal')) closeJsonModal();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !$('jsonModal').hidden) closeJsonModal();
+    });
+    $('modalCopyButton').addEventListener('click', async () => {
+      const ok = await copyToClipboard($('jsonOutput').value);
+      if (ok) toast('JSON 已复制。');
+    });
+    $('modalDownloadButton').addEventListener('click', downloadJson);
+  }
+
+  function openJsonModal() {
+    if (!state.dataset || state.results.length === 0) return;
+    state.lastJson = buildJson();
+    $('jsonOutput').value = state.lastJson;
+    $('jsonMeta').textContent =
+      `${state.results.length} 个阈值 · ${state.dataset.truthIds.length} 个真值 · ${state.dataset.predictionIds.length} 个预测`;
+    $('jsonModal').hidden = false;
+  }
+
+  function closeJsonModal() {
+    $('jsonModal').hidden = true;
+  }
+
+  function downloadJson() {
+    if (!state.dataset || state.results.length === 0) return;
+    const text = $('jsonOutput').value || buildJson();
+    const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `instance-agreement-${state.dataset.width}x${state.dataset.height}-${state.results.length}thresholds.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('已生成 JSON 下载。');
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch { /* fall through */ }
+
+    try {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  if (!Core) {
+    document.body.innerHTML = '<p style="padding:24px">agreement-core.js 未能载入。</p>';
+    return;
+  }
+  init();
+})();
+
+  </script>
+</body>
+</html>

@@ -9,6 +9,9 @@
 id_rsa*
 credentials*.json
 secrets*.json
+# dependencies
+node_modules/
+
 # 缓存目录
 .cache/
 __pycache__/

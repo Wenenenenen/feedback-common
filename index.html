@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>实例匹配对照台</title>
+  <meta name="description" content="16 位 P5 实例分割真值与预测的忽略区感知、精确 IoU 和一对一最优匹配对照工具" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <div class="title-block">
+        <p class="eyebrow">Instance mask agreement</p>
+        <h1>实例匹配对照台</h1>
+        <p class="lede">导入同尺寸 16 位 P5 真值与预测，按最多 32 档阈值重算一对一匹配；先最大化配对数，再最大化百万分 IoU 总分，最后用编号字典序消除并列。</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" id="themeToggle" type="button" aria-label="切换深浅色">切换主题</button>
+        <button class="btn btn-primary" id="zipButton" type="button">导入 ZIP</button>
+        <input type="file" id="zipInput" accept=".zip,application/zip" hidden />
+      </div>
+    </div>
+  </header>
+
+  <main class="shell workspace">
+    <section class="panel import-panel" aria-labelledby="importTitle">
+      <div class="import-copy">
+        <h2 id="importTitle">数据导入</h2>
+        <p id="datasetLine" class="dataset-line">正在载入内置样例…</p>
+        <p class="file-line" id="fileLine">支持 <code>samples/instance-agreement.zip</code> 中的 <code>truth.pgm</code> 与 <code>prediction.pgm</code>。所有计算均在本地浏览器完成。</p>
+      </div>
+      <div class="import-actions">
+        <button class="btn" id="truthButton" type="button">选择真值 PGM</button>
+        <input type="file" id="truthInput" accept=".pgm,.pnm,image/x-portable-graymap" hidden />
+        <button class="btn" id="predictionButton" type="button">选择预测 PGM</button>
+        <input type="file" id="predictionInput" accept=".pgm,.pnm,image/x-portable-graymap" hidden />
+        <button class="btn btn-soft" id="sampleButton" type="button">重载内置样例</button>
+      </div>
+      <div class="threshold-editor">
+        <label for="thresholdInput">重叠阈值（万分数，空格/逗号/换行分隔，最多 32 个）</label>
+        <div class="threshold-row">
+          <textarea id="thresholdInput" rows="2" spellcheck="false">0 2500 5000 7500</textarea>
+          <button class="btn btn-primary" id="applyThresholds" type="button">重算各档</button>
+        </div>
+        <p class="hint">例如 <code>5000</code> = IoU ≥ 0.5000。资格判断使用整数交叉相乘；即使阈值为 <code>0</code>，零交集也不会成为候选边。</p>
+      </div>
+      <div id="statusBanner" class="banner" role="status" aria-live="polite" hidden></div>
+      <div id="dropZone" class="drop-zone">也可以把 ZIP、两个 PGM 文件拖到页面任意位置。</div>
+    </section>
+
+    <section class="panel table-panel" aria-labelledby="summaryTitle">
+      <div class="panel-head">
+        <div>
+          <h2 id="summaryTitle">各档配对与计数</h2>
+          <p class="panel-sub">选择一行作为联动点选和未配对象检查的当前档位。</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" id="copyJsonButton" type="button" disabled>复制 JSON</button>
+          <button class="btn btn-primary" id="exportJsonButton" type="button" disabled>导出各档 JSON</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table threshold-table">
+          <thead>
+            <tr>
+              <th>阈值</th>
+              <th scope="col">资格边</th>
+              <th scope="col">配对数</th>
+              <th scope="col">未配真值</th>
+              <th scope="col">未配预测</th>
+              <th scope="col">真值匹配率</th>
+              <th scope="col">预测匹配率</th>
+              <th scope="col">百万分总分</th>
+            </tr>
+          </thead>
+          <tbody id="thresholdTableBody">
+            <tr><td colspan="8" class="empty-cell">等待数据。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="viewer-toolbar panel">
+      <div class="viewer-toolbar-left">
+        <strong>联动掩膜视图</strong>
+        <span class="hint">点击实例或编号；另一侧会定位到当前阈值下的配对。两图滚动、十字线和缩放同步。</span>
+      </div>
+      <div class="zoom-controls" aria-label="视图缩放">
+        <button class="icon-btn" id="zoomOut" type="button" aria-label="缩小">−</button>
+        <button class="btn btn-small" id="zoomFit" type="button">适应宽度</button>
+        <button class="icon-btn" id="zoomIn" type="button" aria-label="放大">+</button>
+        <span id="zoomReadout" class="zoom-readout">适应</span>
+        <label class="check-label"><input type="checkbox" id="labelToggle" checked /> 编号</label>
+      </div>
+    </section>
+
+    <section class="viewers-grid">
+      <article class="panel viewer-card">
+        <header class="viewer-head">
+          <div>
+            <h2>真值 P5</h2>
+            <p id="truthMeta" class="viewer-meta">—</p>
+          </div>
+          <span class="side-badge truth-badge">Truth</span>
+        </header>
+        <div class="viewport" id="truthViewport" data-viewport="truth">
+          <div class="canvas-stack fit" id="truthStack">
+            <canvas id="truthCanvas" data-side="truth" aria-label="真值实例掩膜"></canvas>
+            <canvas id="truthOverlay" class="overlay-canvas" data-side="truth" aria-hidden="true"></canvas>
+            <div class="label-layer" id="truthLabels"></div>
+            <div class="crosshair" id="truthCrosshair" hidden><i class="cross-v"></i><i class="cross-h"></i></div>
+          </div>
+        </div>
+        <footer class="viewer-foot" id="truthReadout">未载入</footer>
+      </article>
+
+      <article class="panel viewer-card">
+        <header class="viewer-head">
+          <div>
+            <h2>预测 P5</h2>
+            <p id="predictionMeta" class="viewer-meta">—</p>
+          </div>
+          <span class="side-badge prediction-badge">Prediction</span>
+        </header>
+        <div class="viewport" id="predictionViewport" data-viewport="prediction">
+          <div class="canvas-stack fit" id="predictionStack">
+            <canvas id="predictionCanvas" data-side="prediction" aria-label="预测实例掩膜"></canvas>
+            <canvas id="predictionOverlay" class="overlay-canvas" data-side="prediction" aria-hidden="true"></canvas>
+            <div class="label-layer" id="predictionLabels"></div>
+            <div class="crosshair" id="predictionCrosshair" hidden><i class="cross-v"></i><i class="cross-h"></i></div>
+          </div>
+        </div>
+        <footer class="viewer-foot" id="predictionReadout">未载入</footer>
+      </article>
+    </section>
+
+    <section class="detail-grid">
+      <article class="panel pair-panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="pairTitle">当前档配对明细</h2>
+            <p class="panel-sub">按真值编号递增；点击任意行在两图中联动查看。</p>
+          </div>
+        </div>
+        <div class="table-scroll pair-scroll">
+          <table class="data-table pair-table">
+            <thead>
+              <tr>
+                <th>真值</th>
+                <th>预测</th>
+                <th>交集</th>
+                <th>并集</th>
+                <th>精确 IoU</th>
+                <th>百万分向下取整</th>
+              </tr>
+            </thead>
+            <tbody id="pairTableBody"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <aside class="side-column">
+        <section class="panel inspector" id="inspectorPanel" aria-labelledby="inspectorTitle">
+          <h2 id="inspectorTitle">交并面积检查器</h2>
+          <div id="inspectorBody" class="inspector-body">
+            <p class="empty-state">点击掩膜实例、编号标签、配对行或未配编号，查看交集、并集、面积和候选重叠。</p>
+          </div>
+        </section>
+
+        <section class="panel unmatched-panel" aria-labelledby="unmatchedTitle">
+          <h2 id="unmatchedTitle">当前档未配对象</h2>
+          <div id="unmatchedBody" class="unmatched-body"></div>
+        </section>
+      </aside>
+    </section>
+
+    <footer class="page-footer">
+      <p>匹配由本页内置的 BigInt 精确指派计算完成；不使用贪心最高重叠，也不调用外部匹配服务。</p>
+    </footer>
+  </main>
+
+  <div class="modal-backdrop" id="jsonModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="jsonModalTitle">
+      <header class="modal-head">
+        <h2 id="jsonModalTitle">各档配对与计数 JSON</h2>
+        <button class="icon-btn" id="jsonClose" type="button" aria-label="关闭">×</button>
+      </header>
+      <p class="modal-sub" id="jsonMeta"></p>
+      <textarea id="jsonOutput" class="json-output" spellcheck="false" readonly></textarea>
+      <footer class="modal-actions">
+        <button class="btn" id="modalCopyButton" type="button">复制 JSON</button>
+        <button class="btn btn-primary" id="modalDownloadButton" type="button">下载 JSON</button>
+      </footer>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="agreement-core.js"></script>
+  <script src="sample-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

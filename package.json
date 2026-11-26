@@ -1,0 +1,14 @@
+{
+  "name": "instance-mask-agreement",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first P5 instance mask agreement and exact one-to-one threshold matching workbench",
+  "scripts": {
+    "test": "node --test tests/core.test.js",
+    "build": "node scripts/build-standalone.js",
+    "serve": "python3 -m http.server 8123"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
