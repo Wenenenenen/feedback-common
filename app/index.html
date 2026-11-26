@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>房间早期反射校验台</title>
+<style>
+/* layout: header band, control rail + three working panes (plan / response / table) */
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --panel-2:#f9fafb; --fg:#16181d; --fg-2:#5c6470;
+  --line:#d8dce2; --line-soft:#e8eaee; --accent:#257de0; --accent-soft:#cce3fd;
+  --ok:#008a17; --ok-bg:#e6f4e8; --block:#ec4647; --block-bg:#fdecec;
+  --violet:#6a4ce2; --orange:#f47230; --aqua:#00b894;
+  --wall:#8a93a0; --box-fill:#3a4150; --box-edge:#22262e; --source:#b85cff; --recv:#f2a600;
+  --grid:#eef0f3; --shadow:0 1px 2px rgba(16,20,26,.06),0 4px 16px rgba(16,20,26,.06);
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0c0e12; --panel:#16191f; --panel-2:#1d2129; --fg:#eef1f5; --fg-2:#9aa3b0;
+    --line:#2c323c; --line-soft:#232832; --accent:#338ced; --accent-soft:#16304f;
+    --ok:#53c556; --ok-bg:#13251a; --block:#eb6263; --block-bg:#2c1718;
+    --violet:#9887ef; --orange:#e76624; --aqua:#00a888;
+    --wall:#6b7480; --box-fill:#9aa6b8; --box-edge:#c6ceda; --source:#c98bff; --recv:#d28e05;
+    --grid:#1c2027; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0c0e12; --panel:#16191f; --panel-2:#1d2129; --fg:#eef1f5; --fg-2:#9aa3b0;
+  --line:#2c323c; --line-soft:#232832; --accent:#338ced; --accent-soft:#16304f;
+  --ok:#53c556; --ok-bg:#13251a; --block:#eb6263; --block-bg:#2c1718;
+  --violet:#9887ef; --orange:#e76624; --aqua:#00a888;
+  --wall:#6b7480; --box-fill:#9aa6b8; --box-edge:#c6ceda; --source:#c98bff; --recv:#d28e05;
+  --grid:#1c2027; --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font-family:var(--sans);
+  font-size:14px; line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.app{max-width:1480px;margin:0 auto;padding-block:18px 40px;display:flex;flex-direction:column;gap:16px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;letter-spacing:.2px;font-weight:650}
+.sub{color:var(--fg-2);font-size:13px;margin-top:3px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel);color:var(--fg-2);font-variant-numeric:tabular-nums}
+.pill .dot{width:8px;height:8px;border-radius:50%}
+.dot.ok{background:var(--ok)} .dot.block{background:var(--block)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);
+  padding:7px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover{filter:brightness(1.06);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+select,input{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--fg);
+  border-radius:8px;padding:6px 8px}
+input[type=number]{width:74px;font-variant-numeric:tabular-nums}
+input[type=file]{display:none}
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--fg-2)}
+.grid{display:grid;gap:16px}
+.grid.main{grid-template-columns:340px minmax(0,1fr)}
+@media(max-width:980px){.grid.main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line-soft);border-radius:12px;box-shadow:var(--shadow);
+  min-width:0;display:flex;flex-direction:column}
+.card>h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-2);margin:0;
+  padding:13px 16px;border-bottom:1px solid var(--line-soft);font-weight:650;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card .body{padding:14px 16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>.fld{flex:1 1 120px;min-width:0}
+.switch{display:flex;gap:6px;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--panel);padding:6px 11px}
+.seg button.on{background:var(--accent);color:#fff}
+.seg button:hover{border:0}
+.wallgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.walltap{border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;background:var(--panel-2)}
+.walltap b{font-size:12px;font-family:var(--mono);color:var(--fg)}
+.walltap input{width:100%}
+.taphint{font-size:11px;color:var(--fg-2)}
+.panes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;min-width:0}
+@media(max-width:1180px){.panes{grid-template-columns:1fr}}
+svg{display:block;max-width:100%}
+.plotwrap{position:relative;min-width:0}
+canvas{width:100%;display:block;border-radius:8px;background:var(--panel-2)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--fg-2);padding:0 2px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:0;border-top:2.5px solid var(--accent)}
+.sw.block{border-top-color:var(--block);border-top-style:dashed}
+.sw.sel{border-top-color:var(--violet);border-top-width:3px}
+.sw.box{border-top:3px solid var(--box-fill)}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-2);
+  font-weight:650;padding:8px 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+tbody td{padding:7px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel-2)}
+tbody tr.sel{background:var(--accent-soft)}
+tbody tr.sel td{color:var(--fg)}
+.tag{font-family:var(--mono);font-size:11.5px;padding:2px 6px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line)}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap}
+.badge.ok{color:var(--ok);background:var(--ok-bg)}
+.badge.block{color:var(--block);background:var(--block-bg)}
+.badge.diff{margin-left:5px;font-size:10.5px;padding:2px 7px;border-radius:999px;font-weight:700}
+.badge.diff.new{color:#fff;background:var(--block)}
+.badge.diff.open{color:#fff;background:var(--ok)}
+tr.row-diff{outline:2px solid var(--block);outline-offset:-2px}
+.diffbanner{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px;font-size:12.5px;
+  border-bottom:1px solid var(--line-soft);background:var(--panel-2);color:var(--fg-2)}
+.diffbanner b{color:var(--fg)}
+.diffbanner .nb{color:var(--block);font-weight:700}
+.diffbanner .ob{color:var(--ok);font-weight:700}
+.diffbanner button{margin-left:auto;padding:4px 10px;font-size:12px}
+.tablewrap{max-height:430px;overflow:auto;border-radius:0 0 12px 12px}
+.muted{color:var(--fg-2);font-size:12px}
+.statline{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.statline b{color:var(--fg);font-size:15px;font-weight:650}
+.tooltip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:var(--shadow);z-index:5;display:none;max-width:240px}
+.tooltip code{font-family:var(--mono);font-size:11.5px}
+.boxtbl input{width:100%;padding:4px 6px}
+.boxtbl td{padding:4px 6px}
+.iconbtn{padding:5px 8px}
+.err{color:var(--block);font-size:12.5px;background:var(--block-bg);border:1px solid var(--block);
+  border-radius:8px;padding:8px 10px;display:none}
+.err.show{display:block}
+.kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--fg-2)}
+details.editbox{border:1px solid var(--line);border-radius:8px;background:var(--panel-2)}
+details.editbox summary{padding:9px 11px;cursor:pointer;font-size:13px;font-weight:600;list-style:none}
+details.editbox summary::-webkit-details-marker{display:none}
+details.editbox[open] summary{border-bottom:1px solid var(--line)}
+details.editbox .body{padding:12px 11px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>房间早期反射校验台</h1>
+      <div class="sub">镜像声源法 · 0–<span id="ordLabel">4</span> 阶镜面路径 · BigInt 精确有理交点 · 48 kHz 浮点响应</div>
+    </div>
+    <div class="toolbar">
+      <span class="pill" id="roomSizePill">—</span>
+      <span class="pill"><span class="dot ok"></span>可达 <b id="cntOk">0</b></span>
+      <span class="pill"><span class="dot block"></span>阻挡 <b id="cntBlock">0</b></span>
+      <span class="pill" id="timePill">—</span>
+      <button id="themeBtn" class="iconbtn" title="切换深浅色">◐</button>
+    </div>
+  </header>
+
+  <div class="grid main">
+    <!-- ============ control rail ============ -->
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div class="card">
+        <h2>工况选择</h2>
+        <div class="body">
+          <div class="row">
+            <label class="fld">声源
+              <select id="srcSel"></select>
+            </label>
+            <label class="fld">麦位
+              <select id="recvSel"></select>
+            </label>
+            <label class="fld">最高阶数
+              <select id="orderSel">
+                <option>0</option><option>1</option><option>2</option>
+                <option>3</option><option>4</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <div class="seg" id="viewSeg">
+              <button data-view="xy" class="on">俯视 XY</button>
+              <button data-view="xz">侧视 XZ</button>
+              <button data-view="yz">正视 YZ</button>
+            </div>
+          </div>
+          <div class="err" id="cfgErr"></div>
+          <div class="row">
+            <label class="btn" style="cursor:pointer;flex:1;justify-content:center">
+              导入 room.json
+              <input type="file" id="fileInput" accept=".json,application/json">
+            </label>
+            <button id="resetBtn" style="flex:1;justify-content:center">恢复样例</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>墙面三抽头系数 <span class="taphint">整数 ÷4096</span></h2>
+        <div class="body">
+          <div class="wallgrid" id="wallGrid"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>导出</h2>
+        <div class="body">
+          <div class="row">
+            <button id="wavBtn" class="primary" style="flex:1;justify-content:center">下载 48k float32 WAV</button>
+            <button id="jsonBtn" style="flex:1;justify-content:center">下载当前路径表 JSON</button>
+          </div>
+          <div class="muted">WAV 为所选声源→所选麦位、96000 帧单声道；阻挡路径不写入响应。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ working panes ============ -->
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div class="panes">
+        <div class="card">
+          <h2>路径几何
+          <span style="display:inline-flex;gap:6px;align-items:center">
+            <label class="muted" style="display:inline-flex;gap:4px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500">
+              <input type="checkbox" id="blockedToggle" checked style="width:auto"> 显示阻挡
+            </label>
+            <span class="muted" id="viewLabel">俯视图（X–Y，Z 投影）</span>
+          </span>
+        </h2>
+          <div class="body">
+            <div class="plotwrap">
+              <svg id="planSvg" role="img" aria-label="房间路径俯视图"></svg>
+              <div class="tooltip" id="planTip"></div>
+            </div>
+            <div class="legend">
+              <span><i class="sw"></i>可达路径</span>
+              <span><i class="sw block"></i>阻挡路径</span>
+              <span><i class="sw sel"></i>当前选中</span>
+              <span><i class="sw box"></i>闭合展柜</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>脉冲响应
+          <span style="display:inline-flex;gap:6px;align-items:center">
+            <span class="seg" id="irWinSeg" style="text-transform:none;letter-spacing:0">
+              <button data-win="early" class="on">早期 250ms</button>
+              <button data-win="full">全 2s</button>
+            </span>
+            <span class="muted" id="irMeta">96000 帧</span>
+          </span>
+        </h2>
+          <div class="body">
+            <div class="plotwrap">
+              <canvas id="irCanvas" height="300"></canvas>
+              <div class="tooltip" id="irTip"></div>
+            </div>
+            <div class="legend">
+              <span><i class="sw" style="border-top-color:var(--accent)"></i>响应幅值</span>
+              <span><i class="sw sel"></i>选中路径到达帧</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>
+          当前路径表
+          <span class="muted" id="tblMeta"></span>
+        </h2>
+        <div id="diffBanner" class="diffbanner" hidden></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr>
+              <th>#</th><th>墙序</th><th>总长 mm</th><th>状态</th><th>阻挡 段/盒</th><th>折点（毫米）</th>
+            </tr></thead>
+            <tbody id="pathTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>展柜障碍编辑（整数毫米，闭合轴对齐盒）</h2>
+        <div class="body">
+          <div class="tablewrap" style="max-height:300px">
+            <table class="boxtbl">
+              <thead><tr><th>盒</th><th>minX</th><th>minY</th><th>minZ</th><th>maxX</th><th>maxY</th><th>maxZ</th><th></th></tr></thead>
+              <tbody id="boxTbody"></tbody>
+            </table>
+          </div>
+          <div class="row">
+            <button id="addBoxBtn">＋ 新增展柜</button>
+            <button id="applyBoxBtn" class="primary">应用并重新计算</button>
+            <span class="muted" id="boxErr"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
