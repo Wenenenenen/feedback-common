@@ -1,0 +1,87 @@
+{
+  "buffers": {
+    "geometry": "00000040bf6666e6bee06a40ffcdcc4cbe6666e6be5cb681ff6666e6be3333b33e4b92d5ff",
+    "indices": "000001000200",
+    "instances": "00000000000000006666663f00000000"
+  },
+  "commands": [
+    {
+      "op": "draw",
+      "index": {
+        "b": "indices",
+        "at": 0,
+        "type": "u16"
+      },
+      "firstIndex": 0,
+      "count": 3,
+      "baseVertex": 0,
+      "firstInstance": 0,
+      "instances": 2,
+      "attrs": {
+        "position": {
+          "b": "geometry",
+          "at": 1,
+          "stride": 12,
+          "divisor": 0,
+          "type": "f32x2"
+        },
+        "color": {
+          "b": "geometry",
+          "at": 9,
+          "stride": 12,
+          "divisor": 0,
+          "type": "unorm8x4"
+        },
+        "offset": {
+          "b": "instances",
+          "at": 0,
+          "stride": 8,
+          "divisor": 1,
+          "type": "f32x2"
+        }
+      }
+    },
+    {
+      "op": "write",
+      "b": "geometry",
+      "at": 9,
+      "hex": "d8b24e"
+    },
+    {
+      "op": "draw",
+      "index": {
+        "b": "indices",
+        "at": 0,
+        "type": "u16"
+      },
+      "firstIndex": 0,
+      "count": 3,
+      "baseVertex": 0,
+      "firstInstance": 0,
+      "instances": 2,
+      "attrs": {
+        "position": {
+          "b": "geometry",
+          "at": 1,
+          "stride": 12,
+          "divisor": 0,
+          "type": "f32x2"
+        },
+        "color": {
+          "b": "geometry",
+          "at": 9,
+          "stride": 12,
+          "divisor": 0,
+          "type": "unorm8x4"
+        },
+        "offset": {
+          "b": "instances",
+          "at": 0,
+          "stride": 8,
+          "divisor": 1,
+          "type": "f32x2"
+        }
+      }
+    }
+  ]
+}
