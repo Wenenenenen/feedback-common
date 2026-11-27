@@ -1,0 +1,16 @@
+{
+  "name": "phase-mask-diffraction",
+  "version": "1.0.0",
+  "private": true,
+  "description": "全息展品相位掩膜打样台：多波长角谱传播 + 解析梯度回退拟合",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:core": "node --test tests/core.test.mjs",
+    "test:perf": "node --test tests/perf.test.mjs",
+    "serve": "python3 -m http.server 8124"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

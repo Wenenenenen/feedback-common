@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>相位掩膜打样台</title>
+<style>
+:root{
+  --page:#f4f5f7; --surface:#ffffff; --surface-2:#eef1f5; --surface-3:#e4e8ee;
+  --ink:#16202b; --ink-2:#4d5a68; --muted:#85909c;
+  --line:#d8dde4; --line-soft:#e7eaee;
+  --accent:#1f6fd6; --accent-ink:#ffffff; --accent-soft:#e7f0fc;
+  --good:#0c8a3c; --warn:#b8770a; --critical:#c43636;
+  --shadow:0 1px 2px rgba(16,24,32,.06),0 4px 14px rgba(16,24,32,.06);
+  --radius:10px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --page:#101317; --surface:#181d24; --surface-2:#20262f; --surface-3:#28303a;
+    --ink:#e8edf3; --ink-2:#b3bdc8; --muted:#7d8794;
+    --line:#2c343e; --line-soft:#242b34;
+    --accent:#5598e7; --accent-ink:#0c1420; --accent-soft:#1b2a3d;
+    --good:#34c46b; --warn:#e0b34a; --critical:#e66767;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#101317; --surface:#181d24; --surface-2:#20262f; --surface-3:#28303a;
+  --ink:#e8edf3; --ink-2:#b3bdc8; --muted:#7d8794;
+  --line:#2c343e; --line-soft:#242b34;
+  --accent:#5598e7; --accent-ink:#0c1420; --accent-soft:#1b2a3d;
+  --good:#34c46b; --warn:#e0b34a; --critical:#e66767;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--page); color:var(--ink); font-family:var(--sans);
+  font-size:14px; line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px;
+}
+h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.2px}
+h2{font-size:12.5px;margin:0 0 8px;color:var(--ink-2);font-weight:650;
+   text-transform:uppercase;letter-spacing:.08em}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;
+     max-width:1520px;margin:0 auto;align-items:start}
+header.bar{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);
+  padding:12px 14px;box-shadow:var(--shadow)}
+header.bar .sub{color:var(--muted);font-size:12.5px}
+header.bar .sp{flex:1}
+.card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);
+      box-shadow:var(--shadow);padding:14px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+label{font-size:12.5px;color:var(--ink-2)}
+button{font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);
+       border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+button.ghost{background:transparent}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=number],input[type=text],select{
+  font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:7px;padding:5px 8px;width:100%;min-width:0}
+input[type=file]{display:none}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row.tight{gap:6px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{padding:5px 11px;font-size:13px;border-radius:999px;background:transparent;
+  border-color:transparent;color:var(--ink-2)}
+.tabs button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.view-wrap{display:flex;flex-direction:column;gap:10px}
+.canvas-box{position:relative;background:#0b0d10;border:1px solid var(--line);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;min-height:260px;overflow:hidden;padding:8px}
+#view{image-rendering:pixelated;width:100%;height:auto;border-radius:3px;
+  background:#000;cursor:crosshair;outline:none}
+#view:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+#chart{background:transparent}
+#probeMark{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid #ffce38;
+  border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 6px rgba(255,206,56,.7);pointer-events:none}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
+  font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent)}
+.pill.bad{background:rgba(196,54,54,.14);color:var(--critical)}
+.pill.good{background:rgba(12,138,60,.14);color:var(--good)}
+.pill.warn{background:rgba(184,119,10,.16);color:var(--warn)}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
+.metric{background:var(--surface-2);border-radius:8px;padding:8px 10px;min-width:0}
+.metric .k{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.metric .v{font-family:var(--mono);font-size:15px;font-weight:600;margin-top:2px;
+  overflow-wrap:anywhere}
+.metric .v.small{font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:5px 7px;text-align:right;border-bottom:1px solid var(--line-soft)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.04em}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--surface-2)}
+tbody tr.sel{background:var(--accent-soft)}
+td.num,th.num{font-family:var(--mono)}
+.probe{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12.5px}
+.probe dt{color:var(--muted)}
+.probe dd{margin:0;font-family:var(--mono);text-align:right;overflow-wrap:anywhere}
+.zrow{display:grid;grid-template-columns:1fr 96px;gap:8px;align-items:center;margin-bottom:6px}
+.note{font-size:12px;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere}
+.note.bad{color:var(--critical)}
+.chart-box{height:150px;width:100%;background:var(--surface-2);border-radius:8px;overflow:hidden}
+#chart{width:100%;height:100%;display:block}
+.hint{font-size:12px;color:var(--muted)}
+.divider{height:1px;background:var(--line-soft);margin:10px 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--surface-3);color:var(--ink-2)}
+@media (max-width:1040px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .card{padding:12px}
+}
+@media (max-width:560px){
+  header.bar h1{font-size:16px}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  canvas-box{min-height:200px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div>
+      <h1>相位掩膜打样台</h1>
+      <div class="sub">多波长角谱传播 · 解析梯度 · Armijo 回退试步</div>
+    </div>
+    <div class="sp"></div>
+    <div class="row tight">
+      <label class="pill" id="busyPill" hidden><span id="busyText">处理中</span></label>
+      <button id="btnSample">载入内置样例</button>
+      <button id="btnLoad">导入 JSON</button>
+      <input type="file" id="fileInput" accept="application/json,.json">
+      <span class="pill" id="statusPill"><span id="statusText">未载入项目</span></span>
+    </div>
+  </header>
+
+  <section class="stack">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div class="view-wrap" style="flex:1">
+          <div class="row tight">
+            <div class="tabs" id="viewTabs">
+              <button data-view="drive" class="on">驱动图</button>
+              <button data-view="intensity">预测强度</button>
+              <button data-view="grad">损失梯度</button>
+            </div>
+            <div class="sp"></div>
+            <select id="planeSel" style="width:auto;min-width:150px"></select>
+          </div>
+          <div class="canvas-box" id="viewBox">
+            <canvas id="view" tabindex="0" aria-label="驱动与强度视图，点选像素查看数值"></canvas>
+            <div id="probeMark" hidden></div>
+          </div>
+          <div class="row">
+            <button id="btnStep" class="primary">单步</button>
+            <button id="btnRun">续跑</button>
+            <button id="btnPause" disabled>暂停</button>
+            <div class="sp"></div>
+            <span class="hint">点图上任意像素查看该点的驱动 / 梯度 / 强度</span>
+          </div>
+        </div>
+        <div style="width:300px;flex:0 0 300px">
+          <h2>点查</h2>
+          <div class="hint" id="probeHint">在图上点一个像素</div>
+          <dl class="probe" id="probeRows"></dl>
+          <div id="probeGrid" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">每轮损失与步长</h2>
+        <div class="chips" id="chartLegend">
+          <span class="chip">蓝线：总损失 E</span>
+          <span class="chip">绿柱：采用步长 t（对数）</span>
+          <span class="chip">红柱：步长 0</span>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="chart-box"><canvas id="chart"></canvas></div>
+      <div class="divider"></div>
+      <h2>逐面损失（0.5·Σw(I−T)²）</h2>
+      <table>
+        <thead><tr><th>面</th><th>波长</th><th class="num">z (µm)</th><th class="num">加权损失</th><th></th></tr></thead>
+        <tbody id="planeRows"></tbody>
+      </table>
+      <div class="note" id="exportNote"></div>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <div class="card">
+      <h2>项目</h2>
+      <div class="note" id="loadStatus">未载入项目</div>
+      <div class="divider"></div>
+      <div class="metrics">
+        <div class="metric"><div class="k">宽 W</div><div class="v" id="metaW">—</div></div>
+        <div class="metric"><div class="k">高 H</div><div class="v" id="metaH">—</div></div>
+        <div class="metric"><div class="k">波长</div><div class="v" id="metaWaves">—</div></div>
+        <div class="metric"><div class="k">成像面</div><div class="v" id="metaPlanes">—</div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="metrics">
+        <div class="metric"><div class="k">已完成轮数</div><div class="v" id="roundVal">0</div></div>
+        <div class="metric"><div class="k">上一步长</div><div class="v small" id="stepVal">—</div></div>
+        <div class="metric" style="grid-column:span 2"><div class="k">总损失 E</div><div class="v small" id="lossVal">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>参数</h2>
+      <div class="field" style="margin-bottom:10px">
+        <label for="etaInput">步长比 eta（(0,1]，改动回到第 0 轮）</label>
+        <input type="number" id="etaInput" step="any" min="1e-6" max="1">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label for="stepsInput">目标轮数 steps（1–120）</label>
+        <input type="number" id="stepsInput" step="1" min="1" max="120">
+      </div>
+      <div id="zPanel" hidden>
+        <label>各面成像距离 z（µm，改动回到第 0 轮）</label>
+        <div id="zRows"></div>
+      </div>
+      <div class="note" id="paramMsg"></div>
+      <div class="hint">当前 eta：<span id="etaVal" class="mono">—</span></div>
+    </div>
+
+    <div class="card">
+      <h2>导出</h2>
+      <div class="hint">驱动字节按 q = floor(255p+0.5) 逐行从左到右；误差 JSON 的 loss/planeLoss 用 q/255 重新传播。</div>
+      <div class="divider"></div>
+      <div class="row">
+        <button id="btnExportDrive">8 位驱动 .bin</button>
+        <button id="btnExportError">误差 .json</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnExportBoth" class="ghost">两者一起导出</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="src/core.js"></script>
+<script src="src/worker-source.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

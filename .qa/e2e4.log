@@ -1,0 +1,5 @@
+PERF 12 rounds: 8120 ms; loss 20284.017453 step 0.025
+PAUSED at round 4 loss 26477.7665747017 step 0.1
+PAUSE resume loss 25910.8574352687 straight 25910.8574352687 equal true bytesEqual true
+STALE after wait: {"status":"第 0 轮","round":0,"eta":0.5,"z":[5,11.5,9,12,15,18]} loss 26895.50062220999 freshRound0 26895.50062220999 unchanged true
+errors []
