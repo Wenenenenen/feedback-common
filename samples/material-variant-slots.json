@@ -1,0 +1,1 @@
+{"flags":["fog","normal"],"slots":2,"forbidden":[],"varyings":[{"name":"uv","width":2,"interpolation":"smooth","pin":0},{"name":"fogcoord","width":1,"interpolation":"smooth","on":["fog"],"off":["normal"]},{"name":"normaldir","width":3,"interpolation":"smooth","on":["normal"]}],"说明":"on和off缺省视为空集合，条件为全部满足。forbidden元素也用on和off，满足即排除。分量从0起，槽号为分量整除4。pin可省略。名称为ASCII标识。"}
