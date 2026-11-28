@@ -1,0 +1,14 @@
+{
+  "name": "fluorescent-patch-relighter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "荧光展品换灯打样网页：多贴片多波段稳态光传播求解与色板导出",
+  "scripts": {
+    "ref": "python3 -I tests/ref_solve.py",
+    "test": "node tests/test-core.js && node tests/dom-smoke.js",
+    "test:core": "node tests/test-core.js",
+    "test:dom": "node tests/dom-smoke.js",
+    "serve": "python3 -m http.server 8000"
+  },
+  "license": "UNLICENSED"
+}

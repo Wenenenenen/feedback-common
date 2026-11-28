@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>荧光贴片换灯台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* ---- 设计令牌：暗房紫光灯箱（dark-first），浅主题为灯房审阅模式 ---- */
+:root {
+  --bg: #0d0c14;
+  --surface: #161421;
+  --surface-2: #1e1b2e;
+  --surface-3: #282440;
+  --fg: #ece9f6;
+  --fg-2: #a49fc0;
+  --fg-3: #6f6a8c;
+  --line: rgba(236, 233, 246, 0.10);
+  --line-strong: rgba(236, 233, 246, 0.22);
+  --accent: #9d7cff;
+  --accent-soft: rgba(157, 124, 255, 0.16);
+  --accent-glow: rgba(157, 124, 255, 0.45);
+  --uv: #6f5bd6;
+  --good: #53c556;
+  --warn: #fbb315;
+  --critical: #eb6263;
+  /* 数据系列（经 dataviz 校验的暗模式色序） */
+  --s-direct: #338ced;
+  --s-reflect: #e76624;
+  --s-fluor: #00a888;
+  --s-total: #9887ef;
+  --gridline: #2b2740;
+  --axis: #4a4468;
+  color-scheme: dark;
+  --radius: 12px;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #f6f4fb;
+  --surface: #ffffff;
+  --surface-2: #f1eef8;
+  --surface-3: #e6e1f3;
+  --fg: #1c1826;
+  --fg-2: #57506e;
+  --fg-3: #847d9c;
+  --line: rgba(28, 24, 38, 0.12);
+  --line-strong: rgba(28, 24, 38, 0.24);
+  --accent: #6a4ce2;
+  --accent-soft: rgba(106, 76, 226, 0.12);
+  --accent-glow: rgba(106, 76, 226, 0.25);
+  --uv: #6f5bd6;
+  --good: #0a8a17;
+  --warn: #9a6b00;
+  --critical: #c43233;
+  --s-direct: #257de0;
+  --s-reflect: #f47230;
+  --s-fluor: #00b894;
+  --s-total: #6a4ce2;
+  --gridline: #e7e3f2;
+  --axis: #c3bdd6;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f6f4fb; --surface: #ffffff; --surface-2: #f1eef8; --surface-3: #e6e1f3;
+    --fg: #1c1826; --fg-2: #57506e; --fg-3: #847d9c;
+    --line: rgba(28, 24, 38, 0.12); --line-strong: rgba(28, 24, 38, 0.24);
+    --accent: #6a4ce2; --accent-soft: rgba(106, 76, 226, 0.12); --accent-glow: rgba(106, 76, 226, 0.25);
+    --uv: #6f5bd6; --good: #0a8a17; --warn: #9a6b00; --critical: #c43233;
+    --s-direct: #257de0; --s-reflect: #f47230; --s-fluor: #00b894; --s-total: #6a4ce2;
+    --gridline: #e7e3f2; --axis: #c3bdd6;
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+.num, .tabular { font-variant-numeric: tabular-nums; }
+
+/* ---- 顶栏 ---- */
+.topbar {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-size: 19px; font-weight: 700; letter-spacing: 0.2px; }
+.brand .sub { color: var(--fg-3); font-size: 12px; white-space: nowrap; }
+.uv-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px 2px var(--accent-glow);
+  align-self: center;
+}
+.top-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--fg);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-weight: 500;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="light"] .btn.primary, :root:not([data-theme="dark"]) .btn.primary { color: #fff; }
+.btn.ghost { background: transparent; }
+.btn.danger { border-color: var(--critical); color: var(--critical); }
+.btn.small { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
+.icon-btn { padding: 7px 10px; }
+
+/* ---- 状态条 ---- */
+.statusbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; margin: 14px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+.statusbar .pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 999px;
+  background: var(--surface-3); font-weight: 500; color: var(--fg);
+}
+.statusbar .pill.good { color: var(--good); background: transparent; padding-left: 0; }
+.statusbar .spacer { flex: 1; }
+.residual { color: var(--fg-3); }
+
+/* ---- 错误横幅 ---- */
+.error-banner {
+  margin: 10px 0 0;
+  border: 1px solid color-mix(in srgb, var(--critical) 55%, transparent);
+  background: color-mix(in srgb, var(--critical) 12%, var(--surface));
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.error-banner h3 { color: var(--critical); font-size: 13.5px; margin-bottom: 6px; }
+.error-banner ul { margin: 0; padding-left: 18px; color: var(--fg); font-size: 13px; }
+.error-banner li { margin: 2px 0; }
+.error-banner .retain-note { margin-top: 8px; color: var(--fg-2); font-size: 12px; }
+
+/* ---- 主布局 ---- */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+  gap: 16px;
+  padding: 12px 0 40px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-width: 0;
+}
+.card > h2 {
+  font-size: 14.5px; font-weight: 600; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card > h2 .count { color: var(--fg-3); font-family: var(--font-body); font-weight: 400; font-size: 12px; }
+
+/* ---- 灯光控制 ---- */
+.lamp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+.lamp-cell {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 9px; padding: 9px 10px;
+}
+.lamp-cell .lbl { display: flex; justify-content: space-between; font-size: 12px; color: var(--fg-2); margin-bottom: 6px; }
+.lamp-cell .lbl b { color: var(--fg); font-weight: 600; }
+.lamp-cell input[type="range"] { width: 100%; accent-color: var(--accent); }
+.lamp-cell .val { font-size: 12px; color: var(--fg-2); display: flex; justify-content: space-between; margin-top: 2px; }
+.lamp-cell .val input {
+  width: 64px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 5px; text-align: right;
+}
+
+/* ---- 贴片色板 ---- */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+.swatch {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--surface-2);
+  overflow: hidden;
+  text-align: left;
+  transition: border-color .15s, transform .1s;
+}
+.swatch:hover, .swatch:focus-visible { border-color: var(--accent); outline: none; }
+.swatch.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 18px -4px var(--accent-glow); }
+.swatch .chip {
+  height: 56px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.swatch .chip::after {
+  content: ""; position: absolute; inset: 0;
+  box-shadow: inset 0 0 22px rgba(0,0,0,.35);
+}
+.swatch .meta { padding: 7px 9px; }
+.swatch .pid {
+  font-size: 12.5px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.swatch .prgb { font-size: 11px; color: var(--fg-3); }
+.swatch .zero-tag {
+  position: absolute; top: 6px; right: 6px;
+  font-size: 10px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(0,0,0,.55); color: #cfcbe2;
+}
+
+/* ---- 详情面板 ---- */
+.detail-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.detail-head .big-chip {
+  width: 46px; height: 46px; border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 0 16px -2px var(--accent-glow);
+}
+.detail-head h2 { font-size: 16px; }
+.detail-head .rgb-line { font-size: 12px; color: var(--fg-3); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 4px 0 10px; font-size: 12px; }
+.legend .key { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-2); }
+.legend .sw { width: 12px; height: 12px; border-radius: 3px; }
+.legend .sw.line { height: 3px; border-radius: 2px; width: 16px; }
+.chart-scroll { overflow-x: auto; padding-bottom: 4px; }
+svg.chart { display: block; font-family: var(--font-body); }
+.chart .axis-text { fill: var(--fg-2); font-size: 11px; }
+.chart .grid-line { stroke: var(--gridline); stroke-width: 1; }
+.chart .axis-line { stroke: var(--axis); stroke-width: 1; }
+.chart-tip {
+  position: fixed; z-index: 50; pointer-events: none;
+  background: var(--surface-3); border: 1px solid var(--line-strong);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  max-width: 240px;
+}
+.chart-tip .tip-title { font-weight: 600; margin-bottom: 4px; }
+.chart-tip .tip-row { display: flex; align-items: center; gap: 7px; color: var(--fg-2); }
+.chart-tip .tip-row b { color: var(--fg); margin-left: auto; padding-left: 12px; font-weight: 600; }
+.chart-tip .tip-row .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+
+/* ---- 数据表 ---- */
+table.data { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.data th, table.data td {
+  padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data th { color: var(--fg-3); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+.table-wrap { overflow: auto; max-height: 320px; border: 1px solid var(--line); border-radius: 9px; margin-top: 12px; }
+
+/* ---- 编辑器 ---- */
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid var(--line); background: var(--surface-2);
+  border-radius: 8px; padding: 6px 12px; font-size: 12.5px; color: var(--fg-2);
+}
+.tab.active { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); font-weight: 600; }
+.editor-section h3 { font-size: 13px; color: var(--fg-2); font-family: var(--font-body); font-weight: 600; margin: 14px 0 8px; }
+.input-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+.input-cell { display: flex; flex-direction: column; gap: 3px; }
+.input-cell label { font-size: 11px; color: var(--fg-3); }
+.input-cell input, .input-cell select {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 8px; width: 100%; min-width: 0;
+}
+.input-cell input.invalid { border-color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, var(--surface-2)); }
+.input-cell input:focus, .input-cell select:focus { outline: none; border-color: var(--accent); }
+.convert-row, .link-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px;
+  align-items: center; margin-bottom: 8px;
+}
+.link-row { grid-template-columns: 1fr 18px 1fr 1fr auto; }
+.link-row .field-hint { margin: 0; text-align: center; }
+.convert-row select, .convert-row input, .link-row select, .link-row input {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 7px; padding: 6px 8px; width: 100%; min-width: 0;
+}
+.field-hint { font-size: 11.5px; color: var(--fg-3); margin: 4px 0 0; }
+.sum-meter {
+  height: 6px; border-radius: 999px; background: var(--surface-3);
+  overflow: hidden; margin-top: 6px;
+}
+.sum-meter i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.sum-meter.over i { background: var(--critical); }
+.sum-label { font-size: 11.5px; color: var(--fg-2); display: flex; justify-content: space-between; margin-top: 4px; }
+.sum-label.over { color: var(--critical); }
+.add-row-btn { margin-top: 6px; }
+.empty-note { color: var(--fg-3); font-size: 12.5px; padding: 10px 0; }
+
+/* ---- 模态 ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(5, 4, 10, .66);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 14px; padding: 20px;
+  width: min(720px, 100%); max-height: 86vh; overflow: auto;
+}
+.modal h2 { font-size: 16px; margin-bottom: 12px; }
+.modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+.radio-row { display: flex; gap: 16px; margin-bottom: 10px; }
+.radio-row label { display: inline-flex; gap: 6px; align-items: center; }
+textarea.export-box {
+  width: 100%; min-height: 260px; resize: vertical;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 9px; padding: 10px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px; line-height: 1.45;
+  color: var(--fg);
+}
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--surface-3); border: 1px solid var(--line-strong);
+  color: var(--fg); padding: 9px 16px; border-radius: 999px;
+  font-size: 13px; z-index: 70; box-shadow: 0 8px 28px rgba(0,0,0,.45);
+}
+.gain-row { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; flex-wrap: wrap; }
+.gain-row input[type="range"] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+.hidden-file { display: none; }
+.footer-note { color: var(--fg-3); font-size: 11.5px; margin-top: 10px; }
+@media (max-width: 900px) {
+  .brand .sub { display: none; }
+  .detail-panel { position: static; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="uv-dot" aria-hidden="true"></span>
+    <h1>荧光贴片换灯台</h1>
+    <span class="sub">稳态多波段光传播打样</span>
+  </div>
+  <div class="top-actions">
+    <button class="btn" id="btn-import" type="button">导入 JSON</button>
+    <button class="btn" id="btn-export" type="button">导出数据</button>
+    <button class="btn ghost" id="btn-reset" type="button">恢复样例</button>
+    <button class="btn icon-btn" id="btn-theme" type="button" aria-label="切换深浅色">◐</button>
+    <input type="file" id="file-input" class="hidden-file" accept=".json,application/json">
+  </div>
+</header>
+
+<div class="statusbar" id="statusbar">
+  <span class="pill good" id="status-state">● 已求解</span>
+  <span class="pill" id="status-size">—</span>
+  <span class="spacer"></span>
+  <span class="residual num" id="status-residual">—</span>
+</div>
+
+<div class="error-banner" id="error-banner" hidden>
+  <h3>输入不合法，已保留上一次有效结果</h3>
+  <ul id="error-list"></ul>
+  <div class="retain-note">修正下面标红的输入后会自动重新求解。</div>
+</div>
+
+<main class="layout">
+  <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
+    <section class="card">
+      <h2>入射灯光 <span class="count" id="lamp-count"></span></h2>
+      <div class="lamp-grid" id="lamp-grid"></div>
+      <div class="gain-row">
+        <span style="font-size:12px;color:var(--fg-2);">色板显示增益</span>
+        <input type="range" id="gain-range" min="-3" max="3" step="0.05" value="0">
+        <span class="num" id="gain-label" style="font-size:12px;color:var(--fg-2);min-width:52px;text-align:right;">×1.00</span>
+        <button class="btn small ghost" id="btn-gain-reset" type="button">自动</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>贴片色板 <span class="count" id="swatch-count"></span></h2>
+      <div class="swatch-grid" id="swatch-grid"></div>
+    </section>
+  </div>
+
+  <aside class="card detail-panel" id="detail-panel">
+    <div class="detail-head">
+      <div class="big-chip" id="detail-chip"></div>
+      <div style="min-width:0;">
+        <h2 id="detail-title">选择一个贴片</h2>
+        <div class="rgb-line num" id="detail-rgb"></div>
+      </div>
+    </div>
+
+    <div class="tabs" id="detail-tabs">
+      <button class="tab active" data-tab="spectra" type="button">光谱</button>
+      <button class="tab" data-tab="light" type="button">直射灯</button>
+      <button class="tab" data-tab="material" type="button">材料</button>
+      <button class="tab" data-tab="links" type="button">传播链接</button>
+    </div>
+
+    <section data-pane="spectra">
+      <div class="legend">
+        <span class="key"><i class="sw" style="background:var(--s-direct)"></i>直射入射</span>
+        <span class="key"><i class="sw" style="background:var(--s-reflect)"></i>同波段反射</span>
+        <span class="key"><i class="sw" style="background:var(--s-fluor)"></i>荧光</span>
+        <span class="key"><i class="sw line" style="background:var(--s-total)"></i>总出射</span>
+      </div>
+      <div class="chart-scroll" id="chart-host"></div>
+      <div class="table-wrap">
+        <table class="data" id="spectra-table"></table>
+      </div>
+    </section>
+
+    <section data-pane="light" hidden>
+      <p class="field-hint">该贴片各波段的直射入射能量（灯光倍数在左侧全局调节，不改变材料数据）。</p>
+      <div class="input-grid" id="direct-editor"></div>
+    </section>
+
+    <section data-pane="material" hidden>
+      <h3 class="editor-section" style="margin-top:10px;">同波段反射率</h3>
+      <div class="input-grid" id="reflect-editor"></div>
+      <h3 class="editor-section">荧光转换（源波段 → 更长波段，能量比例）</h3>
+      <div id="convert-editor"></div>
+      <button class="btn small add-row-btn" id="btn-add-convert" type="button">+ 添加转换</button>
+      <div class="sum-meter" id="conv-meter"><i></i></div>
+      <div class="sum-label" id="conv-sum-label"></div>
+    </section>
+
+    <section data-pane="links" hidden>
+      <p class="field-hint">同一来源贴片的全部传出比例之和不得超过 0.95；比例对所有波段共用。</p>
+      <div id="link-editor"></div>
+      <button class="btn small add-row-btn" id="btn-add-link" type="button">+ 添加链接</button>
+    </section>
+  </aside>
+</main>
+
+<div class="chart-tip" id="chart-tip" hidden></div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script src="fluorescent-core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
