@@ -1,0 +1,1 @@
+{"strands":[{"id":1,"points":[[0,4],[12,4]],"closed":false,"gap":1},{"id":2,"points":[[3,0],[3,8]],"closed":false,"gap":1},{"id":3,"points":[[9,0],[9,8]],"closed":false,"gap":1}],"pins":[{"at":[3,4],"above":1}],"说明":"points按行进顺序，closed为真时末点连到首点。gap为以交点为中心、单侧需删去的弧长。编号为互异正整数，at为交点的XY坐标。"}
