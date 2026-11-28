@@ -1,0 +1,13 @@
+{
+  "name": "woven-crossing-proof",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "矢量编织纹样上下关系校样：交替求解、锁定传播、缺口并集与 SVG 导出",
+  "scripts": {
+    "test": "node tests/test-core.mjs",
+    "bench": "node tools/benchmark.mjs",
+    "verify": "node tools/verify-invariants.mjs",
+    "serve": "python3 -m http.server 8000"
+  }
+}
