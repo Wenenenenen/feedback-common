@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>彩色透射焦散打样</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1d2129; --line: #2c323d;
+    --fg: #d8dee8; --dim: #8b94a3; --accent: #5aa9ff; --warn: #ffb454;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  header { padding: 12px 20px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  h2 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em;
+       margin: 16px 0 6px; }
+  button { background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+           border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #status { color: var(--dim); font-size: 12.5px; }
+  #status.err { color: #ff7a7a; }
+  main { display: flex; gap: 20px; padding: 16px 20px; align-items: flex-start; flex-wrap: wrap; }
+  .viewbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  canvas { image-rendering: pixelated; display: block; background: #000; cursor: crosshair; }
+  .view-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px;
+                   font-size: 12.5px; color: var(--dim); flex-wrap: wrap; }
+  aside { flex: 1; min-width: 300px; max-width: 460px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+          padding: 10px 12px; margin-bottom: 12px; }
+  .mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 3px 8px; text-align: right; border-bottom: 1px solid var(--line);
+           font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--dim); font-weight: normal; position: sticky; top: 0; background: var(--panel); }
+  tr.degen td { color: var(--warn); }
+  .tablewrap { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+  section#budgetSec { padding: 0 20px 24px; }
+  .warn { color: var(--warn); }
+  .dim { color: var(--dim); }
+  #pixelInfo .contrib { max-height: 240px; overflow: auto; margin-top: 6px; }
+  footer { padding: 12px 20px 28px; color: var(--dim); font-size: 12px; line-height: 1.7;
+           border-top: 1px solid var(--line); }
+  code { background: #00000055; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>彩色透射焦散打样</h1>
+  <div class="controls">
+    <input type="file" id="file" accept=".json,application/json">
+    <button id="btnSample">载入示例</button>
+    <button id="btnStress">满额压力测试(512源片)</button>
+    <span id="status">载入中…</span>
+  </div>
+</header>
+
+<main>
+  <div class="viewbox">
+    <canvas id="cv"></canvas>
+    <div class="view-controls">
+      <label>曝光 <input type="range" id="exposure" min="-4" max="4" step="0.05" value="0" style="width:140px"></label>
+      <button id="autoExp">自动曝光</button>
+      <label><input type="checkbox" id="srgb" checked> sRGB 显示</label>
+      <span id="hover" class="mono"></span>
+    </div>
+  </div>
+  <aside>
+    <div class="card" id="pixelInfo"><h2>像素贡献</h2><span class="dim">点击热图查看逐源片贡献</span></div>
+    <div class="card"><h2>退化落点(落点三角形面积为零)</h2><div id="degen">无</div></div>
+    <div class="card"><h2>合计与守恒</h2><div id="totals" class="mono"></div></div>
+  </aside>
+</main>
+
+<section id="budgetSec">
+  <h2>逐片逐色能量收支</h2>
+  <div class="controls" style="margin-bottom:8px">
+    <button id="expPixJson">导出逐像素 JSON</button>
+    <button id="expPixCsv">导出逐像素 CSV</button>
+    <button id="expBudgetJson">导出收支 JSON</button>
+    <button id="expBudgetCsv">导出收支 CSV</button>
+  </div>
+  <div class="tablewrap"><table id="budget"></table></div>
+</section>
+
+<footer>
+  约定:板在 z=0,像素 (i,j) 覆盖 [i,i+1]×[j,j+1](y 向上);射线方向 (dx,dy,−1),落点 =(x+z·dx, y+z·dy);
+  入射能量 = powerPerXY × 源片 XY 面积,在落点三角形上摊匀;挡板(高度 z 的水平矩形)阴影 = rect 平移 z·(dx,dy),
+  多挡板按并集扣除,扣挡后才计出界。逐像素能量为精确多边形 ∩ 单位像素面积(非点采样)。
+  退化判定:落点三角形有符号面积精确为 0。全部计算双精度,守恒残差一般 ≤1e-12。
+</footer>
+
+<script src="caustic-core.js"></script>
+<script>
+'use strict';
+/* 内置示例 = samples/caustic-footprints.json 的副本(file:// 打开时兜底) */
+var SAMPLE = {"width":12,"height":8,"sources":[{"id":"a","vertices":[[1,1,3],[6,1,3],[1,5,4]],"slopes":[[1,0],[0.5,0],[0,0.5]],"powerPerXY":[1,0.7,0.4]},{"id":"b","vertices":[[5,1,4],[10,1,4],[8,6,4]],"slopes":[[-0.5,0],[0,0],[-0.5,0.25]],"powerPerXY":[0.4,0.6,1]}],"blockers":[{"z":1,"rect":[5,2,6,4]}]};
+
+var model = null, result = null, sel = null;
+var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+var off = document.createElement('canvas'), octx = off.getContext('2d');
+var $ = function (id) { return document.getElementById(id); };
+
+function fmt(v) {
+  if (!isFinite(v)) return String(v);
+  if (v === 0) return '0';
+  var a = Math.abs(v);
+  if (a >= 1e-4 && a < 1e7) {
+    var s = v.toPrecision(9);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s;
+  }
+  return v.toExponential(6);
+}
+
+function setStatus(msg, isErr) {
+  var el = $('status');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : '';
+}
+
+function compute(data, label) {
+  var errors = CausticCore.validate(data);
+  if (errors.length) { setStatus('输入错误:' + errors.join(';'), true); return; }
+  model = data;
+  var t0 = performance.now();
+  result = CausticCore.analyze(data);
+  var ms = performance.now() - t0;
+
+  /* 守恒残差 */
+  var maxRes = 0, i, e;
+  for (i = 0; i < result.entries.length; i++) {
+    e = result.entries[i];
+    if (e.degenerate) continue;
+    maxRes = Math.max(maxRes, Math.abs(e.incident - e.occluded - e.outOfBounds - e.landed));
+  }
+  var pixSum = 0;
+  for (i = 0; i < result.pixels.length; i++) pixSum += result.pixels[i];
+  var pixRes = Math.abs(pixSum - result.totals.landed);
+
+  setStatus((label || '') + data.sources.length + ' 源片 / ' + (data.blockers || []).length +
+    ' 挡板 / ' + data.width + '×' + data.height + ' · 计算 ' + ms.toFixed(1) +
+    ' ms · 守恒残差 ' + maxRes.toExponential(1) + ' · 像素-落板残差 ' + pixRes.toExponential(1));
+
+  sel = null;
+  autoExposure();
+  drawHeat();
+  renderPixelInfo();
+  renderDegenerate();
+  renderTotals(maxRes, pixRes);
+  renderBudget();
+}
+
+/* ---------- 热图 ---------- */
+function drawHeat() {
+  if (!result) return;
+  var W = result.width, H = result.height;
+  off.width = W; off.height = H;
+  var img = octx.createImageData(W, H);
+  var exp = Math.pow(10, parseFloat($('exposure').value));
+  var useSrgb = $('srgb').checked;
+  for (var j = 0; j < H; j++) {
+    var row = H - 1 - j;
+    for (var i = 0; i < W; i++) {
+      var idx = j * W + i, o = (row * W + i) * 4;
+      for (var c = 0; c < 3; c++) {
+        var v = result.pixels[3 * idx + c] * exp;
+        v = v < 0 ? 0 : v > 1 ? 1 : v;
+        if (useSrgb) v = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+        img.data[o + c] = Math.round(v * 255);
+      }
+      img.data[o + 3] = 255;
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  cv.width = W; cv.height = H;
+  var scale = Math.max(2, Math.min(32, Math.floor(720 / W), Math.floor(540 / H)));
+  cv.style.width = W * scale + 'px';
+  cv.style.height = H * scale + 'px';
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, 0, 0);
+  if (sel) {
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 0.1;
+    ctx.strokeRect(sel.i, H - 1 - sel.j, 1, 1);
+  }
+}
+
+function autoExposure() {
+  var max = 0;
+  for (var i = 0; i < result.pixels.length; i++) max = Math.max(max, result.pixels[i]);
+  $('exposure').value = max > 0 ? Math.log10(0.9 / max).toFixed(2) : 0;
+}
+
+function pixelFromEvent(ev) {
+  var r = cv.getBoundingClientRect();
+  var i = Math.floor((ev.clientX - r.left) / r.width * result.width);
+  var j = result.height - 1 - Math.floor((ev.clientY - r.top) / r.height * result.height);
+  if (i < 0 || j < 0 || i >= result.width || j >= result.height) return null;
+  return { i: i, j: j };
+}
+
+cv.addEventListener('click', function (ev) {
+  var p = pixelFromEvent(ev);
+  if (!p) return;
+  sel = p;
+  drawHeat();
+  renderPixelInfo();
+});
+cv.addEventListener('mousemove', function (ev) {
+  var p = pixelFromEvent(ev);
+  if (!p) { $('hover').textContent = ''; return; }
+  var idx = (p.j * result.width + p.i) * 3;
+  $('hover').textContent = '(' + p.i + ',' + p.j + ')  R ' + fmt(result.pixels[idx]) +
+    '  G ' + fmt(result.pixels[idx + 1]) + '  B ' + fmt(result.pixels[idx + 2]);
+});
+$('exposure').addEventListener('input', drawHeat);
+$('srgb').addEventListener('change', drawHeat);
+$('autoExp').addEventListener('click', function () { autoExposure(); drawHeat(); });
+
+/* ---------- 侧栏 ---------- */
+function renderPixelInfo() {
+  var el = $('pixelInfo');
+  if (!sel) { el.innerHTML = '<h2>像素贡献</h2><span class="dim">点击热图查看逐源片贡献</span>'; return; }
+  var idx = sel.j * result.width + sel.i;
+  var rgb = [result.pixels[3 * idx], result.pixels[3 * idx + 1], result.pixels[3 * idx + 2]];
+  var lst = result.contrib[idx] || [];
+  var merged = {}, k, key;
+  for (k = 0; k < lst.length; k += 3) {
+    key = lst[k] + ':' + lst[k + 1];
+    merged[key] = (merged[key] || 0) + lst[k + 2];
+  }
+  var rows = [];
+  for (key in merged) {
+    var parts = key.split(':');
+    rows.push({
+      id: result.sources[+parts[0]].id != null ? String(result.sources[+parts[0]].id) : parts[0],
+      color: CausticCore.COLORS[+parts[1]],
+      e: merged[key]
+    });
+  }
+  rows.sort(function (a, b) { return b.e - a.e; });
+  var html = '<h2>像素贡献</h2><div class="mono">像素 (' + sel.i + ',' + sel.j + ') · ' +
+    '<span style="color:#ff6b6b">R ' + fmt(rgb[0]) + '</span> · ' +
+    '<span style="color:#6bd66b">G ' + fmt(rgb[1]) + '</span> · ' +
+    '<span style="color:#6b8cff">B ' + fmt(rgb[2]) + '</span></div>';
+  if (!rows.length) {
+    html += '<div class="dim" style="margin-top:6px">无贡献(未被覆盖或全被遮挡)</div>';
+  } else {
+    html += '<div class="contrib"><table><tr><th>源片</th><th>色</th><th>能量</th></tr>';
+    for (k = 0; k < rows.length; k++) {
+      html += '<tr><td>' + esc(rows[k].id) + '</td><td>' + rows[k].color + '</td><td>' + fmt(rows[k].e) + '</td></tr>';
+    }
+    html += '</table></div><div class="dim">' + rows.length + ' 项贡献</div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderDegenerate() {
+  var el = $('degen');
+  if (!result.degenerate.length) { el.innerHTML = '<span class="dim">无</span>'; return; }
+  var html = '<table><tr><th>源片</th><th>色</th></tr>';
+  for (var i = 0; i < result.degenerate.length; i++) {
+    html += '<tr class="degen"><td>' + esc(result.degenerate[i].source) + '</td><td>' +
+      result.degenerate[i].color + '</td></tr>';
+  }
+  el.innerHTML = html + '</table><div class="warn">该色落点三角形面积为零,能量未摊布(见收支表)</div>';
+}
+
+function renderTotals(maxRes, pixRes) {
+  var t = result.totals;
+  $('totals').innerHTML =
+    '<table><tr><th></th><th>能量</th></tr>' +
+    '<tr><td>入射</td><td>' + fmt(t.incident) + '</td></tr>' +
+    '<tr><td>遮挡</td><td>' + fmt(t.occluded) + '</td></tr>' +
+    '<tr><td>出界</td><td>' + fmt(t.outOfBounds) + '</td></tr>' +
+    '<tr><td>落板</td><td>' + fmt(t.landed) + '</td></tr>' +
+    '</table>' +
+    '<div class="dim" style="margin-top:6px">逐条守恒最大残差 ' + maxRes.toExponential(2) +
+    '<br>像素总和 − 落板 = ' + pixRes.toExponential(2) + '</div>';
+}
+
+function renderBudget() {
+  var html = '<tr><th>源片</th><th>色</th><th>入射</th><th>遮挡</th><th>出界</th><th>落板</th><th>残差</th></tr>';
+  var es = result.entries;
+  for (var i = 0; i < es.length; i++) {
+    var e = es[i];
+    var res = e.incident - e.occluded - e.outOfBounds - e.landed;
+    html += '<tr' + (e.degenerate ? ' class="degen"' : '') + '><td>' + esc(e.source) + '</td><td>' + e.color +
+      '</td><td>' + fmt(e.incident) + '</td><td>' + fmt(e.occluded) + '</td><td>' + fmt(e.outOfBounds) +
+      '</td><td>' + fmt(e.landed) + '</td><td>' + (e.degenerate ? '退化' : fmt(res)) + '</td></tr>';
+  }
+  var t = result.totals;
+  html += '<tr><td><b>合计</b></td><td></td><td><b>' + fmt(t.incident) + '</b></td><td><b>' +
+    fmt(t.occluded) + '</b></td><td><b>' + fmt(t.outOfBounds) + '</b></td><td><b>' + fmt(t.landed) +
+    '</b></td><td></td></tr>';
+  $('budget').innerHTML = html;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/* ---------- 导出 ---------- */
+function download(name, text) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/octet-stream' }));
+  a.download = name;
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+}
+
+function pixelsArray() {
+  var W = result.width, H = result.height, out = new Array(W * H);
+  for (var idx = 0; idx < W * H; idx++) {
+    out[idx] = [result.pixels[3 * idx], result.pixels[3 * idx + 1], result.pixels[3 * idx + 2]];
+  }
+  return out;
+}
+
+$('expPixJson').addEventListener('click', function () {
+  download('caustic-pixels.json', JSON.stringify({
+    width: result.width, height: result.height,
+    layout: 'pixels[y*width+x]=[R,G,B];像素(x,y)覆盖[x,x+1]x[y,y+1],y=0为底行;线性RGB能量',
+    pixels: pixelsArray()
+  }));
+});
+$('expPixCsv').addEventListener('click', function () {
+  var W = result.width, H = result.height;
+  var lines = ['x,y,R,G,B'];
+  for (var j = 0; j < H; j++) for (var i = 0; i < W; i++) {
+    var idx = (j * W + i) * 3;
+    lines.push(i + ',' + j + ',' + result.pixels[idx] + ',' + result.pixels[idx + 1] + ',' + result.pixels[idx + 2]);
+  }
+  download('caustic-pixels.csv', lines.join('\n'));
+});
+$('expBudgetJson').addEventListener('click', function () {
+  download('caustic-budget.json', JSON.stringify({
+    说明: '逐源片逐色:入射=powerPerXY×源片XY面积;遮挡=被挡板并集挡住;出界=扣挡后落在板外;落板=到达接光板。入射=遮挡+出界+落板(退化条目除外,其能量未摊布)',
+    totals: result.totals,
+    degenerate: result.degenerate,
+    entries: result.entries
+  }, null, 2));
+});
+$('expBudgetCsv').addEventListener('click', function () {
+  var lines = ['source,color,incident,occluded,outOfBounds,landed,degenerate'];
+  for (var i = 0; i < result.entries.length; i++) {
+    var e = result.entries[i];
+    lines.push([e.source, e.color, e.incident, e.occluded, e.outOfBounds, e.landed, e.degenerate].join(','));
+  }
+  download('caustic-budget.csv', lines.join('\n'));
+});
+
+/* ---------- 载入 ---------- */
+$('file').addEventListener('change', function (ev) {
+  var f = ev.target.files[0];
+  if (!f) return;
+  var rd = new FileReader();
+  rd.onload = function () {
+    try { compute(JSON.parse(rd.result), f.name + ' · '); }
+    catch (err) { setStatus('JSON 解析失败:' + err.message, true); }
+  };
+  rd.readAsText(f);
+});
+$('btnSample').addEventListener('click', function () { compute(SAMPLE, '内置示例 · '); });
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+$('btnStress').addEventListener('click', function () {
+  var rnd = mulberry32(12345), sources = [], blockers = [], i, k, c;
+  for (i = 0; i < 512; i++) {
+    var cx = rnd() * 140 - 6, cy = rnd() * 108 - 6, z = 2 + rnd() * 3, verts = [];
+    for (k = 0; k < 3; k++) {
+      var a = rnd() * Math.PI * 2, rr = 0.5 + rnd() * 2.5;
+      verts.push([cx + rr * Math.cos(a), cy + rr * Math.sin(a), z + rnd() * 0.5]);
+    }
+    var slopes = [], pow = [];
+    for (c = 0; c < 3; c++) { slopes.push([rnd() * 2 - 1, rnd() * 2 - 1]); pow.push(rnd()); }
+    sources.push({ id: 's' + i, vertices: verts, slopes: slopes, powerPerXY: pow });
+  }
+  for (i = 0; i < 16; i++) {
+    var l = rnd() * 120, b = rnd() * 88;
+    blockers.push({ z: 0.5 + rnd(), rect: [l, b, l + 1 + rnd() * 8, b + 1 + rnd() * 6] });
+  }
+  compute({ width: 128, height: 96, sources: sources, blockers: blockers }, '满额压力测试 · ');
+});
+
+/* 启动:优先取 samples/caustic-footprints.json,失败用内置副本 */
+fetch('samples/caustic-footprints.json').then(function (r) {
+  if (!r.ok) throw new Error('http ' + r.status);
+  return r.json();
+}).then(function (data) {
+  compute(data, 'samples/caustic-footprints.json · ');
+}).catch(function () {
+  compute(SAMPLE, '内置示例(未能 fetch samples/) · ');
+});
+</script>
+</body>
+</html>
