@@ -1,0 +1,1 @@
+{"groups":2,"lanes":2,"sharedWords":2,"outputWords":2,"program":[["set","r0","lane"],["store","shared","lane","r0"],["barrier"],["xor","r1","lane",1],["load","r2","shared","r1"],["store","output","lane","r2"],["halt"]],"说明":"组号、线程号、字地址和指令号从0起。操作数为u32字面量、r加十进制编号的寄存器、group或lane。add和xor参数为目标、左、右。jz参数为值、绝对指令号。load参数为目标、区、地址，store为区、地址、值。set参数为目标、值。"}
