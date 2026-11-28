@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>子像素点阵打样台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <g fill="none" stroke="#e9b451" stroke-width="1.4">
+        <circle cx="16" cy="16" r="11" stroke-dasharray="1.5 3.5" stroke-linecap="round"/>
+      </g>
+      <g fill="#e9b451">
+        <circle cx="16" cy="5" r="1.8"/><circle cx="23.8" cy="8.2" r="1.8"/>
+        <circle cx="27" cy="16" r="1.8"/><circle cx="23.8" cy="23.8" r="1.8"/>
+        <circle cx="16" cy="27" r="1.8"/><circle cx="8.2" cy="23.8" r="1.8"/>
+        <circle cx="5" cy="16" r="1.8"/><circle cx="8.2" cy="8.2" r="1.8"/>
+      </g>
+      <circle cx="16" cy="16" r="2" fill="#5ac8e8"/>
+    </svg>
+    <div class="brand-text">
+      <h1>子像素点阵打样台</h1>
+      <p>八点采样 · 精确半平面测例 · 最优切边拟合</p>
+    </div>
+  </div>
+  <div class="actions">
+    <input id="fileInput" type="file" accept=".json,application/json" hidden>
+    <button id="btnImport" class="btn">导入 JSON</button>
+    <button id="btnSample" class="btn">载入样例</button>
+    <button id="btnSolve" class="btn primary">求解</button>
+    <button id="btnExport" class="btn">导出结果</button>
+  </div>
+</header>
+
+<main class="app">
+  <div id="conflict" class="banner" hidden></div>
+
+  <div class="grid">
+    <section class="card visual">
+      <div class="card-head">
+        <span class="eyebrow">采样窗口</span>
+        <div class="nav">
+          <button id="prevTest" class="icon-btn" aria-label="上一条测例">‹</button>
+          <span id="testCounter" class="counter">— / —</span>
+          <button id="nextTest" class="icon-btn" aria-label="下一条测例">›</button>
+        </div>
+      </div>
+
+      <div class="eq-line" id="selEq">—</div>
+
+      <div class="window-wrap">
+        <svg id="windowSvg" viewBox="0 0 680 680" preserveAspectRatio="xMidYMid meet" role="img" aria-label="2×2 像素窗口与切边"></svg>
+      </div>
+
+      <div class="legend">
+        <span class="lg"><i class="sw-region"></i>覆盖区域</span>
+        <span class="lg"><i class="sw-cov"></i>采样点·覆盖</span>
+        <span class="lg"><i class="sw-unc"></i>采样点·未覆盖</span>
+        <span class="lg"><i class="sw-line"></i>切边</span>
+        <span class="lg"><i class="sw-on"></i>恰在线上</span>
+      </div>
+
+      <div class="strip">
+        <div class="stat">
+          <div class="stat-label">采样比例</div>
+          <div class="stat-value mono" id="selSample">—</div>
+          <div class="stat-sub" id="selSampleSub">覆盖 — / 32</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">精确比例</div>
+          <div class="stat-value mono" id="selTrue">—</div>
+          <div class="stat-sub" id="selTrueSub">半平面 ∩ 窗口 ÷ 4</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">绝对误差</div>
+          <div class="stat-value mono" id="selErr">—</div>
+          <div class="stat-sub" id="selErrSub">采样 − 精确</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <div class="card-head">
+          <span class="eyebrow">测例</span>
+          <span id="testCount" class="muted">—</span>
+        </div>
+        <div id="testList" class="test-list" role="list"></div>
+      </section>
+
+      <section class="card summary">
+        <div class="card-head"><span class="eyebrow">汇总</span></div>
+        <div class="biggrid">
+          <div class="big">
+            <span>最大绝对误差</span>
+            <strong class="mono" id="sumMax">—</strong>
+            <em id="sumMaxDec"></em>
+          </div>
+          <div class="big">
+            <span>加权误差和</span>
+            <strong class="mono" id="sumWsum">—</strong>
+            <em id="sumWsumDec"></em>
+          </div>
+        </div>
+        <div class="meta-list">
+          <div><span>求解耗时</span><b id="sumTime">—</b></div>
+          <div><span>可行点阵</span><b id="sumFeasible">—</b></div>
+          <div><span>参与评测</span><b id="sumEvaluated">—</b></div>
+          <div><span>测例数</span><b id="sumCount">—</b></div>
+        </div>
+        <p class="note">排序规则：最大绝对误差 → 加权绝对误差和 → 行列号字典序。</p>
+      </section>
+    </aside>
+  </div>
+
+  <div class="bottom">
+    <section class="card">
+      <div class="card-head">
+        <span class="eyebrow">原点阵</span>
+        <span class="muted">点击单元格：空 → 锁定 → 禁用</span>
+      </div>
+      <div class="pattern-area">
+        <div class="pattern-svg-wrap">
+          <svg id="patternSvg" viewBox="0 0 384 384" role="img" aria-label="8×8 原点阵"></svg>
+        </div>
+        <div class="pattern-info">
+          <div class="perm-line"><span class="k">行→列</span><code id="permText">—</code></div>
+          <div class="tag-list" id="pinList"></div>
+          <button id="btnClearConstraints" class="btn small">清除约束</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <span class="eyebrow">数据</span>
+        <span class="muted">JSON · 最多 128 条</span>
+      </div>
+      <textarea id="dataJson" class="json" spellcheck="false" aria-label="测例数据 JSON"></textarea>
+      <div id="dataError" class="data-error" hidden></div>
+      <div class="row">
+        <button id="btnApplyData" class="btn">应用数据</button>
+        <span class="muted">tests / pins / bans</span>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <p>窗口 [0,2]×[0,2]，四个像素各含 8×8 子格；每个像素在子格中心取八点，每行每列各一点，共 32 个采样点。偶格用原点阵，奇格将局部坐标 (x,y) 映为 (1−y,x)。比例与误差以 BigInt 有理数精确计算，落在半平面边界上的点计为覆盖。</p>
+  </footer>
+</main>
+
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
