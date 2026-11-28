@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>灰度样张批次号可逆嵌入</title>
+<style>
+  :root {
+    --ink: #1f2430;
+    --muted: #667085;
+    --line: #d8dce4;
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --accent: #2f6fed;
+    --ok: #1a7f37;
+    --bad: #c03434;
+    --warn: #9a6700;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  header {
+    padding: 20px 24px;
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 16px 0;
+  }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  h2 .step {
+    display: inline-block;
+    min-width: 24px; height: 24px; line-height: 24px;
+    text-align: center; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 13px; margin-right: 8px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 8px 0; }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input[type=text], textarea {
+    font: inherit; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 10px; background: #fff; min-width: 260px;
+  }
+  input[readonly] { background: #f2f4f7; color: var(--muted); }
+  button, .btn {
+    font: inherit; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    border-radius: 6px; padding: 7px 16px;
+  }
+  button.ghost, .btn.ghost { background: #fff; color: var(--accent); }
+  button:disabled, .btn.disabled {
+    border-color: var(--line); background: #eef0f3; color: #a0a6b1;
+    cursor: not-allowed; text-decoration: none; pointer-events: none;
+  }
+  .status { font-size: 13px; padding: 8px 12px; border-radius: 6px; margin: 8px 0; display: none; }
+  .status.show { display: block; }
+  .status.info { background: #eef4ff; color: #2456b8; }
+  .status.ok { background: #e8f6ec; color: var(--ok); }
+  .status.err { background: #fdecec; color: var(--bad); }
+  .meta { font-size: 13px; color: var(--muted); }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .canvases { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px; }
+  .canvasbox { font-size: 12px; color: var(--muted); }
+  .canvaswrap { position: relative; display: inline-block; border: 1px solid var(--line); background: #fff; margin-top: 4px; }
+  .canvaswrap canvas { display: block; image-rendering: pixelated; }
+  .canvaswrap canvas.overlay { position: absolute; left: 0; top: 0; }
+  ul.checks { list-style: none; padding: 0; margin: 10px 0; font-size: 13px; }
+  ul.checks li { padding: 4px 0 4px 26px; position: relative; }
+  ul.checks li::before { position: absolute; left: 2px; }
+  ul.checks li.ok::before { content: "✓"; color: var(--ok); font-weight: 700; }
+  ul.checks li.fail::before { content: "✗"; color: var(--bad); font-weight: 700; }
+  ul.checks li.skip { color: var(--muted); }
+  ul.checks li.skip::before { content: "–"; color: var(--muted); }
+  .capbar { height: 8px; background: #eef0f3; border-radius: 4px; overflow: hidden; max-width: 420px; }
+  .capbar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  .capbar.over > div { background: var(--bad); }
+  details { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  code { background: #eef0f3; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>灰度扫描样张批次号可逆嵌入</h1>
+  <p>8×8 块内差值扩展整数嵌入；靠近纯黑 / 纯白的像素对若会越界则自动跳过，原图可无损取回。支持 8 位 P5 PGM（单边 ≤ 2048）与同尺寸掩膜（非 0 表示获准嵌入）。</p>
+</header>
+<main>
+
+<section id="sec-load">
+  <h2><span class="step">1</span>载入原图与掩膜</h2>
+  <div class="row">
+    <label class="field">原图（P5 PGM）
+      <input type="file" id="fileOriginal" accept=".pgm,image/x-portable-graymap">
+    </label>
+    <button type="button" class="ghost" id="btnSample">使用样图 samples/seal-gray.pgm</button>
+  </div>
+  <div class="row">
+    <label class="field">掩膜（可选，同尺寸 P5，非 0 = 获准）
+      <input type="file" id="fileMask" accept=".pgm,image/x-portable-graymap">
+    </label>
+    <button type="button" class="ghost" id="btnClearMask">清除掩膜</button>
+    <span class="meta" id="maskStatus">未使用掩膜：全部像素获准。</span>
+  </div>
+  <div class="status" id="loadStatus"></div>
+  <div class="meta" id="origInfo"></div>
+  <div class="meta" id="capInfo"></div>
+  <div class="row">
+    <label class="meta"><input type="checkbox" id="chkGrid"> 显示 8×8 块网格</label>
+    <label class="meta">叠加显示
+      <select id="selOverlay">
+        <option value="none">不显示</option>
+        <option value="usable" selected>可用载体（全部可用对）</option>
+        <option value="used">已用载体（上次嵌入）</option>
+      </select>
+    </label>
+  </div>
+  <div class="canvases">
+    <div class="canvasbox">原图
+      <div class="canvaswrap">
+        <canvas id="canvasOrig"></canvas>
+        <canvas id="canvasOrigOverlay" class="overlay"></canvas>
+      </div>
+    </div>
+    <div class="canvasbox">嵌入后（标记图）
+      <div class="canvaswrap">
+        <canvas id="canvasMarked"></canvas>
+        <canvas id="canvasMarkedOverlay" class="overlay"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="sec-embed">
+  <h2><span class="step">2</span>嵌入批次号</h2>
+  <div class="row">
+    <label class="field">批次号（文本，按 UTF-8 转为十六进制写入）
+      <input type="text" id="payloadText" placeholder="例如：批次2026-A01" autocomplete="off">
+    </label>
+    <label class="meta"><input type="checkbox" id="chkHexMode"> 直接输入十六进制</label>
+  </div>
+  <div class="row">
+    <label class="field">十六进制载荷（高位在先逐位写入）
+      <input type="text" id="payloadHex" readonly autocomplete="off" spellcheck="false">
+    </label>
+    <span class="meta" id="needInfo"></span>
+  </div>
+  <div class="capbar" id="capBar"><div></div></div>
+  <div class="row">
+    <button type="button" id="btnEmbed">嵌入</button>
+    <span class="meta">始终从第 1 步载入（或验证通过后取回）的原图重嵌，绝不在标记图上叠加。</span>
+  </div>
+  <div class="status" id="embedStatus"></div>
+  <div class="row" id="embedDownloads" style="display:none">
+    <a class="btn" id="dlMarked" download>下载标记 P5</a>
+    <a class="btn ghost" id="dlSidecar" download>下载 JSON 旁车</a>
+    <span class="meta" id="embedDlInfo"></span>
+  </div>
+</section>
+
+<section id="sec-verify">
+  <h2><span class="step">3</span>读回验证</h2>
+  <div class="row">
+    <label class="field">标记图（P5）
+      <input type="file" id="fileMarked" accept=".pgm,image/x-portable-graymap">
+    </label>
+    <label class="field">JSON 旁车
+      <input type="file" id="fileSidecar" accept=".json,application/json">
+    </label>
+    <label class="field">同一掩膜（若嵌入时使用过）
+      <input type="file" id="fileMaskV" accept=".pgm,image/x-portable-graymap">
+    </label>
+  </div>
+  <div class="row">
+    <button type="button" id="btnVerify">验证并取回</button>
+  </div>
+  <ul class="checks" id="verifyChecks"></ul>
+  <div class="status" id="verifyStatus"></div>
+  <div id="verifyResult" style="display:none">
+    <div class="meta" id="recoveredInfo"></div>
+    <div class="row">
+      <a class="btn" id="dlPayload" download>下载载荷</a>
+      <a class="btn" id="dlRecovered" download>下载取回的原图 P5</a>
+      <button type="button" class="ghost" id="btnPromote">以此原图重新嵌入新批次号</button>
+    </div>
+  </div>
+</section>
+
+<details>
+  <summary>格式说明</summary>
+  <p>配对规则：每对像素 (x, y) 记 l = ⌊(x+y)/2⌋、h = x−y，把 h 换成 2h+b 后还原两像素；
+  两种载荷位嵌入后都不越出 [0,255] 且两像素均被掩膜获准，该对才可用。
+  按 8×8 块划分（边缘块截断），每块分别试横向与纵向的不交叠相邻配对（从块左上起配），
+  取可用容量大的方向，同数取横向。写入顺序：块行序 → 块内首像素行序 → 十六进制载荷每字符 4 位、高位在先。</p>
+  <p>旁车 JSON 字段：<code>image</code>（宽高）、<code>bitCount</code>（位数）、<code>payloadHex</code>（载荷）、
+  <code>originalCrc32</code>（原栅格 CRC32）、<code>maskCrc32</code>（掩膜 CRC32 或 null）、
+  <code>pairs</code>（已用坐标 [x1,y1,x2,y2]）。读回时先从标记图按坐标提取并还原原图，
+  再校验 CRC32，并用还原原图与同一掩膜重算配对规则核对坐标，全部通过才开放下载。</p>
+</details>
+
+</main>
+<script src="embed.js"></script>
+<script>
+(function () {
+  'use strict';
+  const R = window.ReversibleStamp;
+  const $ = (id) => document.getElementById(id);
+
+  const state = {
+    original: null,   // { width, height, pixels, crc32, name }
+    mask: null,       // { pixels, crc32, name }
+    plan: null,
+    lastEmbed: null,  // { markedBytes, sidecarText, markedName, sidecarName, usedPairs, bitCount, payloadHex }
+    lastVerify: null, // { payloadHex, payloadText, originalBytes, baseName, restored, mask }
+    verifyMask: null,
+  };
+
+  /* ---------- 小工具 ---------- */
+  function setStatus(el, kind, msg) {
+    el.className = 'status show ' + kind;
+    el.textContent = msg;
+  }
+  function clearStatus(el) { el.className = 'status'; el.textContent = ''; }
+
+  function hexOf(bytes) {
+    let s = '';
+    for (const b of bytes) s += b.toString(16).padStart(2, '0');
+    return s;
+  }
+  function textToHex(t) { return hexOf(new TextEncoder().encode(t)); }
+  function hexToText(hex) {
+    try {
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) { return null; }
+  }
+  function baseName(name) {
+    return (name || 'image').replace(/\.[^.]*$/, '');
+  }
+  function setDownload(a, bytesOrText, filename, mime) {
+    if (a.dataset.url) URL.revokeObjectURL(a.dataset.url);
+    const blob = bytesOrText instanceof Uint8Array
+      ? new Blob([bytesOrText], { type: mime })
+      : new Blob([bytesOrText], { type: mime });
+    const url = URL.createObjectURL(blob);
+    a.dataset.url = url;
+    a.href = url;
+    a.download = filename;
+  }
+
+  /* ---------- 画布 ---------- */
+  function drawGray(canvas, w, h, pixels, scale) {
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext('2d');
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const octx = off.getContext('2d');
+    const img = octx.createImageData(w, h);
+    for (let i = 0; i < pixels.length; i++) {
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = pixels[i];
+      img.data[i * 4 + 3] = 255;
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+  }
+
+  function drawOverlay(canvas, w, h, scale, pairs, color, grid) {
+    canvas.width = w * scale;
+    canvas.height = h * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (grid) {
+      ctx.strokeStyle = 'rgba(47,111,237,0.25)';
+      ctx.lineWidth = 1;
+      for (let x = R.BLOCK; x < w; x += R.BLOCK) {
+        ctx.beginPath(); ctx.moveTo(x * scale + 0.5, 0); ctx.lineTo(x * scale + 0.5, canvas.height); ctx.stroke();
+      }
+      for (let y = R.BLOCK; y < h; y += R.BLOCK) {
+        ctx.beginPath(); ctx.moveTo(0, y * scale + 0.5); ctx.lineTo(canvas.width, y * scale + 0.5); ctx.stroke();
+      }
+    }
+    if (!pairs) return;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = Math.max(1, scale / 8);
+    for (const p of pairs) {
+      const cx1 = (p.x1 + 0.5) * scale, cy1 = (p.y1 + 0.5) * scale;
+      const cx2 = (p.x2 + 0.5) * scale, cy2 = (p.y2 + 0.5) * scale;
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(p.x1 * scale, p.y1 * scale, scale, scale);
+      ctx.fillRect(p.x2 * scale, p.y2 * scale, scale, scale);
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.moveTo(cx1, cy1); ctx.lineTo(cx2, cy2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function pickScale(w, h) {
+    return Math.max(1, Math.min(16, Math.floor(520 / Math.max(w, h))));
+  }
+
+  function refreshViews() {
+    const o = state.original;
+    if (!o) return;
+    // 上次嵌入结果若属于另一张图（尺寸不同），只保留下载，不再叠加显示
+    const le = state.lastEmbed;
+    const embedMatches = le && le.width === o.width && le.height === o.height;
+    const scale = pickScale(o.width, o.height);
+    drawGray($('canvasOrig'), o.width, o.height, o.pixels, scale);
+    const mode = $('selOverlay').value;
+    const grid = $('chkGrid').checked;
+    let pairs = null, color = 'rgba(224,90,40,1)';
+    if (mode === 'usable' && state.plan) { pairs = state.plan.pairs; color = 'rgba(47,111,237,1)'; }
+    if (mode === 'used' && embedMatches) { pairs = le.usedPairs; color = 'rgba(224,90,40,1)'; }
+    drawOverlay($('canvasOrigOverlay'), o.width, o.height, scale, pairs, color, grid);
+    if (embedMatches && le.markedPixels) {
+      drawGray($('canvasMarked'), o.width, o.height, le.markedPixels, scale);
+      drawOverlay($('canvasMarkedOverlay'), o.width, o.height, scale,
+        le.usedPairs, 'rgba(224,90,40,1)', grid);
+    } else {
+      for (const id of ['canvasMarked', 'canvasMarkedOverlay']) {
+        const c = $(id); c.width = 0; c.height = 0;
+      }
+    }
+  }
+
+  /* ---------- 第 1 步：载入 ---------- */
+  function updateCapacityInfo() {
+    if (!state.original || !state.plan) { $('capInfo').textContent = ''; return; }
+    const p = state.plan;
+    const h = p.blocks.filter(b => b.dir === 'h').length;
+    const v = p.blocks.length - h;
+    $('capInfo').innerHTML =
+      '容量：<b>' + p.capacityBits + '</b> 位（约 <b>' + Math.floor(p.capacityBits / 8) + '</b> 字节）；' +
+      '共 <b>' + p.blocks.length + '</b> 个 8×8 块（取横向 ' + h + ' / 纵向 ' + v + '）。';
+    updateNeedInfo();
+  }
+
+  function setOriginal(img, name) {
+    state.original = {
+      width: img.width, height: img.height,
+      pixels: img.pixels, crc32: R.crc32(img.pixels), name,
+    };
+    state.plan = R.computePlan(img.width, img.height, img.pixels, state.mask ? state.mask.pixels : null);
+    $('origInfo').innerHTML =
+      '原图：<b>' + name + '</b>　尺寸 <b>' + img.width + '×' + img.height + '</b>' +
+      '　原栅格 CRC32：<code>' + state.original.crc32 + '</code>';
+    updateCapacityInfo();
+    refreshViews();
+  }
+
+  function loadMaskFile(file, done) {
+    file.arrayBuffer().then((buf) => {
+      const img = R.parsePGM(new Uint8Array(buf));
+      if (!state.original) throw new Error('请先载入原图');
+      if (img.width !== state.original.width || img.height !== state.original.height) {
+        throw new Error('掩膜尺寸 ' + img.width + '×' + img.height + ' 与原图不一致');
+      }
+      done(img);
+    }).catch((e) => setStatus($('loadStatus'), 'err', '掩膜读取失败：' + e.message));
+  }
+
+  $('fileOriginal').addEventListener('change', (ev) => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    clearStatus($('loadStatus'));
+    f.arrayBuffer().then((buf) => {
+      const img = R.parsePGM(new Uint8Array(buf));
+      setOriginal(img, f.name);
+      setStatus($('loadStatus'), 'ok', '原图已载入。');
+    }).catch((e) => setStatus($('loadStatus'), 'err', '原图读取失败：' + e.message));
+  });
+
+  $('btnSample').addEventListener('click', () => {
+    clearStatus($('loadStatus'));
+    fetch('samples/seal-gray.pgm')
+      .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then((buf) => {
+        const img = R.parsePGM(new Uint8Array(buf));
+        setOriginal(img, 'seal-gray.pgm');
+        setStatus($('loadStatus'), 'ok', '样图已载入。');
+      })
+      .catch((e) => setStatus($('loadStatus'), 'err', '样图载入失败（请通过本地 HTTP 服务打开页面）：' + e.message));
+  });
+
+  $('fileMask').addEventListener('change', (ev) => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    loadMaskFile(f, (img) => {
+      state.mask = { pixels: img.pixels, crc32: R.crc32(img.pixels), name: f.name };
+      $('maskStatus').innerHTML = '掩膜：<b>' + f.name + '</b>　CRC32 <code>' + state.mask.crc32 + '</code>';
+      if (state.original) setOriginal(state.original, state.original.name);
+      setStatus($('loadStatus'), 'ok', '掩膜已应用，容量已重算。');
+    });
+  });
+
+  $('btnClearMask').addEventListener('click', () => {
+    state.mask = null;
+    $('fileMask').value = '';
+    $('maskStatus').textContent = '未使用掩膜：全部像素获准。';
+    if (state.original) setOriginal(state.original, state.original.name);
+  });
+
+  $('selOverlay').addEventListener('change', refreshViews);
+  $('chkGrid').addEventListener('change', refreshViews);
+
+  /* ---------- 第 2 步：嵌入 ---------- */
+  function currentPayloadHex() {
+    if ($('chkHexMode').checked) return $('payloadHex').value.trim().toLowerCase();
+    return textToHex($('payloadText').value);
+  }
+
+  function updateNeedInfo() {
+    if (!state.plan) { $('needInfo').textContent = ''; return; }
+    let hex;
+    try { hex = currentPayloadHex(); } catch (e) { hex = ''; }
+    const need = hex.length * 4;
+    const cap = state.plan.capacityBits;
+    $('needInfo').innerHTML = need
+      ? ('载荷 <b>' + need + '</b> 位 / 容量 ' + cap + ' 位' + (need > cap ? '　<b style="color:var(--bad)">超出容量</b>' : ''))
+      : ('容量 ' + cap + ' 位');
+    const bar = $('capBar');
+    bar.classList.toggle('over', need > cap);
+    bar.firstElementChild.style.width = Math.min(100, cap ? (need / cap) * 100 : 0) + '%';
+  }
+
+  $('payloadText').addEventListener('input', () => {
+    if (!$('chkHexMode').checked) $('payloadHex').value = textToHex($('payloadText').value);
+    updateNeedInfo();
+  });
+  $('payloadHex').addEventListener('input', updateNeedInfo);
+  $('chkHexMode').addEventListener('change', () => {
+    const hexMode = $('chkHexMode').checked;
+    $('payloadHex').readOnly = !hexMode;
+    $('payloadText').readOnly = hexMode;
+    if (!hexMode) $('payloadHex').value = textToHex($('payloadText').value);
+    updateNeedInfo();
+  });
+
+  $('btnEmbed').addEventListener('click', () => {
+    clearStatus($('embedStatus'));
+    if (!state.original) { setStatus($('embedStatus'), 'err', '请先在第 1 步载入原图。'); return; }
+    let hex, bits;
+    try {
+      hex = currentPayloadHex();
+      bits = R.hexToBits(hex);
+    } catch (e) {
+      setStatus($('embedStatus'), 'err', e.message + '。上次可下载结果已保留。');
+      return;
+    }
+    if (bits.length > state.plan.capacityBits) {
+      setStatus($('embedStatus'), 'err',
+        '容量不足：需要 ' + bits.length + ' 位，可用 ' + state.plan.capacityBits + ' 位。上次可下载结果已保留。');
+      return;
+    }
+    // 始终从原图重嵌
+    const o = state.original;
+    const marked = R.embedBits(o.pixels, state.plan.pairs, bits, o.width);
+    const usedPairs = state.plan.pairs.slice(0, bits.length);
+    const sidecar = {
+      format: 'reversible-scan-stamp',
+      version: 1,
+      image: { width: o.width, height: o.height },
+      bitCount: bits.length,
+      payloadHex: hex,
+      originalCrc32: o.crc32,
+      maskCrc32: state.mask ? state.mask.crc32 : null,
+      pairs: usedPairs.map((p) => [p.x1, p.y1, p.x2, p.y2]),
+    };
+    const base = baseName(o.name);
+    state.lastEmbed = {
+      width: o.width, height: o.height,
+      markedPixels: marked,
+      markedBytes: R.writePGM(o.width, o.height, marked),
+      sidecarText: JSON.stringify(sidecar, null, 2) + '\n',
+      markedName: base + '.marked.pgm',
+      sidecarName: base + '.marked.json',
+      usedPairs, bitCount: bits.length, payloadHex: hex,
+    };
+    setDownload($('dlMarked'), state.lastEmbed.markedBytes, state.lastEmbed.markedName, 'image/x-portable-graymap');
+    setDownload($('dlSidecar'), state.lastEmbed.sidecarText, state.lastEmbed.sidecarName, 'application/json');
+    $('embedDownloads').style.display = '';
+    $('embedDlInfo').textContent =
+      '已用 ' + usedPairs.length + ' 对像素（' + bits.length + ' 位）。';
+    $('selOverlay').value = 'used';
+    refreshViews();
+    setStatus($('embedStatus'), 'ok',
+      '嵌入完成：' + bits.length + ' 位写入 ' + usedPairs.length + ' 对像素，未越界、未截断。');
+  });
+
+  /* ---------- 第 3 步：读回验证 ---------- */
+  function renderChecks(checks) {
+    const ul = $('verifyChecks');
+    ul.innerHTML = '';
+    for (const c of checks) {
+      const li = document.createElement('li');
+      li.className = c.state; // ok | fail | skip
+      li.textContent = c.text;
+      ul.appendChild(li);
+    }
+  }
+
+  $('btnVerify').addEventListener('click', async () => {
+    clearStatus($('verifyStatus'));
+    const checks = [];
+    const fail = (text) => { checks.push({ state: 'fail', text }); renderChecks(checks); };
+    const ok = (text) => checks.push({ state: 'ok', text });
+
+    try {
+      const mf = $('fileMarked').files[0];
+      const sf = $('fileSidecar').files[0];
+      if (!mf || !sf) throw new Error('请同时选择标记图与 JSON 旁车。');
+
+      const marked = R.parsePGM(new Uint8Array(await mf.arrayBuffer()));
+      let sc;
+      try { sc = JSON.parse(await sf.text()); }
+      catch (e) { throw new Error('旁车不是合法 JSON：' + e.message); }
+
+      // 1. 尺寸一致
+      if (!sc.image || sc.image.width !== marked.width || sc.image.height !== marked.height) {
+        fail('标记图尺寸与旁车记录一致');
+        throw new Error('标记图 ' + marked.width + '×' + marked.height + ' 与旁车记录不符。');
+      }
+      ok('标记图尺寸与旁车记录一致（' + marked.width + '×' + marked.height + '）');
+
+      // 2. 字段完整
+      const fieldsOk = sc.format === 'reversible-scan-stamp' && sc.version === 1 &&
+        Number.isInteger(sc.bitCount) && sc.bitCount > 0 && sc.bitCount % 4 === 0 &&
+        typeof sc.payloadHex === 'string' && /^[0-9a-f]+$/i.test(sc.payloadHex) &&
+        sc.payloadHex.length * 4 === sc.bitCount &&
+        typeof sc.originalCrc32 === 'string' && /^[0-9a-f]{8}$/i.test(sc.originalCrc32) &&
+        Array.isArray(sc.pairs) && sc.pairs.length === sc.bitCount &&
+        sc.pairs.every((p) => Array.isArray(p) && p.length === 4 &&
+          p.every((n) => Number.isInteger(n)) &&
+          p[0] >= 0 && p[0] < marked.width && p[2] >= 0 && p[2] < marked.width &&
+          p[1] >= 0 && p[1] < marked.height && p[3] >= 0 && p[3] < marked.height);
+      if (!fieldsOk) {
+        fail('旁车字段完整（位数 / 载荷 / 坐标数量一致且在界内）');
+        throw new Error('旁车字段不完整或自相矛盾。');
+      }
+      ok('旁车字段完整：' + sc.bitCount + ' 位，' + sc.pairs.length + ' 对坐标均在界内');
+
+      // 3. 掩膜一致
+      let maskPixels = null;
+      const vf = $('fileMaskV').files[0];
+      if (sc.maskCrc32 != null) {
+        if (!vf) {
+          fail('掩膜一致（旁车记录使用了掩膜）');
+          throw new Error('旁车记录嵌入时使用了掩膜（CRC32 ' + sc.maskCrc32 + '），请提供同一掩膜。');
+        }
+        const m = R.parsePGM(new Uint8Array(await vf.arrayBuffer()));
+        if (m.width !== marked.width || m.height !== marked.height) {
+          fail('掩膜一致（尺寸）');
+          throw new Error('掩膜尺寸与图像不一致。');
+        }
+        if (R.crc32(m.pixels) !== sc.maskCrc32.toLowerCase()) {
+          fail('掩膜一致（CRC32）');
+          throw new Error('提供的掩膜与嵌入时使用的掩膜不同。');
+        }
+        maskPixels = m.pixels;
+        state.verifyMask = { pixels: m.pixels, crc32: sc.maskCrc32.toLowerCase(), name: vf.name };
+        ok('掩膜一致（CRC32 ' + sc.maskCrc32 + '）');
+      } else {
+        if (vf) {
+          fail('掩膜一致（旁车记录未使用掩膜）');
+          throw new Error('旁车记录嵌入时未使用掩膜，请移除掩膜后重验。');
+        }
+        state.verifyMask = null;
+        ok('掩膜一致（嵌入时未使用掩膜）');
+      }
+
+      // 4. 提取载荷一致
+      const pairs = sc.pairs.map((p) => ({ x1: p[0], y1: p[1], x2: p[2], y2: p[3] }));
+      const { bits, restored } = R.extractBits(marked.pixels, pairs, sc.bitCount, marked.width);
+      const gotHex = R.bitsToHex(bits);
+      if (gotHex !== sc.payloadHex.toLowerCase()) {
+        fail('提取载荷与旁车记录一致');
+        throw new Error('从标记图提取的载荷与旁车不符。');
+      }
+      ok('提取载荷与旁车记录一致（' + sc.payloadHex + '）');
+
+      // 5. 原栅格 CRC32
+      const crc = R.crc32(restored);
+      if (crc !== sc.originalCrc32.toLowerCase()) {
+        fail('还原原栅格 CRC32 与旁车一致');
+        throw new Error('还原原图 CRC32 ' + crc + ' ≠ 旁车 ' + sc.originalCrc32 + '。');
+      }
+      ok('还原原栅格 CRC32 与旁车一致（' + crc + '）');
+
+      // 6. 坐标符合配对规则（用还原原图 + 同一掩膜重算）
+      const plan = R.computePlan(marked.width, marked.height, restored, maskPixels);
+      let prefixOk = plan.pairs.length >= sc.bitCount;
+      if (prefixOk) {
+        for (let i = 0; i < sc.bitCount; i++) {
+          const a = plan.pairs[i], b = pairs[i];
+          if (a.x1 !== b.x1 || a.y1 !== b.y1 || a.x2 !== b.x2 || a.y2 !== b.y2) { prefixOk = false; break; }
+        }
+      }
+      if (!prefixOk) {
+        fail('坐标符合按还原原图与同一掩膜重算的配对规则');
+        throw new Error('旁车坐标与配对规则不符。');
+      }
+      ok('坐标符合配对规则（8×8 块、方向选择、块行序与首像素行序）');
+
+      // 全部通过
+      renderChecks(checks);
+      const text = hexToText(sc.payloadHex);
+      const base = baseName(mf.name).replace(/\.marked$/, '');
+      state.lastVerify = {
+        payloadHex: sc.payloadHex,
+        payloadText: text,
+        restored,
+        width: marked.width, height: marked.height,
+        originalBytes: R.writePGM(marked.width, marked.height, restored),
+        baseName: base,
+      };
+      setDownload($('dlPayload'),
+        (text != null ? text + '\n' : sc.payloadHex + '\n'),
+        base + '.payload.txt', 'text/plain');
+      setDownload($('dlRecovered'), state.lastVerify.originalBytes, base + '.original.pgm', 'image/x-portable-graymap');
+      $('recoveredInfo').innerHTML =
+        '载荷（十六进制）：<code>' + sc.payloadHex + '</code>' +
+        (text != null ? '　解码文本：<b>' + text.replace(/</g, '&lt;') + '</b>' : '　（非 UTF-8 文本）');
+      $('verifyResult').style.display = '';
+      setStatus($('verifyStatus'), 'ok', '验证通过，载荷与原图已可取回。');
+    } catch (e) {
+      renderChecks(checks);
+      setStatus($('verifyStatus'), 'err',
+        '验证失败：' + e.message + (state.lastVerify ? ' 上次可下载结果已保留。' : ''));
+    }
+  });
+
+  $('btnPromote').addEventListener('click', () => {
+    const v = state.lastVerify;
+    if (!v) return;
+    // 用验证通过的原图与同一掩膜重嵌
+    state.mask = state.verifyMask;
+    $('maskStatus').innerHTML = state.mask
+      ? '掩膜：<b>' + state.mask.name + '</b>　CRC32 <code>' + state.mask.crc32 + '</code>'
+      : '未使用掩膜：全部像素获准。';
+    setOriginal({ width: v.width, height: v.height, pixels: v.restored }, v.baseName + '.original.pgm');
+    setStatus($('loadStatus'), 'ok', '已载入验证通过的原图，可输入新批次号重新嵌入。');
+    setStatus($('embedStatus'), 'info', '当前原图为验证取回的原图，新批次号将从它重嵌。');
+    $('sec-embed').scrollIntoView({ behavior: 'smooth' });
+    $('payloadText').focus();
+  });
+})();
+</script>
+</body>
+</html>
